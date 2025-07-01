@@ -191,15 +191,42 @@ function update_source_if_set(env, pkg)
     project = env.project
     source = get(project.sources, pkg.name, nothing)
     if source !== nothing
-        # This should probably not modify the dicts directly...
-        if pkg.repo.source !== nothing
-            source["url"] = pkg.repo.source
+        if pkg.repo == GitRepo()
+            delete!(project.sources, pkg.name)
+        else
+            # This should probably not modify the dicts directly...
+            if pkg.repo.source !== nothing
+                source["url"] = pkg.repo.source
+                delete!(source, "path")
+            end
+            if pkg.repo.rev !== nothing
+                source["rev"] = pkg.repo.rev
+                delete!(source, "path")
+            end
+            if pkg.repo.subdir !== nothing
+                source["subdir"] = pkg.repo.subdir
+            end
+            if pkg.path !== nothing
+                source["path"] = pkg.path
+                delete!(source, "url")
+                delete!(source, "rev")
+            end
         end
-        if pkg.repo.rev !== nothing
-            source["rev"] = pkg.repo.rev
+        if pkg.subdir !== nothing
+            source["subdir"] = pkg.subdir
         end
-        if pkg.path !== nothing
-            source["path"] = pkg.path
+        path, repo = get_path_repo(project, pkg.name)
+        if path !== nothing
+            pkg.path = path
+        end
+        if repo.source !== nothing
+            pkg.repo.source = repo.source
+        end
+        if repo.rev !== nothing
+            pkg.repo.rev = repo.rev
+        end
+        if repo.subdir !== nothing
+            pkg.repo.subdir = repo.subdir
         end
     end
 
@@ -425,6 +452,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
                 pkgerror("pinning a package requires a single version, not a versionrange")
             end
         end
+        update_source_if_set(ctx.env, pkg)
     end
 
     project_deps_resolve!(ctx.env, pkgs)
