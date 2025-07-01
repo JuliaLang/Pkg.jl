@@ -1,4 +1,4 @@
-# [**10.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
+# [**11.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
 
 Two files that are central to Pkg are `Project.toml` and `Manifest.toml`. `Project.toml`
 and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (hence the
@@ -133,6 +133,15 @@ handled by Pkg operations such as `add`.
 Specifiying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
 corresponding manifest file.
+
+Each entry in the `[sources]` section supports the following keys:
+
+- **`url`**: The URL of the Git repository. Cannot be used with `path`.
+- **`rev`**: The Git revision (branch name, tag, or commit hash) to use. Only valid with `url`.
+- **`subdir`**: A subdirectory within the repository containing the package.
+- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`.
+
+This might in practice look something like:
 
 ```toml
 [sources]
