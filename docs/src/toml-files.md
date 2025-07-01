@@ -22,7 +22,7 @@ are described below.
 
 ### The `authors` field
 
-For a package, the optional `authors` field is a TOML array describing the package authors. 
+For a package, the optional `authors` field is a TOML array describing the package authors.
 Entries in the array can either be a string in the form `"NAME"` or `"NAME <EMAIL>"`, or a table keys following the [Citation File Format schema](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md) for either a
 [`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an[`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
 
@@ -100,6 +100,18 @@ See also the section on [Compatibility](@ref).
 
 Note that Pkg.jl deviates from the SemVer specification when it comes to versions pre-1.0.0. See
 the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
+
+
+### The `readonly` field
+
+The `readonly` field is a boolean that, when set to `true`, marks the environment as read-only. This prevents any modifications to the environment, including adding, removing, or updating packages. For example:
+
+```toml
+readonly = true
+```
+
+When an environment is marked as readonly, Pkg will throw an error if any operation that would modify the environment is attempted.
+If the `readonly` field is not present or set to `false` (the default), the environment can be modified normally.
 
 
 ### The `[deps]` section
