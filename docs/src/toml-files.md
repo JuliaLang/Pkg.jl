@@ -22,7 +22,7 @@ are described below.
 
 ### The `authors` field
 
-For a package, the optional `authors` field is a TOML array describing the package authors. 
+For a package, the optional `authors` field is a TOML array describing the package authors.
 Entries in the array can either be a string in the form `"NAME"` or `"NAME <EMAIL>"`, or a table keys following the [Citation File Format schema](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md) for either a
 [`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an[`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
 
@@ -121,6 +121,15 @@ handled by Pkg operations such as `add`.
 Specifiying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
 corresponding manifest file.
+
+Each entry in the `[sources]` section supports the following keys:
+
+- **`url`**: The URL of the Git repository. Cannot be used with `path`.
+- **`rev`**: The Git revision (branch name, tag, or commit hash) to use. Only valid with `url`.
+- **`subdir`**: A subdirectory within the repository containing the package.
+- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`.
+
+This might in practice look something like:
 
 ```toml
 [sources]
