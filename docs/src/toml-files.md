@@ -39,7 +39,7 @@ name = "Example"
 The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
 (a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
 For packages, it is recommended to follow the
-[package naming rules](@ref Package-naming-rules). The `name` field is mandatory
+[package naming rules](@ref Package-naming-guidelines). The `name` field is mandatory
 for packages.
 
 
