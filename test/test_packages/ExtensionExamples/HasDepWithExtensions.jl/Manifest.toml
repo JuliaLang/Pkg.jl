@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.0-DEV"
+julia_version = "1.11.0-DEV"
 manifest_format = "2.0"
-project_hash = "51e63007fdb8e0cae2b36f0e7b2acebf7b7432a5"
+project_hash = "c0b34a2f360e3789aa008772cc2c162a8e9d9850"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -16,7 +16,7 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.0.1+0"
+version = "1.0.5+1"
 
 [[deps.Example]]
 git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
@@ -28,10 +28,16 @@ deps = ["Example"]
 path = "../HasExtensions.jl"
 uuid = "4d3288b3-3afc-4bb6-85f3-489fffe514c8"
 version = "0.1.0"
-weakdeps = ["OffsetArrays"]
+weakdeps = ["IndirectArrays", "OffsetArrays"]
 
     [deps.HasExtensions.extensions]
+    IndirectArraysExt = "IndirectArrays"
     OffsetArraysExt = "OffsetArrays"
+
+[[deps.IndirectArrays]]
+git-tree-sha1 = "012e604e1c7458645cb8b436f8fba789a51b257f"
+uuid = "9b13fd28-a010-5f03-acff-a1bbcff69959"
+version = "1.0.0"
 
 [[deps.Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
@@ -49,9 +55,9 @@ version = "1.12.8"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
-version = "0.3.21+0"
+version = "0.3.23+2"
 
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-version = "5.2.0+0"
+version = "5.8.0+1"
