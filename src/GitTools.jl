@@ -95,7 +95,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
-    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    bar = MiniProgressBar(header = "Cloning:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     fancyprint && start_progress(io, bar)
     if credentials === nothing
@@ -122,7 +122,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
                 LibGit2.Callbacks()
             end
             mkpath(source_path)
-            return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+            return LibGit2.clone(url, source_path; callbacks, credentials, kwargs...)
         end
     catch err
         rm(source_path; force=true, recursive=true)
@@ -177,7 +177,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
                 end
             end
         else
-            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
+            return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
         end
     catch err
         err isa LibGit2.GitError || rethrow()
