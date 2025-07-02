@@ -1690,7 +1690,8 @@ end
 
 function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
                     pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
-    printpkgstyle(io, :Resolving, "package versions...")
+    usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
+    printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
     if preserve == PRESERVE_TIERED_INSTALLED
         tiered_resolve(env, registries, pkgs, julia_version, true)
     elseif preserve == PRESERVE_TIERED
