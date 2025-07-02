@@ -1,6 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-[[Example]]
+manifest_format = "2.0"
+
+[[deps.Example]]
 git-tree-sha1 = "6cb40eba4dd78fc0fa3ebeb8cb7e125ba645be6e"
 repo-rev = "master"
 repo-url = "https://github.com/JuliaLang/Example.jl.git"

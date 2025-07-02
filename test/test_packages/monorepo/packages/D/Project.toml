@@ -1,0 +1,4 @@
+name = "D"
+uuid = "bf733257-898a-45a0-b2f2-c1c188bdd870"
+version = "0.0.0"
+manifest = "../../Manifest.toml"

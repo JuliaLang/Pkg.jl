@@ -1,0 +1,7 @@
+name = "ExtensionRegistry"
+uuid = "e84ee987-529c-45f3-abc6-f0c1e5b43514"
+repo = ""
+
+[packages]
+4d3288b3-3afc-4bb6-85f3-489fffe514c8 = { name = "HasExtensions", path = "H/HasExtensions" }
+d4ef3d4a-8e22-4710-85d8-c6cf2eb9efca = { name = "HasDepWithExtensions", path = "H/HasDepWithExtensions" }

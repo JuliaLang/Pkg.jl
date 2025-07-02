@@ -10,12 +10,13 @@ PSA[:name => "test",
     :option_spec => [
         PSA[:name => "coverage", :api => :coverage => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => :complete_installed_packages,
     :description => "run tests for packages",
     :help => md"""
-    test [--coverage] pkg[=uuid] ...
+    test [--coverage] [pkg[=uuid]] ...
 
-Run the tests for package `pkg`. This is done by running the file `test/runtests.jl`
+Run the tests for package `pkg`, or for the current project (which thus needs to be
+a package) if `pkg` is omitted.  This is done by running the file `test/runtests.jl`
 in the package directory. The option `--coverage` can be used to run the tests with
 coverage enabled. The `startup.jl` file is disabled during testing unless
 julia is started with `--startup-file=yes`.
@@ -26,7 +27,7 @@ PSA[:name => "help",
     :api => identity, # dummy API function
     :arg_count => 0 => Inf,
     :arg_parser => ((x,y) -> x),
-    :completions => complete_help,
+    :completions => :complete_help,
     :description => "show this message",
     :help => md"""
     [?|help]
@@ -45,31 +46,39 @@ PSA[:name => "instantiate",
         PSA[:name => "project", :short_name => "p", :api => :manifest => false],
         PSA[:name => "manifest", :short_name => "m", :api => :manifest => true],
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
+        PSA[:name => "workspace", :api => :workspace => true],
+        PSA[:name => "julia_version_strict", :api => :julia_version_strict => false],
     ],
     :description => "downloads all the dependencies for the project",
     :help => md"""
-    instantiate [-v|--verbose]
-    instantiate [-v|--verbose] [-m|--manifest]
-    instantiate [-v|--verbose] [-p|--project]
+    instantiate [-v|--verbose] [--workspace] [--julia_version_strict]
+    instantiate [-v|--verbose] [--workspace] [--julia_version_strict] [-m|--manifest]
+    instantiate [-v|--verbose] [--workspace] [--julia_version_strict] [-p|--project]
 
 Download all the dependencies for the current project at the version given by the project's manifest.
 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
+If `--workspace` is given, all dependencies in the workspace will be downloaded.
+If `--julia_version_strict` is given, manifest version check failures will error instead of log warnings.
+
+After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "remove",
     :short_name => "rm",
     :api => API.rm,
     :should_splat => false,
-    :arg_count => 1 => Inf,
+    :arg_count => 0 => Inf,
     :arg_parser => parse_package,
     :option_spec => [
         PSA[:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
+        PSA[:name => "all", :api => :all_pkgs => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => :complete_installed_packages,
     :description => "remove packages from project or manifest",
     :help => md"""
     [rm|remove] [-p|--project] pkg[=uuid] ...
+    [rm|remove] [-p|--project] [--all]
 
 Remove package `pkg` from the project file. Since the name `pkg` can only
 refer to one package in a project this is unambiguous, but you can specify
@@ -78,14 +87,16 @@ and UUID do not match. When a package is removed from the project file, it
 may still remain in the manifest if it is required by some other package in
 the project. Project mode operation is the default, so passing `-p` or
 `--project` is optional unless it is preceded by the `-m` or `--manifest`
-options at some earlier point.
+options at some earlier point. All packages can be removed by passing `--all`.
 
     [rm|remove] [-m|--manifest] pkg[=uuid] ...
+    [rm|remove] [-m|--manifest] [--all]
 
 Remove package `pkg` from the manifest file. If the name `pkg` refers to
 multiple packages in the manifest, `uuid` disambiguates it. Removing a package
 from the manifest forces the removal of all packages that depend on it, as well
 as any no-longer-necessary manifest packages due to project package removals.
+All packages can be removed by passing `--all`.
 """,
 ],
 PSA[:name => "add",
@@ -95,11 +106,13 @@ PSA[:name => "add",
     :arg_parser => ((x,y) -> parse_package(x,y; add_or_dev=true)),
     :option_spec => [
         PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+        PSA[:name => "weak", :short_name => "w", :api => :target => :weakdeps],
+        PSA[:name => "extra", :short_name => "e", :api => :target => :extras],
     ],
-    :completions => complete_add_dev,
+    :completions => :complete_add_dev,
     :description => "add packages to project",
     :help => md"""
-    add [--preserve=<opt>] pkg[=uuid] [@version] [#rev] ...
+    add [--preserve=<opt>] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...
 
 Add package `pkg` to the current project file. If `pkg` could refer to
 multiple different packages, specifying `uuid` allows you to disambiguate.
@@ -107,6 +120,9 @@ multiple different packages, specifying `uuid` allows you to disambiguate.
 are of the form `@1`, `@1.2` or `@1.2.3`, allowing any version with a prefix
 that matches, or ranges thereof, such as `@1.2-3.4.5`. A git revision can be
 specified by `#branch` or `#commit`.
+
+If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
+added automatically with a lower bound of the added version.
 
 If a local path is used as an argument to `add`, the path needs to be a git repository.
 The project will then track that git repository just like it would track a remote repository online.
@@ -117,26 +133,40 @@ If the package is not located at the top of the git repository, a subdirectory c
 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
 The following table describes the command line arguments to `--preserve` (in order of strictness).
 
-| Argument | Description                                                                         |
-|:---------|:------------------------------------------------------------------------------------|
-| `all`    | Preserve the state of all existing dependencies (including recursive dependencies)  |
-| `direct` | Preserve the state of all existing direct dependencies                              |
-| `semver` | Preserve semver-compatible versions of direct dependencies                          |
-| `none`   | Do not attempt to preserve any version information                                  |
-| `tiered` | Use the tier which will preserve the most version information (this is the default) |
+| Argument           | Description                                                                        |
+|:-------------------|:-----------------------------------------------------------------------------------|
+| `installed`        | Like `all` except also only add versions that are already installed                |
+| `all`              | Preserve the state of all existing dependencies (including recursive dependencies) |
+| `direct`           | Preserve the state of all existing direct dependencies                             |
+| `semver`           | Preserve semver-compatible versions of direct dependencies                         |
+| `none`             | Do not attempt to preserve any version information                                 |
+| `tiered_installed` | Like `tiered` except first try to add only installed versions                      |
+| **`tiered`**       | Use the tier that will preserve the most version information while                 |
+|                    | allowing version resolution to succeed (this is the default)                       |
 
-!!! compat "Julia 1.5"
-    Subdirectory specification requires at least Julia 1.5.
+Note: To make the default strategy `tiered_installed` set the env var `JULIA_PKG_PRESERVE_TIERED_INSTALLED` to
+true.
+
+After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
+With the `installed` strategy the newly added packages will likely already be precompiled, but if not this may be
+because either the combination of package versions resolved in this environment has not been resolved and
+precompiled before, or the precompile cache has been deleted by the LRU cache storage
+(see `JULIA_MAX_NUM_PRECOMPILE_FILES`).
 
 **Examples**
 ```
 pkg> add Example
 pkg> add --preserve=all Example
+pkg> add --weak Example
+pkg> add --extra Example
 pkg> add Example@0.5
 pkg> add Example#master
 pkg> add Example#c37b675
 pkg> add https://github.com/JuliaLang/Example.jl#master
 pkg> add git@github.com:JuliaLang/Example.jl.git
+pkg> add "git@github.com:JuliaLang/Example.jl.git"#master
+pkg> add https://github.com/Company/MonoRepo:juliapkgs/Package.jl
 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
 ```
 """,
@@ -151,18 +181,26 @@ PSA[:name => "develop",
         PSA[:name => "strict", :api => :strict => true],
         PSA[:name => "local", :api => :shared => false],
         PSA[:name => "shared", :api => :shared => true],
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
-    :completions => complete_add_dev,
+    :completions => :complete_add_dev,
     :description => "clone the full package repo locally for development",
     :help => md"""
-    [dev|develop] [--shared|--local] pkg[=uuid] ...
+    [dev|develop] [--preserve=<opt>] [--shared|--local] pkg[=uuid] ...
+    [dev|develop] [--preserve=<opt>] path
 
 Make a package available for development. If `pkg` is an existing local path, that path will be recorded in
 the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
 controlled by the `--shared` (default) and `--local` arguments. The `--shared` location defaults to
-`~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable. When `--local` is given,
-the clone is placed in a `dev` folder in the current project.
+`~/.julia/dev`, but can be controlled with the `JULIA_PKG_DEVDIR` environment variable.
+
+When `--local` is given, the clone is placed in a `dev` folder in the current project. This
+is not supported for paths, only registered packages.
+
 This operation is undone by `free`.
+
+The preserve strategies offered by `add` are also available via the `preserve` argument.
+See `add` for more information.
 
 **Examples**
 ```jl
@@ -176,35 +214,66 @@ pkg> develop --local Example
 PSA[:name => "free",
     :api => API.free,
     :should_splat => false,
-    :arg_count => 1 => Inf,
+    :arg_count => 0 => Inf,
+    :option_spec => [
+        PSA[:name => "all", :api => :all_pkgs => true],
+    ],
     :arg_parser => parse_package,
-    :completions => complete_installed_packages,
+    :completions => :complete_fixed_packages,
     :description => "undoes a `pin`, `develop`, or stops tracking a repo",
     :help => md"""
     free pkg[=uuid] ...
+    free [--all]
 
-Free a pinned package `pkg`, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
-makes the package no longer being checked out.
+Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
+makes the package no longer being checked out. Specifying `--all` will free all dependencies (direct and indirect).
+""",
+],
+PSA[:name => "why",
+    :api => API.why,
+    :should_splat => false,
+    :arg_count => 1 => 1,
+    :option_spec => [
+        PSA[:name => "workspace", :api => :workspace => true],
+    ],
+    :arg_parser => parse_package,
+    :completions => :complete_all_installed_packages,
+    :description => "shows why a package is in the manifest",
+    :help => md"""
+    why [--workspace] pkg[=uuid] ...
+
+Show the reason why packages are in the manifest, printed as a path through the
+dependency graph starting at the direct dependencies.
+The `workspace` option can be used to show the path from any dependency of a project in
+the workspace.
+
+!!! compat "Julia 1.9"
+    The `why` function is added in Julia 1.9
 """,
 ],
 PSA[:name => "pin",
     :api => API.pin,
     :should_splat => false,
-    :arg_count => 1 => Inf,
+    :arg_count => 0 => Inf,
+    :option_spec => [
+        PSA[:name => "all", :api => :all_pkgs => true],
+    ],
     :arg_parser => parse_package,
-    :completions => complete_installed_packages,
+    :completions => :complete_installed_packages,
     :description => "pins the version of packages",
     :help => md"""
     pin pkg[=uuid] ...
+    pin [--all]
 
 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-A pinned package has the symbol `⚲` next to its version in the status list.
+A pinned package has the symbol `⚲` next to its version in the status list.. Specifying `--all` will pin all dependencies (direct and indirect).
 
 **Examples**
 ```
 pkg> pin Example
 pkg> pin Example@0.5.0
 pkg> pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
+pkg> pin --all
 ```
 """,
 ],
@@ -216,7 +285,7 @@ PSA[:name => "build",
     :option_spec => [
         PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => :complete_installed_packages,
     :description => "run the build script for packages",
     :help => md"""
     build [-v|--verbose] pkg[=uuid] ...
@@ -245,19 +314,25 @@ PSA[:name => "activate",
         PSA[:name => "shared", :api => :shared => true],
         PSA[:name => "temp", :api => :temp => true],
     ],
-    :completions => complete_activate,
+    :completions => :complete_activate,
     :description => "set the primary environment the package manager manipulates",
     :help => md"""
     activate
-    activate [--shared|--temp] [path]
+    activate [--shared] path
+    activate --temp
+    activate - (activates the previously active environment)
 
-Activate the environment at the given `path`, or the home project environment if no `path` is specified.
+Activate the environment at the given `path`, or use the first project found in
+`LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
+In the latter case, for the default value of `LOAD_PATH`, the result is to activate the
+`@v#.#` environment.
 The active environment is the environment that is modified by executing package commands.
 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
 it will be placed in the first depot of the stack.
 Use the `--temp` option to create temporary environments which are removed when the julia
 process is exited.
+Use a single `-` to activate the previously active environment.
 """ ,
 ],
 PSA[:name => "update",
@@ -273,51 +348,64 @@ PSA[:name => "update",
         PSA[:name => "minor", :api => :level => UPLEVEL_MINOR],
         PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
         PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
+        PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
     ],
-    :completions => complete_installed_packages,
+    :completions => :complete_installed_packages,
     :description => "update packages in manifest",
     :help => md"""
     [up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
     [up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
 
     opts: --major | --minor | --patch | --fixed
+          --preserve=<all/direct/none>
 
 Update `pkg` within the constraints of the indicated version
 specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
 any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
 In `--project` mode, package specifications only match project packages, while
-in `manifest` mode they match any manifest package. Bound level options force
+in `--manifest` mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the `--fixed` upgrade level is given, then the following
 packages will not be upgraded at all.
+
+After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
 """,
 ],
 PSA[:name => "generate",
-    :api => API.generate_deprecated,
+    :api => API.generate,
     :arg_count => 1 => 1,
     :arg_parser => ((x,y) -> map(expanduser, unwrap(x))),
     :description => "generate files for a new project",
     :help => md"""
     generate pkgname
 
-Create a project called `pkgname` in the current folder.
+Create a minimal project called `pkgname` in the current folder. For more featureful package creation, please see `PkgTemplates.jl`.
 """,
 ],
 PSA[:name => "precompile",
     :api => API.precompile,
+    :should_splat => false,
+    :arg_count => 0 => Inf,
+    :completions => :complete_installed_packages,
     :description => "precompile all the project dependencies",
+    :option_spec => [
+        PSA[:name => "workspace", :api => :workspace => true],
+    ],
     :help => md"""
-    precompile
+    precompile [--workspace]
+    precompile [--workspace] pkgs...
 
-Precompile all the dependencies of the project in parallel.
+Precompile all or specified dependencies of the project in parallel.
 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
+The `workspace` option will precompile all packages in the workspace and not only the active project.
 
 Errors will only throw when precompiling the top-level dependencies, given that
 not all manifest dependencies may be loaded by the top-level dependencies on the given system.
 
 This method is called automatically after any Pkg action that changes the manifest.
 Any packages that have previously errored during precompilation won't be retried in auto mode
-until they have changed. To disable automatic precompilation set the environment variable `JULIA_PKG_PRECOMPILE_AUTO=0`
+until they have changed. To disable automatic precompilation set the environment variable `JULIA_PKG_PRECOMPILE_AUTO=0`.
+To manually control the number of tasks used set the environment variable `JULIA_NUM_PRECOMPILE_TASKS`.
 """,
 ],
 PSA[:name => "status",
@@ -330,27 +418,56 @@ PSA[:name => "status",
         PSA[:name => "project",  :short_name => "p", :api => :mode => PKGMODE_PROJECT],
         PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
         PSA[:name => "diff", :short_name => "d", :api => :diff => true],
+        PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
+        PSA[:name => "compat", :short_name => "c", :api => :compat => true],
+        PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
+        PSA[:name => "workspace", :api => :workspace => true],
     ],
-    :completions => complete_installed_packages,
+    :completions => :complete_installed_packages,
     :description => "summarize contents of and changes to environment",
     :help => md"""
-    [st|status] [-d|--diff] [pkgs...]
-    [st|status] [-d|--diff] [-p|--project] [pkgs...]
-    [st|status] [-d|--diff] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-m|--manifest] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-p|--project] [pkgs...]
+    [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-m|--manifest] [pkgs...]
+    [st|status] [-c|--compat] [pkgs...]
 
-Show the status of the current environment. In `--project` mode (default), the
-status of the project file is summarized. In `--manifest` mode the output also
-includes the recursive dependencies of added packages given in the manifest.
+Show the status of the current environment. Packages marked with `⌃` have new
+versions that may be installed, e.g. via `pkg> up`. Those marked with `⌅` have
+new versions available, but cannot be installed due to compatibility
+constraints. To see why use `pkg> status --outdated` which shows any packages
+that are not at their latest version and if any packages are holding them back.
+
+Use `pkg> status --extensions` to show dependencies with extensions and what extension dependencies
+of those that are currently loaded.
+
+In `--project` mode (default), the status of the project file is summarized. In `--manifest`
+mode the output also includes the recursive dependencies of added packages given in the manifest.
 If there are any packages listed as arguments the output will be limited to those packages.
 The `--diff` option will, if the environment is in a git repository, limit
 the output to the difference as compared to the last git commit.
+The `--compat` option alone shows project compat entries.
+The `--workspace` option shows the (merged) status of packages in the workspace.
 
-!!! compat "Julia 1.1"
-    `pkg> status` with package arguments requires at least Julia 1.1.
+!!! compat "Julia 1.8"
+    The `⌃` and `⌅` indicators were added in Julia 1.8.
+    The `--outdated` and `--compat` options require at least Julia 1.8.
+""",
+],
+PSA[:name => "compat",
+    :api => API.compat,
+    :arg_count => 0 => 2,
+    :completions => :complete_installed_packages_and_compat,
+    :description => "edit compat entries in the current Project and re-resolve",
+    :help => md"""
+    compat [pkg] [compat_string]
 
-!!! compat "Julia 1.3"
-    The `--diff` option requires Julia 1.3. In earlier versions `--diff`
-    is the default for environments in git repositories.
+Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments.
+When directly editing use tab to complete the package name and any existing compat entry.
+Specifying a package with a blank compat entry will remove the entry.
+After changing compat entries a `resolve` will be attempted to check whether the current
+environment is compliant with the new compat rules.
 """,
 ],
 PSA[:name => "gc",
@@ -402,12 +519,6 @@ Add package registries `reg...` to the user depot. Without arguments
 it adds known registries, i.e. the General registry and registries
 served by the configured package server.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
-!!! compat "Julia 1.5"
-    `registry add` without arguments requires at least Julia 1.5.
-
 **Examples**
 ```
 pkg> registry add General
@@ -427,9 +538,6 @@ PSA[:name => "remove",
     registry [rm|remove] reg...
 
 Remove package registries `reg...`.
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 **Examples**
 ```
@@ -451,9 +559,6 @@ PSA[:name => "update",
 Update package registries `reg...`. If no registries are specified
 all registries will be updated.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 **Examples**
 ```
 pkg> registry up
@@ -470,9 +575,6 @@ PSA[:name => "status",
 
 Display information about installed registries.
 
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
-
 **Examples**
 ```
 pkg> registry status
@@ -480,4 +582,105 @@ pkg> registry status
 """,
 ]
 ], #registry
+"app" => CommandDeclaration[
+    PSA[:name => "status",
+    :short_name => "st",
+    :api => Apps.status,
+    :should_splat => false,
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_package,
+    :completions => :complete_installed_apps,
+    :description => "show status of apps",
+    :help => md"""
+    app status [pkg[=uuid]] ...
+
+Show the status of installed apps. If packages are specified, only show
+apps for those packages.
+    """
+],
+PSA[:name => "add",
+    :api => Apps.add,
+    :should_splat => false,
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_app_add,
+    :completions => :complete_add_dev,
+    :description => "add app",
+    :help => md"""
+    app add pkg[=uuid] ...
+
+Add apps provided by packages `pkg...`. This will make the apps available
+as executables in `~/.julia/bin` (which should be added to PATH).
+
+**Examples**
+```
+pkg> app add Example
+pkg> app add Example@0.5.0
+```
+""",
+],
+PSA[:name => "remove",
+    :short_name => "rm",
+    :api => Apps.rm,
+    :should_splat => false,
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_package,
+    :completions => :complete_installed_apps,
+    :description => "remove apps",
+    :help => md"""
+    app [rm|remove] pkg[=uuid] ...
+
+Remove apps provided by packages `pkg...`. This will remove the executables
+from `~/.julia/bin`.
+
+**Examples**
+```
+pkg> app rm Example
+```
+    """
+],
+PSA[:name => "develop",
+    :short_name => "dev",
+    :api => Apps.develop,
+    :should_splat => false,
+    :arg_count => 1 => Inf,
+    :arg_parser => (x,y) -> parse_package(x,y; add_or_dev=true),
+    :completions => :complete_add_dev,
+    :description => "develop a package and install all the apps in it",
+    :help => md"""
+    app [dev|develop] pkg[=uuid] ...
+    app [dev|develop] path
+
+Same as `develop` but also installs all the apps in the package.
+This allows one to edit their app and have the changes immediately be reflected in the app.
+
+**Examples**
+```jl
+pkg> app develop Example
+pkg> app develop https://github.com/JuliaLang/Example.jl
+pkg> app develop ~/mypackages/Example
+pkg> app develop --local Example
+```
+"""
+],
+PSA[:name => "update",
+    :short_name => "up",
+    :api => Apps.update,
+    :completions => :complete_installed_apps,
+    :should_splat => false,
+    :arg_count => 0 => Inf,
+    :arg_parser => parse_package,
+    :description => "update app",
+    :help => md"""
+    app [up|update] [pkg[=uuid]] ...
+
+Update apps for packages `pkg...`. If no packages are specified, all apps will be updated.
+
+**Examples**
+```
+pkg> app update
+pkg> app update Example
+```
+""",
+], # app
+]
 ] #command_declarations

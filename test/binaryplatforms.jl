@@ -7,9 +7,9 @@ import Pkg.BinaryPlatforms: platform_name
 # The platform we're running on
 const platform = @inferred Platform platform_key_abi()
 
-# This is a compatability test; once we've fully migrated away from Pkg.BinaryPlatforms
+# This is a compatibility test; once we've fully migrated away from Pkg.BinaryPlatforms
 # to the new Base.BinaryPlatforms module, we can throw away the shim definitions in
-# `BinaryPlatforms_compat.jl` and drop these tests.
+# `BinaryPlatformsCompat.jl` and drop these tests.
 @testset "Compat - PlatformNames" begin
     # Ensure the platform type constructors are well behaved
     @testset "Platform constructors" begin
@@ -152,39 +152,5 @@ const platform = @inferred Platform platform_key_abi()
         @test !Sys.isbsd(Linux(:powerpc64le; libc=:musl))
     end
 end
-
-@testset "select_platform" begin
-    platforms = Dict(
-        # Typical binning test
-        Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"3")) => "linux4",
-        Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"4")) => "linux7",
-        Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"5")) => "linux8",
-
-        # Ambiguity test
-        Linux(:aarch64, compiler_abi=CompilerABI(libgfortran_version=v"3")) => "linux4",
-        Linux(:aarch64, compiler_abi=CompilerABI(libgfortran_version=v"3", libstdcxx_version=v"3.4.18")) => "linux5",
-
-        MacOS(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"3")) => "mac4",
-        Windows(:x86_64, compiler_abi=CompilerABI(cxxstring_abi=:cxx11)) => "win",
-    )
-
-    @test select_platform(platforms, Linux(:x86_64)) == "linux8"
-    @test select_platform(platforms, Linux(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"4"))) == "linux7"
-
-    # Ambiguity test
-    @test select_platform(platforms, Linux(:aarch64)) == "linux5"
-    @test select_platform(platforms, Linux(:aarch64; compiler_abi=CompilerABI(libgfortran_version=v"3"))) == "linux5"
-    @test select_platform(platforms, Linux(:aarch64; compiler_abi=CompilerABI(libgfortran_version=v"4"))) == nothing
-
-    @test select_platform(platforms, MacOS(:x86_64)) == "mac4"
-    @test select_platform(platforms, MacOS(:x86_64, compiler_abi=CompilerABI(libgfortran_version=v"4"))) == nothing
-
-    @test select_platform(platforms, Windows(:x86_64, compiler_abi=CompilerABI(cxxstring_abi=:cxx11))) == "win"
-    @test select_platform(platforms, Windows(:x86_64, compiler_abi=CompilerABI(cxxstring_abi=:cxx03))) == nothing
-
-    # Poor little guy
-    @test select_platform(platforms, FreeBSD(:x86_64)) == nothing
-end
-
 
 end # module

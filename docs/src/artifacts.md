@@ -1,7 +1,4 @@
-# [**8.** Artifacts](@id Artifacts)
-
-!!! compat "Julia 1.3"
-    Pkg's artifacts functionality requires at least Julia 1.3.
+# [**9.** Artifacts](@id Artifacts)
 
 `Pkg` can install and manage containers of data that are not Julia packages.  These containers can contain platform-specific binaries, datasets, text, or any other kind of data that would be convenient to place within an immutable, life-cycled datastore.
 These containers, (called "Artifacts") can be created locally, hosted anywhere, and automatically downloaded and unpacked upon installation of your Julia package.
@@ -36,7 +33,7 @@ open(joinpath(rootpath, "bin", "socrates")) do file
 end
 ```
 
-If you have an existing tarball that is accessible via a `url`, it could also be be accessed in this manner.
+If you have an existing tarball that is accessible via a `url`, it could also be accessed in this manner.
 To create the `Artifacts.toml` you must compute two hashes: the `sha256` hash of the download file, and the `git-tree-sha1` of the unpacked content.
 These can be computed as follows.
 
@@ -106,7 +103,7 @@ Because artifacts are addressed only by their content hash, the purpose of an `A
 ## Artifact types and properties
 
 In the above example, the `socrates` artifact showcases a platform-independent artifact with multiple download locations.
-When downloading and installing the `socrates` artifact, URLs will be attempted in-order until one succeeds.
+When downloading and installing the `socrates` artifact, URLs will be attempted in order until one succeeds.
 The `socrates` artifact is marked as `lazy`, which means that it will not be automatically downloaded when the containing package is installed, but rather will be downloaded on-demand when the package first attempts to use it.
 
 The `c_simple` artifact showcases a platform-dependent artifact, where each entry in the `c_simple` array contains keys that help the calling package choose the appropriate download based on the particulars of the host machine.
@@ -126,7 +123,7 @@ While we could just download the dataset during a build step into the package di
 
 * Second, the downloaded data is not shared across different versions of our package.
   If we have three different versions of the package installed for use by various projects, then we need three different copies of the data, even if it hasn't changed between those versions.
-  Moreover, each time we upgrade or downgrade the package, unless we do something clever (and probably brittle), we have to download the data again.
+  Moreover, each time we upgrade or downgrade the package unless we do something clever (and probably brittle), we have to download the data again.
 
 With artifacts, we will instead check to see if our `iris` artifact already exists on-disk and only if it doesn't will we download and install it, after which we can bind the result into our `Artifacts.toml` file:
 
@@ -178,7 +175,7 @@ iris_dataset_path = artifact"iris"
 
 The `Artifacts` API is broken up into three levels: hash-aware functions, name-aware functions and utility functions.
 
-* **Hash-aware** functions deal with content-hashes and essentially nothing else. These methods allow you to query whether an artifact exists, what its path is, to verify that an artifact satisfies its content hash on-disk, etc.  Hash-aware functions include: `artifact_exists()`, `artifact_path()`, `remove_artifact()`, `verify_artifact()` and `archive_artifact()`.  Note that in general you should not use `remove_artifact()` and should instead use `Pkg.gc()` to cleanup artifact installations.
+* **Hash-aware** functions deal with content-hashes and essentially nothing else. These methods allow you to query whether an artifact exists, what its path is, verify that an artifact satisfies its content hash on-disk, etc.  Hash-aware functions include: `artifact_exists()`, `artifact_path()`, `remove_artifact()`, `verify_artifact()` and `archive_artifact()`.  Note that in general you should not use `remove_artifact()` and should instead use `Pkg.gc()` to cleanup artifact installations.
 
 * **Name-aware** functions deal with bound names within an `Artifacts.toml` file, and as such, typically require both a path to an `Artifacts.toml` file as well as the artifact name.  Name-aware functions include: `artifact_meta()`, `artifact_hash()`, `bind_artifact!()`, `unbind_artifact!()`, `download_artifact()` and `ensure_artifact_installed()`.
 
@@ -196,7 +193,7 @@ Additionally, the destination location can be either an absolute path, or a repl
 This allows sysadmins to create their own artifacts which they can then use by overriding other packages to use the new artifact.
 
 ```TOML
-# Override single hash to absolute path
+# Override single hash to an absolute path
 78f35e74ff113f02274ce60dab6e92b4546ef806 = "/path/to/replacement"
 
 # Override single hash to new artifact content-hash
@@ -221,9 +218,85 @@ To remove an override and re-enable default location logic for an artifact, inse
 libfoo = ""
 ```
 
-If the two `Overrides.toml` snippets as given above are layered on top of eachother, the end result will be mapping the content-hash `78f35e74ff113f02274ce60dab6e92b4546ef806` to `"/path/to/new/replacement"`, and mapping `Foo.libbar` to the artifact identified by the content-hash `683942669b4639019be7631caa28c38f3e1924fe`.
+If the two `Overrides.toml` snippets as given above are layered on top of each other, the end result will be mapping the content-hash `78f35e74ff113f02274ce60dab6e92b4546ef806` to `"/path/to/new/replacement"`, and mapping `Foo.libbar` to the artifact identified by the content-hash `683942669b4639019be7631caa28c38f3e1924fe`.
 Note that while that hash was previously overridden, it is no longer, and therefore `Foo.libbar` will look directly at locations such as `~/.julia/artifacts/683942669b4639019be7631caa28c38f3e1924fe`.
 
-Most methods that are affected by overrides have the ability to ignore overrides by setting `honor_overrides=false` as a keyword argument within them.
-For UUID/name based overrides to work, `Artifacts.toml` files must be loaded with the knowledge of the UUID of the loading package.
-This is deduced automatically by the `artifacts""` string macro, however if you are for some reason manually using the `Pkg.Artifacts` API within your package and you wish to honor overrides, you must provide the package UUID to API calls like `artifact_meta()` and `ensure_artifact_installed()` via the `pkg_uuid` keyword argument.
+Most methods that are affected by overrides can ignore overrides by setting `honor_overrides=false` as a keyword argument within them.
+For UUID/name-based overrides to work, `Artifacts.toml` files must be loaded with the knowledge of the UUID of the loading package.
+This is deduced automatically by the `artifacts""` string macro, however, if you are for some reason manually using the `Pkg.Artifacts` API within your package and you wish to honor overrides, you must provide the package UUID to API calls like `artifact_meta()` and `ensure_artifact_installed()` via the `pkg_uuid` keyword argument.
+
+## Extending Platform Selection
+
+!!! compat "Julia 1.7"
+    Pkg's extended platform selection requires at least Julia 1.7, and is considered experimental.
+
+New in Julia 1.6, `Platform` objects can have extended attributes applied to them, allowing artifacts to be tagged with things such as CUDA driver version compatibility, microarchitectural compatibility, julia version compatibility and more!
+Note that this feature is considered experimental and may change in the future.
+If you as a package developer find yourself needing this feature, please get in contact with us so it can evolve for the benefit of the whole ecosystem.
+In order to support artifact selection at `Pkg.add()` time, `Pkg` will run the specially-named file `<project_root>/.pkg/select_artifacts.jl`, passing the current platform triplet as the first argument.
+This artifact selection script should print a `TOML`-serialized dictionary representing the artifacts that this package needs according to the given platform, and perform any inspection of the system as necessary to auto-detect platform capabilities if they are not explicitly provided by the given platform triplet.
+The format of the dictionary should match that returned from `Artifacts.select_downloadable_artifacts()`, and indeed most packages should simply call that function with an augmented `Platform` object.
+An example artifact selection hook definition might look like the following, split across two files:
+
+```julia
+# .pkg/platform_augmentation.jl
+using Libdl, Base.BinaryPlatforms
+function augment_platform!(p::Platform)
+    # If this platform object already has a `cuda` tag set, don't augment
+    if haskey(p, "cuda")
+        return p
+    end
+
+    # Open libcuda explicitly, so it gets `dlclose()`'ed after we're done
+    dlopen("libcuda") do lib
+        # find symbol to ask for driver version; if we can't find it, just silently continue
+        cuDriverGetVersion = dlsym(lib, "cuDriverGetVersion"; throw_error=false)
+        if cuDriverGetVersion !== nothing
+            # Interrogate CUDA driver for driver version:
+            driverVersion = Ref{Cint}()
+            ccall(cuDriverGetVersion, UInt32, (Ptr{Cint},), driverVersion)
+
+            # Store only the major version
+            p["cuda"] = div(driverVersion, 1000)
+        end
+    end
+
+    # Return possibly-altered `Platform` object
+    return p
+end
+```
+
+```julia
+using TOML, Artifacts, Base.BinaryPlatforms
+include("./platform_augmentation.jl")
+artifacts_toml = joinpath(dirname(@__DIR__), "Artifacts.toml")
+
+# Get "target triplet" from ARGS, if given (defaulting to the host triplet otherwise)
+target_triplet = get(ARGS, 1, Base.BinaryPlatforms.host_triplet())
+
+# Augment this platform object with any special tags we require
+platform = augment_platform!(HostPlatform(parse(Platform, target_triplet)))
+
+# Select all downloadable artifacts that match that platform
+artifacts = select_downloadable_artifacts(artifacts_toml; platform)
+
+# Output the result to `stdout` as a TOML dictionary
+TOML.print(stdout, artifacts)
+```
+
+In this hook definition, our platform augmentation routine opens a system library (`libcuda`), searches it for a symbol to give us the CUDA driver version, then embeds the major version of that version number into the `cuda` property of the `Platform` object we are augmenting.
+While it is not critical for this code to actually attempt to close the loaded library (as it will most likely be opened again by the CUDA package immediately after the package operations are completed) it is best practice to make hooks as lightweight and transparent as possible, as they may be used by other Pkg utilities in the future.
+In your own package, you should also use augmented platform objects when using the `@artifact_str` macro, as follows:
+
+```julia
+include("../.pkg/platform_augmentation.jl")
+
+function __init__()
+    p = augment_platform!(HostPlatform())
+    global my_artifact_dir = @artifact_str("MyArtifact", p)
+end
+```
+
+This ensures that the same artifact is used by your code as Pkg attempted to install.
+
+Artifact selection hooks are only allowed to use `Base`, `Artifacts`, `Libdl`, and `TOML`. They are not allowed to use any other standard libraries, and they are not allowed to use any packages (including the package to which they belong).

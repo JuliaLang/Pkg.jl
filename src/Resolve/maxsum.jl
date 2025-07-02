@@ -1,23 +1,23 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-# An exception type used internally to signal that an unsatisfiable
-# constraint was detected
-struct UnsatError <: Exception
-    p0::Int
-end
+const DEFAULT_MAX_TIME = "300"
 
 # Some parameters to drive the decimation process
 mutable struct MaxSumParams
     dec_interval::Int # number of iterations between decimations
-    dec_fraction::Float64 # fraction of nodes to decimate at every decimation
-                          # step
+    dec_fraction::Float64 # fraction of nodes to decimate at every decimation step
+    max_time::Float64 # maximum allowed time
 
     function MaxSumParams()
-        accuracy = parse(Int, get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1"))
-        accuracy > 0 || error("JULIA_PKGRESOLVE_ACCURACY must be > 0")
+        accuracy = parse(Int, get(ENV, "JULIA_PKG_RESOLVE_ACCURACY",
+                                  # Allow for `JULIA_PKGRESOLVE_ACCURACY` for backward
+                                  # compatibility with Julia v1.7-
+                                  get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1")))
+        accuracy > 0 || error("JULIA_PKG_RESOLVE_ACCURACY must be > 0")
         dec_interval = accuracy * 5
         dec_fraction = 0.05 / accuracy
-        return new(dec_interval, dec_fraction)
+        max_time = parse(Float64, get(ENV, "JULIA_PKG_RESOLVE_MAX_TIME", DEFAULT_MAX_TIME))
+        return new(dec_interval, dec_fraction, max_time)
     end
 end
 
@@ -306,7 +306,6 @@ function clean_forbidden!(graph::Graph, msgs::Messages)
     ignored = graph.ignored
     fld = msgs.fld
     affected = Tuple{Int,Int}[]
-    removed = 0
 
     for p0 = 1:np
         ignored[p0] && continue
@@ -315,7 +314,6 @@ function clean_forbidden!(graph::Graph, msgs::Messages)
         for v0 in findall(gconstr0)
             validmax(fld0[v0]) && continue
             push!(affected, (p0,v0))
-            removed += 1
         end
     end
     return affected
@@ -325,6 +323,7 @@ end
 # (occasionally calling decimate())
 function maxsum(graph::Graph)
     params = MaxSumParams()
+    timer = Timer(params.max_time) # start the timeout timer
 
     perm = NodePerm(graph.np)
     strace = SolutionTrace(graph)
@@ -333,19 +332,19 @@ function maxsum(graph::Graph)
     push_snapshot!(graph)
     # gconstr_sav = graph.gconstr
     # ignored_sav = graph.ignored
-    ok = converge!(graph, msgs, strace, perm, params)
+    result = converge!(graph, msgs, strace, perm, params, timer)
     # @assert graph.gconstr ≡ gconstr_sav
     # @assert graph.ignored ≡ ignored_sav
     pop_snapshot!(graph)
-    if ok
+    if result == :ok
         @assert strace.best == strace.solution
         @assert strace.num_nondecimated == 0
         @assert all(strace.solution .> 0)
         @assert strace.staged ≡ nothing
-    else
+    elseif result == :unsat
         @assert strace.staged ≢ nothing
     end
-    return ok, strace.best, strace.staged
+    return result, strace.best, strace.staged
 end
 
 function try_simplify_graph_soft!(graph, sources)
@@ -362,17 +361,21 @@ struct Unsat
     p0::Int
 end
 
-function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::NodePerm, params::MaxSumParams)
+function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::NodePerm, params::MaxSumParams, timer::Timer)
+    # check for time out (we need to yield first to give the timer a chance to update)
+    yield()
+    isopen(timer) || return :timedout
+
     is_best_sofar = update_solution!(strace, graph)
 
     # this is the base of the recursion: the case when
     # the solver has succeeded in decimating everything
-    strace.num_nondecimated == 0 && return true
+    strace.num_nondecimated == 0 && return :ok
 
     reset_messages!(msgs, graph)
 
     # perform some maxsum iterations, then decimate one node.
-    # If failure happens during this process, we bail (return false)
+    # If failure happens during this process, we bail (return :unsat)
     it = 0
     for it = 1:params.dec_interval
         maxdiff = iterate!(graph, msgs, perm)
@@ -382,7 +385,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
                 s0 = findlast(graph.gconstr[p0])
                 strace.staged = (p0, s0)
             end
-            return false
+            return :unsat
         end
         maxdiff == zero(FieldValue) && break
     end
@@ -402,9 +405,9 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
     if !try_simplify_graph_soft!(graph, sources)
         # found an implicit contradiction
         is_best_sofar && (strace.staged = first(affected))
-        return false
+        return :unsat
     end
-    return converge!(graph, msgs, strace, perm, params)
+    return converge!(graph, msgs, strace, perm, params, timer)
 
     @label decimate
 
@@ -420,7 +423,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
             s0 = argmax(fld[p0])
             strace.staged = dec_firstcandidate(graph, msgs)
         end
-        return false
+        return :unsat
     end
 
     while true
@@ -446,7 +449,11 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
         try_simplify_graph_soft!(graph, Set{Int}(first.(dtrace))) || @goto backtrack
 
         # otherwise, keep going...
-        converge!(graph, msgs, strace, perm, params) && (pop_snapshot!(graph); return true)
+        result = converge!(graph, msgs, strace, perm, params, timer)
+        if result == :ok || result == :timedout
+            pop_snapshot!(graph)
+            return result
+        end
 
         @label backtrack
 
@@ -472,10 +479,10 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
     # (note that we're working on the "entry" snapshot here!)
     graph.gconstr[p0][s0] = false
     # check if we have finished all available possibilities
-    any(graph.gconstr[p0]) || return false
+    any(graph.gconstr[p0]) || return :unsat
     # if neither the s0 state nor its negation are valid, give up
-    try_simplify_graph_soft!(graph, Set{Int}([p0])) || return false
+    try_simplify_graph_soft!(graph, Set{Int}([p0])) || return :unsat
 
     # keep going, with one possible state less...
-    return converge!(graph, msgs, strace, perm, params)
+    return converge!(graph, msgs, strace, perm, params, timer)
 end
