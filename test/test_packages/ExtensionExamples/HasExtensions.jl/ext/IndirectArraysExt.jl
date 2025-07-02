@@ -9,6 +9,7 @@ end
 
 function __init__()
     HasExtensions.indirectarrays_loaded = true
+    return
 end
 
 end

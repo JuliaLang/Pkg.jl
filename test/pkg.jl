@@ -24,44 +24,44 @@ const PackageSpec = Pkg.Types.PackageSpec
 import Pkg.Types: semver_spec, VersionSpec
 @testset "semver notation" begin
     @test semver_spec("^1.2.3") == VersionSpec("1.2.3-1")
-    @test semver_spec("^1.2")   == VersionSpec("1.2.0-1")
-    @test semver_spec("^1")     == VersionSpec("1.0.0-1")
+    @test semver_spec("^1.2") == VersionSpec("1.2.0-1")
+    @test semver_spec("^1") == VersionSpec("1.0.0-1")
     @test semver_spec("^0.2.3") == VersionSpec("0.2.3-0.2")
     @test semver_spec("^0.0.3") == VersionSpec("0.0.3-0.0.3")
-    @test semver_spec("^0.0")   == VersionSpec("0.0.0-0.0")
-    @test semver_spec("^0")     == VersionSpec("0.0.0-0")
+    @test semver_spec("^0.0") == VersionSpec("0.0.0-0.0")
+    @test semver_spec("^0") == VersionSpec("0.0.0-0")
     @test semver_spec("~1.2.3") == VersionSpec("1.2.3-1.2")
-    @test semver_spec("~1.2")   == VersionSpec("1.2.0-1.2")
-    @test semver_spec("~1")     == VersionSpec("1.0.0-1")
-    @test semver_spec("1.2.3")  == semver_spec("^1.2.3")
-    @test semver_spec("1.2")    == semver_spec("^1.2")
-    @test semver_spec("1")      == semver_spec("^1")
-    @test semver_spec("0.0.3")  == semver_spec("^0.0.3")
-    @test semver_spec("0")      == semver_spec("^0")
+    @test semver_spec("~1.2") == VersionSpec("1.2.0-1.2")
+    @test semver_spec("~1") == VersionSpec("1.0.0-1")
+    @test semver_spec("1.2.3") == semver_spec("^1.2.3")
+    @test semver_spec("1.2") == semver_spec("^1.2")
+    @test semver_spec("1") == semver_spec("^1")
+    @test semver_spec("0.0.3") == semver_spec("^0.0.3")
+    @test semver_spec("0") == semver_spec("^0")
 
     @test semver_spec("0.0.3, 1.2") == VersionSpec(["0.0.3-0.0.3", "1.2.0-1"])
     @test semver_spec("~1.2.3, ~v1") == VersionSpec(["1.2.3-1.2", "1.0.0-1"])
 
-    @test   v"1.5.2"  in semver_spec("1.2.3")
-    @test   v"1.2.3"  in semver_spec("1.2.3")
-    @test !(v"2.0.0"  in semver_spec("1.2.3"))
-    @test !(v"1.2.2"  in semver_spec("1.2.3"))
+    @test   v"1.5.2" in semver_spec("1.2.3")
+    @test   v"1.2.3" in semver_spec("1.2.3")
+    @test !(v"2.0.0" in semver_spec("1.2.3"))
+    @test !(v"1.2.2" in semver_spec("1.2.3"))
     @test   v"1.2.99" in semver_spec("~1.2.3")
-    @test   v"1.2.3"  in semver_spec("~1.2.3")
-    @test !(v"1.3"    in semver_spec("~1.2.3"))
-    @test  v"1.2.0"   in semver_spec("1.2")
-    @test  v"1.9.9"   in semver_spec("1.2")
-    @test !(v"2.0.0"  in semver_spec("1.2"))
-    @test !(v"1.1.9"  in semver_spec("1.2"))
-    @test   v"0.2.3"  in semver_spec("0.2.3")
-    @test !(v"0.3.0"  in semver_spec("0.2.3"))
-    @test !(v"0.2.2"  in semver_spec("0.2.3"))
-    @test   v"0.0.0"  in semver_spec("0")
-    @test  v"0.99.0"  in semver_spec("0")
-    @test !(v"1.0.0"  in semver_spec("0"))
-    @test  v"0.0.0"   in semver_spec("0.0")
-    @test  v"0.0.99"  in semver_spec("0.0")
-    @test !(v"0.1.0"  in semver_spec("0.0"))
+    @test   v"1.2.3" in semver_spec("~1.2.3")
+    @test !(v"1.3" in semver_spec("~1.2.3"))
+    @test  v"1.2.0" in semver_spec("1.2")
+    @test  v"1.9.9" in semver_spec("1.2")
+    @test !(v"2.0.0" in semver_spec("1.2"))
+    @test !(v"1.1.9" in semver_spec("1.2"))
+    @test   v"0.2.3" in semver_spec("0.2.3")
+    @test !(v"0.3.0" in semver_spec("0.2.3"))
+    @test !(v"0.2.2" in semver_spec("0.2.3"))
+    @test   v"0.0.0" in semver_spec("0")
+    @test  v"0.99.0" in semver_spec("0")
+    @test !(v"1.0.0" in semver_spec("0"))
+    @test  v"0.0.0" in semver_spec("0.0")
+    @test  v"0.0.99" in semver_spec("0.0")
+    @test !(v"0.1.0" in semver_spec("0.0"))
 
     @test semver_spec("<1.2.3") == VersionSpec("0.0.0 - 1.2.2")
     @test semver_spec("<1.2") == VersionSpec("0.0.0 - 1.1")
@@ -147,8 +147,8 @@ import Pkg.Types: semver_spec, VersionSpec
     @test_throws ErrorException semver_spec("0.0.0")
     @test_throws ErrorException semver_spec("0.7 1.0")
 
-    @test Pkg.Types.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6)))
-    @test !(Pkg.Types.isjoinable(Pkg.Types.VersionBound((1,5)), Pkg.Types.VersionBound((1,6,0))))
+    @test Pkg.Types.isjoinable(Pkg.Types.VersionBound((1, 5)), Pkg.Types.VersionBound((1, 6)))
+    @test !(Pkg.Types.isjoinable(Pkg.Types.VersionBound((1, 5)), Pkg.Types.VersionBound((1, 6, 0))))
 end
 
 # TODO: Should rewrite these tests not to rely on internals like field names
@@ -188,20 +188,20 @@ temp_pkg_dir() do project_path
         pkgdir = joinpath(Pkg.depots1(), "packages")
 
         # Test to ensure that with a long enough collect_delay, nothing gets reaped
-        Pkg.gc(;collect_delay=Day(1000))
+        Pkg.gc(; collect_delay = Day(1000))
         @test !isempty(readdir(pkgdir))
 
         # Setting collect_delay to zero causes it to be reaped immediately, however
-        Pkg.gc(;collect_delay=Second(0))
+        Pkg.gc(; collect_delay = Second(0))
         @test isempty(readdir(pkgdir))
 
         clonedir = joinpath(Pkg.depots1(), "clones")
-        Pkg.add(Pkg.PackageSpec(name=TEST_PKG.name, rev="master"))
+        Pkg.add(Pkg.PackageSpec(name = TEST_PKG.name, rev = "master"))
         @test !isempty(readdir(clonedir))
         Pkg.rm(TEST_PKG.name)
-        Pkg.gc(;collect_delay=Day(1000))
+        Pkg.gc(; collect_delay = Day(1000))
         @test !isempty(readdir(clonedir))
-        Pkg.gc(;collect_delay=Second(0))
+        Pkg.gc(; collect_delay = Second(0))
         @test isempty(readdir(clonedir))
     end
 
@@ -209,7 +209,7 @@ temp_pkg_dir() do project_path
         @test_throws PkgError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
         @testset "package with wrong UUID but correct name" begin
             try
-                Pkg.add(PackageSpec(name="Example", uuid=UUID(UInt128(2))))
+                Pkg.add(PackageSpec(name = "Example", uuid = UUID(UInt128(2))))
             catch e
                 @test e isa PkgError
                 errstr = sprint(showerror, e)
@@ -252,7 +252,7 @@ temp_pkg_dir() do project_path
         recursive_rm_cov_files(pkgdir) # clean out cov files from previous test runs
 
         @test !any(endswith(".cov"), readdir(pkgdir)) # should be no cov files to start with
-        Pkg.test(TEST_PKG.name; coverage=true)
+        Pkg.test(TEST_PKG.name; coverage = true)
         @test any(endswith(".cov"), readdir(pkgdir))
         Pkg.rm(TEST_PKG.name)
     end
@@ -270,7 +270,7 @@ temp_pkg_dir() do project_path
     @testset "pinning / freeing" begin
         Pkg.add(TEST_PKG.name)
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
-        Pkg.pin(Pkg.PackageSpec(;name=TEST_PKG.name, version=v"0.2"))
+        Pkg.pin(Pkg.PackageSpec(; name = TEST_PKG.name, version = v"0.2"))
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
         Pkg.update(TEST_PKG.name)
         @test Pkg.dependencies()[TEST_PKG.uuid].version.minor == 2
@@ -281,20 +281,21 @@ temp_pkg_dir() do project_path
     end
 
     @testset "develop / freeing" begin
-        Pkg.add(name=TEST_PKG.name, version=v"0.5.3")
+        Pkg.add(name = TEST_PKG.name, version = v"0.5.3")
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
         @test old_v == v"0.5.3"
         Pkg.rm(TEST_PKG.name)
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
-                @test_throws PkgError Pkg.develop(Pkg.PackageSpec(url="bleh", rev="blurg"))
+                @test_throws PkgError Pkg.develop(Pkg.PackageSpec(url = "bleh", rev = "blurg"))
                 Pkg.develop(TEST_PKG.name)
                 @test isinstalled(TEST_PKG)
                 @test Pkg.dependencies()[TEST_PKG.uuid].version > old_v
                 test_pkg_main_file = joinpath(devdir, TEST_PKG.name, "src", TEST_PKG.name * ".jl")
                 @test isfile(test_pkg_main_file)
                 # Pkg #152
-                write(test_pkg_main_file,
+                write(
+                    test_pkg_main_file,
                     """
                     module Example
                         export hello, domath
@@ -305,9 +306,11 @@ temp_pkg_dir() do project_path
                         hello(who::String) = "Hello, \$who"
                         domath(x::Number) = x + 5
                     end
-                    """)
+                    """
+                )
                 mkpath(joinpath(devdir, TEST_PKG.name, "deps"))
-                write(joinpath(devdir, TEST_PKG.name, "deps", "build.jl"),
+                write(
+                    joinpath(devdir, TEST_PKG.name, "deps", "build.jl"),
                     """
                     touch("deps.jl")
                     """
@@ -316,14 +319,16 @@ temp_pkg_dir() do project_path
                 proj_str = read(exa_proj, String)
                 compat_onwards = split(proj_str, "[compat]")[2]
                 open(exa_proj, "w") do io
-                    println(io, """
-                    name = "Example"
-                    uuid = "$(TEST_PKG.uuid)"
-                    version = "100.0.0"
+                    println(
+                        io, """
+                        name = "Example"
+                        uuid = "$(TEST_PKG.uuid)"
+                        version = "100.0.0"
 
-                    [compat]
-                    $compat_onwards
-                    """)
+                        [compat]
+                        $compat_onwards
+                        """
+                    )
                 end
                 Pkg.resolve()
                 @test Pkg.dependencies()[TEST_PKG.uuid].version == v"100.0.0"
@@ -349,7 +354,7 @@ temp_pkg_dir() do project_path
 
     @testset "package name in resolver errors" begin
         try
-            Pkg.add(PackageSpec(;name = TEST_PKG.name, version = v"55"))
+            Pkg.add(PackageSpec(; name = TEST_PKG.name, version = v"55"))
         catch e
             @test occursin(TEST_PKG.name, sprint(showerror, e))
         end
@@ -418,7 +423,9 @@ temp_pkg_dir() do project_path
         flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
         for i in 1:Sys.CPU_THREADS
             iob = IOBuffer()
-            t = @async run(pipeline(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
+            t = @async run(
+                pipeline(
+                    `$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
                 -e "import Pkg;
                 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
                 Pkg.activate(temp = true);
@@ -444,7 +451,9 @@ temp_pkg_dir() do project_path
                     end
                     yield()
                 end"`,
-                stderr = iob, stdout = devnull))
+                    stderr = iob, stdout = devnull
+                )
+            )
             push!(tasks, t)
             push!(iobs, iob)
         end
@@ -494,7 +503,7 @@ end
 
 temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
-        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+        Pkg.add(TEST_PKG.name; use_git_for_all_downloads = true)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         @eval import $(Symbol(TEST_PKG.name))
         @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
@@ -516,12 +525,12 @@ end
 
 temp_pkg_dir() do project_path
     @testset "libgit2 downloads" begin
-        Pkg.add(TEST_PKG.name; use_git_for_all_downloads=true)
+        Pkg.add(TEST_PKG.name; use_git_for_all_downloads = true)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
         Pkg.rm(TEST_PKG.name)
     end
     @testset "tarball downloads" begin
-        Pkg.add("JSON"; use_only_tarballs_for_downloads=true)
+        Pkg.add("JSON"; use_only_tarballs_for_downloads = true)
         @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
         Pkg.rm("JSON")
     end
@@ -558,27 +567,29 @@ temp_pkg_dir() do project_path
         cd(project_path) do
             target_dir = mktempdir()
             uuid = nothing
-            mktempdir() do tmp; cd(tmp) do
-                pkg_name = "FooBar"
-                # create a project and grab its uuid
-                Pkg.generate(pkg_name)
-                uuid = extract_uuid(joinpath(pkg_name, "Project.toml"))
-                # activate project env
-                Pkg.activate(abspath(pkg_name))
-                # add an example project to populate manifest file
-                Pkg.add("Example")
-                # change away from default names
-                ## note: this is written awkwardly because a `mv` here causes failures on AppVeyor
-                cp(joinpath(pkg_name, "src"), joinpath(target_dir, "src"))
-                cp(joinpath(pkg_name, "Project.toml"), joinpath(target_dir, "JuliaProject.toml"))
-                cp(joinpath(pkg_name, "Manifest.toml"), joinpath(target_dir, "JuliaManifest.toml"))
-            end end
+            mktempdir() do tmp
+                cd(tmp) do
+                    pkg_name = "FooBar"
+                    # create a project and grab its uuid
+                    Pkg.generate(pkg_name)
+                    uuid = extract_uuid(joinpath(pkg_name, "Project.toml"))
+                    # activate project env
+                    Pkg.activate(abspath(pkg_name))
+                    # add an example project to populate manifest file
+                    Pkg.add("Example")
+                    # change away from default names
+                    ## note: this is written awkwardly because a `mv` here causes failures on AppVeyor
+                    cp(joinpath(pkg_name, "src"), joinpath(target_dir, "src"))
+                    cp(joinpath(pkg_name, "Project.toml"), joinpath(target_dir, "JuliaProject.toml"))
+                    cp(joinpath(pkg_name, "Manifest.toml"), joinpath(target_dir, "JuliaManifest.toml"))
+                end
+            end
             Pkg.activate()
             # make sure things still work
             Pkg.REPLMode.pkgstr("dev $target_dir")
-            @test isinstalled((name="FooBar", uuid=UUID(uuid)))
+            @test isinstalled((name = "FooBar", uuid = UUID(uuid)))
             Pkg.rm("FooBar")
-            @test !isinstalled((name="FooBar", uuid=UUID(uuid)))
+            @test !isinstalled((name = "FooBar", uuid = UUID(uuid)))
         end # cd project_path
     end # @testset
 end
@@ -593,53 +604,57 @@ temp_pkg_dir() do project_path
     end
 end
 
-temp_pkg_dir() do project_path; cd(project_path) do
-    tmp = mktempdir()
-    depo1 = mktempdir()
-    depo2 = mktempdir()
-    cd(tmp) do; @testset "instantiating updated repo" begin
-        empty!(DEPOT_PATH)
-        pushfirst!(DEPOT_PATH, depo1)
-        Base.append_bundled_depot_path!(DEPOT_PATH)
-        LibGit2.close(LibGit2.clone(TEST_PKG.url, "Example.jl"))
-        mkdir("machine1")
-        cd("machine1")
-        Pkg.activate(".")
-        Pkg.add(Pkg.PackageSpec(path="../Example.jl"))
-        cd("..")
-        cp("machine1", "machine2")
-        empty!(DEPOT_PATH)
-        pushfirst!(DEPOT_PATH, depo2)
-        Base.append_bundled_depot_path!(DEPOT_PATH)
-        cd("machine2")
-        Pkg.activate(".")
-        Pkg.instantiate()
-        cd("..")
-        cd("Example.jl")
-        open("README.md", "a") do io
-            print(io, "Hello")
+temp_pkg_dir() do project_path
+    cd(project_path) do
+        tmp = mktempdir()
+        depo1 = mktempdir()
+        depo2 = mktempdir()
+        cd(tmp) do;
+            @testset "instantiating updated repo" begin
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo1)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                LibGit2.close(LibGit2.clone(TEST_PKG.url, "Example.jl"))
+                mkdir("machine1")
+                cd("machine1")
+                Pkg.activate(".")
+                Pkg.add(Pkg.PackageSpec(path = "../Example.jl"))
+                cd("..")
+                cp("machine1", "machine2")
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo2)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                cd("machine2")
+                Pkg.activate(".")
+                Pkg.instantiate()
+                cd("..")
+                cd("Example.jl")
+                open("README.md", "a") do io
+                    print(io, "Hello")
+                end
+                LibGit2.with(LibGit2.GitRepo(".")) do repo
+                    LibGit2.add!(repo, "*")
+                    LibGit2.commit(repo, "changes"; author = TEST_SIG, committer = TEST_SIG)
+                end
+                cd("../machine1")
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo1)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                Pkg.activate(".")
+                Pkg.update()
+                cd("..")
+                cp("machine1/Manifest.toml", "machine2/Manifest.toml"; force = true)
+                cd("machine2")
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo2)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                Pkg.activate(".")
+                Pkg.instantiate()
+            end
         end
-        LibGit2.with(LibGit2.GitRepo(".")) do repo
-            LibGit2.add!(repo, "*")
-            LibGit2.commit(repo, "changes"; author=TEST_SIG, committer=TEST_SIG)
-        end
-        cd("../machine1")
-        empty!(DEPOT_PATH)
-        pushfirst!(DEPOT_PATH, depo1)
-        Base.append_bundled_depot_path!(DEPOT_PATH)
-        Pkg.activate(".")
-        Pkg.update()
-        cd("..")
-        cp("machine1/Manifest.toml", "machine2/Manifest.toml"; force=true)
-        cd("machine2")
-        empty!(DEPOT_PATH)
-        pushfirst!(DEPOT_PATH, depo2)
-        Base.append_bundled_depot_path!(DEPOT_PATH)
-        Pkg.activate(".")
-        Pkg.instantiate()
-    end end
-    Base.rm.([tmp, depo1, depo2]; force = true, recursive = true)
-end end
+        Base.rm.([tmp, depo1, depo2]; force = true, recursive = true)
+    end
+end
 
 @testset "printing of stdlib paths, issue #605" begin
     path = Pkg.Types.stdlib_path("Test")
@@ -647,13 +662,13 @@ end end
 end
 
 @testset "stdlib_resolve!" begin
-    a = Pkg.Types.PackageSpec(name="Markdown")
-    b = Pkg.Types.PackageSpec(uuid=UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
+    a = Pkg.Types.PackageSpec(name = "Markdown")
+    b = Pkg.Types.PackageSpec(uuid = UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
     Pkg.Types.stdlib_resolve!([a, b])
     @test a.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
     @test b.name == "Profile"
 
-    x = Pkg.Types.PackageSpec(name="Markdown", uuid=UUID("d6f4376e-aef5-505a-96c1-9c027394607a"))
+    x = Pkg.Types.PackageSpec(name = "Markdown", uuid = UUID("d6f4376e-aef5-505a-96c1-9c027394607a"))
     Pkg.Types.stdlib_resolve!([x])
     @test x.name == "Markdown"
     @test x.uuid == UUID("d6f4376e-aef5-505a-96c1-9c027394607a")
@@ -662,10 +677,10 @@ end
 @testset "issue #913" begin
     temp_pkg_dir() do project_path
         Pkg.activate(project_path)
-        Pkg.add(Pkg.PackageSpec(name="Example", rev = "master"))
+        Pkg.add(Pkg.PackageSpec(name = "Example", rev = "master"))
         @test isinstalled(TEST_PKG)
-        rm.(joinpath.(project_path, ["Project.toml","Manifest.toml"]))
-        Pkg.add(Pkg.PackageSpec(name="Example", rev = "master")) # should not fail
+        rm.(joinpath.(project_path, ["Project.toml", "Manifest.toml"]))
+        Pkg.add(Pkg.PackageSpec(name = "Example", rev = "master")) # should not fail
         @test isinstalled(TEST_PKG)
     end
 end
@@ -686,33 +701,39 @@ end
 
 #issue #876
 @testset "targets should survive add/rm" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
-        cp(joinpath(@__DIR__, "project", "good", "pkg.toml"), "Project.toml")
-        mkdir("src")
-        touch("src/Pkg.jl")
-        targets = deepcopy(Pkg.Types.read_project("Project.toml").targets)
-        Pkg.activate(".")
-        Pkg.add("Example")
-        Pkg.rm("Example")
-        @test targets == Pkg.Types.read_project("Project.toml").targets
-    end end
+    temp_pkg_dir() do project_path
+        cd_tempdir() do tmpdir
+            cp(joinpath(@__DIR__, "project", "good", "pkg.toml"), "Project.toml")
+            mkdir("src")
+            touch("src/Pkg.jl")
+            targets = deepcopy(Pkg.Types.read_project("Project.toml").targets)
+            Pkg.activate(".")
+            Pkg.add("Example")
+            Pkg.rm("Example")
+            @test targets == Pkg.Types.read_project("Project.toml").targets
+        end
+    end
 end
 
 @testset "canonicalized relative paths in manifest" begin
-    mktempdir() do tmp; cd(tmp) do
-        write("Manifest.toml",
-            """
-            [[Foo]]
-            path = "bar/Foo"
-            uuid = "824dc81a-29a7-11e9-3958-fba342a32644"
-            version = "0.1.0"
-            """)
-        manifest = Pkg.Types.read_manifest("Manifest.toml")
-        package = manifest[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
-        @test package.path == (Sys.iswindows() ? "bar\\Foo" : "bar/Foo")
-        Pkg.Types.write_manifest(manifest, "Manifest.toml")
-        @test occursin("path = \"bar/Foo\"", read("Manifest.toml", String))
-    end end
+    mktempdir() do tmp
+        cd(tmp) do
+            write(
+                "Manifest.toml",
+                """
+                [[Foo]]
+                path = "bar/Foo"
+                uuid = "824dc81a-29a7-11e9-3958-fba342a32644"
+                version = "0.1.0"
+                """
+            )
+            manifest = Pkg.Types.read_manifest("Manifest.toml")
+            package = manifest[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
+            @test package.path == (Sys.iswindows() ? "bar\\Foo" : "bar/Foo")
+            Pkg.Types.write_manifest(manifest, "Manifest.toml")
+            @test occursin("path = \"bar/Foo\"", read("Manifest.toml", String))
+        end
+    end
 end
 
 @testset "building project should fix version of deps" begin
@@ -731,36 +752,40 @@ end
 end
 
 @testset "issue #1066: package with colliding name/uuid exists in project" begin
-    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
-        Pkg.activate(".")
-        Pkg.generate("A")
-        cd(mkdir("packages")) do
+    temp_pkg_dir() do project_path
+        cd_tempdir() do tmpdir
+            Pkg.activate(".")
             Pkg.generate("A")
-            git_init_and_commit("A")
+            cd(mkdir("packages")) do
+                Pkg.generate("A")
+                git_init_and_commit("A")
+            end
+            Pkg.generate("B")
+            project = Pkg.Types.read_project("A/Project.toml")
+            project.name = "B"
+            Pkg.Types.write_project(project, "B/Project.toml")
+            git_init_and_commit("B")
+            Pkg.develop(Pkg.PackageSpec(path = abspath("A")))
+            # package with same name but different uuid exist in project
+            @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("packages", "A")))
+            @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("packages", "A")))
+            # package with same uuid but different name exist in project
+            @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("B")))
+            @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("B")))
         end
-        Pkg.generate("B")
-        project = Pkg.Types.read_project("A/Project.toml")
-        project.name = "B"
-        Pkg.Types.write_project(project, "B/Project.toml")
-        git_init_and_commit("B")
-        Pkg.develop(Pkg.PackageSpec(path = abspath("A")))
-        # package with same name but different uuid exist in project
-        @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("packages", "A")))
-        @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("packages", "A")))
-        # package with same uuid but different name exist in project
-        @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("B")))
-        @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("B")))
-    end end
+    end
 end
 
 @testset "issue #1180: broken toml-files in HEAD" begin
-    temp_pkg_dir() do dir; cd(dir) do
-        write("Project.toml", "[deps]\nExample = \n")
-        git_init_and_commit(dir)
-        write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
-        Pkg.activate(dir)
-        @test_logs (:warn, r"could not read project from HEAD") Pkg.status(diff=true)
-    end end
+    temp_pkg_dir() do dir
+        cd(dir) do
+            write("Project.toml", "[deps]\nExample = \n")
+            git_init_and_commit(dir)
+            write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
+            Pkg.activate(dir)
+            @test_logs (:warn, r"could not read project from HEAD") Pkg.status(diff = true)
+        end
+    end
 end
 
 import Markdown
@@ -775,96 +800,102 @@ end
 @testset "up should prune manifest" begin
     example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
-    temp_pkg_dir() do project_path; mktempdir() do tmp
-        copy_test_package(tmp, "Unpruned")
-        Pkg.activate(joinpath(tmp, "Unpruned"))
-        Pkg.update()
-        manifest = Pkg.Types.Context().env.manifest
-        package_example = get(manifest, example_uuid, nothing)
-        @test package_example !== nothing
-        @test package_example.version > v"0.4.0"
-        @test get(manifest, unicode_uuid, nothing) === nothing
-    end end
+    temp_pkg_dir() do project_path
+        mktempdir() do tmp
+            copy_test_package(tmp, "Unpruned")
+            Pkg.activate(joinpath(tmp, "Unpruned"))
+            Pkg.update()
+            manifest = Pkg.Types.Context().env.manifest
+            package_example = get(manifest, example_uuid, nothing)
+            @test package_example !== nothing
+            @test package_example.version > v"0.4.0"
+            @test get(manifest, unicode_uuid, nothing) === nothing
+        end
+    end
 end
 
 @testset "undo redo functionality" begin
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
-    temp_pkg_dir() do project_path; with_temp_env() do
-        Pkg.activate(project_path)
-        # Example
-        Pkg.add(TEST_PKG.name)
-        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        #
-        Pkg.undo()
-        @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        # Example
-        Pkg.redo()
-        # Example, Unicode
-        Pkg.add("Unicode")
-        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        # Example
-        Pkg.undo()
-        @test !haskey(Pkg.dependencies(), unicode_uuid)
-        #
-        Pkg.undo()
-        @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        # Example, Unicode
-        Pkg.redo()
-        Pkg.redo()
-        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        @test haskey(Pkg.dependencies(), unicode_uuid)
-        # Should not add states since they are nops
-        Pkg.add("Unicode")
-        Pkg.add("Unicode")
-        # Example
-        Pkg.undo()
-        @test !haskey(Pkg.dependencies(), unicode_uuid)
-        # Example, Unicode
-        Pkg.redo()
-        @test haskey(Pkg.dependencies(), unicode_uuid)
-
-        # Example
-        Pkg.undo()
-
-        prev_project = Base.active_project()
-        mktempdir() do tmp
-            Pkg.activate(tmp)
-            Pkg.add("Example")
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            Pkg.activate(project_path)
+            # Example
+            Pkg.add(TEST_PKG.name)
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            #
             Pkg.undo()
             @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            # Example
+            Pkg.redo()
+            # Example, Unicode
+            Pkg.add("Unicode")
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            # Example
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), unicode_uuid)
+            #
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            # Example, Unicode
+            Pkg.redo()
+            Pkg.redo()
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            @test haskey(Pkg.dependencies(), unicode_uuid)
+            # Should not add states since they are nops
+            Pkg.add("Unicode")
+            Pkg.add("Unicode")
+            # Example
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), unicode_uuid)
+            # Example, Unicode
+            Pkg.redo()
+            @test haskey(Pkg.dependencies(), unicode_uuid)
+
+            # Example
+            Pkg.undo()
+
+            prev_project = Base.active_project()
+            mktempdir() do tmp
+                Pkg.activate(tmp)
+                Pkg.add("Example")
+                Pkg.undo()
+                @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            end
+            Pkg.activate(prev_project)
+
+            # Check that undo state persists after swapping projects
+            # Example, Unicode
+            Pkg.redo()
+            @test haskey(Pkg.dependencies(), unicode_uuid)
+
         end
-        Pkg.activate(prev_project)
-
-        # Check that undo state persists after swapping projects
-        # Example, Unicode
-        Pkg.redo()
-        @test haskey(Pkg.dependencies(), unicode_uuid)
-
-    end end
+    end
 end
 
 @testset "subdir functionality" begin
-    temp_pkg_dir() do project_path; with_temp_env() do
-        mktempdir() do tmp
-            repodir = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "MainRepo"))
-            # Add with subdir
-            subdir_uuid = UUID("6fe4e069-dcb0-448a-be67-3a8bf3404c58")
-            Pkg.add(url = repodir, subdir = "SubDir")
-            pkgdir = abspath(joinpath(dirname(Base.find_package("SubDir")), ".."))
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            mktempdir() do tmp
+                repodir = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "MainRepo"))
+                # Add with subdir
+                subdir_uuid = UUID("6fe4e069-dcb0-448a-be67-3a8bf3404c58")
+                Pkg.add(url = repodir, subdir = "SubDir")
+                pkgdir = abspath(joinpath(dirname(Base.find_package("SubDir")), ".."))
 
-            # Update with subdir in manifest
-            Pkg.update()
-            # Test instantiate with subdir
-            rm(pkgdir; recursive=true)
-            Pkg.instantiate()
-            @test isinstalled("SubDir")
-            Pkg.rm("SubDir")
+                # Update with subdir in manifest
+                Pkg.update()
+                # Test instantiate with subdir
+                rm(pkgdir; recursive = true)
+                Pkg.instantiate()
+                @test isinstalled("SubDir")
+                Pkg.rm("SubDir")
 
-            # Dev of local path with subdir
-            Pkg.develop(path=repodir, subdir="SubDir")
-            @test Pkg.dependencies()[subdir_uuid].source == joinpath(repodir, "SubDir")
+                # Dev of local path with subdir
+                Pkg.develop(path = repodir, subdir = "SubDir")
+                @test Pkg.dependencies()[subdir_uuid].source == joinpath(repodir, "SubDir")
+            end
         end
-    end end
+    end
 end
 
 # PR #1784 - Remove trailing slash from URL.
@@ -955,9 +986,10 @@ end
 import Pkg.Resolve.range_compressed_versionspec
 @testset "range_compressed_versionspec" begin
     pool = [v"1.0.0", v"1.1.0", v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0", v"3.1.0"]
-    @test (range_compressed_versionspec(pool)
-        == range_compressed_versionspec(pool, pool)
-        == VersionSpec("1.0.0-3.1.0")
+    @test (
+        range_compressed_versionspec(pool)
+            == range_compressed_versionspec(pool, pool)
+            == VersionSpec("1.0.0-3.1.0")
     )
 
     @test isequal(
@@ -990,7 +1022,7 @@ end
 end
 
 @testset "Issue #3069" begin
-    p = PackageSpec(; path="test_packages/Example")
+    p = PackageSpec(; path = "test_packages/Example")
     @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
 end
 
@@ -1001,7 +1033,7 @@ end
         Pkg.activate(temp = true)
         mktempdir() do tmp_dir
             LibGit2.close(LibGit2.clone(TEST_PKG.url, tmp_dir))
-            Pkg.develop(path=tmp_dir)
+            Pkg.develop(path = tmp_dir)
             Pkg.pin("Example")
             Pkg.add("Example")
             info = Pkg.dependencies()[TEST_PKG.uuid]
@@ -1012,7 +1044,7 @@ end
         end
         Pkg.rm("Example")
 
-        Pkg.add(url=TEST_PKG.url, rev="29aa1b4")
+        Pkg.add(url = TEST_PKG.url, rev = "29aa1b4")
         Pkg.pin("Example")
         Pkg.add("Example")
         info = Pkg.dependencies()[TEST_PKG.uuid]
@@ -1032,7 +1064,7 @@ end
             hash = string(LibGit2.target(tag))
             LibGit2.checkout!(repo, hash)
             LibGit2.close(repo)
-            Pkg.develop(path=tmp_dir)
+            Pkg.develop(path = tmp_dir)
             Pkg.pin("Example")
             Pkg.update("Example")  # pkg should remain pinned
             info = Pkg.dependencies()[TEST_PKG.uuid]
@@ -1060,34 +1092,35 @@ end
             @test info.is_tracking_path
             @test !info.is_tracking_repo
             @test info.version == dev_ver
-      end
-      Pkg.rm("Example")
+        end
+        Pkg.rm("Example")
     end
 
     Pkg.activate(prev_project)
 end
 
 @testset "check_registered error paths" begin
-        # Test the "no registries have been installed" error path
-        isolate(loaded_depot=false, linked_reg=false) do
-            with_temp_env() do
-                # Ensure we have no registries available
-                @test isempty(Pkg.Registry.reachable_registries())
+    # Test the "no registries have been installed" error path
+    isolate(loaded_depot = false, linked_reg = false) do
+        with_temp_env() do
+            # Ensure we have no registries available
+            @test isempty(Pkg.Registry.reachable_registries())
 
-                # Should install General registry automatically
-                Pkg.add("Example")
+            # Should install General registry automatically
+            Pkg.add("Example")
 
-                Pkg.Registry.rm("General")
-                @test isempty(Pkg.Registry.reachable_registries())
+            Pkg.Registry.rm("General")
+            @test isempty(Pkg.Registry.reachable_registries())
 
-                @test_throws r"no registries have been installed\. Cannot resolve the following packages:" begin
-                    Pkg.resolve()
-                end
+            @test_throws r"no registries have been installed\. Cannot resolve the following packages:" begin
+                Pkg.resolve()
             end
         end
+    end
 
-        # Test the "expected package to be registered" error path with a custom unregistered package
-        isolate(loaded_depot=true) do; mktempdir() do tempdir
+    # Test the "expected package to be registered" error path with a custom unregistered package
+    isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
             with_temp_env() do
                 # Create a fake package with a manifest that references an unregistered UUID
                 fake_pkg_path = copy_test_package(tempdir, "UnregisteredUUID")

@@ -6,19 +6,19 @@ using Tar: can_symlink
 using FileWatching: FileWatching
 
 import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
-       ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries
+    ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries
 
 import Base: get, SHA1
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
-                  artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
-                  query_override, with_artifacts_directory, load_overrides
+    artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
+    query_override, with_artifacts_directory, load_overrides
 import ..Types: write_env_usage, parse_toml
 
 const Artifacts = PkgArtifacts # This is to preserve compatability for folks who depend on the internals of this module
 export Artifacts, create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
-       artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
-       find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
-       select_downloadable_artifacts, ArtifactDownloadInfo
+    artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
+    find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
+    select_downloadable_artifacts, ArtifactDownloadInfo
 
 """
     create_artifact(f::Function)
@@ -49,14 +49,14 @@ function create_artifact(f::Function)
         # system directory by accidentally creating something with the same content-hash
         # as something that was foolishly overridden.  This should be virtually impossible
         # unless the user has been very unwise, but let's be cautious.
-        new_path = artifact_path(artifact_hash; honor_overrides=false)
+        new_path = artifact_path(artifact_hash; honor_overrides = false)
         mv_temp_dir_retries(temp_dir, new_path)
 
         # Give the people what they want
         return artifact_hash
     finally
         # Always attempt to cleanup
-        rm(temp_dir; recursive=true, force=true)
+        rm(temp_dir; recursive = true, force = true)
     end
 end
 
@@ -82,9 +82,10 @@ function remove_artifact(hash::SHA1)
     possible_paths = artifacts_dirs(bytes2hex(hash.bytes))
     for path in possible_paths
         if isdir(path)
-            rm(path; recursive=true, force=true)
+            rm(path; recursive = true, force = true)
         end
     end
+    return
 end
 
 """
@@ -94,7 +95,7 @@ Verifies that the given artifact (identified by its SHA1 git tree hash) is insta
 disk, and retains its integrity.  If the given artifact is overridden, skips the
 verification unless `honor_overrides` is set to `true`.
 """
-function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
+function verify_artifact(hash::SHA1; honor_overrides::Bool = false)
     # Silently skip overridden artifacts unless we really ask for it
     if !honor_overrides
         if query_override(hash) !== nothing
@@ -118,7 +119,7 @@ Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 
 resultant tarball as a hexadecimal string. Throws an error if the artifact does not
 exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.
 """
-function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
+function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool = false)
     if !honor_overrides
         if query_override(hash) !== nothing
             error("Will not archive an overridden artifact unless `honor_overrides` is set!")
@@ -178,7 +179,7 @@ ArtifactDownloadInfo(adi::ArtifactDownloadInfo) = adi
 
 # Make the dict that will be embedded in the TOML
 function make_dict(adi::ArtifactDownloadInfo)
-    ret = Dict{String,Any}(
+    ret = Dict{String, Any}(
         "url" => adi.url,
         "sha256" => bytes2hex(adi.hash),
     )
@@ -207,11 +208,13 @@ is set to `true`, even if download information is available, this artifact will 
 downloaded until it is accessed via the `artifact"name"` syntax, or
 `ensure_artifact_installed()` is called upon it.
 """
-function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
-                        platform::Union{AbstractPlatform,Nothing} = nothing,
-                        download_info::Union{Vector{<:Tuple},Vector{<:ArtifactDownloadInfo},Nothing} = nothing,
-                        lazy::Bool = false,
-                        force::Bool = false)
+function bind_artifact!(
+        artifacts_toml::String, name::String, hash::SHA1;
+        platform::Union{AbstractPlatform, Nothing} = nothing,
+        download_info::Union{Vector{<:Tuple}, Vector{<:ArtifactDownloadInfo}, Nothing} = nothing,
+        lazy::Bool = false,
+        force::Bool = false
+    )
     # First, check to see if this artifact is already bound:
     if isfile(artifacts_toml)
         artifact_dict = parse_toml(artifacts_toml)
@@ -229,7 +232,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
     end
 
     # Otherwise, the new piece of data we're going to write out is this dict:
-    meta = Dict{String,Any}(
+    meta = Dict{String, Any}(
         "git-tree-sha1" => bytes2hex(hash.bytes),
     )
 
@@ -269,9 +272,9 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
         parent_dir = dirname(artifacts_toml)
         temp_artifacts_toml = isempty(parent_dir) ? tempname(pwd()) : tempname(parent_dir)
         open(temp_artifacts_toml, "w") do io
-            TOML.print(io, artifact_dict, sorted=true)
+            TOML.print(io, artifact_dict, sorted = true)
         end
-        mv(temp_artifacts_toml, artifacts_toml; force=true)
+        mv(temp_artifacts_toml, artifacts_toml; force = true)
     end
 
     # Mark that we have used this Artifact.toml
@@ -286,8 +289,10 @@ end
 Unbind the given `name` from an `(Julia)Artifacts.toml` file.
 Silently fails if no such binding exists within the file.
 """
-function unbind_artifact!(artifacts_toml::String, name::String;
-                         platform::Union{AbstractPlatform,Nothing} = nothing)
+function unbind_artifact!(
+        artifacts_toml::String, name::String;
+        platform::Union{AbstractPlatform, Nothing} = nothing
+    )
     artifact_dict = parse_toml(artifacts_toml)
     if !haskey(artifact_dict, name)
         return
@@ -303,7 +308,7 @@ function unbind_artifact!(artifacts_toml::String, name::String;
     end
 
     open(artifacts_toml, "w") do io
-        TOML.print(io, artifact_dict, sorted=true)
+        TOML.print(io, artifact_dict, sorted = true)
     end
     return
 end
@@ -320,14 +325,14 @@ returns an error object on failure.
     failure occurs
 """
 function download_artifact(
-    tree_hash::SHA1,
-    tarball_url::String,
-    tarball_hash::Union{String, Nothing} = nothing;
-    verbose::Bool = false,
-    quiet_download::Bool = false,
-    io::IO=stderr_f(),
-    progress::Union{Function, Nothing} = nothing,
-)
+        tree_hash::SHA1,
+        tarball_url::String,
+        tarball_hash::Union{String, Nothing} = nothing;
+        verbose::Bool = false,
+        quiet_download::Bool = false,
+        io::IO = stderr_f(),
+        progress::Union{Function, Nothing} = nothing,
+    )
     _artifact_paths = artifact_paths(tree_hash)
     pidfile = _artifact_paths[1] * ".pid"
     mkpath(dirname(pidfile))
@@ -335,7 +340,7 @@ function download_artifact(
         if progress === nothing
             @info "downloading $tarball_url ($hex) in another process"
         else
-            progress(0, 0; status="downloading in another process")
+            progress(0, 0; status = "downloading in another process")
         end
     end
     ret = FileWatching.mkpidlock(pidfile, stale_age = 20) do
@@ -361,9 +366,11 @@ function download_artifact(
         temp_dir = mktempdir(artifacts_dir)
 
         try
-            download_verify_unpack(tarball_url, tarball_hash, temp_dir;
-                                    ignore_existence=true, verbose, quiet_download, io, progress)
-            isnothing(progress) || progress(10000, 10000; status="verifying")
+            download_verify_unpack(
+                tarball_url, tarball_hash, temp_dir;
+                ignore_existence = true, verbose, quiet_download, io, progress
+            )
+            isnothing(progress) || progress(10000, 10000; status = "verifying")
             calc_hash = SHA1(GitTools.tree_hash(temp_dir))
 
             # Did we get what we expected?  If not, freak out.
@@ -402,7 +409,7 @@ function download_artifact(
                 end
             end
             # Move it to the location we expected
-            isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
+            isnothing(progress) || progress(10000, 10000; status = "moving to artifact store")
             mv_temp_dir_retries(temp_dir, dst)
         catch err
             @debug "download_artifact error" tree_hash tarball_url tarball_hash err
@@ -414,10 +421,10 @@ function download_artifact(
         finally
             # Always attempt to cleanup
             try
-                rm(temp_dir; recursive=true, force=true)
+                rm(temp_dir; recursive = true, force = true)
             catch e
                 e isa InterruptException && rethrow()
-                @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
+                @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception = e)
             end
         end
         return true
@@ -437,28 +444,34 @@ end
 Ensures an artifact is installed, downloading it via the download information stored in
 `artifacts_toml` if necessary.  Throws an error if unable to install.
 """
-function ensure_artifact_installed(name::String, artifacts_toml::String;
-                                   platform::AbstractPlatform = HostPlatform(),
-                                   pkg_uuid::Union{Base.UUID,Nothing}=nothing,
-                                   verbose::Bool = false,
-                                   quiet_download::Bool = false,
-                                   progress::Union{Function,Nothing} = nothing,
-                                   io::IO=stderr_f())
-    meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
+function ensure_artifact_installed(
+        name::String, artifacts_toml::String;
+        platform::AbstractPlatform = HostPlatform(),
+        pkg_uuid::Union{Base.UUID, Nothing} = nothing,
+        verbose::Bool = false,
+        quiet_download::Bool = false,
+        progress::Union{Function, Nothing} = nothing,
+        io::IO = stderr_f()
+    )
+    meta = artifact_meta(name, artifacts_toml; pkg_uuid = pkg_uuid, platform = platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
 
-    return ensure_artifact_installed(name, meta, artifacts_toml;
-                                    platform, verbose, quiet_download, progress, io)
+    return ensure_artifact_installed(
+        name, meta, artifacts_toml;
+        platform, verbose, quiet_download, progress, io
+    )
 end
 
-function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
-                                   platform::AbstractPlatform = HostPlatform(),
-                                   verbose::Bool = false,
-                                   quiet_download::Bool = false,
-                                   progress::Union{Function,Nothing} = nothing,
-                                   io::IO=stderr_f())
+function ensure_artifact_installed(
+        name::String, meta::Dict, artifacts_toml::String;
+        platform::AbstractPlatform = HostPlatform(),
+        verbose::Bool = false,
+        quiet_download::Bool = false,
+        progress::Union{Function, Nothing} = nothing,
+        io::IO = stderr_f()
+    )
 
     hash = SHA1(meta["git-tree-sha1"])
     if !artifact_exists(hash)
@@ -466,7 +479,7 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
             return try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, verbose, quiet_download, io)
         else
             # if a custom progress handler is given it is taken to mean the caller wants to handle the download scheduling
-            return () -> try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, quiet_download=true, io, progress)
+            return () -> try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, quiet_download = true, io, progress)
         end
     else
         return artifact_path(hash)
@@ -474,12 +487,13 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
 end
 
 function try_artifact_download_sources(
-            name::String, hash::SHA1, meta::Dict, artifacts_toml::String;
-            platform::AbstractPlatform=HostPlatform(),
-            verbose::Bool=false,
-            quiet_download::Bool=false,
-            io::IO=stderr_f(),
-            progress::Union{Function,Nothing}=nothing)
+        name::String, hash::SHA1, meta::Dict, artifacts_toml::String;
+        platform::AbstractPlatform = HostPlatform(),
+        verbose::Bool = false,
+        quiet_download::Bool = false,
+        io::IO = stderr_f(),
+        progress::Union{Function, Nothing} = nothing
+    )
 
     errors = Any[]
     # first try downloading from Pkg server
@@ -586,22 +600,27 @@ This function is deprecated and should be replaced with the following snippet:
     This function is deprecated in Julia 1.6 and will be removed in a future version.
     Use `select_downloadable_artifacts()` and `ensure_artifact_installed()` instead.
 """
-function ensure_all_artifacts_installed(artifacts_toml::String;
-                                        platform::AbstractPlatform = HostPlatform(),
-                                        pkg_uuid::Union{Nothing,Base.UUID} = nothing,
-                                        include_lazy::Bool = false,
-                                        verbose::Bool = false,
-                                        quiet_download::Bool = false,
-                                        io::IO=stderr_f())
+function ensure_all_artifacts_installed(
+        artifacts_toml::String;
+        platform::AbstractPlatform = HostPlatform(),
+        pkg_uuid::Union{Nothing, Base.UUID} = nothing,
+        include_lazy::Bool = false,
+        verbose::Bool = false,
+        quiet_download::Bool = false,
+        io::IO = stderr_f()
+    )
     # This function should not be called anymore; use `select_downloadable_artifacts()` directly.
     Base.depwarn("`ensure_all_artifacts_installed()` is deprecated; iterate over `select_downloadable_artifacts()` output with `ensure_artifact_installed()`.", :ensure_all_artifacts_installed)
     # Collect all artifacts we're supposed to install
     artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy, pkg_uuid)
     for name in keys(artifacts)
         # Otherwise, let's try and install it!
-        ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=platform,
-                                  verbose=verbose, quiet_download=quiet_download, io=io)
+        ensure_artifact_installed(
+            name, artifacts[name], artifacts_toml; platform = platform,
+            verbose = verbose, quiet_download = quiet_download, io = io
+        )
     end
+    return
 end
 
 """
@@ -615,20 +634,22 @@ be provided to properly support overrides from `Overrides.toml` entries in depot
 
 If `include_lazy` is set to `true`, then lazy packages will be installed as well.
 """
-function extract_all_hashes(artifacts_toml::String;
-                            platform::AbstractPlatform = HostPlatform(),
-                            pkg_uuid::Union{Nothing,Base.UUID} = nothing,
-                            include_lazy::Bool = false)
+function extract_all_hashes(
+        artifacts_toml::String;
+        platform::AbstractPlatform = HostPlatform(),
+        pkg_uuid::Union{Nothing, Base.UUID} = nothing,
+        include_lazy::Bool = false
+    )
     hashes = Base.SHA1[]
     if !isfile(artifacts_toml)
         return hashes
     end
 
-    artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid=pkg_uuid)
+    artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid = pkg_uuid)
 
     for name in keys(artifact_dict)
         # Get the metadata about this name for the requested platform
-        meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
+        meta = artifact_meta(name, artifact_dict, artifacts_toml; platform = platform)
 
         # If there are no instances of this name for the desired platform, skip it
         meta === nothing && continue
@@ -665,5 +686,3 @@ extract_all_hashes(artifacts_toml::AbstractString; kwargs...) =
     extract_all_hashes(string(artifacts_toml)::String; kwargs...)
 
 end # module PkgArtifacts
-
-const Artifacts = PkgArtifacts

@@ -1,6 +1,6 @@
 module FuzzySorting
 
-_displaysize(io::IO) = displaysize(io)::Tuple{Int,Int}
+_displaysize(io::IO) = displaysize(io)::Tuple{Int, Int}
 
 # This code is duplicated from REPL.jl
 # Considering breaking this into an independent package
@@ -21,7 +21,7 @@ function matchinds(needle, haystack; acronym::Bool = false)
         end
         isempty(chars) && break
         if lowercase(char) == lowercase(chars[1]) &&
-           (!acronym || !isletter(lastc))
+                (!acronym || !isletter(lastc))
             push!(is, i)
             popfirst!(chars)
         end
@@ -33,8 +33,10 @@ end
 longer(x, y) = length(x) ≥ length(y) ? (x, true) : (y, false)
 
 bestmatch(needle, haystack) =
-    longer(matchinds(needle, haystack, acronym = true),
-           matchinds(needle, haystack))
+    longer(
+    matchinds(needle, haystack, acronym = true),
+    matchinds(needle, haystack)
+)
 
 # Optimal string distance: Counts the minimum number of insertions, deletions,
 # transpositions or substitutions to go from one string to the other.
@@ -81,17 +83,17 @@ function string_distance(a::AbstractString, lena::Integer, b::AbstractString, le
         end
         prev_a = ai
     end
-    current
+    return current
 end
 
 function fuzzyscore(needle::AbstractString, haystack::AbstractString)
     lena, lenb = length(needle), length(haystack)
-    1 - (string_distance(needle, lena, haystack, lenb) / max(lena, lenb))
+    return 1 - (string_distance(needle, lena, haystack, lenb) / max(lena, lenb))
 end
 
 function fuzzysort(search::String, candidates::Vector{String})
     scores = map(cand -> (FuzzySorting.fuzzyscore(search, cand), -Float64(FuzzySorting.levenshtein(search, cand))), candidates)
-    candidates[sortperm(scores)] |> reverse, any(s -> s[1] >= print_score_threshold, scores)
+    return candidates[sortperm(scores)] |> reverse, any(s -> s[1] >= print_score_threshold, scores)
 end
 
 # Levenshtein Distance
@@ -100,25 +102,27 @@ function levenshtein(s1, s2)
     a, b = collect(s1), collect(s2)
     m = length(a)
     n = length(b)
-    d = Matrix{Int}(undef, m+1, n+1)
+    d = Matrix{Int}(undef, m + 1, n + 1)
 
-    d[1:m+1, 1] = 0:m
-    d[1, 1:n+1] = 0:n
+    d[1:(m + 1), 1] = 0:m
+    d[1, 1:(n + 1)] = 0:n
 
-    for i = 1:m, j = 1:n
-        d[i+1,j+1] = min(d[i  , j+1] + 1,
-                         d[i+1, j  ] + 1,
-                         d[i  , j  ] + (a[i] != b[j]))
+    for i in 1:m, j in 1:n
+        d[i + 1, j + 1] = min(
+            d[i, j + 1] + 1,
+            d[i + 1, j] + 1,
+            d[i, j] + (a[i] != b[j])
+        )
     end
 
-    return d[m+1, n+1]
+    return d[m + 1, n + 1]
 end
 
 function levsort(search::String, candidates::Vector{String})
     scores = map(cand -> (Float64(levenshtein(search, cand)), -fuzzyscore(search, cand)), candidates)
     candidates = candidates[sortperm(scores)]
     i = 0
-    for outer i = 1:length(candidates)
+    for outer i in 1:length(candidates)
         levenshtein(search, candidates[i]) > 3 && break
     end
     return candidates[1:i]
@@ -128,13 +132,14 @@ end
 
 function printmatch(io::IO, word, match)
     is, _ = bestmatch(word, match)
-    for (i, char) = enumerate(match)
+    for (i, char) in enumerate(match)
         if i in is
-            printstyled(io, char, bold=true)
+            printstyled(io, char, bold = true)
         else
             print(io, char)
         end
     end
+    return
 end
 
 const print_score_threshold = 0.5
@@ -148,6 +153,7 @@ function printmatches(io::IO, word, matches; cols::Int = _displaysize(io)[2])
         printmatch(io, word, match)
         total += length(match) + 1
     end
+    return
 end
 
 printmatches(args...; cols::Int = _displaysize(stdout)[2]) = printmatches(stdout, args..., cols = cols)
@@ -155,14 +161,15 @@ printmatches(args...; cols::Int = _displaysize(stdout)[2]) = printmatches(stdout
 function print_joined_cols(io::IO, ss::Vector{String}, delim = "", last = delim; cols::Int = _displaysize(io)[2])
     i = 0
     total = 0
-    for outer i = 1:length(ss)
+    for outer i in 1:length(ss)
         total += length(ss[i])
-        total + max(i-2,0)*length(delim) + (i>1 ? 1 : 0)*length(last) > cols && (i-=1; break)
+        total + max(i - 2, 0) * length(delim) + (i > 1 ? 1 : 0) * length(last) > cols && (i -= 1; break)
     end
     join(io, ss[1:i], delim, last)
+    return
 end
 
-print_joined_cols(args...; cols::Int = _displaysize(stdout)[2]) = print_joined_cols(stdout, args...; cols=cols)
+print_joined_cols(args...; cols::Int = _displaysize(stdout)[2]) = print_joined_cols(stdout, args...; cols = cols)
 
 function print_correction(io::IO, word::String, mod::Module)
     cors = map(quote_spaces, levsort(word, accessible(mod)))

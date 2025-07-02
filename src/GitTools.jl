@@ -41,13 +41,14 @@ const GIT_USERS = Dict{String, Union{Nothing, String}}()
 @deprecate setprotocol!(proto::Union{Nothing, AbstractString}) setprotocol!(protocol = proto) false
 
 function setprotocol!(;
-    domain::AbstractString="github.com",
-    protocol::Union{Nothing, AbstractString}=nothing,
-    user::Union{Nothing, AbstractString}=(protocol == "ssh" ? "git" : nothing)
-)
+        domain::AbstractString = "github.com",
+        protocol::Union{Nothing, AbstractString} = nothing,
+        user::Union{Nothing, AbstractString} = (protocol == "ssh" ? "git" : nothing)
+    )
     domain = lowercase(domain)
     GIT_PROTOCOLS[domain] = protocol
     GIT_USERS[domain] = user
+    return
 end
 
 function normalize_url(url::AbstractString)
@@ -61,12 +62,11 @@ function normalize_url(url::AbstractString)
 
     proto = get(GIT_PROTOCOLS, lowercase(host), nothing)
 
-    if proto === nothing
+    return if proto === nothing
         url
     else
         user = get(GIT_USERS, lowercase(host), nothing)
         user = user === nothing ? "" : "$user@"
-
         "$proto://$user$host/$path"
     end
 end
@@ -85,11 +85,12 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
             checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
             target_directory = Base.unsafe_convert(Cstring, path)
         )
-        LibGit2.checkout_tree(repo, tree, options=opts)
+        LibGit2.checkout_tree(repo, tree, options = opts)
     end
+    return
 end
 
-function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
+function clone(io::IO, url, source_path; header = nothing, credentials = nothing, kwargs...)
     url = String(url)::String
     source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
@@ -101,15 +102,15 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
     end
-    try
+    return try
         if use_cli_git()
             cmd = `git clone --quiet $url $source_path`
             try
-                run(pipeline(cmd; stdout=devnull))
+                run(pipeline(cmd; stdout = devnull))
             catch err
                 Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
             end
-            return LibGit2.GitRepo(source_path)
+            LibGit2.GitRepo(source_path)
         else
             callbacks = if fancyprint
                 LibGit2.Callbacks(
@@ -122,15 +123,15 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
                 LibGit2.Callbacks()
             end
             mkpath(source_path)
-            return LibGit2.clone(url, source_path; callbacks, credentials, kwargs...)
+            return LibGit2.clone(url, source_path; callbacks = callbacks, credentials = credentials, kwargs...)
         end
     catch err
-        rm(source_path; force=true, recursive=true)
+        rm(source_path; force = true, recursive = true)
         err isa LibGit2.GitError || err isa InterruptException || rethrow()
         if err isa InterruptException
             Pkg.Types.pkgerror("git clone of `$url` interrupted")
         elseif (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
-           (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
+                (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
             Pkg.Types.pkgerror("git repository not found at `$(url)`")
         else
             Pkg.Types.pkgerror("failed to clone from $(url), error: $err")
@@ -141,7 +142,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, refspecs=[""], kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = nothing, credentials = nothing, refspecs = [""], kwargs...)
     if remoteurl === nothing
         remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
             LibGit2.url(remote)
@@ -168,16 +169,16 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     end
     try
         if use_cli_git()
-            let remoteurl=remoteurl
+            let remoteurl = remoteurl
                 cmd = `git -C $(LibGit2.path(repo)) fetch -q $remoteurl $(only(refspecs))`
                 try
-                    run(pipeline(cmd; stdout=devnull))
+                    run(pipeline(cmd; stdout = devnull))
                 catch err
                     Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
                 end
             end
         else
-            return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
+            LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
         end
     catch err
         err isa LibGit2.GitError || rethrow()
@@ -190,12 +191,13 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
         Base.shred!(credentials)
         fancyprint && end_progress(io, bar)
     end
+    return
 end
 
 
 # This code gratefully adapted from https://github.com/simonbyrne/GitX.jl
-@enum GitMode mode_dir=0o040000 mode_normal=0o100644 mode_executable=0o100755 mode_symlink=0o120000 mode_submodule=0o160000
-Base.string(mode::GitMode) = string(UInt32(mode); base=8)
+@enum GitMode mode_dir = 0o040000 mode_normal = 0o100644 mode_executable = 0o100755 mode_symlink = 0o120000 mode_submodule = 0o160000
+Base.string(mode::GitMode) = string(UInt32(mode); base = 8)
 Base.print(io::IO, mode::GitMode) = print(io, string(mode))
 
 function gitmode(path::AbstractString)
@@ -225,7 +227,7 @@ end
 
 Calculate the git blob hash of a given path.
 """
-function blob_hash(::Type{HashType}, path::AbstractString) where HashType
+function blob_hash(::Type{HashType}, path::AbstractString) where {HashType}
     ctx = HashType()
     if islink(path)
         datalen = length(readlink(path))
@@ -237,7 +239,7 @@ function blob_hash(::Type{HashType}, path::AbstractString) where HashType
     SHA.update!(ctx, Vector{UInt8}("blob $(datalen)\0"))
 
     # Next, read data in in chunks of 4KB
-    buff = Vector{UInt8}(undef, 4*1024)
+    buff = Vector{UInt8}(undef, 4 * 1024)
 
     try
         if islink(path)
@@ -285,9 +287,9 @@ end
 
 Calculate the git tree hash of a given path.
 """
-function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,Nothing} = nothing, indent::Int=0) where HashType
+function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, Nothing} = nothing, indent::Int = 0) where {HashType}
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
-    for f in sort(readdir(root; join=true); by = f -> gitmode(f) == mode_dir ? f*"/" : f)
+    for f in sort(readdir(root; join = true); by = f -> gitmode(f) == mode_dir ? f * "/" : f)
         # Skip `.git` directories
         if basename(f) == ".git"
             continue
@@ -304,7 +306,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
             if debug_out !== nothing
                 child_stream = IOBuffer()
             end
-            hash = tree_hash(HashType, filepath; debug_out=child_stream, indent=indent+1)
+            hash = tree_hash(HashType, filepath; debug_out = child_stream, indent = indent + 1)
             if debug_out !== nothing
                 indent_str = "| "^indent
                 println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
@@ -324,7 +326,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
 
     content_size = 0
     for (n, h, m) in entries
-        content_size += ndigits(UInt32(m); base=8) + 1 + sizeof(n) + 1 + sizeof(h)
+        content_size += ndigits(UInt32(m); base = 8) + 1 + sizeof(n) + 1 + sizeof(h)
     end
 
     # Return the hash of these entries
@@ -336,17 +338,19 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO,N
     end
     return SHA.digest!(ctx)
 end
-tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_hash(SHA.SHA1_CTX, root; debug_out)
+tree_hash(root::AbstractString; debug_out::Union{IO, Nothing} = nothing) = tree_hash(SHA.SHA1_CTX, root; debug_out)
 
 function check_valid_HEAD(repo)
-    try LibGit2.head(repo)
+    return try
+        LibGit2.head(repo)
     catch err
         Pkg.Types.pkgerror("invalid git HEAD ($(err.msg))")
     end
 end
 
-function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool=false)::IO
-    blob = try LibGit2.GitBlob(repo, spec)
+function git_file_stream(repo::LibGit2.GitRepo, spec::String; fakeit::Bool = false)::IO
+    blob = try
+        LibGit2.GitBlob(repo, spec)
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
         fakeit && return devnull

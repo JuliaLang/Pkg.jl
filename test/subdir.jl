@@ -10,8 +10,12 @@ using ..Utils
 
 # Derived from RegistryTools' gitcmd.
 function gitcmd(path::AbstractString)
-    Cmd(["git", "-C", path, "-c", "user.name=RegistratorTests",
-         "-c", "user.email=ci@juliacomputing.com"])
+    return Cmd(
+        [
+            "git", "-C", path, "-c", "user.name=RegistratorTests",
+            "-c", "user.email=ci@juliacomputing.com",
+        ]
+    )
 end
 
 # Create a repository containing two packages in different
@@ -20,28 +24,36 @@ end
 function setup_packages_repository(dir)
     package_dir = joinpath(dir, "julia")
     mkpath(joinpath(package_dir, "src"))
-    write(joinpath(package_dir, "Project.toml"), """
+    write(
+        joinpath(package_dir, "Project.toml"), """
         name = "Package"
         uuid = "408b23ff-74ea-48c4-abc7-a671b41e2073"
         version = "1.0.0"
 
         [deps]
         Dep = "d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"
-        """)
-    write(joinpath(package_dir, "src", "Package.jl"), """
+        """
+    )
+    write(
+        joinpath(package_dir, "src", "Package.jl"), """
         module Package end
-        """)
+        """
+    )
 
     dep_dir = joinpath(dir, "dependencies", "Dep")
     mkpath(joinpath(dep_dir, "src"))
-    write(joinpath(dep_dir, "Project.toml"), """
+    write(
+        joinpath(dep_dir, "Project.toml"), """
         name = "Dep"
         uuid = "d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"
         version = "1.0.0"
-        """)
-    write(joinpath(dep_dir, "src", "Dep.jl"), """
+        """
+    )
+    write(
+        joinpath(dep_dir, "src", "Dep.jl"), """
         module Dep end
-        """)
+        """
+    )
 
     git = gitcmd(dir)
     run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
@@ -70,45 +82,58 @@ function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
     dep_path = joinpath(dir, "D", "Dep")
     mkpath(package_path)
     mkpath(dep_path)
-    write(joinpath(dir, "Registry.toml"), """
+    write(
+        joinpath(dir, "Registry.toml"), """
         name = "Registry"
         uuid = "cade28e2-3b52-4f58-aeba-0b1386f9894b"
         repo = "https://github.com"
         [packages]
         408b23ff-74ea-48c4-abc7-a671b41e2073 = { name = "Package", path = "P/Package" }
         d43cb7ef-9818-40d3-bb27-28fb4aa46cc5 = { name = "Dep", path = "D/Dep" }
-        """)
-    write(joinpath(package_path, "Package.toml"), """
+        """
+    )
+    write(
+        joinpath(package_path, "Package.toml"), """
         name = "Package"
         uuid = "408b23ff-74ea-48c4-abc7-a671b41e2073"
         repo = "$(packages_dir_url)"
         subdir = "julia"
-        """)
-    write(joinpath(package_path, "Versions.toml"), """
+        """
+    )
+    write(
+        joinpath(package_path, "Versions.toml"), """
         ["1.0.0"]
         git-tree-sha1 = "$(package_tree_hash)"
-        """)
-    write(joinpath(package_path, "Deps.toml"), """
+        """
+    )
+    write(
+        joinpath(package_path, "Deps.toml"), """
         [1]
         Dep = "d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"
-        """)
+        """
+    )
 
-    write(joinpath(dep_path, "Package.toml"), """
+    write(
+        joinpath(dep_path, "Package.toml"), """
         name = "Dep"
         uuid = "d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"
         repo = "$(packages_dir_url)"
         subdir = "dependencies/Dep"
-        """)
-    write(joinpath(dep_path, "Versions.toml"), """
+        """
+    )
+    write(
+        joinpath(dep_path, "Versions.toml"), """
         ["1.0.0"]
         git-tree-sha1 = "$(dep_tree_hash)"
-        """)
+        """
+    )
 
     git = gitcmd(dir)
     run(pipeline(`$git init -q`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git add .`, stdout = stdout_f(), stderr = stderr_f()))
     run(pipeline(`$git commit -qm 'Create repository.'`, stdout = stdout_f(), stderr = stderr_f()))
     fix_default_branch(; dir)
+    return
 end
 
 # Some of our tests assume that the default branch name is `master`.
@@ -153,218 +178,222 @@ end
         # with the `pkg"add ..."` calls. Just set it to something that
         # exists.
         cd(@__DIR__) do
-        # Setup a repository with two packages and a registry where
-        # these packages are registered.
-        packages_dir = mktempdir()
-        registry_dir = mktempdir()
-        packages_dir_url = make_file_url(packages_dir)
-        tree_hashes = setup_packages_repository(packages_dir)
-        setup_registry(registry_dir, packages_dir_url, tree_hashes...)
-        pkgstr("registry add $(registry_dir)")
-        dep = (name="Dep", uuid=UUID("d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"))
+            # Setup a repository with two packages and a registry where
+            # these packages are registered.
+            packages_dir = mktempdir()
+            registry_dir = mktempdir()
+            packages_dir_url = make_file_url(packages_dir)
+            tree_hashes = setup_packages_repository(packages_dir)
+            setup_registry(registry_dir, packages_dir_url, tree_hashes...)
+            pkgstr("registry add $(registry_dir)")
+            dep = (name = "Dep", uuid = UUID("d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"))
 
-        # Ordinary add from registry.
-        pkg"add Package"
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Ordinary add from registry.
+            pkg"add Package"
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkg"add Dep"
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkg"add Dep"
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add version from registry.
-        pkg"add Package@1.0.0"
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add version from registry.
+            pkg"add Package@1.0.0"
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkg"add Dep@1.0.0"
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkg"add Dep@1.0.0"
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add branch from registry.
-        pkg"add Package#master"
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
+            # Add branch from registry.
+            pkg"add Package#master"
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
 
-        # Test that adding a second time doesn't error (#3391)
-        pkg"add Package#master"
-        @test isinstalled("Package")
-        pkg"rm Package"
+            # Test that adding a second time doesn't error (#3391)
+            pkg"add Package#master"
+            @test isinstalled("Package")
+            pkg"rm Package"
 
-        pkg"add Dep#master"
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkg"add Dep#master"
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Develop from registry.
-        pkg"develop Package"
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
+            # Develop from registry.
+            pkg"develop Package"
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
 
-        # Test developing twice (#3391)
-        pkg"develop Package"
-        @test isinstalled("Package")
-        pkg"rm Package"
+            # Test developing twice (#3391)
+            pkg"develop Package"
+            @test isinstalled("Package")
+            pkg"rm Package"
 
-        pkg"develop Dep"
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkg"develop Dep"
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from path.
-        Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="julia"))
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from path.
+            Pkg.add(Pkg.PackageSpec(path = packages_dir, subdir = "julia"))
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="dependencies/Dep"))
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            Pkg.add(Pkg.PackageSpec(path = packages_dir, subdir = "dependencies/Dep"))
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from path, REPL subdir syntax.
-        pkgstr("add $(packages_dir):julia")
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from path, REPL subdir syntax.
+            pkgstr("add $(packages_dir):julia")
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkgstr("add $(packages_dir):dependencies/Dep")
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"dev Dep" # 4269
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkgstr("add $(packages_dir):dependencies/Dep")
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"dev Dep" # 4269
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from path at branch.
-        Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="julia", rev="master"))
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from path at branch.
+            Pkg.add(Pkg.PackageSpec(path = packages_dir, subdir = "julia", rev = "master"))
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        Pkg.add(Pkg.PackageSpec(path=packages_dir, subdir="dependencies/Dep", rev="master"))
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            Pkg.add(Pkg.PackageSpec(path = packages_dir, subdir = "dependencies/Dep", rev = "master"))
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from path at branch, REPL subdir syntax
-        pkgstr("add $(packages_dir):julia#master")
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from path at branch, REPL subdir syntax
+            pkgstr("add $(packages_dir):julia#master")
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkgstr("add $(packages_dir):dependencies/Dep#master")
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkgstr("add $(packages_dir):dependencies/Dep#master")
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Develop from path.
-        Pkg.develop(Pkg.PackageSpec(path=packages_dir, subdir="julia"))
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Develop from path.
+            Pkg.develop(Pkg.PackageSpec(path = packages_dir, subdir = "julia"))
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        Pkg.develop(Pkg.PackageSpec(path=packages_dir, subdir="dependencies/Dep"))
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            Pkg.develop(Pkg.PackageSpec(path = packages_dir, subdir = "dependencies/Dep"))
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Develop from path, REPL subdir syntax.
-        pkgstr("develop $(packages_dir):julia")
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Develop from path, REPL subdir syntax.
+            pkgstr("develop $(packages_dir):julia")
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkgstr("develop $(packages_dir):dependencies/Dep")
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkgstr("develop $(packages_dir):dependencies/Dep")
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from url.
-        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from url.
+            Pkg.add(Pkg.PackageSpec(url = packages_dir_url, subdir = "julia"))
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            Pkg.add(Pkg.PackageSpec(url = packages_dir_url, subdir = "dependencies/Dep"))
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from url, REPL subdir syntax.
-        pkgstr("add $(packages_dir_url):julia")
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from url, REPL subdir syntax.
+            pkgstr("add $(packages_dir_url):julia")
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkgstr("add $(packages_dir_url):dependencies/Dep")
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkgstr("add $(packages_dir_url):dependencies/Dep")
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from url at branch.
-        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="julia",
-                                rev="master"))
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from url at branch.
+            Pkg.add(
+                Pkg.PackageSpec(
+                    url = packages_dir_url, subdir = "julia",
+                    rev = "master"
+                )
+            )
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        Pkg.add(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep", rev="master"))
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            Pkg.add(Pkg.PackageSpec(url = packages_dir_url, subdir = "dependencies/Dep", rev = "master"))
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Add from url at branch, REPL subdir syntax.
-        pkgstr("add $(packages_dir_url):julia#master")
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Add from url at branch, REPL subdir syntax.
+            pkgstr("add $(packages_dir_url):julia#master")
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkgstr("add $(packages_dir_url):dependencies/Dep#master")
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkgstr("add $(packages_dir_url):dependencies/Dep#master")
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Develop from url.
-        Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="julia"))
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Develop from url.
+            Pkg.develop(Pkg.PackageSpec(url = packages_dir_url, subdir = "julia"))
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        Pkg.develop(Pkg.PackageSpec(url=packages_dir_url, subdir="dependencies/Dep"))
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            Pkg.develop(Pkg.PackageSpec(url = packages_dir_url, subdir = "dependencies/Dep"))
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
 
-        # Develop from url, REPL subdir syntax.
-        pkgstr("develop $(packages_dir_url):julia")
-        @test isinstalled("Package")
-        @test !isinstalled("Dep")
-        @test isinstalled(dep)
-        pkg"rm Package"
+            # Develop from url, REPL subdir syntax.
+            pkgstr("develop $(packages_dir_url):julia")
+            @test isinstalled("Package")
+            @test !isinstalled("Dep")
+            @test isinstalled(dep)
+            pkg"rm Package"
 
-        pkgstr("develop $(packages_dir_url):dependencies/Dep")
-        @test !isinstalled("Package")
-        @test isinstalled("Dep")
-        pkg"rm Dep"
+            pkgstr("develop $(packages_dir_url):dependencies/Dep")
+            @test !isinstalled("Package")
+            @test isinstalled("Dep")
+            pkg"rm Dep"
         end #cd
     end
 end

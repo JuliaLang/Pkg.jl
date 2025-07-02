@@ -16,6 +16,8 @@ function do_something()
 
     # @info "Now do something with extended IndirectArray support"
     HasExtensions.foo(IndirectArray(rand(1:6, 32, 32), 1:6)) == 3 || error("Unexpected value")
+
+    return
 end
 
 end # module

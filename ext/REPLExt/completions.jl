@@ -34,11 +34,11 @@ function complete_local_dir(s, i1, i2)
 end
 
 function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
-    cmp = REPL.REPLCompletions.complete_path(s, i2, shell_escape=true)
+    cmp = REPL.REPLCompletions.complete_path(s, i2, shell_escape = true)
     cmp2 = cmp[2]
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
     completions = filter!(completions) do x
-        Base.isaccessibledir(s[1:prevind(s, first(cmp2)-i1+1)]*x)
+        Base.isaccessibledir(s[1:prevind(s, first(cmp2) - i1 + 1)] * x)
     end
     if expanded_user
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
@@ -98,13 +98,14 @@ end
 function complete_help(options, partial; hint::Bool)
     names = String[]
     for cmds in values(SPECS)
-         append!(names, [spec.canonical_name for spec in values(cmds)])
+        append!(names, [spec.canonical_name for spec in values(cmds)])
     end
     return sort!(unique!(append!(names, collect(keys(SPECS)))))
 end
 
 function complete_installed_packages(options, partial; hint::Bool)
-    env = try EnvCache()
+    env = try
+        EnvCache()
     catch err
         err isa PkgError || rethrow()
         return String[]
@@ -116,7 +117,8 @@ function complete_installed_packages(options, partial; hint::Bool)
 end
 
 function complete_all_installed_packages(options, partial; hint::Bool)
-    env = try EnvCache()
+    env = try
+        EnvCache()
     catch err
         err isa PkgError || rethrow()
         return String[]
@@ -125,7 +127,8 @@ function complete_all_installed_packages(options, partial; hint::Bool)
 end
 
 function complete_installed_packages_and_compat(options, partial; hint::Bool)
-    env = try EnvCache()
+    env = try
+        EnvCache()
     catch err
         err isa PkgError || rethrow()
         return String[]
@@ -137,7 +140,8 @@ function complete_installed_packages_and_compat(options, partial; hint::Bool)
 end
 
 function complete_fixed_packages(options, partial; hint::Bool)
-    env = try EnvCache()
+    env = try
+        EnvCache()
     catch err
         err isa PkgError || rethrow()
         return String[]
@@ -198,13 +202,23 @@ function complete_command(statement::Statement, final::Bool, on_sub::Bool)
 end
 
 complete_opt(opt_specs) =
-    unique(sort(map(wrap_option,
-                    map(x -> getproperty(x, :name),
-                        collect(values(opt_specs))))))
+    unique(
+    sort(
+        map(
+            wrap_option,
+            map(
+                x -> getproperty(x, :name),
+                collect(values(opt_specs))
+            )
+        )
+    )
+)
 
-function complete_argument(spec::CommandSpec, options::Vector{String},
-                           partial::AbstractString, offset::Int,
-                           index::Int; hint::Bool)
+function complete_argument(
+        spec::CommandSpec, options::Vector{String},
+        partial::AbstractString, offset::Int,
+        index::Int; hint::Bool
+    )
     if spec.completions isa Symbol
         # if completions is a symbol, it is a function in REPLExt that needs to be forwarded
         # to REPLMode (couldn't be linked there because REPLExt is not a dependency of REPLMode)
@@ -214,11 +228,11 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
             @error "REPLMode indicates a completion function called :$(spec.completions) that cannot be found in REPLExt"
             rethrow()
         end
-        spec.completions = function(opts, partial, offset, index; hint::Bool)
-                applicable(completions, opts, partial, offset, index) ?
-                    completions(opts, partial, offset, index; hint) :
-                    completions(opts, partial; hint)
-            end
+        spec.completions = (opts, partial, offset, index; hint::Bool) -> begin
+            applicable(completions, opts, partial, offset, index) ?
+                completions(opts, partial, offset, index; hint) :
+                completions(opts, partial; hint)
+        end
     end
     spec.completions === nothing && return String[]
     # finish parsing opts
@@ -274,7 +288,7 @@ function _completions(input, final, offset, index; hint::Bool)
     end
 end
 
-function completions(full, index; hint::Bool=false)::Tuple{Vector{String},UnitRange{Int},Bool}
+function completions(full, index; hint::Bool = false)::Tuple{Vector{String}, UnitRange{Int}, Bool}
     pre = full[1:index]
     isempty(pre) && return default_commands(), 0:-1, false # empty input -> complete commands
     offset_adjust = 0
@@ -283,8 +297,8 @@ function completions(full, index; hint::Bool=false)::Tuple{Vector{String},UnitRa
         pre = string(pre[1], " ", pre[2:end])
         offset_adjust = -1
     end
-    last = split(pre, ' ', keepempty=true)[end]
-    offset = isempty(last) ? index+1+offset_adjust : last.offset+1+offset_adjust
-    final  = isempty(last) # is the cursor still attached to the final token?
+    last = split(pre, ' ', keepempty = true)[end]
+    offset = isempty(last) ? (index + 1 + offset_adjust) : (last.offset + 1 + offset_adjust)
+    final = isempty(last) # is the cursor still attached to the final token?
     return _completions(pre, final, offset, index; hint)
 end

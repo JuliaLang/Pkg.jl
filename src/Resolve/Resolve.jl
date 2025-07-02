@@ -14,7 +14,7 @@ export resolve, sanity_check, Graph, pkgID
 ####################
 # Requires / Fixed #
 ####################
-const Requires = Dict{UUID,VersionSpec}
+const Requires = Dict{UUID, VersionSpec}
 
 struct Fixed
     version::VersionNumber
@@ -35,19 +35,19 @@ Base.show(io::IO, f::Fixed) = isempty(f.requires) ?
 
 struct ResolverError <: Exception
     msg::AbstractString
-    ex::Union{Exception,Nothing}
+    ex::Union{Exception, Nothing}
 end
 ResolverError(msg::AbstractString) = ResolverError(msg, nothing)
 
 struct ResolverTimeoutError <: Exception
     msg::AbstractString
-    ex::Union{Exception,Nothing}
+    ex::Union{Exception, Nothing}
 end
 ResolverTimeoutError(msg::AbstractString) = ResolverTimeoutError(msg, nothing)
 
 function Base.showerror(io::IO, pkgerr::ResolverError)
     print(io, pkgerr.msg)
-    if pkgerr.ex !== nothing
+    return if pkgerr.ex !== nothing
         pkgex = pkgerr.ex
         if isa(pkgex, CompositeException)
             for cex in pkgex
@@ -76,16 +76,16 @@ function resolve(graph::Graph)
     return compute_output_dict(sol, graph)
 end
 
-function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previous_sol::Union{Vector{Int},Nothing})
+function _resolve(graph::Graph, lower_bound::Union{Vector{Int}, Nothing}, previous_sol::Union{Vector{Int}, Nothing})
     np = graph.np
     spp = graph.spp
     gconstr = graph.gconstr
 
     if lower_bound ≢ nothing
-        for p0 = 1:np
+        for p0 in 1:np
             v0 = lower_bound[p0]
             @assert v0 ≠ spp[p0]
-            gconstr[p0][1:(v0-1)] .= false
+            gconstr[p0][1:(v0 - 1)] .= false
         end
     end
 
@@ -114,11 +114,15 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previou
     else
         @assert maxsum_result == :timedout
         log_event_global!(graph, "maxsum solver timed out")
-        throw(ResolverTimeoutError("""
-            The resolution process timed out. This is likely due to unsatisfiable requirements.
-            You can increase the maximum resolution time via the environment variable JULIA_PKG_RESOLVE_MAX_TIME
-            (the current value is $(get(ENV, "JULIA_PKG_RESOLVE_MAX_TIME", DEFAULT_MAX_TIME))).
-            """))
+        throw(
+            ResolverTimeoutError(
+                """
+                The resolution process timed out. This is likely due to unsatisfiable requirements.
+                You can increase the maximum resolution time via the environment variable JULIA_PKG_RESOLVE_MAX_TIME
+                (the current value is $(get(ENV, "JULIA_PKG_RESOLVE_MAX_TIME", DEFAULT_MAX_TIME))).
+                """
+            )
+        )
     end
 
 
@@ -166,7 +170,7 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
     isempty(req_inds) || @warn("sanity check called on a graph with non-empty requirements")
     if !any(is_julia(graph, fp0) for fp0 in fix_inds)
         @warn("sanity check called on a graph without julia requirement, adding it")
-        add_fixed!(graph, Dict(uuid_julia=>Fixed(VERSION)))
+        add_fixed!(graph, Dict(uuid_julia => Fixed(VERSION)))
     end
     if length(fix_inds) ≠ 1
         @warn("sanity check called on a graph with extra fixed requirements (besides julia)")
@@ -190,22 +194,22 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
     pvers = data.pvers
     eq_classes = data.eq_classes
 
-    problematic = Tuple{String,VersionNumber}[]
+    problematic = Tuple{String, VersionNumber}[]
 
     np == 0 && return problematic
 
-    vers = [(pkgs[p0],pvers[p0][v0]) for p0 = 1:np for v0 = 1:(spp[p0]-1)]
-    sort!(vers, by=pv->(-length(gadj[pdict[pv[1]]])))
+    vers = [(pkgs[p0], pvers[p0][v0]) for p0 in 1:np for v0 in 1:(spp[p0] - 1)]
+    sort!(vers, by = pv -> (-length(gadj[pdict[pv[1]]])))
 
     nv = length(vers)
 
-    svdict = Dict{Tuple{UUID,VersionNumber},Int}(vers[i] => i for i = 1:nv)
+    svdict = Dict{Tuple{UUID, VersionNumber}, Int}(vers[i] => i for i in 1:nv)
 
     checked = falses(nv)
 
     last_str_len = 0
 
-    for (i,(p,vn)) in enumerate(vers)
+    for (i, (p, vn)) in enumerate(vers)
         if verbose
             frac_compl = i / nv
             print("\r", " "^last_str_len, "\r")
@@ -249,8 +253,8 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
         else
             @assert verify_solution(sol, graph)
             sol_dict = compute_output_dict(sol, graph)
-            for (sp,svn) in sol_dict
-                j = svdict[sp,svn]
+            for (sp, svn) in sol_dict
+                j = svdict[sp, svn]
                 checked[j] = true
             end
         end
@@ -278,8 +282,8 @@ function compute_output_dict(sol::Vector{Int}, graph::Graph)
     pvers = graph.data.pvers
     pruned = graph.data.pruned
 
-    want = Dict{UUID,VersionNumber}()
-    for p0 = 1:np
+    want = Dict{UUID, VersionNumber}()
+    for p0 in 1:np
         p0 ∈ fix_inds && continue
         p = pkgs[p0]
         s0 = sol[p0]
@@ -287,7 +291,7 @@ function compute_output_dict(sol::Vector{Int}, graph::Graph)
         vn = pvers[p0][s0]
         want[p] = vn
     end
-    for (p,vn) in pruned
+    for (p, vn) in pruned
         @assert !haskey(want, p)
         want[p] = vn
     end
@@ -309,12 +313,12 @@ function greedysolver(graph::Graph)
     gconstr = graph.gconstr
 
     # initialize solution: all uninstalled
-    sol = Int[spp[p0] for p0 = 1:np]
+    sol = Int[spp[p0] for p0 in 1:np]
 
     # packages which are not allowed to be uninstalled
     # (NOTE: this is potentially a superset of graph.req_inds,
     #        since it may include implicit requirements)
-    req_inds = Set{Int}(p0 for p0 = 1:np if !gconstr[p0][end])
+    req_inds = Set{Int}(p0 for p0 in 1:np if !gconstr[p0][end])
 
     # set up required packages to their highest allowed versions
     for rp0 in req_inds
@@ -347,10 +351,10 @@ function greedysolver(graph::Graph)
             @assert s0 < spp[p0]
 
             # scan dependencies
-            for (j1,p1) in enumerate(gadj[p0])
+            for (j1, p1) in enumerate(gadj[p0])
                 msk = gmsk[p0][j1]
                 # look for the highest version which satisfies the requirements
-                v1 = findlast(msk[:,s0] .& gconstr[p1])
+                v1 = findlast(msk[:, s0] .& gconstr[p1])
                 v1 == spp[p1] && continue # p1 is not required by p0's current version
                 # if we found a version, and the package was uninstalled
                 # or the same version was already selected, we're ok;
@@ -374,7 +378,7 @@ function greedysolver(graph::Graph)
 
     pop_snapshot!(graph)
 
-    for p0 = 1:np
+    for p0 in 1:np
         log_event_greedysolved!(graph, p0, sol[p0])
     end
 
@@ -396,13 +400,13 @@ function verify_solution(sol::Vector{Int}, graph::Graph)
     @assert all(sol .> 0)
 
     # verify constraints and dependencies
-    for p0 = 1:np
+    for p0 in 1:np
         s0 = sol[p0]
         gconstr[p0][s0] || (@warn("gconstr[$p0][$s0] fail"); return false)
-        for (j1,p1) in enumerate(gadj[p0])
+        for (j1, p1) in enumerate(gadj[p0])
             msk = gmsk[p0][j1]
             s1 = sol[p1]
-            msk[s1,s0] || (@warn("gmsk[$p0][$p1][$s1,$s0] fail"); return false)
+            msk[s1, s0] || (@warn("gmsk[$p0][$p1][$s1,$s0] fail"); return false)
         end
     end
     return true
@@ -413,7 +417,7 @@ end
 Uninstall unreachable packages:
 start from the required ones and keep only the packages reachable from them along the graph.
 """
-function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol,Int}}, graph::Graph)
+function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol, Int}}, graph::Graph)
     np = graph.np
     spp = graph.spp
     gadj = graph.gadj
@@ -421,8 +425,8 @@ function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol,Int}
     gconstr = graph.gconstr
 
     uninst = trues(np)
-    staged = Set{Int}(p0 for p0 = 1:np if !gconstr[p0][end])
-    seen = copy(staged) ∪ Set{Int}(p0 for p0 = 1:np if sol[p0] == spp[p0]) # we'll skip uninstalled packages
+    staged = Set{Int}(p0 for p0 in 1:np if !gconstr[p0][end])
+    seen = copy(staged) ∪ Set{Int}(p0 for p0 in 1:np if sol[p0] == spp[p0]) # we'll skip uninstalled packages
 
     while !isempty(staged)
         staged_next = Set{Int}()
@@ -430,9 +434,9 @@ function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol,Int}
             s0 = sol[p0]
             @assert s0 ≠ spp[p0]
             uninst[p0] = false
-            for (j1,p1) in enumerate(gadj[p0])
+            for (j1, p1) in enumerate(gadj[p0])
                 p1 ∈ seen && continue            # we've already seen the package, or it is uninstalled
-                gmsk[p0][j1][end,s0] && continue # the package is not required by p0 at version s0
+                gmsk[p0][j1][end, s0] && continue # the package is not required by p0 at version s0
                 push!(staged_next, p1)
             end
         end
@@ -444,6 +448,7 @@ function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol,Int}
         sol[p0] = spp[p0]
         why[p0] = :uninst
     end
+    return
 end
 
 """
@@ -463,7 +468,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     pkgs = graph.data.pkgs
 
     # keep a track for the log
-    why = Union{Symbol,Int}[0 for p0 = 1:np]
+    why = Union{Symbol, Int}[0 for p0 in 1:np]
 
     # Strategy:
     # There's a cycle in which first the unnecessary (unconnected) packages are removed,
@@ -510,10 +515,10 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
         move_up .= sol .≠ spp
         copy!(upperbound, spp)
         let move_up = move_up
-            lowerbound .= [move_up[p0] ? sol[p0] : 1 for p0 = 1:np]
+            lowerbound .= [move_up[p0] ? sol[p0] : 1 for p0 in 1:np]
         end
 
-        for p0 = 1:np
+        for p0 in 1:np
             s0 = sol[p0]
             s0 == spp[p0] && (why[p0] = :uninst; continue) # the package is not installed
             move_up[p0] || continue # the package is only installed as a result of a previous bump, skip it
@@ -521,9 +526,9 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             @assert upperbound[p0] == spp[p0]
 
             # pick the next version that doesn't violate a constraint (if any)
-            bump_range = collect(s0+1:spp[p0])
+            bump_range = collect((s0 + 1):spp[p0])
             bump = let gconstr = gconstr
-                findfirst(v0->gconstr[p0][v0], bump_range)
+                findfirst(v0 -> gconstr[p0][v0], bump_range)
             end
 
             # no such version was found, skip this package
@@ -551,7 +556,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
 
             while !isempty(staged)
                 for f0 in staged
-                    for (j1,f1) in enumerate(gadj[f0])
+                    for (j1, f1) in enumerate(gadj[f0])
                         s1 = sol[f1]
                         msk = gmsk[f0][j1]
                         if f1 == p0 || try_uninstall
@@ -565,13 +570,13 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
                                 s1 > lb1 && @assert s1 == spp[f1]
                                 # the arrangement of the range gives precedence to improving the
                                 # current situation, but allows reinstalling a package if needed
-                                bump_range = vcat(s1:ub1, s1-1:-1:lb1)
+                                bump_range = vcat(s1:ub1, (s1 - 1):-1:lb1)
                             else
                                 bump_range = collect(ub1:-1:lb1)
                             end
                         end
                         bump = let gconstr = gconstr
-                            findfirst(v1->(gconstr[f1][v1] && msk[v1, sol[f0]]), bump_range)
+                            findfirst(v1 -> (gconstr[f1][v1] && msk[v1, sol[f0]]), bump_range)
                         end
                         if bump ≡ nothing
                             why[p0] = f1 # TODO: improve this? (ideally we might want the path from p0 to f1)
@@ -610,15 +615,16 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
 
     @assert verify_solution(sol, graph)
 
-    for p0 = 1:np
+    for p0 in 1:np
         log_event_maxsumsolved!(graph, p0, sol[p0], why[p0])
     end
+    return
 end
 
 function apply_maxsum_trace!(graph::Graph, sol::Vector{Int})
     gconstr = graph.gconstr
 
-    for (p0,s0) in enumerate(sol)
+    for (p0, s0) in enumerate(sol)
         s0 == 0 && continue
         gconstr0 = gconstr[p0]
         old_constr = copy(gconstr0)
@@ -627,9 +633,10 @@ function apply_maxsum_trace!(graph::Graph, sol::Vector{Int})
         gconstr0[s0] = true
         gconstr0 ≠ old_constr && log_event_maxsumtrace!(graph, p0, s0)
     end
+    return
 end
 
-function trigger_failure!(graph::Graph, sol::Vector{Int}, staged::Tuple{Int,Int})
+function trigger_failure!(graph::Graph, sol::Vector{Int}, staged::Tuple{Int, Int})
     apply_maxsum_trace!(graph, sol)
     simplify_graph_soft!(graph, Set(findall(sol .> 0)), log_events = true) # this may throw an error...
 
@@ -643,8 +650,8 @@ function trigger_failure!(graph::Graph, sol::Vector{Int}, staged::Tuple{Int,Int}
     log_event_maxsumtrace!(graph, p0, v0)
     simplify_graph!(graph) # this may throw an error...
     outdict = resolve(graph) # ...otherwise, this MUST throw an error
-    open(io->showlog(io, graph, view=:chronological), "logchrono.errresolve.txt", "w")
-    error("this is not supposed to happen... $(Dict(pkgID(p, graph) => vn for (p,vn) in outdict))")
+    open(io -> showlog(io, graph, view = :chronological), "logchrono.errresolve.txt", "w")
+    error("this is not supposed to happen... $(Dict(pkgID(p, graph) => vn for (p, vn) in outdict))")
 end
 
 end # module

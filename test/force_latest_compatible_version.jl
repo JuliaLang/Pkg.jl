@@ -297,7 +297,7 @@ const test_package_parent_dir = joinpath(
                             )
                             @test_logs(
                                 (:warn, message_2),
-                                match_mode=:any,
+                                match_mode = :any,
                                 Pkg.test(;
                                     force_latest_compatible_version = true,
                                 ),
@@ -314,7 +314,7 @@ const test_package_parent_dir = joinpath(
                                 )
                                 @test_logs(
                                     (:warn, message_2),
-                                    match_mode=:any,
+                                    match_mode = :any,
                                     Pkg.test(;
                                         force_latest_compatible_version = true,
                                         allow_earlier_backwards_compatible_versions,

@@ -14,34 +14,34 @@ const platform = @inferred Platform platform_key_abi()
     # Ensure the platform type constructors are well behaved
     @testset "Platform constructors" begin
         @test_throws ArgumentError Linux(:not_a_platform)
-        @test_throws ArgumentError Linux(:x86_64; libc=:crazy_libc)
-        @test_throws ArgumentError Linux(:x86_64; libc=:glibc, call_abi=:crazy_abi)
-        @test_throws ArgumentError Linux(:x86_64; libc=:glibc, call_abi=:eabihf)
-        @test_throws ArgumentError Linux(:armv7l; libc=:glibc, call_abi=:kekeke)
+        @test_throws ArgumentError Linux(:x86_64; libc = :crazy_libc)
+        @test_throws ArgumentError Linux(:x86_64; libc = :glibc, call_abi = :crazy_abi)
+        @test_throws ArgumentError Linux(:x86_64; libc = :glibc, call_abi = :eabihf)
+        @test_throws ArgumentError Linux(:armv7l; libc = :glibc, call_abi = :kekeke)
         @test_throws ArgumentError MacOS(:i686)
-        @test_throws ArgumentError MacOS(:x86_64; libc=:glibc)
-        @test_throws ArgumentError MacOS(:x86_64; call_abi=:eabihf)
-        @test_throws ArgumentError Windows(:x86_64; libc=:glibc)
-        @test_throws ArgumentError Windows(:x86_64; call_abi=:eabihf)
+        @test_throws ArgumentError MacOS(:x86_64; libc = :glibc)
+        @test_throws ArgumentError MacOS(:x86_64; call_abi = :eabihf)
+        @test_throws ArgumentError Windows(:x86_64; libc = :glibc)
+        @test_throws ArgumentError Windows(:x86_64; call_abi = :eabihf)
         @test_throws ArgumentError FreeBSD(:not_a_platform)
-        @test_throws ArgumentError FreeBSD(:x86_64; libc=:crazy_libc)
-        @test_throws ArgumentError FreeBSD(:x86_64; call_abi=:crazy_abi)
-        @test_throws ArgumentError FreeBSD(:x86_64; call_abi=:eabihf)
+        @test_throws ArgumentError FreeBSD(:x86_64; libc = :crazy_libc)
+        @test_throws ArgumentError FreeBSD(:x86_64; call_abi = :crazy_abi)
+        @test_throws ArgumentError FreeBSD(:x86_64; call_abi = :eabihf)
 
         # Test copy constructor
         cabi = CompilerABI(;
-            libgfortran_version=v"3",
-            libstdcxx_version=v"3.4.18",
-            cxxstring_abi=:cxx03,
+            libgfortran_version = v"3",
+            libstdcxx_version = v"3.4.18",
+            cxxstring_abi = :cxx03,
         )
-        cabi2 = CompilerABI(cabi; cxxstring_abi=:cxx11)
+        cabi2 = CompilerABI(cabi; cxxstring_abi = :cxx11)
         @test libgfortran_version(cabi) == libgfortran_version(cabi2)
         @test libstdcxx_version(cabi) == libstdcxx_version(cabi2)
         @test cxxstring_abi(cabi) != cxxstring_abi(cabi2)
 
         # Explicitly test that we can pass arguments to UnknownPlatform,
         # and it doesn't do anything.
-        @test UnknownPlatform(:riscv; libc=:fuschia_libc) == UnknownPlatform()
+        @test UnknownPlatform(:riscv; libc = :fuschia_libc) == UnknownPlatform()
     end
 
     @testset "Platform properties" begin
@@ -51,7 +51,7 @@ const platform = @inferred Platform platform_key_abi()
         end
 
         # Test that we can get the arch of various platforms
-        @test arch(Linux(:aarch64; libc=:musl)) == :aarch64
+        @test arch(Linux(:aarch64; libc = :musl)) == :aarch64
         @test arch(Windows(:i686)) == :i686
         @test arch(FreeBSD(:amd64)) == :x86_64
         @test arch(FreeBSD(:i386)) == :i686
@@ -70,13 +70,13 @@ const platform = @inferred Platform platform_key_abi()
 
         @test call_abi(Linux(:x86_64)) === nothing
         @test call_abi(Linux(:armv6l)) == :eabihf
-        @test call_abi(Linux(:armv7l; call_abi=:eabihf)) == :eabihf
-        @test call_abi(UnknownPlatform(;call_abi=:eabihf)) === nothing
+        @test call_abi(Linux(:armv7l; call_abi = :eabihf)) == :eabihf
+        @test call_abi(UnknownPlatform(; call_abi = :eabihf)) === nothing
 
         @test triplet(Windows(:i686)) == "i686-w64-mingw32"
-        @test triplet(Linux(:x86_64; libc=:musl)) == "x86_64-linux-musl"
-        @test triplet(Linux(:armv7l; libc=:musl)) == "armv7l-linux-musleabihf"
-        @test triplet(Linux(:armv6l; libc=:musl, call_abi=:eabihf)) == "armv6l-linux-musleabihf"
+        @test triplet(Linux(:x86_64; libc = :musl)) == "x86_64-linux-musl"
+        @test triplet(Linux(:armv7l; libc = :musl)) == "armv7l-linux-musleabihf"
+        @test triplet(Linux(:armv6l; libc = :musl, call_abi = :eabihf)) == "armv6l-linux-musleabihf"
         @test triplet(Linux(:x86_64)) == "x86_64-linux-gnu"
         @test triplet(Linux(:armv6l)) == "armv6l-linux-gnueabihf"
         @test triplet(MacOS()) == "x86_64-apple-darwin14"
@@ -100,20 +100,20 @@ const platform = @inferred Platform platform_key_abi()
     @testset "platforms_match()" begin
         # Just do a quick combinatorial sweep for completeness' sake for platform matching
         for libgfortran_version in (nothing, v"3", v"5"),
-            libstdcxx_version in (nothing, v"3.4.18", v"3.4.26"),
-            cxxstring_abi in (nothing, :cxx03, :cxx11)
+                libstdcxx_version in (nothing, v"3.4.18", v"3.4.26"),
+                cxxstring_abi in (nothing, :cxx03, :cxx11)
 
             cabi = CompilerABI(;
-                libgfortran_version=libgfortran_version,
-                libstdcxx_version=libstdcxx_version,
-                cxxstring_abi=cxxstring_abi,
+                libgfortran_version = libgfortran_version,
+                libstdcxx_version = libstdcxx_version,
+                cxxstring_abi = cxxstring_abi,
             )
-            @test platforms_match(Linux(:x86_64), Linux(:x86_64, compiler_abi=cabi))
-            @test platforms_match(Linux(:x86_64, compiler_abi=cabi), Linux(:x86_64))
+            @test platforms_match(Linux(:x86_64), Linux(:x86_64, compiler_abi = cabi))
+            @test platforms_match(Linux(:x86_64, compiler_abi = cabi), Linux(:x86_64))
 
             # Also test auto-string-parsing
-            @test platforms_match(triplet(Linux(:x86_64)), Linux(:x86_64, compiler_abi=cabi))
-            @test platforms_match(Linux(:x86_64), triplet(Linux(:x86_64, compiler_abi=cabi)))
+            @test platforms_match(triplet(Linux(:x86_64)), Linux(:x86_64, compiler_abi = cabi))
+            @test platforms_match(Linux(:x86_64), triplet(Linux(:x86_64, compiler_abi = cabi)))
         end
 
         # Ensure many of these things do NOT match
@@ -124,18 +124,18 @@ const platform = @inferred Platform platform_key_abi()
 
         # Make some explicitly non-matching cabi's
         base_cabi = CompilerABI(;
-            libgfortran_version=v"5",
-            cxxstring_abi=:cxx11,
+            libgfortran_version = v"5",
+            cxxstring_abi = :cxx11,
         )
         for arch in (:x86_64, :i686, :aarch64, :armv6l, :armv7l),
-            cabi in (
-                CompilerABI(libgfortran_version=v"3"),
-                CompilerABI(cxxstring_abi=:cxx03),
-                CompilerABI(libgfortran_version=v"4", cxxstring_abi=:cxx11),
-                CompilerABI(libgfortran_version=v"3", cxxstring_abi=:cxx03),
-            )
+                cabi in (
+                    CompilerABI(libgfortran_version = v"3"),
+                    CompilerABI(cxxstring_abi = :cxx03),
+                    CompilerABI(libgfortran_version = v"4", cxxstring_abi = :cxx11),
+                    CompilerABI(libgfortran_version = v"3", cxxstring_abi = :cxx03),
+                )
 
-            @test !platforms_match(Linux(arch, compiler_abi=base_cabi), Linux(arch, compiler_abi=cabi))
+            @test !platforms_match(Linux(arch, compiler_abi = base_cabi), Linux(arch, compiler_abi = cabi))
         end
     end
 
@@ -149,7 +149,7 @@ const platform = @inferred Platform platform_key_abi()
         @test !Sys.isapple(Linux(:powerpc64le))
         @test Sys.isbsd(MacOS())
         @test Sys.isbsd(FreeBSD(:x86_64))
-        @test !Sys.isbsd(Linux(:powerpc64le; libc=:musl))
+        @test !Sys.isbsd(Linux(:powerpc64le; libc = :musl))
     end
 end
 

@@ -1,23 +1,23 @@
 module ManifestTests
 
-using  Test, UUIDs, Dates, TOML
+using Test, UUIDs, Dates, TOML
 import ..Pkg, LibGit2
-using  ..Utils
+using ..Utils
 
 # used with the reference manifests in `test/manifest/formats`
 # ensures the manifests are valid and restored after test
-function reference_manifest_isolated_test(f, dir::String; v1::Bool=false)
+function reference_manifest_isolated_test(f, dir::String; v1::Bool = false)
     env_dir = joinpath(@__DIR__, "manifest", "formats", dir)
     env_manifest = joinpath(env_dir, "Manifest.toml")
     env_project = joinpath(env_dir, "Project.toml")
     cp(env_manifest, string(env_manifest, "_backup"))
     cp(env_project, string(env_project, "_backup"))
-    try
+    return try
         isfile(env_manifest) || error("Reference manifest is missing")
         if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == !v1
             error("Reference manifest file at $(env_manifest) is invalid")
         end
-        isolate(loaded_depot=true) do
+        isolate(loaded_depot = true) do
             f(env_dir, env_manifest)
         end
     finally
@@ -32,9 +32,9 @@ end
 
 @testset "Manifest.toml formats" begin
     @testset "Default manifest format is v2" begin
-        isolate(loaded_depot=true) do
+        isolate(loaded_depot = true) do
             io = IOBuffer()
-            Pkg.activate(; io=io, temp=true)
+            Pkg.activate(; io = io, temp = true)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*", output)
             Pkg.add("Profile")
@@ -45,12 +45,12 @@ end
     end
 
     @testset "Empty manifest file is automatically upgraded to v2" begin
-        isolate(loaded_depot=true) do
+        isolate(loaded_depot = true) do
             io = IOBuffer()
             d = mktempdir()
             manifest = joinpath(d, "Manifest.toml")
             touch(manifest)
-            Pkg.activate(d; io=io)
+            Pkg.activate(d; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*", output)
             env_manifest = Pkg.Types.Context().env.manifest_file
@@ -59,7 +59,7 @@ end
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
 
-            Pkg.add("Profile"; io=io)
+            Pkg.add("Profile"; io = io)
             env_manifest = Pkg.Types.Context().env.manifest_file
             @test samefile(env_manifest, manifest)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
@@ -68,15 +68,15 @@ end
             # check that having a Project with deps, and an empty manifest file doesn't error
             rm(manifest)
             touch(manifest)
-            Pkg.activate(d; io=io)
-            Pkg.add("Example"; io=io)
+            Pkg.activate(d; io = io)
+            Pkg.add("Example"; io = io)
         end
     end
 
     @testset "v1.0: activate, change, maintain manifest format" begin
         reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
             io = IOBuffer()
-            Pkg.activate(env_dir; io=io)
+            Pkg.activate(env_dir; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*`.*v1.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
@@ -92,7 +92,7 @@ end
     @testset "v2.0: activate, change, maintain manifest format" begin
         reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
             io = IOBuffer()
-            Pkg.activate(env_dir; io=io)
+            Pkg.activate(env_dir; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*`.*v2.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
@@ -105,7 +105,7 @@ end
 
             m = Pkg.Types.read_manifest(env_manifest)
             @test m.other["some_other_field"] == "other"
-            @test m.other["some_other_data"] == [1,2,3,4]
+            @test m.other["some_other_data"] == [1, 2, 3, 4]
 
             mktemp() do path, io
                 Pkg.Types.write_manifest(io, m)
@@ -121,12 +121,12 @@ end
             m.julia_version = v"1.5.0"
             msg = r"The active manifest file has dependencies that were resolved with a different julia version"
             @test_logs (:warn, msg) Pkg.Types.check_manifest_julia_version_compat(m, env_manifest)
-            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict=true)
+            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict = true)
 
             m.julia_version = nothing
             msg = r"The active manifest file is missing a julia version entry"
             @test_logs (:warn, msg) Pkg.Types.check_manifest_julia_version_compat(m, env_manifest)
-            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict=true)
+            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict = true)
         end
     end
 
@@ -134,21 +134,21 @@ end
         # the reference file here is not actually v3.0. It just represents an unknown manifest format
         reference_manifest_isolated_test("v3.0_unknown") do env_dir, env_manifest
             io = IOBuffer()
-            @test_logs (:warn,) Pkg.activate(env_dir; io=io)
+            @test_logs (:warn,) Pkg.activate(env_dir; io = io)
         end
     end
 
     @testset "Pkg.upgrade_manifest()" begin
         reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
             io = IOBuffer()
-            Pkg.activate(env_dir; io=io)
+            Pkg.activate(env_dir; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*`.*v1.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
             Pkg.upgrade_manifest()
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            Pkg.activate(env_dir; io=io)
+            Pkg.activate(env_dir; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*`.*v1.0`", output)
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
@@ -157,14 +157,14 @@ end
     @testset "Pkg.upgrade_manifest(manifest_path)" begin
         reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
             io = IOBuffer()
-            Pkg.activate(env_dir; io=io)
+            Pkg.activate(env_dir; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*`.*v1.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
             Pkg.upgrade_manifest(env_manifest)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            Pkg.activate(env_dir; io=io)
+            Pkg.activate(env_dir; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*`.*v1.0`", output)
             @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
@@ -181,8 +181,8 @@ end
             @test Pkg.Operations.dropbuild(v"1.2.3-rc1") == v"1.2.3-rc1"
         end
         @testset "new environment: value is `nothing`, then ~`VERSION` after resolve" begin
-            isolate(loaded_depot=true) do
-                Pkg.activate(; temp=true)
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
                 @test Pkg.Types.Context().env.manifest.julia_version == nothing
                 Pkg.add("Profile")
                 @test Pkg.Types.Context().env.manifest.julia_version == Pkg.Operations.dropbuild(VERSION)
@@ -212,10 +212,10 @@ end
             end
         end
         @testset "project_hash for identifying out of sync manifest" begin
-            isolate(loaded_depot=true) do
+            isolate(loaded_depot = true) do
                 iob = IOBuffer()
 
-                Pkg.activate(; temp=true)
+                Pkg.activate(; temp = true)
                 Pkg.add("Example")
                 @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
 

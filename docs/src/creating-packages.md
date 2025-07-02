@@ -627,7 +627,7 @@ may fit your package better.
      * The package name should begin with a capital letter and word separation is shown with upper camel case
      * Packages that provide the functionality of a project from another language should use the Julia convention
      * Packages that [provide pre-built libraries and executables](https://docs.binarybuilder.org/stable/jll/) can keep their original name, but should get `_jll`as a suffix. For example `pandoc_jll` wraps pandoc. However, note that the generation and release of most JLL packages is handled by the [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil) system.
-  
+
 10. For the complete list of rules for automatic merging into the General registry, see [these guidelines](https://juliaregistries.github.io/RegistryCI.jl/stable/guidelines/).
 
 
