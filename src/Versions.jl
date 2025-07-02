@@ -161,15 +161,15 @@ function Base.print(io::IO, r::VersionRange)
     if (m, n) == (0, 0)
         print(io, '*')
     elseif m == 0
-        print(io, "0-")
+        print(io, "0 -")
         join(io, r.upper.t, '.')
     elseif n == 0
         join(io, r.lower.t, '.')
-        print(io, "-*")
+        print(io, " - *")
     else
         join(io, r.lower.t[1:m], '.')
         if r.lower != r.upper
-            print(io, '-')
+            print(io, " - ")
             join(io, r.upper.t[1:n], '.')
         end
     end
@@ -279,7 +279,21 @@ function Base.print(io::IO, s::VersionSpec)
     end
     print(io, ']')
 end
-Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
+
+function Base.show(io::IO, s::VersionSpec)
+    print(io, "VersionSpec(")
+    if length(s.ranges) == 1
+        print(io, '"', s.ranges[1], '"')
+    else
+        print(io, "[")
+        for i = 1:length(s.ranges)
+            1 < i && print(io, ", ")
+            print(io, '"', s.ranges[i], '"')
+        end
+        print(io, ']')
+    end
+    print(io, ")")
+end
 
 
 ###################

@@ -1,0 +1,9 @@
+name = "SubProjectA"
+uuid = "87654321-4321-4321-4321-210987654321"
+version = "0.1.0"
+
+[deps]
+SubProjectB = "12345678-1234-1234-1234-123456789012"
+
+[sources]
+SubProjectB = {path = "SubProjectB"}

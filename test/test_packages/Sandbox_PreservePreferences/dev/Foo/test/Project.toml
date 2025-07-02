@@ -1,0 +1,6 @@
+[deps]
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
+Foo = "48898bec-3adb-11e9-02a6-a164ba74aeae"
+
+[preferences]
+Foo.tree = "birch"

@@ -7,8 +7,9 @@ function augment_platform!(p::Platform)
         return p
     end
 
-    # If the tag is not set, autodetect through magic (in this case, checking environment variables)
-    flooblecrank_status = get(ENV, "FLOOBLECRANK", "disengaged")
+    # If the tag is not set, autodetect through magic (in this case, checking preferences)
+    ap_uuid = Base.UUID("4d5b37cf-bcfd-af76-759b-4d98ee7f9293")
+    flooblecrank_status = get(Base.get_preferences(ap_uuid), "flooblecrank", "disengaged")
     if flooblecrank_status == "engaged"
         p["flooblecrank"] = "engaged"
     else

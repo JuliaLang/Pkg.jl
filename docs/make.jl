@@ -9,7 +9,7 @@ const formats = Any[
     Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
         canonical = "https://julialang.github.io/Pkg.jl/v1/",
-        assets = ["assets/custom.css"],
+        assets = ["assets/custom.css", "assets/favicon.ico"],
     ),
 ]
 if "pdf" in ARGS
@@ -18,7 +18,6 @@ end
 
 # setup for doctesting
 DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Base.BinaryPlatforms); recursive=true)
-DocMeta.setdocmeta!(Pkg.LazilyInitializedFields, :DocTestSetup, :(using Pkg.LazilyInitializedFields))
 
 # Run doctests first and disable them in makedocs
 Documenter.doctest(joinpath(@__DIR__, "src"), [Pkg])
@@ -29,20 +28,22 @@ makedocs(
     modules = [Pkg],
     sitename = "Pkg.jl",
     doctest = false,
+    warnonly = :missing_docs,
     pages = Any[
         "index.md",
         "getting-started.md",
         "managing-packages.md",
         "environments.md",
         "creating-packages.md",
+        "apps.md",
         "compatibility.md",
         "registries.md",
         "artifacts.md",
-        # "faq.md",
         "glossary.md",
         "toml-files.md",
         "repl.md",
         "api.md",
+        "protocol.md",
     ],
 )
 
