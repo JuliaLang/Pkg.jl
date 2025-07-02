@@ -225,6 +225,10 @@ end
 
 function tokenize(cmd::AbstractString)
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ") # for multiline commands
+    if startswith(cmd, ']')
+        @warn "Removing leading `]`, which should only be used once to switch to pkg> mode"
+        cmd = string(lstrip(cmd, ']'))
+    end
     qstrings = lex(cmd)
     statements = foldl(qstrings; init=[QString[]]) do collection, next
         (next.raw == ";" && !next.isquoted) ?
