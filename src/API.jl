@@ -1648,7 +1648,7 @@ Check if a particular version is contained in a particular [compat] entry.
 
 ## Examples
 
-```jldoctest
+```jldoctest; setup = :(import Pkg)
 julia> Pkg.satisfies_compat(v"1.2.3", "1")
 true
 
