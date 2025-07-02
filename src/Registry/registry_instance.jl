@@ -1,5 +1,6 @@
 using Base: UUID, SHA1
 using TOML
+using Dates
 using Tar
 using ..Versions: VersionSpec, VersionRange
 
@@ -15,7 +16,7 @@ function to_tar_path_format(file::AbstractString)
 end
 
 # See loading.jl
-const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
+const TOML_CACHE = Base.TOMLCache(Base.TOML.Parser{Dates}())
 const TOML_LOCK = ReentrantLock()
 _parsefile(toml_file::AbstractString) = Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK)
 function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, file::AbstractString)
@@ -23,7 +24,8 @@ function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractStr
         return _parsefile(joinpath(folder, file))
     else
         content = in_memory_registry[to_tar_path_format(file)]
-        return TOML.Internals.parse(TOML.Parser(content; filepath=file))
+        parser = Base.TOML.Parser{Dates}(content; filepath=file)
+        return Base.TOML.parse(parser)
     end
 end
 
@@ -366,6 +368,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
     end
     println(io, "  packages: ", length(r.pkgs))
 end
+Base.show(io::IO, r::RegistryInstance) = Base.show(io, MIME"text/plain"(), r)
 
 function uuids_from_name(r::RegistryInstance, name::String)
     create_name_uuid_mapping!(r)

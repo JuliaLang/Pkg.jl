@@ -39,6 +39,12 @@ struct ResolverError <: Exception
 end
 ResolverError(msg::AbstractString) = ResolverError(msg, nothing)
 
+struct ResolverTimeoutError <: Exception
+    msg::AbstractString
+    ex::Union{Exception,Nothing}
+end
+ResolverTimeoutError(msg::AbstractString) = ResolverTimeoutError(msg, nothing)
+
 function Base.showerror(io::IO, pkgerr::ResolverError)
     print(io, pkgerr.msg)
     if pkgerr.ex !== nothing
@@ -91,19 +97,30 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previou
     log_event_global!(graph, "greedy solver failed")
 
     # trivial solution failed, use maxsum solver
-    maxsum_ok, sol, staged = maxsum(graph)
+    maxsum_result, sol, staged = maxsum(graph)
 
-    maxsum_ok && @goto solved
+    maxsum_result == :ok && @goto solved
 
-    log_event_global!(graph, "maxsum solver failed")
+    if maxsum_result == :unsat
+        log_event_global!(graph, "maxsum solver failed")
 
-    @assert previous_sol ≡ nothing
+        @assert previous_sol ≡ nothing
 
-    # the problem is unsat, force-trigger a failure
-    # in order to produce a log - this will contain
-    # information about the best that the solver could
-    # achieve
-    trigger_failure!(graph, sol, staged)
+        # the problem is unsat, force-trigger a failure
+        # in order to produce a log - this will contain
+        # information about the best that the solver could
+        # achieve
+        trigger_failure!(graph, sol, staged)
+    else
+        @assert maxsum_result == :timedout
+        log_event_global!(graph, "maxsum solver timed out")
+        throw(ResolverTimeoutError("""
+            The resolution process timed out. This is likely due to unsatisfiable requirements.
+            You can increase the maximum resolution time via the environment variable JULIA_PKG_RESOLVE_MAX_TIME
+            (the current value is $(get(ENV, "JULIA_PKG_RESOLVE_MAX_TIME", DEFAULT_MAX_TIME))).
+            """))
+    end
+
 
     @label solved
 
@@ -159,7 +176,10 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
         Set{Int}(1:graph.np) :
         Set{Int}(graph.data.pdict[p] for p in sources)
 
-    simplify_graph!(graph, isources)
+    propagate_constraints!(graph)
+    disable_unreachable!(graph, isources)
+    prune_graph!(graph)
+    compute_eq_classes!(graph)
 
     np = graph.np
     spp = graph.spp
@@ -217,7 +237,8 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
 
         ok, sol = greedysolver(graph)
         ok && @goto done
-        ok, sol = maxsum(graph)
+        maxsum_result, sol = maxsum(graph)
+        ok = maxsum_result == :ok
 
         @label done
 
@@ -288,7 +309,7 @@ function greedysolver(graph::Graph)
     gconstr = graph.gconstr
 
     # initialize solution: all uninstalled
-    sol = [spp[p0] for p0 = 1:np]
+    sol = Int[spp[p0] for p0 = 1:np]
 
     # packages which are not allowed to be uninstalled
     # (NOTE: this is potentially a superset of graph.req_inds,
@@ -341,6 +362,8 @@ function greedysolver(graph::Graph)
                     return (false, Int[])
                 elseif old_v1 == spp[p1]
                     sol[p1] = v1
+                    fill!(gconstr[p1], false)
+                    gconstr[p1][v1] = true
                     push!(staged_next, p1)
                 end
             end
