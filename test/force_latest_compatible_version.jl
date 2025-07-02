@@ -261,7 +261,7 @@ const test_package_parent_dir = joinpath(
                 # will break this test. Therefore, we intentionally run this
                 # test using a fixed version of the General registry.
                 registry_url = "https://github.com/JuliaRegistries/General.git"
-                registry_commit = "982ab1618f87a7dc69c3617e124a6ad83a22b1c5"
+                registry_commit = "8129a7701ba2bd95bd83b90178114dd3aa2d3295"
                 Utils.isolate_and_pin_registry(; registry_url, registry_commit) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
