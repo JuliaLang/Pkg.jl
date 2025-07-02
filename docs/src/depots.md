@@ -65,4 +65,4 @@ installed package(s).
 
 Regarding the motivating example: don't forget to copy the
 Julia-kernel created by IJulia to a place where the JupyterHub install
-can pick it pu.
+can pick it up.
