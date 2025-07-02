@@ -2212,7 +2212,15 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
                 @debug err
-                printpkgstyle(ctx.io, :Test, "Could not use exact versions of packages in manifest. Re-resolving dependencies", color=Base.warn_color())
+                msg = string(
+                    "Could not use exact versions of packages in manifest, re-resolving. ",
+                    "Note: if you do not check your manifest file into source control, ",
+                    "then you can probably ignore this message. ",
+                    "However, if you do check your manifest file into source control, ",
+                    "then you probably want to pass the `allow_reresolve = false` kwarg ",
+                    "when calling the `Pkg.test` function.",
+                )
+                printpkgstyle(ctx.io, :Test, msg, color=Base.warn_color())
                 Pkg.update(temp_ctx; skip_writing_project=true, update_registry=false, io=ctx.io)
                 printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
                 @debug "Using _clean_ dep graph"
