@@ -152,7 +152,7 @@ end
         # removed directory when getting here, which doesn't go well
         # with the `pkg"add ..."` calls. Just set it to something that
         # exists.
-        cd(@__DIR__)
+        cd(@__DIR__) do
         # Setup a repository with two packages and a registry where
         # these packages are registered.
         packages_dir = mktempdir()
@@ -240,6 +240,8 @@ end
 
         pkgstr("add $(packages_dir):dependencies/Dep")
         @test !isinstalled("Package")
+        @test isinstalled("Dep")
+        pkg"dev Dep" # 4269
         @test isinstalled("Dep")
         pkg"rm Dep"
 
@@ -363,6 +365,7 @@ end
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
+        end #cd
     end
 end
 

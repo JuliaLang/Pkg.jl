@@ -44,6 +44,35 @@ end
         end
     end
 
+    @testset "Empty manifest file is automatically upgraded to v2" begin
+        isolate(loaded_depot=true) do
+            io = IOBuffer()
+            d = mktempdir()
+            manifest = joinpath(d, "Manifest.toml")
+            touch(manifest)
+            Pkg.activate(d; io=io)
+            output = String(take!(io))
+            @test occursin(r"Activating.*project at.*", output)
+            env_manifest = Pkg.Types.Context().env.manifest_file
+            @test samefile(env_manifest, manifest)
+            # an empty manifest is still technically considered to be v1 manifest
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+
+            Pkg.add("Profile"; io=io)
+            env_manifest = Pkg.Types.Context().env.manifest_file
+            @test samefile(env_manifest, manifest)
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.0.0"
+
+            # check that having a Project with deps, and an empty manifest file doesn't error
+            rm(manifest)
+            touch(manifest)
+            Pkg.activate(d; io=io)
+            Pkg.add("Example"; io=io)
+        end
+    end
+
     @testset "v1.0: activate, change, maintain manifest format" begin
         reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
             io = IOBuffer()
@@ -91,11 +120,13 @@ end
             m = Pkg.Types.read_manifest(env_manifest)
             m.julia_version = v"1.5.0"
             msg = r"The active manifest file has dependencies that were resolved with a different julia version"
-            @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
+            @test_logs (:warn, msg) Pkg.Types.check_manifest_julia_version_compat(m, env_manifest)
+            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict=true)
 
             m.julia_version = nothing
             msg = r"The active manifest file is missing a julia version entry"
-            @test_logs (:warn, msg) Pkg.Types.check_warn_manifest_julia_version_compat(m, env_manifest)
+            @test_logs (:warn, msg) Pkg.Types.check_manifest_julia_version_compat(m, env_manifest)
+            @test_throws Pkg.Types.PkgError Pkg.Types.check_manifest_julia_version_compat(m, env_manifest, julia_version_strict=true)
         end
     end
 
@@ -186,17 +217,17 @@ end
 
                 Pkg.activate(; temp=true)
                 Pkg.add("Example")
-                @test Pkg.is_manifest_current() === true
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
 
                 Pkg.compat("Example", "0.4")
-                @test Pkg.is_manifest_current() === false
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
                 Pkg.status(io = iob)
                 sync_msg_str = r"The project dependencies or compat requirements have changed since the manifest was last resolved."
                 @test occursin(sync_msg_str, String(take!(iob)))
                 @test_logs (:warn, sync_msg_str) Pkg.instantiate()
 
                 Pkg.update()
-                @test Pkg.is_manifest_current() === true
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
                 Pkg.status(io = iob)
                 @test !occursin(sync_msg_str, String(take!(iob)))
 
@@ -206,7 +237,7 @@ end
                 @test_logs (:warn, sync_msg_str) Pkg.instantiate()
 
                 Pkg.rm("Example")
-                @test Pkg.is_manifest_current() === true
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
                 Pkg.status(io = iob)
                 @test !occursin(sync_msg_str, String(take!(iob)))
             end

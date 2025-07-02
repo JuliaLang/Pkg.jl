@@ -1,11 +1,15 @@
-module BinaryPlatforms
+module BinaryPlatformsCompat
 
-using Base.BinaryPlatforms
 export platform_key_abi, platform_dlext, valid_dl_path, arch, libc,
        libgfortran_version, libstdcxx_version, cxxstring_abi, parse_dl_name_version,
        detect_libgfortran_version, detect_libstdcxx_version, detect_cxxstring_abi,
        call_abi, wordsize, triplet, select_platform, platforms_match,
        CompilerABI, Platform, UnknownPlatform, Linux, MacOS, Windows, FreeBSD
+
+using Base.BinaryPlatforms: parse_dl_name_version,
+                            detect_libgfortran_version, detect_libstdcxx_version, detect_cxxstring_abi,
+                            os, call_abi, select_platform, platforms_match,
+                            AbstractPlatform, Platform, HostPlatform
 
 import Base.BinaryPlatforms: libgfortran_version, libstdcxx_version, platform_name,
                              wordsize, platform_dlext, tags, arch, libc, call_abi,
@@ -141,4 +145,6 @@ function valid_dl_path(path::AbstractString, platform::AbstractPlatform)
     end
 end
 
-end # module BinaryPlatforms
+end # module BinaryPlatformsCompat
+
+const BinaryPlatforms = BinaryPlatformsCompat
