@@ -9,10 +9,14 @@ mutable struct MaxSumParams
     max_time::Float64 # maximum allowed time
 
     function MaxSumParams()
-        accuracy = parse(Int, get(ENV, "JULIA_PKG_RESOLVE_ACCURACY",
-                                  # Allow for `JULIA_PKGRESOLVE_ACCURACY` for backward
-                                  # compatibility with Julia v1.7-
-                                  get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1")))
+        accuracy = parse(
+            Int, get(
+                ENV, "JULIA_PKG_RESOLVE_ACCURACY",
+                # Allow for `JULIA_PKGRESOLVE_ACCURACY` for backward
+                # compatibility with Julia v1.7-
+                get(ENV, "JULIA_PKGRESOLVE_ACCURACY", "1")
+            )
+        )
         accuracy > 0 || error("JULIA_PKG_RESOLVE_ACCURACY must be > 0")
         dec_interval = accuracy * 5
         dec_fraction = 0.05 / accuracy
@@ -50,19 +54,19 @@ mutable struct Messages
         pdict = graph.data.pdict
 
         ## generate wveights (v0 == spp[p0] is the "uninstalled" state)
-        vweight = [[VersionWeight(v0 < spp[p0] ? pvers[p0][v0] : v"0") for v0 = 1:spp[p0]] for p0 = 1:np]
+        vweight = [[VersionWeight(v0 < spp[p0] ? pvers[p0][v0] : v"0") for v0 in 1:spp[p0]] for p0 in 1:np]
 
         # external fields: favor newest versions over older, and no-version over all;
         #                  explicit requirements use level l1 instead of l2
         fv(p0, v0) = p0 ∈ req_inds ?
-            FieldValue(0, vweight[p0][v0],     zero(VersionWeight), (v0==spp[p0])) :
-            FieldValue(0, zero(VersionWeight), vweight[p0][v0],     (v0==spp[p0]))
-        fld = [[fv(p0, v0) for v0 = 1:spp[p0]] for p0 = 1:np]
+            FieldValue(0, vweight[p0][v0], zero(VersionWeight), (v0 == spp[p0])) :
+            FieldValue(0, zero(VersionWeight), vweight[p0][v0], (v0 == spp[p0]))
+        fld = [[fv(p0, v0) for v0 in 1:spp[p0]] for p0 in 1:np]
 
         initial_fld = [copy(f0) for f0 in fld]
 
         # allocate cavity messages
-        msg = [[Field(undef, spp[p0]) for j1 = 1:length(gadj[p0])] for p0 = 1:np]
+        msg = [[Field(undef, spp[p0]) for j1 in 1:length(gadj[p0])] for p0 in 1:np]
 
         msgs = new(msg, fld, initial_fld)
 
@@ -82,12 +86,12 @@ function reset_messages!(msgs::Messages, graph::Graph)
     spp = graph.spp
     gconstr = graph.gconstr
     ignored = graph.ignored
-    for p0 = 1:np
+    for p0 in 1:np
         ignored[p0] && continue
-        map(m->fill!(m, zero(FieldValue)), msg[p0])
+        map(m -> fill!(m, zero(FieldValue)), msg[p0])
         copyto!(fld[p0], initial_fld[p0])
         gconstr0 = gconstr[p0]
-        for v0 = 1:spp[p0]
+        for v0 in 1:spp[p0]
             gconstr0[v0] || (fld[p0][v0] = FieldValue(-1))
         end
         fld[p0] .-= maximum(fld[p0])
@@ -101,7 +105,7 @@ mutable struct SolutionTrace
     num_nondecimated::Int
 
     best::Vector{Int}
-    staged::Union{Tuple{Int,Int},Nothing}
+    staged::Union{Tuple{Int, Int}, Nothing}
 
     function SolutionTrace(graph::Graph)
         np = graph.np
@@ -190,13 +194,13 @@ function update!(p0::Int, graph::Graph, msgs::Messages)
         #    newmsg = [maximum(cavfld[bm1[:,v1]]) for v1 = 1:spp1]
         # )
         # This is hot code for the resolver
-        @inbounds for v1 = 1:spp1, v0 = 1:spp0
+        @inbounds for v1 in 1:spp1, v0 in 1:spp0
             bm1[v0, v1] || continue
             newmsg[v1] = max(newmsg[v1], cavfld[v0])
         end
         m = maximum(newmsg)
         validmax(m) || return Unsat(p0) # No state available without violating some
-                                        # hard constraint
+        # hard constraint
 
         # normalize the new message
         @inbounds for i in 1:length(newmsg)
@@ -226,12 +230,13 @@ end
 
 function Random.shuffle!(perm::NodePerm)
     p = perm.p
-    for j = length(p):-1:2
+    for j in length(p):-1:2
         k = perm.step % j + 1
         p[j], p[k] = p[k], p[j]
         perm.step += isodd(j) ? 1 : k
     end
     #@assert isperm(p)
+    return
 end
 
 Base.iterate(perm::NodePerm, state...) = iterate(perm.p, state...)
@@ -271,7 +276,7 @@ function decimate1!(p0::Int, graph::Graph, strace::SolutionTrace, msgs::Messages
         haskey(adjdict[p0], p1) || continue
         s1 = solution[p1]
         j1 = adjdict[p0][p1]
-        gmsk[p1][j1][s0,s1] || return 0
+        gmsk[p1][j1][s0, s1] || return 0
     end
     solution[p0] = s0
     strace.num_nondecimated -= 1
@@ -285,14 +290,14 @@ function decimate!(graph::Graph, strace::SolutionTrace, msgs::Messages, n::Integ
     fld = msgs.fld
 
     @assert n ≥ 1
-    dtrace = Tuple{Int,Int}[]
+    dtrace = Tuple{Int, Int}[]
     dec = 0
 
-    fldorder = sort(findall(.!(ignored)), by=p0->secondmax(fld[p0], gconstr[p0]))
+    fldorder = sort(findall(.!(ignored)), by = p0 -> secondmax(fld[p0], gconstr[p0]))
     for p0 in fldorder
         s0 = decimate1!(p0, graph, strace, msgs)
         s0 == 0 && continue
-        push!(dtrace, (p0,s0))
+        push!(dtrace, (p0, s0))
         dec += 1
         dec == n && break
     end
@@ -305,15 +310,15 @@ function clean_forbidden!(graph::Graph, msgs::Messages)
     gconstr = graph.gconstr
     ignored = graph.ignored
     fld = msgs.fld
-    affected = Tuple{Int,Int}[]
+    affected = Tuple{Int, Int}[]
 
-    for p0 = 1:np
+    for p0 in 1:np
         ignored[p0] && continue
         fld0 = fld[p0]
         gconstr0 = gconstr[p0]
         for v0 in findall(gconstr0)
             validmax(fld0[v0]) && continue
-            push!(affected, (p0,v0))
+            push!(affected, (p0, v0))
         end
     end
     return affected
@@ -377,7 +382,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
     # perform some maxsum iterations, then decimate one node.
     # If failure happens during this process, we bail (return :unsat)
     it = 0
-    for it = 1:params.dec_interval
+    for it in 1:params.dec_interval
         maxdiff = iterate!(graph, msgs, perm)
         if maxdiff isa Unsat
             if is_best_sofar
@@ -397,7 +402,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
     isempty(affected) && @goto decimate
 
     sources = Set{Int}()
-    for (p0,v0) in affected
+    for (p0, v0) in affected
         graph.gconstr[p0][v0] = false
         push!(sources, p0)
     end
@@ -419,7 +424,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
         if is_best_sofar
             # pick the first decimation candidate
             smx(p1) = secondmax(msgs.fld[p1], graph.gconstr[p1])
-            p0 = reduce((p1,p2)->(smx(p1)≤smx(p2) ? p1 : p2), findall(.!(graph.ignored)))
+            p0 = reduce((p1, p2) -> (smx(p1) ≤ smx(p2) ? p1 : p2), findall(.!(graph.ignored)))
             s0 = argmax(fld[p0])
             strace.staged = dec_firstcandidate(graph, msgs)
         end
@@ -437,7 +442,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
 
         push_snapshot!(graph)
         # info("setting dtrace=$dtrace")
-        for (p0,s0) in dtrace
+        for (p0, s0) in dtrace
             @assert !graph.ignored[p0]
             @assert graph.gconstr[p0][s0]
             fill!(graph.gconstr[p0], false)
@@ -467,7 +472,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
 
         lentr == 1 && break
         # halve the dtrace
-        deleteat!(dtrace, ((lentr÷2)+1):lentr)
+        deleteat!(dtrace, ((lentr ÷ 2) + 1):lentr)
     end
 
     @assert length(dtrace) == 1

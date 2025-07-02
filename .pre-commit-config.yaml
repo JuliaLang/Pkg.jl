@@ -1,0 +1,17 @@
+repos:
+  - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      # - id: check-toml # we have tomls with invalid syntax for tests
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  - repo: 'https://github.com/fredrikekre/runic-pre-commit'
+    rev: v2.0.1
+    hooks:
+      - id: runic
+        additional_dependencies:
+          - 'Runic@1.4' # Keep version in sync with .github/workflows/Check.yml

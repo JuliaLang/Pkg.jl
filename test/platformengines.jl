@@ -31,7 +31,7 @@ using ..Utils: list_tarball_files
 
         # Next, package it up as a .tar.gz file
         mktempdir() do output_dir
-            tarball_path =  joinpath(output_dir, "foo.tar.gz")
+            tarball_path = joinpath(output_dir, "foo.tar.gz")
             package(prefix, tarball_path)
             @test isfile(tarball_path)
 
@@ -55,8 +55,8 @@ end
         foo_hash = bytes2hex(sha256("test"))
 
         # Check that verifying with the right hash works
-        @test_logs (:info, r"No hash cache found") match_mode=:any begin
-            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+        @test_logs (:info, r"No hash cache found") match_mode = :any begin
+            ret, status = verify(foo_path, foo_hash; verbose = true, report_cache_status = true)
             @test ret == true
             @test status == :hash_cache_missing
         end
@@ -65,8 +65,8 @@ end
         @test isfile("$(foo_path).sha256")
 
         # Check that it verifies the second time around properly
-        @test_logs (:info, r"Hash cache is consistent") match_mode=:any begin
-            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+        @test_logs (:info, r"Hash cache is consistent") match_mode = :any begin
+            ret, status = verify(foo_path, foo_hash; verbose = true, report_cache_status = true)
             @test ret == true
             @test status == :hash_cache_consistent
         end
@@ -76,29 +76,29 @@ end
 
         # Get coverage of messing with different parts of the verification chain
         touch(foo_path)
-        @test_logs (:info, r"File has been modified") match_mode=:any begin
-            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+        @test_logs (:info, r"File has been modified") match_mode = :any begin
+            ret, status = verify(foo_path, foo_hash; verbose = true, report_cache_status = true)
             @test ret == true
             @test status == :file_modified
         end
 
         # Ensure that we print an error when verification fails
-        rm("$(foo_path).sha256"; force=true)
-        @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
-            @test !verify(foo_path, "0"^64; verbose=true)
+        rm("$(foo_path).sha256"; force = true)
+        @test_logs (:error, r"Hash Mismatch!") match_mode = :any begin
+            @test !verify(foo_path, "0"^64; verbose = true)
         end
 
         # Ensure that incorrect lengths cause an exception
-        @test_throws ErrorException verify(foo_path, "0"^65; verbose=true)
+        @test_throws ErrorException verify(foo_path, "0"^65; verbose = true)
 
         # Ensure that messing with the hash file works properly
         touch(foo_path)
-        @test verify(foo_path, foo_hash; verbose=true)
+        @test verify(foo_path, foo_hash; verbose = true)
         open("$(foo_path).sha256", "w") do file
             write(file, "this is not the right hash")
         end
-        @test_logs (:info, r"hash cache invalidated") match_mode=:any begin
-            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+        @test_logs (:info, r"hash cache invalidated") match_mode = :any begin
+            ret, status = verify(foo_path, foo_hash; verbose = true, report_cache_status = true)
             @test ret == true
             @test status == :hash_cache_mismatch
         end
@@ -109,9 +109,9 @@ end
         end
 
         # Delete hash cache file to force re-verification
-        rm("$(foo_path).sha256"; force=true)
-        @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
-            ret, status = verify(foo_path, foo_hash; verbose=true, report_cache_status=true)
+        rm("$(foo_path).sha256"; force = true)
+        @test_logs (:error, r"Hash Mismatch!") match_mode = :any begin
+            ret, status = verify(foo_path, foo_hash; verbose = true, report_cache_status = true)
             @test ret == false
             @test status == :hash_mismatch
         end
@@ -121,11 +121,11 @@ end
 
 const socrates_urls = [
     "https://github.com/staticfloat/small_bin/raw/f1a92f5eafbd30a0c6a8efb6947485b0f6d1bec3/socrates.tar.gz" =>
-    "e65d2f13f2085f2c279830e863292312a72930fee5ba3c792b14c33ce5c5cc58",
+        "e65d2f13f2085f2c279830e863292312a72930fee5ba3c792b14c33ce5c5cc58",
     "https://github.com/staticfloat/small_bin/raw/f1a92f5eafbd30a0c6a8efb6947485b0f6d1bec3/socrates.tar.bz2" =>
-    "13fc17b97be41763b02cbb80e9d048302cec3bd3d446c2ed6e8210bddcd3ac76",
+        "13fc17b97be41763b02cbb80e9d048302cec3bd3d446c2ed6e8210bddcd3ac76",
     "https://github.com/staticfloat/small_bin/raw/f1a92f5eafbd30a0c6a8efb6947485b0f6d1bec3/socrates.tar.xz" =>
-    "61bcf109fcb749ee7b6a570a6057602c08c836b6f81091eab7aa5f5870ec6475",
+        "61bcf109fcb749ee7b6a570a6057602c08c836b6f81091eab7aa5f5870ec6475",
 ]
 const socrates_hash = "adcbcf15674eafe8905093183d9ab997cbfba9056fc7dde8bfa5a22dfcfb4967"
 
@@ -135,16 +135,16 @@ const socrates_hash = "adcbcf15674eafe8905093183d9ab997cbfba9056fc7dde8bfa5a22df
             tarball_path = joinpath(prefix, "download_target.tar$(splitext(url)[2])")
 
             target_dir = joinpath(prefix, "target")
-            download_verify_unpack(url, hash, target_dir; tarball_path=tarball_path, verbose=true)
+            download_verify_unpack(url, hash, target_dir; tarball_path = tarball_path, verbose = true)
 
             # Test downloading a second time, to get the "already exists" path
-            download_verify_unpack(url, hash, target_dir; tarball_path=tarball_path, verbose=true)
+            download_verify_unpack(url, hash, target_dir; tarball_path = tarball_path, verbose = true)
 
             # And a third time, after corrupting it, to get the "redownloading" path
             open(tarball_path, "w") do io
                 println(io, "corruptify")
             end
-            download_verify_unpack(url, hash, target_dir; tarball_path=tarball_path, verbose=true, force=true)
+            download_verify_unpack(url, hash, target_dir; tarball_path = tarball_path, verbose = true, force = true)
 
             # Test that it has the contents we expect
             socrates_path = joinpath(target_dir, "bin", "socrates")
@@ -163,7 +163,7 @@ const collapse_hash = "956c1201405f64d3465cc28cb0dec9d63c11a08cad28c381e13bb22e1
     withenv("BINARYPROVIDER_COPYDEREF" => "true") do
         mktempdir() do prefix
             target_dir = joinpath(prefix, "target")
-            download_verify_unpack(collapse_url, collapse_hash, target_dir; verbose=true)
+            download_verify_unpack(collapse_url, collapse_hash, target_dir; verbose = true)
 
             # Test that we get the files we expect
             @test isfile(joinpath(target_dir, "collapse_the_symlink", "foo"))
@@ -182,7 +182,7 @@ end
 
 @testset "Download GitHub API #88" begin
     mktempdir() do tmp
-        PlatformEngines.download("https://api.github.com/repos/JuliaPackaging/BinaryProvider.jl/tarball/c2a4fc38f29eb81d66e3322e585d0199722e5d71", joinpath(tmp, "BinaryProvider"); verbose=true)
+        PlatformEngines.download("https://api.github.com/repos/JuliaPackaging/BinaryProvider.jl/tarball/c2a4fc38f29eb81d66e3322e585d0199722e5d71", joinpath(tmp, "BinaryProvider"); verbose = true)
         @test isfile(joinpath(tmp, "BinaryProvider"))
     end
 end
@@ -241,10 +241,12 @@ end
     end
 
     called = 0
-    dispose = PlatformEngines.register_auth_error_handler("https://foo.bar/baz", function (url, svr, err)
-        called += 1
-        return true, called < 3
-    end)
+    dispose = PlatformEngines.register_auth_error_handler(
+        "https://foo.bar/baz", function (url, svr, err)
+            called += 1
+            return true, called < 3
+        end
+    )
 
     @test PlatformEngines.get_auth_header("https://foo.bar/baz") == nothing
     @test called == 0

@@ -8,13 +8,13 @@ export VersionBound, VersionRange, VersionSpec, semver_spec, isjoinable
 # VersionBound #
 ################
 struct VersionBound
-    t::NTuple{3,UInt32}
+    t::NTuple{3, UInt32}
     n::Int
-    function VersionBound(tin::NTuple{n,Integer}) where n
+    function VersionBound(tin::NTuple{n, Integer}) where {n}
         n <= 3 || throw(ArgumentError("VersionBound: you can only specify major, minor and patch versions"))
-        n == 0 && return new((0,           0,      0), n)
-        n == 1 && return new((tin[1],      0,      0), n)
-        n == 2 && return new((tin[1], tin[2],      0), n)
+        n == 0 && return new((0, 0, 0), n)
+        n == 1 && return new((tin[1], 0, 0), n)
+        n == 2 && return new((tin[1], tin[2], 0), n)
         n == 3 && return new((tin[1], tin[2], tin[3]), n)
         error("invalid $n")
     end
@@ -40,7 +40,7 @@ end
 
 function isless_ll(a::VersionBound, b::VersionBound)
     m, n = a.n, b.n
-    for i = 1:min(m, n)
+    for i in 1:min(m, n)
         a[i] < b[i] && return true
         a[i] > b[i] && return false
     end
@@ -52,7 +52,7 @@ stricterlower(a::VersionBound, b::VersionBound) = isless_ll(a, b) ? b : a
 # Comparison between two upper bounds
 function isless_uu(a::VersionBound, b::VersionBound)
     m, n = a.n, b.n
-    for i = 1:min(m, n)
+    for i in 1:min(m, n)
         a[i] < b[i] && return true
         a[i] > b[i] && return false
     end
@@ -70,7 +70,7 @@ function isjoinable(up::VersionBound, lo::VersionBound)
     up.n == 0 && lo.n == 0 && return true
     if up.n == lo.n
         n = up.n
-        for i = 1:(n - 1)
+        for i in 1:(n - 1)
             up[i] > lo[i] && return true
             up[i] < lo[i] && return false
         end
@@ -78,7 +78,7 @@ function isjoinable(up::VersionBound, lo::VersionBound)
         return true
     else
         l = min(up.n, lo.n)
-        for i = 1:l
+        for i in 1:l
             up[i] > lo[i] && return true
             up[i] < lo[i] && return false
         end
@@ -96,19 +96,19 @@ function VersionBound(s::AbstractString)
     l = lastindex(s)
 
     p = findnext('.', s, 1)
-    b = p === nothing ? l : (p-1)
+    b = p === nothing ? l : (p - 1)
     i = parse(Int64, SubString(s, 1, b))
     p === nothing && return VersionBound(i)
 
-    a = p+1
+    a = p + 1
     p = findnext('.', s, a)
-    b = p === nothing ? l : (p-1)
+    b = p === nothing ? l : (p - 1)
     j = parse(Int64, SubString(s, a, b))
     p === nothing && return VersionBound(i, j)
 
-    a = p+1
+    a = p + 1
     p = findnext('.', s, a)
-    b = p === nothing ? l : (p-1)
+    b = p === nothing ? l : (p - 1)
     k = parse(Int64, SubString(s, a, b))
     p === nothing && return VersionBound(i, j, k)
 
@@ -130,9 +130,9 @@ struct VersionRange
         return new(lo, hi)
     end
 end
-VersionRange(b::VersionBound=VersionBound()) = VersionRange(b, b)
-VersionRange(t::Integer...)                  = VersionRange(VersionBound(t...))
-VersionRange(v::VersionNumber)               = VersionRange(VersionBound(v))
+VersionRange(b::VersionBound = VersionBound()) = VersionRange(b, b)
+VersionRange(t::Integer...) = VersionRange(VersionBound(t...))
+VersionRange(v::VersionNumber) = VersionRange(VersionBound(v))
 VersionRange(lo::VersionNumber, hi::VersionNumber) = VersionRange(VersionBound(lo), VersionBound(hi))
 
 # The vast majority of VersionRanges are in practice equal to "1"
@@ -149,7 +149,7 @@ function VersionRange(s::AbstractString)
 end
 
 function Base.isempty(r::VersionRange)
-    for i = 1:min(r.lower.n, r.upper.n)
+    for i in 1:min(r.lower.n, r.upper.n)
         r.lower[i] > r.upper[i] && return true
         r.lower[i] < r.upper[i] && return false
     end
@@ -173,6 +173,7 @@ function Base.print(io::IO, r::VersionRange)
             join(io, r.upper.t[1:n], '.')
         end
     end
+    return
 end
 Base.show(io::IO, r::VersionRange) = print(io, "VersionRange(\"", r, "\")")
 
@@ -184,14 +185,14 @@ function Base.union!(ranges::Vector{<:VersionRange})
     l = length(ranges)
     l == 0 && return ranges
 
-    sort!(ranges, lt=(a, b) -> (isless_ll(a.lower, b.lower) || (a.lower == b.lower && isless_uu(a.upper, b.upper))))
+    sort!(ranges, lt = (a, b) -> (isless_ll(a.lower, b.lower) || (a.lower == b.lower && isless_uu(a.upper, b.upper))))
 
     k0 = 1
     ks = findfirst(!isempty, ranges)
     ks === nothing && return empty!(ranges)
 
     lo, up, k0 = ranges[ks].lower, ranges[ks].upper, 1
-    for k = (ks + 1):l
+    for k in (ks + 1):l
         isempty(ranges[k]) && continue
         lo1, up1 = ranges[k].lower, ranges[k].upper
         if isjoinable(up, lo1)
@@ -253,7 +254,7 @@ function Base.intersect(A::VersionSpec, B::VersionSpec)
         ranges[i] = intersect(a, b)
         i += 1
     end
-    VersionSpec(ranges)
+    return VersionSpec(ranges)
 end
 Base.intersect(a::VersionNumber, B::VersionSpec) = a in B ? VersionSpec(a) : empty_versionspec
 Base.intersect(A::VersionSpec, b::VersionNumber) = intersect(b, A)
@@ -273,11 +274,12 @@ function Base.print(io::IO, s::VersionSpec)
     isempty(s) && return print(io, _empty_symbol)
     length(s.ranges) == 1 && return print(io, s.ranges[1])
     print(io, '[')
-    for i = 1:length(s.ranges)
+    for i in 1:length(s.ranges)
         1 < i && print(io, ", ")
         print(io, s.ranges[i])
     end
     print(io, ']')
+    return
 end
 
 function Base.show(io::IO, s::VersionSpec)
@@ -286,13 +288,14 @@ function Base.show(io::IO, s::VersionSpec)
         print(io, '"', s.ranges[1], '"')
     else
         print(io, "[")
-        for i = 1:length(s.ranges)
+        for i in 1:length(s.ranges)
             1 < i && print(io, ", ")
             print(io, '"', s.ranges[i], '"')
         end
         print(io, ']')
     end
     print(io, ")")
+    return
 end
 
 
@@ -328,7 +331,7 @@ function semver_interval(m::RegexMatch)
     @assert length(m.captures) == 4
     n_significant = count(x -> x !== nothing, m.captures) - 1
     typ, _major, _minor, _patch = m.captures
-    major =                           parse(Int, _major)
+    major = parse(Int, _major)
     minor = (n_significant < 2) ? 0 : parse(Int, _minor)
     patch = (n_significant < 3) ? 0 : parse(Int, _patch)
     if n_significant == 3 && major == 0 && minor == 0 && patch == 0
@@ -337,25 +340,25 @@ function semver_interval(m::RegexMatch)
     # Default type is :caret
     vertyp = (typ == "" || typ == "^") ? :caret : :tilde
     v0 = VersionBound((major, minor, patch))
-    if vertyp === :caret
+    return if vertyp === :caret
         if major != 0
-            return VersionRange(v0, VersionBound((v0[1],)))
+            VersionRange(v0, VersionBound((v0[1],)))
         elseif minor != 0
-            return VersionRange(v0, VersionBound((v0[1], v0[2])))
+            VersionRange(v0, VersionBound((v0[1], v0[2])))
         else
             if n_significant == 1
-                return VersionRange(v0, VersionBound((0,)))
+                VersionRange(v0, VersionBound((0,)))
             elseif n_significant == 2
-                return VersionRange(v0, VersionBound((0, 0,)))
+                VersionRange(v0, VersionBound((0, 0)))
             else
-                return VersionRange(v0, VersionBound((0, 0, v0[3])))
+                VersionRange(v0, VersionBound((0, 0, v0[3])))
             end
         end
     else
         if n_significant == 3 || n_significant == 2
-            return VersionRange(v0, VersionBound((v0[1], v0[2],)))
+            VersionRange(v0, VersionBound((v0[1], v0[2])))
         else
-            return VersionRange(v0, VersionBound((v0[1],)))
+            VersionRange(v0, VersionBound((v0[1],)))
         end
     end
 end
@@ -365,7 +368,7 @@ function inequality_interval(m::RegexMatch)
     @assert length(m.captures) == 4
     typ, _major, _minor, _patch = m.captures
     n_significant = count(x -> x !== nothing, m.captures) - 1
-    major =                           parse(Int, _major)
+    major = parse(Int, _major)
     minor = (n_significant < 2) ? 0 : parse(Int, _minor)
     patch = (n_significant < 3) ? 0 : parse(Int, _patch)
     if n_significant == 3 && major == 0 && minor == 0 && patch == 0
@@ -376,18 +379,18 @@ function inequality_interval(m::RegexMatch)
         nil = VersionBound(0, 0, 0)
         if v[3] == 0
             if v[2] == 0
-                v1 = VersionBound(v[1]-1)
+                v1 = VersionBound(v[1] - 1)
             else
-                v1 = VersionBound(v[1], v[2]-1)
+                v1 = VersionBound(v[1], v[2] - 1)
             end
         else
-            v1 = VersionBound(v[1], v[2], v[3]-1)
+            v1 = VersionBound(v[1], v[2], v[3] - 1)
         end
         return VersionRange(nil, v1)
     elseif occursin(r"^=\s*$", typ)
         return VersionRange(v)
     elseif occursin(r"^>=\s*$", typ) || occursin(r"^≥\s*$", typ)
-           return VersionRange(v, _inf)
+        return VersionRange(v, _inf)
     else
         error("invalid prefix $typ")
     end
@@ -399,32 +402,40 @@ function hyphen_interval(m::RegexMatch)
     if isnothing(_lower_minor)
         lower_bound = VersionBound(parse(Int, _lower_major))
     elseif isnothing(_lower_patch)
-        lower_bound = VersionBound(parse(Int, _lower_major),
-                                   parse(Int, _lower_minor))
+        lower_bound = VersionBound(
+            parse(Int, _lower_major),
+            parse(Int, _lower_minor)
+        )
     else
-        lower_bound = VersionBound(parse(Int, _lower_major),
-                                   parse(Int, _lower_minor),
-                                   parse(Int, _lower_patch))
+        lower_bound = VersionBound(
+            parse(Int, _lower_major),
+            parse(Int, _lower_minor),
+            parse(Int, _lower_patch)
+        )
     end
     if isnothing(_upper_minor)
         upper_bound = VersionBound(parse(Int, _upper_major))
     elseif isnothing(_upper_patch)
-        upper_bound = VersionBound(parse(Int, _upper_major),
-                                   parse(Int, _upper_minor))
+        upper_bound = VersionBound(
+            parse(Int, _upper_major),
+            parse(Int, _upper_minor)
+        )
     else
-        upper_bound = VersionBound(parse(Int, _upper_major),
-                                   parse(Int, _upper_minor),
-                                   parse(Int, _upper_patch))
+        upper_bound = VersionBound(
+            parse(Int, _upper_major),
+            parse(Int, _upper_minor),
+            parse(Int, _upper_patch)
+        )
     end
     return VersionRange(lower_bound, upper_bound)
 end
 
 const version = "v?([0-9]+?)(?:\\.([0-9]+?))?(?:\\.([0-9]+?))?"
 const ver_regs =
-Pair{Regex,Any}[
-                Regex("^([~^]?)?$version\$") => semver_interval, # 0.5 ^0.4 ~0.3.2
-                Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$")  => inequality_interval,# < 0.2 >= 0.5,2
-                Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
+    Pair{Regex, Any}[
+    Regex("^([~^]?)?$version\$") => semver_interval, # 0.5 ^0.4 ~0.3.2
+    Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$") => inequality_interval, # < 0.2 >= 0.5,2
+    Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
 ]
 
 end

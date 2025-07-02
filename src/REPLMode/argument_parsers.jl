@@ -16,10 +16,12 @@ struct Subdir
     dir::String
 end
 
-const PackageToken = Union{PackageIdentifier,
-                           VersionToken,
-                           Rev,
-                           Subdir}
+const PackageToken = Union{
+    PackageIdentifier,
+    VersionToken,
+    Rev,
+    Subdir,
+}
 
 packagetoken(word::String)::PackageToken =
     first(word) == '@' ? VersionToken(word[2:end]) :
@@ -33,7 +35,7 @@ packagetoken(word::String)::PackageToken =
 """
 Parser for PackageSpec objects.
 """
-function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
+function parse_package(args::Vector{QString}, options; add_or_dev = false)::Vector{PackageSpec}
     words′ = package_lex(args)
     words = String[]
     for word in words′
@@ -46,38 +48,39 @@ function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector
     end
     args = PackageToken[packagetoken(pkgword) for pkgword in words]
 
-    return parse_package_args(args; add_or_dev=add_or_dev)
+    return parse_package_args(args; add_or_dev = add_or_dev)
 end
 
-    # Match a git repository URL. This includes uses of `@` and `:` but
-    # requires that it has `.git` at the end.
+# Match a git repository URL. This includes uses of `@` and `:` but
+# requires that it has `.git` at the end.
 let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git$)(/)?",
 
-    # Match a `NAME=UUID` package specifier.
-    name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
+        # Match a `NAME=UUID` package specifier.
+        name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
 
-    # Match a `#BRANCH` branch or tag specifier.
-    branch = raw"\#\s*[^@^:\s]+",
+        # Match a `#BRANCH` branch or tag specifier.
+        branch = raw"\#\s*[^@^:\s]+",
 
-    # Match an `@VERSION` version specifier.
-    version = raw"@\s*[^@\#\s]*",
+        # Match an `@VERSION` version specifier.
+        version = raw"@\s*[^@\#\s]*",
 
-    # Match a `:SUBDIR` subdir specifier.
-    subdir = raw":[^@\#\s]+",
+        # Match a `:SUBDIR` subdir specifier.
+        subdir = raw":[^@\#\s]+",
 
-    # Match any other way to specify a package. This includes package
-    # names, local paths, and URLs that don't match the `url` part. In
-    # order not to clash with the branch, version, and subdir
-    # specifiers, these cannot include `@` or `#`, and `:` is only
-    # allowed if followed by `/` or `\`. For URLs matching this part
-    # of the regex, that means that `@` (e.g. user names) and `:`
-    # (e.g. port) cannot be used but it doesn't have to end with
-    # `.git`.
-    other = raw"([^@\#\s:] | :(/|\\))+"
+        # Match any other way to specify a package. This includes package
+        # names, local paths, and URLs that don't match the `url` part. In
+        # order not to clash with the branch, version, and subdir
+        # specifiers, these cannot include `@` or `#`, and `:` is only
+        # allowed if followed by `/` or `\`. For URLs matching this part
+        # of the regex, that means that `@` (e.g. user names) and `:`
+        # (e.g. port) cannot be used but it doesn't have to end with
+        # `.git`.
+        other = raw"([^@\#\s:] | :(/|\\))+"
 
     # Combine all of the above.
     global const package_id_re = Regex(
-        "$url | $name_uuid | $branch | $version | $subdir | $other", "x")
+        "$url | $name_uuid | $branch | $version | $subdir | $other", "x"
+    )
 end
 
 function package_lex(qwords::Vector{QString})::Vector{String}
@@ -85,12 +88,12 @@ function package_lex(qwords::Vector{QString})::Vector{String}
     for qword in qwords
         qword.isquoted ?
             push!(words, qword.raw) :
-            append!(words, map(m->m.match, eachmatch(package_id_re, qword.raw)))
+            append!(words, map(m -> m.match, eachmatch(package_id_re, qword.raw)))
     end
     return words
 end
 
-function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
+function parse_package_args(args::Vector{PackageToken}; add_or_dev = false)::Vector{PackageSpec}
     # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
     function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
         (isempty(args) || args[1] isa PackageIdentifier) && return
@@ -123,20 +126,21 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
                 pkgerror("Package name/uuid must precede subdir specifier `$args`.")
             end
         end
+        return
     end
 
     pkgs = PackageSpec[]
     while !isempty(args)
         arg = popfirst!(args)
         if arg isa PackageIdentifier
-            pkg = parse_package_identifier(arg; add_or_develop=add_or_dev)
+            pkg = parse_package_identifier(arg; add_or_develop = add_or_dev)
             apply_modifier!(pkg, args)
             push!(pkgs, pkg)
-        # Modifiers without a corresponding package identifier -- this is a user error
+            # Modifiers without a corresponding package identifier -- this is a user error
         else
             arg isa VersionToken ?
                 pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
-            arg isa Rev ?
+                arg isa Rev ?
                 pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.") :
                 pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
@@ -145,21 +149,21 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
 end
 
 let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(?-i)",
-    name = raw"(\w+)(?:\.jl)?"
+        name = raw"(\w+)(?:\.jl)?"
     global const name_re = Regex("^$name\$")
     global const uuid_re = Regex("^$uuid\$")
     global const name_uuid_re = Regex("^$name\\s*=\\s*($uuid)\$")
 end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
-function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop=false)::PackageSpec
+function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
         if isurl(word)
-            return PackageSpec(; url=word)
-        elseif any(occursin.(['\\','/'], word)) || word == "." || word == ".."
+            return PackageSpec(; url = word)
+        elseif any(occursin.(['\\', '/'], word)) || word == "." || word == ".."
             if casesensitive_isdir(expanduser(word))
-                return PackageSpec(; path=normpath(expanduser(word)))
+                return PackageSpec(; path = normpath(expanduser(word)))
             else
                 pkgerror("`$word` appears to be a local path, but directory does not exist")
             end
@@ -169,7 +173,7 @@ function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop=fals
         end
     end
     if occursin(uuid_re, word)
-        return PackageSpec(;uuid=UUID(word))
+        return PackageSpec(; uuid = UUID(word))
     elseif occursin(name_re, word)
         m = match(name_re, word)
         return PackageSpec(String(something(m.captures[1])))
@@ -184,15 +188,15 @@ end
 ################
 # RegistrySpec #
 ################
-function parse_registry(raw_args::Vector{QString}, options; add=false)
+function parse_registry(raw_args::Vector{QString}, options; add = false)
     regs = RegistrySpec[]
-    foreach(x -> push!(regs, parse_registry(x; add=add)), unwrap(raw_args))
+    foreach(x -> push!(regs, parse_registry(x; add = add)), unwrap(raw_args))
     return regs
 end
 
 # Registries can be identified through: uuid, name, or name+uuid
 # when updating/removing. When adding we can accept a local path or url.
-function parse_registry(word::AbstractString; add=false)::RegistrySpec
+function parse_registry(word::AbstractString; add = false)::RegistrySpec
     word = expanduser(word)
     registry = RegistrySpec()
     if add && isdir_nothrow(word) # TODO: Should be casesensitive_isdir
@@ -223,9 +227,8 @@ end
 # # Apps
 #
 function parse_app_add(raw_args::Vector{QString}, options)
-    return parse_package(raw_args, options; add_or_dev=true)
+    return parse_package(raw_args, options; add_or_dev = true)
 end
-
 
 
 #

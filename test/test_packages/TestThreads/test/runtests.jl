@@ -9,4 +9,3 @@ if Threads.nthreads() == 1
 else
     @assert Threads.nthreads(:interactive) == EXPECTED_NUM_THREADS_INTERACTIVE
 end
-

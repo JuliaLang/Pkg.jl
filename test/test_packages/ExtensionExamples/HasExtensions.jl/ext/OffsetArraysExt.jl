@@ -9,6 +9,7 @@ end
 
 function __init__()
     HasExtensions.offsetarrays_loaded = true
+    return
 end
 
 end

@@ -8,8 +8,8 @@ mutable struct FakeTerminal <: REPL.Terminals.UnixTerminal
     err_stream::Base.IO
     hascolor::Bool
     raw::Bool
-    FakeTerminal(stdin,stdout,stderr,hascolor=true) =
-        new(stdin,stdout,stderr,hascolor,false)
+    FakeTerminal(stdin, stdout, stderr, hascolor = true) =
+        new(stdin, stdout, stderr, hascolor, false)
 end
 
 REPL.Terminals.hascolor(t::FakeTerminal) = t.hascolor

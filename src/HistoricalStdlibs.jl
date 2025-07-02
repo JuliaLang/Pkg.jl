@@ -5,13 +5,13 @@ struct StdlibInfo
     uuid::UUID
 
     # This can be `nothing` if it's an unregistered stdlib
-    version::Union{Nothing,VersionNumber}
+    version::Union{Nothing, VersionNumber}
 
     deps::Vector{UUID}
     weakdeps::Vector{UUID}
 end
 
-const DictStdLibs = Dict{UUID,StdlibInfo}
+const DictStdLibs = Dict{UUID, StdlibInfo}
 
 # Julia standard libraries with duplicate entries removed so as to store only the
 # first release in a set of releases that all contain the same set of stdlibs.

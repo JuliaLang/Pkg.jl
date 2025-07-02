@@ -7,7 +7,7 @@ function (@main)(ARGS)
         println("Usage: rot13cli <text>")
         return 1
     end
-    
+
     for arg in ARGS
         # Add a prefix to distinguish from main module output
         println("CLI: $(rot13(arg))")

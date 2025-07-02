@@ -13,7 +13,7 @@ Pkg v1.12 Release Notes
 - Pkg now supports "apps" which are Julia packages that can be run directly from the terminal after installation.
   Apps can be defined in a package's Project.toml and installed via Pkg. ([#3772])
 - `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
-- When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from 
+- When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from
   weak dependencies and added as a regular dependency. ([#3865])
 - Packages are also automatically added to `[sources]` when they are added by url or devved.
 

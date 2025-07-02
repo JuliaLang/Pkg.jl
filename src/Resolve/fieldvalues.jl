@@ -15,10 +15,12 @@ struct FieldValue
     l1::VersionWeight
     l2::VersionWeight
     l3::Int64
-    FieldValue(l0::Integer = 0,
-               l1::VersionWeight = zero(VersionWeight),
-               l2::VersionWeight = zero(VersionWeight),
-               l3::Integer = 0) = new(l0, l1, l2, l3)
+    FieldValue(
+        l0::Integer = 0,
+        l1::VersionWeight = zero(VersionWeight),
+        l2::VersionWeight = zero(VersionWeight),
+        l3::Integer = 0
+    ) = new(l0, l1, l2, l3)
 end
 
 # This isn't nice, but it's for debugging only anyway
@@ -37,10 +39,10 @@ const Field = Vector{FieldValue}
 
 Base.zero(::Type{FieldValue}) = FieldValue()
 
-Base.typemin(::Type{FieldValue}) = (x=typemin(Int64); y=typemin(VersionWeight); FieldValue(x, y, y, x))
+Base.typemin(::Type{FieldValue}) = (x = typemin(Int64); y = typemin(VersionWeight); FieldValue(x, y, y, x))
 
-Base.:-(a::FieldValue, b::FieldValue) = FieldValue(a.l0-b.l0, a.l1-b.l1, a.l2-b.l2, a.l3-b.l3)
-Base.:+(a::FieldValue, b::FieldValue) = FieldValue(a.l0+b.l0, a.l1+b.l1, a.l2+b.l2, a.l3+b.l3)
+Base.:-(a::FieldValue, b::FieldValue) = FieldValue(a.l0 - b.l0, a.l1 - b.l1, a.l2 - b.l2, a.l3 - b.l3)
+Base.:+(a::FieldValue, b::FieldValue) = FieldValue(a.l0 + b.l0, a.l1 + b.l1, a.l2 + b.l2, a.l3 + b.l3)
 
 function Base.isless(a::FieldValue, b::FieldValue)
     a.l0 < b.l0 && return true
@@ -59,7 +61,7 @@ validmax(a::FieldValue) = a.l0 >= 0
 function Base.argmax(f::Field)
     m = typemin(FieldValue)
     mi = 0
-    for j = length(f):-1:1
+    for j in length(f):-1:1
         if f[j] > m
             m = f[j]
             mi = j
@@ -74,7 +76,7 @@ end
 function secondmax(f::Field, msk::BitVector = trues(length(f)))
     m = typemin(FieldValue)
     m2 = typemin(FieldValue)
-    for i = 1:length(f)
+    for i in 1:length(f)
         msk[i] || continue
         a = f[i]
         if a > m
