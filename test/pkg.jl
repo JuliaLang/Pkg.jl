@@ -614,7 +614,7 @@ temp_pkg_dir() do project_path
                 empty!(DEPOT_PATH)
                 pushfirst!(DEPOT_PATH, depo1)
                 Base.append_bundled_depot_path!(DEPOT_PATH)
-                LibGit2.close(LibGit2.clone(TEST_PKG.url, "Example.jl"))
+                close(LibGit2.clone(TEST_PKG.url, "Example.jl"))
                 mkdir("machine1")
                 cd("machine1")
                 Pkg.activate(".")
@@ -1032,7 +1032,7 @@ end
     @testset "Pkg.add" begin
         Pkg.activate(temp = true)
         mktempdir() do tmp_dir
-            LibGit2.close(LibGit2.clone(TEST_PKG.url, tmp_dir))
+            close(LibGit2.clone(TEST_PKG.url, tmp_dir))
             Pkg.develop(path = tmp_dir)
             Pkg.pin("Example")
             Pkg.add("Example")
@@ -1063,7 +1063,7 @@ end
             tag = LibGit2.GitObject(repo, "v$ver")
             hash = string(LibGit2.target(tag))
             LibGit2.checkout!(repo, hash)
-            LibGit2.close(repo)
+            close(repo)
             Pkg.develop(path = tmp_dir)
             Pkg.pin("Example")
             Pkg.update("Example")  # pkg should remain pinned

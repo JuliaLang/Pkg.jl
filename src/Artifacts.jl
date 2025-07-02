@@ -1,6 +1,12 @@
 module PkgArtifacts
 
-using Artifacts, Base.BinaryPlatforms, SHA
+using Artifacts: artifact_names, @artifact_str, artifact_exists, artifact_hash, artifact_meta,
+    artifact_path, find_artifacts_toml,
+    select_downloadable_artifacts, artifact_paths,
+    artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
+    query_override
+using Base.BinaryPlatforms
+using SHA: SHA, SHA256_CTX, sha256
 using ..MiniProgressBars, ..PlatformEngines
 using Tar: can_symlink
 using FileWatching: FileWatching
@@ -9,9 +15,6 @@ import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
     ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries
 
 import Base: get, SHA1
-import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
-    artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
-    query_override, with_artifacts_directory, load_overrides
 import ..Types: write_env_usage, parse_toml
 
 const Artifacts = PkgArtifacts # This is to preserve compatability for folks who depend on the internals of this module

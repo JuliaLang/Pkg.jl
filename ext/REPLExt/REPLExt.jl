@@ -4,10 +4,12 @@ if Base.get_bool_env("JULIA_PKG_DISALLOW_PKG_PRECOMPILATION", false) == true
     error("Precompililing Pkg extension REPLExt is disallowed. JULIA_PKG_DISALLOW_PKG_PRECOMPILATION=$(ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"])")
 end
 
-using Markdown, UUIDs, Dates
+using Dates: Dates
+using Markdown: Markdown
+using UUIDs: UUIDs, UUID
 
 import REPL
-import .REPL: LineEdit, REPLCompletions, TerminalMenus
+import .REPL: LineEdit, TerminalMenus
 
 import Pkg
 import .Pkg: linewrap, pathrepr, compat, can_fancyprint, printpkgstyle, PKGMODE_PROJECT

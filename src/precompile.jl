@@ -1,6 +1,11 @@
-using LibGit2: LibGit2
-using Tar: Tar
-using Downloads
+# TODO: Make into its own module?
+
+import LibGit2
+import Tar
+import Downloads
+import Dates
+import UUIDs
+
 
 # used by REPLExt too
 function _run_precompilation_script_setup()
@@ -24,8 +29,8 @@ function _run_precompilation_script_setup()
             end
             """,
         )
-        Pkg.activate(".")
-        Pkg.generate("TestPkg")
+        activate(".")
+        generate("TestPkg")
         uuid = TOML.parsefile(joinpath("TestPkg", "Project.toml"))["uuid"]
         mv("TestPkg", "TestPkg.jl")
         tree_hash = cd("TestPkg.jl") do
@@ -103,7 +108,7 @@ let
         original_depot_path = copy(DEPOT_PATH)
         original_load_path = copy(LOAD_PATH)
 
-        Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
+        UPDATED_REGISTRY_THIS_SESSION[] = true
         # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
         DEFAULT_IO[] = unstableio(devnull)
         Downloads.DOWNLOADER[] = Downloads.Downloader(; grace = 1.0)
@@ -113,11 +118,11 @@ let
             tmp = _run_precompilation_script_setup()
             cd(tmp) do
                 withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
-                    Pkg.add("TestPkg")
-                    Pkg.develop(Pkg.PackageSpec(path = "TestPkg.jl"))
-                    Pkg.add(Pkg.PackageSpec(path = "TestPkg.jl/"))
-                    Pkg.update(; update_registry = false)
-                    Pkg.status()
+                    add("TestPkg")
+                    develop(PackageSpec(path = "TestPkg.jl"))
+                    add(PackageSpec(path = "TestPkg.jl/"))
+                    update(; update_registry = false)
+                    status()
                     pkgs_path = pkgdir(Pkg, "test", "test_packages")
                     # Precompile a diverse set of test packages
                     # Check all test packages occasionally if anything has been missed
@@ -136,29 +141,29 @@ let
                         joinpath("ExtensionExamples", "HasExtensions.jl"),
                     )
                     for test_package in test_packages
-                        Pkg.activate(joinpath(pkgs_path, test_package))
+                        activate(joinpath(pkgs_path, test_package))
                     end
-                    Pkg.activate(; temp = true)
-                    Pkg.activate()
-                    Pkg.activate("TestPkg.jl")
+                    activate(; temp = true)
+                    activate()
+                    activate("TestPkg.jl")
                 end
-                Pkg.precompile()
+                precompile()
             end
             try
                 Base.rm(tmp; recursive = true)
             catch
             end
 
-            Base.precompile(Tuple{typeof(Pkg.API.status)})
-            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project})
-            Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch})
+            Base.precompile(Tuple{typeof(API.status)})
+            Base.precompile(Tuple{typeof(Types.read_project_compat), Base.Dict{String, Any}, Types.Project})
+            Base.precompile(Tuple{typeof(Versions.semver_interval), Base.RegexMatch})
 
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.do_cmds), Array{Pkg.REPLMode.Command, 1}, Base.TTY})
+            Base.precompile(Tuple{typeof(REPLMode.do_cmds), Array{REPLMode.Command, 1}, Base.TTY})
 
-            Base.precompile(Tuple{typeof(Pkg.Types.read_project_workspace), Base.Dict{String, Any}, Pkg.Types.Project})
-            Base.precompile(Tuple{Type{Pkg.REPLMode.QString}, String, Bool})
-            Base.precompile(Tuple{typeof(Pkg.REPLMode.parse_package), Array{Pkg.REPLMode.QString, 1}, Base.Dict{Symbol, Any}})
-            Base.precompile(Tuple{Type{Pkg.REPLMode.Command}, Pkg.REPLMode.CommandSpec, Base.Dict{Symbol, Any}, Array{Pkg.Types.PackageSpec, 1}})
+            Base.precompile(Tuple{typeof(Types.read_project_workspace), Base.Dict{String, Any}, Types.Project})
+            Base.precompile(Tuple{Type{REPLMode.QString}, String, Bool})
+            Base.precompile(Tuple{typeof(REPLMode.parse_package), Array{REPLMode.QString, 1}, Base.Dict{Symbol, Any}})
+            Base.precompile(Tuple{Type{REPLMode.Command}, REPLMode.CommandSpec, Base.Dict{Symbol, Any}, Array{Types.PackageSpec, 1}})
 
             # Manually added from trace compiling Pkg.status.
             Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:color,), Tuple{Symbol}}, typeof(Base.printstyled), Base.IOContext{Base.GenericIOBuffer{Memory{UInt8}}}, Char})
@@ -181,15 +186,15 @@ let
             Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Array{String, 1}}, Base.IdDict{Any, Any}})
             Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Base.Dict{String, String}}, Base.IdDict{Any, Any}})
             Base.precompile(Tuple{typeof(Base.deepcopy_internal), Tuple{String}, Base.IdDict{Any, Any}})
-            Base.precompile(Tuple{Type{Memory{Pkg.Types.PackageSpec}}, UndefInitializer, Int64})
+            Base.precompile(Tuple{Type{Memory{Types.PackageSpec}}, UndefInitializer, Int64})
 
             # Manually added from trace compiling Pkg.add
             # Why needed? Something with constant prop overspecialization?
-            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:io, :update_cooldown), Tuple{Base.IOContext{IO}, Dates.Day}}, typeof(Pkg.Registry.update)})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:io, :update_cooldown), Tuple{Base.IOContext{IO}, Dates.Day}}, typeof(Registry.update)})
 
-            Base.precompile(Tuple{Type{Memory{Pkg.Types.PackageSpec}}, UndefInitializer, Int64})
+            Base.precompile(Tuple{Type{Memory{Types.PackageSpec}}, UndefInitializer, Int64})
             Base.precompile(Tuple{typeof(Base.hash), Tuple{String, UInt64}, UInt64})
-            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:context,), Tuple{Base.TTY}}, typeof(Base.sprint), Function, Tuple{Pkg.Versions.VersionSpec}})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:context,), Tuple{Base.TTY}}, typeof(Base.sprint), Function, Tuple{Versions.VersionSpec}})
             Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:context,), Tuple{Base.TTY}}, typeof(Base.sprint), Function, Tuple{String}})
             Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:context,), Tuple{Base.TTY}}, typeof(Base.sprint), Function, Tuple{Base.VersionNumber}})
             Base.precompile(Tuple{typeof(Base.join), Base.IOContext{Base.GenericIOBuffer{Memory{UInt8}}}, Tuple{String, UInt64}, Char})

@@ -92,7 +92,7 @@ function fuzzyscore(needle::AbstractString, haystack::AbstractString)
 end
 
 function fuzzysort(search::String, candidates::Vector{String})
-    scores = map(cand -> (FuzzySorting.fuzzyscore(search, cand), -Float64(FuzzySorting.levenshtein(search, cand))), candidates)
+    scores = map(cand -> (fuzzyscore(search, cand), -Float64(levenshtein(search, cand))), candidates)
     return candidates[sortperm(scores)] |> reverse, any(s -> s[1] >= print_score_threshold, scores)
 end
 
