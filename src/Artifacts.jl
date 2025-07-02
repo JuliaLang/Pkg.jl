@@ -1,24 +1,24 @@
-module Artifacts
+module PkgArtifacts
+
+using Artifacts, Base.BinaryPlatforms, SHA
+using ..MiniProgressBars, ..PlatformEngines
+using Tar: can_symlink
+using FileWatching: FileWatching
+
+import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
+       ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries
 
 import Base: get, SHA1
-using Base.BinaryPlatforms
-using Artifacts
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
                   artifacts_dirs, pack_platform!, unpack_platform, load_artifacts_toml,
                   query_override, with_artifacts_directory, load_overrides
-import ..set_readonly
-import ..GitTools
-import ..TOML
-import ..Types: parse_toml, write_env_usage, printpkgstyle
-import ..Pkg
-import ..Pkg: pkg_server, can_fancyprint, DEFAULT_IO
-using ..Pkg.MiniProgressBars
-using ..PlatformEngines
-using SHA
+import ..Types: write_env_usage, parse_toml
 
-export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
+const Artifacts = PkgArtifacts # This is to preserve compatability for folks who depend on the internals of this module
+export Artifacts, create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
-       find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact
+       find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
+       select_downloadable_artifacts, ArtifactDownloadInfo
 
 """
     create_artifact(f::Function)
@@ -26,9 +26,6 @@ export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_
 Creates a new artifact by running `f(artifact_path)`, hashing the result, and moving it
 to the artifact store (`~/.julia/artifacts` on a typical installation).  Returns the
 identifying tree hash of this artifact.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function create_artifact(f::Function)
     # Ensure the `artifacts` directory exists in our default depot
@@ -53,12 +50,7 @@ function create_artifact(f::Function)
         # as something that was foolishly overridden.  This should be virtually impossible
         # unless the user has been very unwise, but let's be cautious.
         new_path = artifact_path(artifact_hash; honor_overrides=false)
-        if !isdir(new_path)
-            # Move this generated directory to its final destination, set it to read-only
-            mv(temp_dir, new_path)
-            chmod(new_path, filemode(dirname(new_path)))
-            set_readonly(new_path)
-        end
+        mv_temp_dir_retries(temp_dir, new_path)
 
         # Give the people what they want
         return artifact_hash
@@ -79,9 +71,6 @@ will never attempt to remove an overridden artifact.
 In general, we recommend that you use `Pkg.gc()` to manage artifact installations and do
 not use `remove_artifact()` directly, as it can be difficult to know if an artifact is
 being used by another package.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function remove_artifact(hash::SHA1)
     if query_override(hash) !== nothing
@@ -104,9 +93,6 @@ end
 Verifies that the given artifact (identified by its SHA1 git tree hash) is installed on-
 disk, and retains its integrity.  If the given artifact is overridden, skips the
 verification unless `honor_overrides` is set to `true`.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function verify_artifact(hash::SHA1; honor_overrides::Bool=false)
     # Silently skip overridden artifacts unless we really ask for it
@@ -129,11 +115,8 @@ end
     archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
 
 Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 of the
-resultant tarball as a hexidecimal string. Throws an error if the artifact does not
+resultant tarball as a hexadecimal string. Throws an error if the artifact does not
 exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
     if !honor_overrides
@@ -146,8 +129,6 @@ function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Boo
         error("Unable to archive artifact $(bytes2hex(hash.bytes)): does not exist!")
     end
 
-    probe_platform_engines!()
-
     # Package it up
     package(artifact_path(hash), tarball_path)
 
@@ -155,6 +136,56 @@ function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Boo
     return open(tarball_path, "r") do io
         return bytes2hex(sha256(io))
     end
+end
+
+"""
+    ArtifactDownloadInfo
+
+Auxilliary information about an artifact to be used with `bind_artifact!()` to give
+a download location for that artifact, as well as the hash and size of that artifact.
+"""
+struct ArtifactDownloadInfo
+    # URL the artifact is available at as a gzip-compressed tarball
+    url::String
+
+    # SHA256 hash of the tarball
+    hash::Vector{UInt8}
+
+    # Size in bytes of the tarball.  `size <= 0` means unknown.
+    size::Int64
+
+    function ArtifactDownloadInfo(url, hash::AbstractVector, size = 0)
+        valid_hash_len = SHA.digestlen(SHA256_CTX)
+        hash_len = length(hash)
+        if hash_len != valid_hash_len
+            throw(ArgumentError("Invalid hash length '$(hash_len)', must be $(valid_hash_len)"))
+        end
+        return new(
+            String(url),
+            Vector{UInt8}(hash),
+            Int64(size),
+        )
+    end
+end
+
+# Convenience constructor for string hashes
+ArtifactDownloadInfo(url, hash::AbstractString, args...) = ArtifactDownloadInfo(url, hex2bytes(hash), args...)
+
+# Convenience constructor for legacy Tuple representation
+ArtifactDownloadInfo(args::Tuple) = ArtifactDownloadInfo(args...)
+
+ArtifactDownloadInfo(adi::ArtifactDownloadInfo) = adi
+
+# Make the dict that will be embedded in the TOML
+function make_dict(adi::ArtifactDownloadInfo)
+    ret = Dict{String,Any}(
+        "url" => adi.url,
+        "sha256" => bytes2hex(adi.hash),
+    )
+    if adi.size > 0
+        ret["size"] = adi.size
+    end
+    return ret
 end
 
 """
@@ -175,13 +206,10 @@ URLs will be listed as possible locations where this artifact can be obtained.  
 is set to `true`, even if download information is available, this artifact will not be
 downloaded until it is accessed via the `artifact"name"` syntax, or
 `ensure_artifact_installed()` is called upon it.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         platform::Union{AbstractPlatform,Nothing} = nothing,
-                        download_info::Union{Vector{<:Tuple},Nothing} = nothing,
+                        download_info::Union{Vector{<:Tuple},Vector{<:ArtifactDownloadInfo},Nothing} = nothing,
                         lazy::Bool = false,
                         force::Bool = false)
     # First, check to see if this artifact is already bound:
@@ -210,15 +238,11 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
         meta["lazy"] = true
     end
 
-    # Integrate download info, if it is given.  We represent the download info as a
-    # vector of dicts, each with its own `url` and `sha256`, since different tarballs can
-    # expand to the same tree hash.
+    # Integrate download info, if it is given.  Note that there can be multiple
+    # download locations, each with its own tarball with its own hash, but which
+    # expands to the same content/treehash.
     if download_info !== nothing
-        meta["download"] = [
-            Dict("url" => dl[1],
-                 "sha256" => dl[2],
-            ) for dl in download_info
-        ]
+        meta["download"] = make_dict.(ArtifactDownloadInfo.(download_info))
     end
 
     if platform === nothing
@@ -242,9 +266,12 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
 
     # Spit it out onto disk
     let artifact_dict = artifact_dict
-        open(artifacts_toml, "w") do io
+        parent_dir = dirname(artifacts_toml)
+        temp_artifacts_toml = isempty(parent_dir) ? tempname(pwd()) : tempname(parent_dir)
+        open(temp_artifacts_toml, "w") do io
             TOML.print(io, artifact_dict, sorted=true)
         end
+        mv(temp_artifacts_toml, artifacts_toml; force=true)
     end
 
     # Mark that we have used this Artifact.toml
@@ -258,9 +285,6 @@ end
 
 Unbind the given `name` from an `(Julia)Artifacts.toml` file.
 Silently fails if no such binding exists within the file.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function unbind_artifact!(artifacts_toml::String, name::String;
                          platform::Union{AbstractPlatform,Nothing} = nothing)
@@ -286,12 +310,14 @@ end
 
 """
     download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
-                      verbose::Bool = false)
+                      verbose::Bool = false, io::IO=stderr)
 
-Download/install an artifact into the artifact store.  Returns `true` on success.
+Download/install an artifact into the artifact store.  Returns `true` on success,
+returns an error object on failure.
 
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
+!!! compat "Julia 1.8"
+    As of Julia 1.8 this function returns the error object rather than `false` when
+    failure occurs
 """
 function download_artifact(
     tree_hash::SHA1,
@@ -299,149 +325,238 @@ function download_artifact(
     tarball_hash::Union{String, Nothing} = nothing;
     verbose::Bool = false,
     quiet_download::Bool = false,
+    io::IO=stderr_f(),
+    progress::Union{Function, Nothing} = nothing,
 )
-    if artifact_exists(tree_hash)
-        return true
-    end
-
-    # Ensure that we're ready to download things
-    probe_platform_engines!()
-
-    if Sys.iswindows()
-        # The destination directory we're hoping to fill:
-        dest_dir = artifact_path(tree_hash; honor_overrides=false)
-        mkpath(dest_dir)
-
-        # On Windows, we have some issues around stat() and chmod() that make properly
-        # determining the git tree hash problematic; for this reason, we use the "unsafe"
-        # artifact unpacking method, which does not properly verify unpacked git tree
-        # hash.  This will be fixed in a future Julia release which will properly interrogate
-        # the filesystem ACLs for executable permissions, which git tree hashes care about.
-        try
-            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
-                                   verbose=verbose, quiet_download=quiet_download)
-        catch e
-            # Clean that destination directory out if something went wrong
-            rm(dest_dir; force=true, recursive=true)
-
-            if isa(e, InterruptException)
-                rethrow(e)
-            end
-            return false
+    _artifact_paths = artifact_paths(tree_hash)
+    pidfile = _artifact_paths[1] * ".pid"
+    mkpath(dirname(pidfile))
+    t_wait_msg = Timer(2) do t
+        if progress === nothing
+            @info "downloading $tarball_url ($hex) in another process"
+        else
+            progress(0, 0; status="downloading in another process")
         end
-    else
-        # We download by using `create_artifact()`.  We do this because the download may
+    end
+    ret = FileWatching.mkpidlock(pidfile, stale_age = 20) do
+        close(t_wait_msg)
+        if artifact_exists(tree_hash)
+            return true
+        end
+
+        # Ensure the `artifacts` directory exists in our default depot
+        artifacts_dir = first(artifacts_dirs())
+        mkpath(artifacts_dir)
+        # expected artifact path
+        dst = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
+
+        # We download by using a temporary directory.  We do this because the download may
         # be corrupted or even malicious; we don't want to clobber someone else's artifact
         # by trusting the tree hash that has been given to us; we will instead download it
         # to a temporary directory, calculate the true tree hash, then move it to the proper
         # location only after knowing what it is, and if something goes wrong in the process,
-        # everything should be cleaned up.  Luckily, that is precisely what our
-        # `create_artifact()` wrapper does, so we use that here.
-        calc_hash = try
-            create_artifact() do dir
-                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
-            end
-        catch e
-            if isa(e, InterruptException)
-                rethrow(e)
-            end
-            # If something went wrong during download, return false
-            return false
-        end
+        # everything should be cleaned up.
 
-        # Did we get what we expected?  If not, freak out.
-        if calc_hash.bytes != tree_hash.bytes
-            msg  = "Tree Hash Mismatch!\n"
-            msg *= "  Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))\n"
-            msg *= "  Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))"
-            @error(msg)
-            # Tree hash calculation is still broken on some systems, e.g. Pkg.jl#1860,
-            # so we return true here and only raise the warning on the lines above.
-            # return false
+        # Temporary directory where we'll do our creation business
+        temp_dir = mktempdir(artifacts_dir)
+
+        try
+            download_verify_unpack(tarball_url, tarball_hash, temp_dir;
+                                    ignore_existence=true, verbose, quiet_download, io, progress)
+            isnothing(progress) || progress(10000, 10000; status="verifying")
+            calc_hash = SHA1(GitTools.tree_hash(temp_dir))
+
+            # Did we get what we expected?  If not, freak out.
+            if calc_hash.bytes != tree_hash.bytes
+                msg = """
+                Tree Hash Mismatch!
+                Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
+                Calculated git-tree-sha1: $(bytes2hex(calc_hash.bytes))
+                """
+                # Since tree hash calculation is rather fragile and file system dependent,
+                # we allow setting JULIA_PKG_IGNORE_HASHES=1 to ignore the error and move
+                # the artifact to the expected location and return true
+                ignore_hash_env_set = get(ENV, "JULIA_PKG_IGNORE_HASHES", "") != ""
+                if ignore_hash_env_set
+                    ignore_hash = Base.get_bool_env("JULIA_PKG_IGNORE_HASHES", false)
+                    ignore_hash === nothing && @error(
+                        "Invalid ENV[\"JULIA_PKG_IGNORE_HASHES\"] value",
+                        ENV["JULIA_PKG_IGNORE_HASHES"],
+                    )
+                    ignore_hash = something(ignore_hash, false)
+                else
+                    # default: false except Windows users who can't symlink
+                    ignore_hash = Sys.iswindows() &&
+                        !mktempdir(can_symlink, artifacts_dir)
+                end
+                if ignore_hash
+                    desc = ignore_hash_env_set ?
+                        "Environment variable \$JULIA_PKG_IGNORE_HASHES is true" :
+                        "System is Windows and user cannot create symlinks"
+                    msg *= "\n$desc: \
+                        ignoring hash mismatch and moving \
+                        artifact to the expected location"
+                    @error(msg)
+                else
+                    error(msg)
+                end
+            end
+            # Move it to the location we expected
+            isnothing(progress) || progress(10000, 10000; status="moving to artifact store")
+            mv_temp_dir_retries(temp_dir, dst)
+        catch err
+            @debug "download_artifact error" tree_hash tarball_url tarball_hash err
+            if isa(err, InterruptException)
+                rethrow(err)
+            end
+            # If something went wrong during download, return the error
+            return err
+        finally
+            # Always attempt to cleanup
+            try
+                rm(temp_dir; recursive=true, force=true)
+            catch e
+                e isa InterruptException && rethrow()
+                @warn("Failed to clean up temporary directory $(repr(temp_dir))", exception=e)
+            end
         end
+        return true
     end
 
-    return true
+    return ret
 end
 
 """
     ensure_artifact_installed(name::String, artifacts_toml::String;
                               platform::AbstractPlatform = HostPlatform(),
-                              pkg_uuid::Union{Base.UUID,Nothing}=nothing)
+                              pkg_uuid::Union{Base.UUID,Nothing}=nothing,
+                              verbose::Bool = false,
+                              quiet_download::Bool = false,
+                              io::IO=stderr)
 
 Ensures an artifact is installed, downloading it via the download information stored in
 `artifacts_toml` if necessary.  Throws an error if unable to install.
-
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
 """
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::AbstractPlatform = HostPlatform(),
                                    pkg_uuid::Union{Base.UUID,Nothing}=nothing,
                                    verbose::Bool = false,
-                                   quiet_download::Bool = false)
+                                   quiet_download::Bool = false,
+                                   progress::Union{Function,Nothing} = nothing,
+                                   io::IO=stderr_f())
     meta = artifact_meta(name, artifacts_toml; pkg_uuid=pkg_uuid, platform=platform)
     if meta === nothing
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
 
-    return ensure_artifact_installed(name, meta, artifacts_toml; platform=platform,
-                                     verbose=verbose, quiet_download=quiet_download)
+    return ensure_artifact_installed(name, meta, artifacts_toml;
+                                    platform, verbose, quiet_download, progress, io)
 end
 
 function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
                                    platform::AbstractPlatform = HostPlatform(),
                                    verbose::Bool = false,
-                                   quiet_download::Bool = false)
+                                   quiet_download::Bool = false,
+                                   progress::Union{Function,Nothing} = nothing,
+                                   io::IO=stderr_f())
+
     hash = SHA1(meta["git-tree-sha1"])
-
     if !artifact_exists(hash)
-        # first try downloading from Pkg server
-        # TODO: only do this if Pkg server knows about this package
-        if (server = pkg_server()) !== nothing
-            url = "$server/artifact/$hash"
-            download_success = with_show_download_info(name, quiet_download) do
-                download_artifact(hash, url; verbose=verbose, quiet_download=quiet_download)
-            end
-            download_success && return artifact_path(hash)
+        if isnothing(progress) || verbose == true
+            return try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, verbose, quiet_download, io)
+        else
+            # if a custom progress handler is given it is taken to mean the caller wants to handle the download scheduling
+            return () -> try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, quiet_download=true, io, progress)
         end
-
-        # If this artifact does not exist on-disk already, ensure it has download
-        # information, then download it!
-        if !haskey(meta, "download")
-            error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
-        end
-
-        # Attempt to download from all sources
-        for entry in meta["download"]
-            url = entry["url"]
-            tarball_hash = entry["sha256"]
-            download_success = with_show_download_info(name, quiet_download) do
-                download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
-            end
-            download_success && return artifact_path(hash)
-        end
-        error("Unable to automatically install '$(name)' from '$(artifacts_toml)'")
     else
         return artifact_path(hash)
     end
 end
 
-function with_show_download_info(f, name, quiet_download)
-    io = DEFAULT_IO[]
+function try_artifact_download_sources(
+            name::String, hash::SHA1, meta::Dict, artifacts_toml::String;
+            platform::AbstractPlatform=HostPlatform(),
+            verbose::Bool=false,
+            quiet_download::Bool=false,
+            io::IO=stderr_f(),
+            progress::Union{Function,Nothing}=nothing)
+
+    errors = Any[]
+    # first try downloading from Pkg server
+    # TODO: only do this if Pkg server knows about this package
+    if (server = pkg_server()) !== nothing
+        url = "$server/artifact/$hash"
+        download_success = let url = url
+            @debug "Downloading artifact from Pkg server" name artifacts_toml platform url
+            with_show_download_info(io, name, quiet_download) do
+                download_artifact(hash, url; verbose, quiet_download, io, progress)
+            end
+        end
+        # download_success is either `true` or an error object
+        if download_success === true
+            return artifact_path(hash)
+        else
+            @debug "Failed to download artifact from Pkg server" download_success
+            push!(errors, (url, download_success))
+        end
+    end
+
+    # If this artifact does not exist on-disk already, ensure it has download
+    # information, then download it!
+    if !haskey(meta, "download")
+        error("Cannot automatically install '$(name)'; no download section in '$(artifacts_toml)'")
+    end
+
+    # Attempt to download from all sources
+    for entry in meta["download"]
+        url = entry["url"]
+        tarball_hash = entry["sha256"]
+        download_success = let url = url
+            @debug "Downloading artifact" name artifacts_toml platform url
+            with_show_download_info(io, name, quiet_download) do
+                download_artifact(hash, url, tarball_hash; verbose, quiet_download, io, progress)
+            end
+        end
+        # download_success is either `true` or an error object
+        if download_success === true
+            return artifact_path(hash)
+        else
+            @debug "Failed to download artifact" download_success
+            push!(errors, (url, download_success))
+        end
+    end
+    errmsg = """
+    Unable to automatically download/install artifact '$(name)' from sources listed in '$(artifacts_toml)'.
+    Sources attempted:
+    """
+    for (url, err) in errors
+        errmsg *= "- $(url)\n"
+        errmsg *= "    Error: $(sprint(showerror, err))\n"
+    end
+    error(errmsg)
+end
+
+
+function with_show_download_info(f, io, name, quiet_download)
     fancyprint = can_fancyprint(io)
     if !quiet_download
-        fancyprint && print_progress_bottom(stderr)
-        printpkgstyle(stderr, :Downloading, "artifact: $name")
+        fancyprint && print_progress_bottom(io)
+        printpkgstyle(io, :Downloading, "artifact: $name")
     end
+    success = false
     try
-        return f()
+        result = f()
+        success = result === true
+        return result
     finally
         if !quiet_download
-            fancyprint && print(stdout, "\033[1A") # move cursor up one line
-            fancyprint && print(stdout, "\033[2K") # clear line
-            fancyprint && printpkgstyle(stdout, :Downloaded, "artifact: $name")
-            
+            fancyprint && print(io, "\033[1A") # move cursor up one line
+            fancyprint && print(io, "\033[2K") # clear line
+            if success
+                fancyprint && printpkgstyle(io, :Downloaded, "artifact: $name")
+            else
+                printpkgstyle(io, :Failure, "artifact: $name", color = :red)
+            end
         end
     end
 end
@@ -452,42 +567,40 @@ end
                                    pkg_uuid = nothing,
                                    include_lazy = false,
                                    verbose = false,
-                                   quiet_download = false)
+                                   quiet_download = false,
+                                   io::IO=stderr)
 
 Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
 
 If `include_lazy` is set to `true`, then lazy packages will be installed as well.
 
-!!! compat "Julia 1.3"
-    This function requires at least Julia 1.3.
+This function is deprecated and should be replaced with the following snippet:
+
+    artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
+    for name in keys(artifacts)
+        ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=platform)
+    end
+
+!!! warning
+    This function is deprecated in Julia 1.6 and will be removed in a future version.
+    Use `select_downloadable_artifacts()` and `ensure_artifact_installed()` instead.
 """
 function ensure_all_artifacts_installed(artifacts_toml::String;
                                         platform::AbstractPlatform = HostPlatform(),
                                         pkg_uuid::Union{Nothing,Base.UUID} = nothing,
                                         include_lazy::Bool = false,
                                         verbose::Bool = false,
-                                        quiet_download::Bool = false)
-    if !isfile(artifacts_toml)
-        return
-    end
-    artifact_dict = load_artifacts_toml(artifacts_toml; pkg_uuid=pkg_uuid)
-
-    for name in keys(artifact_dict)
-        # Get the metadata about this name for the requested platform
-        meta = artifact_meta(name, artifact_dict, artifacts_toml; platform=platform)
-
-        # If there are no instances of this name for the desired platform, skip it
-        meta === nothing && continue
-
-        # If this mapping doesn't have a `download` stanza or is lazy, skip it
-        if !haskey(meta, "download") || (get(meta, "lazy", false) && !include_lazy)
-            continue
-        end
-
+                                        quiet_download::Bool = false,
+                                        io::IO=stderr_f())
+    # This function should not be called anymore; use `select_downloadable_artifacts()` directly.
+    Base.depwarn("`ensure_all_artifacts_installed()` is deprecated; iterate over `select_downloadable_artifacts()` output with `ensure_artifact_installed()`.", :ensure_all_artifacts_installed)
+    # Collect all artifacts we're supposed to install
+    artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy, pkg_uuid)
+    for name in keys(artifacts)
         # Otherwise, let's try and install it!
-        ensure_artifact_installed(name, meta, artifacts_toml; platform=platform,
-                                  verbose=verbose, quiet_download=quiet_download)
+        ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=platform,
+                                  verbose=verbose, quiet_download=quiet_download, io=io)
     end
 end
 
@@ -547,8 +660,10 @@ ensure_artifact_installed(name::AbstractString, artifacts_toml::AbstractString; 
 ensure_artifact_installed(name::AbstractString, meta::Dict, artifacts_toml::AbstractString; kwargs...) =
     ensure_artifact_installed(string(name)::String, meta, string(artifacts_toml)::String; kwargs...)
 ensure_all_artifacts_installed(artifacts_toml::AbstractString; kwargs...) =
-    ensure_all_artifacts_installed(string(name)::String; kwargs...)
+    ensure_all_artifacts_installed(string(artifacts_toml)::String; kwargs...)
 extract_all_hashes(artifacts_toml::AbstractString; kwargs...) =
     extract_all_hashes(string(artifacts_toml)::String; kwargs...)
 
-end # module Artifacts
+end # module PkgArtifacts
+
+const Artifacts = PkgArtifacts

@@ -2,10 +2,7 @@ module PlatformEngineTests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
-
-# Explicitly probe platform engines in verbose mode to get coverage and make
-# CI debugging easier
-probe_platform_engines!(;verbose=true)
+using ..Utils: list_tarball_files
 
 @testset "Packaging" begin
     # Gotta set this guy up beforehand
@@ -39,7 +36,7 @@ probe_platform_engines!(;verbose=true)
             @test isfile(tarball_path)
 
             # Test that we can inspect the contents of the tarball
-            contents = PlatformEngines.list_tarball_files(tarball_path)
+            contents = list_tarball_files(tarball_path)
             @test "bin/bar.sh" in contents
             @test "lib/baz.so" in contents
             @test "etc/qux.conf" in contents
@@ -200,21 +197,47 @@ end
 
     ENV["JULIA_PKG_SERVER"] = ""
 
-    test_server_dir(url, server, ::Nothing) =
-        @test PlatformEngines.get_server_dir(url, server) == nothing
-    test_server_dir(url, server, domain) =
-        @test PlatformEngines.get_server_dir(url, server) ==
-            joinpath(Pkg.depots1(), "servers", domain)
+    function test_server_dir(url, server, ::Nothing)
+        observed = PlatformEngines.get_server_dir(url, server)
+        expected = nothing
+        @test observed === expected
+    end
+    function test_server_dir(url, server, expected_directory::AbstractString)
+        observed = PlatformEngines.get_server_dir(url, server)
+        expected = joinpath(Pkg.depots1(), "servers", expected_directory)
+        @debug "" url server expected_directory observed expected
+        if observed != expected
+            @error "Test failure" url server expected_directory observed expected
+        end
+
+        @test observed == expected
+
+        # Test for Windows drive letter shenanigans
+        @test startswith(observed, Pkg.depots1())
+        @test startswith(observed, joinpath(Pkg.depots1(), "servers"))
+    end
 
     @testset "get_server_dir" begin
         test_server_dir("https://foo.bar/baz/a", nothing, nothing)
         test_server_dir("https://foo.bar/baz/a", "https://bar", nothing)
         test_server_dir("https://foo.bar/baz/a", "foo.bar", nothing)
         test_server_dir("https://foo.bar/bazx", "https://foo.bar/baz", nothing)
-        test_server_dir("https://foo.bar/baz/a", "https://foo.bar", "foo.bar")
-        test_server_dir("https://foo.bar/baz", "https://foo.bar/baz", "foo.bar")
-        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
-        test_server_dir("https://foo.bar/baz/a", "https://foo.bar/baz", "foo.bar")
+
+        for host in ["localhost", "foo", "foo.bar", "foo.bar.baz"]
+            for protocol in ["http", "https"]
+                for port in [("", ""), (":1234", "_1234")]
+                    port_original, port_transformed = port
+
+                    for server_suffix in ["", "/hello", "/hello/world"]
+                        server = "$(protocol)://$(host)$(port_original)$(server_suffix)"
+                        for url_suffix in ["/", "/foo", "/foo/bar", "/foo/bar/baz"]
+                            url = "$(server)$(url_suffix)"
+                            test_server_dir(url, server, "$(host)$(port_transformed)")
+                        end
+                    end
+                end
+            end
+        end
     end
 
     called = 0

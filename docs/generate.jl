@@ -32,13 +32,13 @@ function generate()
         # [**11.** REPL Mode Reference](@id REPL-Mode-Reference)
 
         This section describes available commands in the Pkg REPL.
-        The REPL mode is mostly meant for interactive use,
+        The Pkg REPL mode is mostly meant for interactive use,
         and for non-interactive use it is recommended to use the
-        "API mode", see [API Reference](@ref API-Reference).
+        functional API, see [API Reference](@ref API-Reference).
         """)
     # list commands
     println(io, "## `package` commands")
-    foreach(command -> generate(io, command), ["add", "build", "develop", "free", "generate", "pin", "remove", "test", "update"])
+    foreach(command -> generate(io, command), ["add", "build", "compat", "develop", "free", "generate", "pin", "remove", "test", "update"])
     println(io, "## `registry` commands")
     foreach(command -> generate(io, command), ["registry add", "registry remove", "registry status", "registry update"])
     println(io, "## Other commands")

@@ -4,48 +4,43 @@ export MiniProgressBar, start_progress, end_progress, show_progress, print_progr
 
 using Printf
 
+# Until Base.format_bytes supports sigdigits
+function pkg_format_bytes(bytes; binary=true, sigdigits::Integer=3)
+    units = binary ? Base._mem_units : Base._cnt_units
+    factor = binary ? 1024 : 1000
+    bytes, mb = Base.prettyprint_getunits(bytes, length(units), Int64(factor))
+    if mb == 1
+        return string(Int(bytes), " ", Base._mem_units[mb], bytes==1 ? "" : "s")
+    else
+        return string(Base.Ryu.writefixed(Float64(bytes), sigdigits), binary ? " $(units[mb])" : "$(units[mb])B")
+    end
+end
+
 Base.@kwdef mutable struct MiniProgressBar
-    max::Int = 1.0
+    max::Int = 1
     header::String = ""
-    color::Symbol = :white
+    color::Symbol = :nothing
     width::Int = 40
-    current::Int = 0.0
-    prev::Int = 0.0
+    current::Int = 0
+    status::String = "" # If not empty this string replaces the bar
+    prev::Int = 0
     has_shown::Bool = false
     time_shown::Float64 = 0.0
-    percentage::Bool = true
+    mode::Symbol = :percentage # :percentage :int :data
     always_reprint::Bool = false
     indent::Int = 4
+    main::Bool = true
 end
 
-const NONINTERACTIVE_TIME_GRANULARITY = Ref(2.0)
+const PROGRESS_BAR_TIME_GRANULARITY = Ref(1 / 30.0) # 30 fps
 const PROGRESS_BAR_PERCENTAGE_GRANULARITY = Ref(0.1)
-
-function pretend_cursor()
-    io = stderr
-    bar = MiniProgressBar(; indent=2, header = "Progress", color = Base.info_color(),
-    percentage=false, always_reprint=true)
-    bar.max = 40
-    start_progress(io, bar)
-    sleep(0.5)
-    for i in 1:40
-        bar.current = i
-        print_progress_bottom(io)
-        println("Downloading ... $i")
-        show_progress(io, bar)
-        x = randstring(7)
-        sleep(0.01)
-    end
-    end_progress(io, bar)
-    print("Hello!")
-end
 
 function start_progress(io::IO, _::MiniProgressBar)
     ansi_disablecursor = "\e[?25l"
     print(io, ansi_disablecursor)
 end
 
-function show_progress(io::IO, p::MiniProgressBar)
+function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagereturn=true)
     if p.max == 0
         perc = 0.0
         prev_perc = 0.0
@@ -58,35 +53,66 @@ function show_progress(io::IO, p::MiniProgressBar)
     if !p.always_reprint && p.has_shown && !((perc - prev_perc) > PROGRESS_BAR_PERCENTAGE_GRANULARITY[])
         return
     end
-    if !isinteractive()
-        t = time()
-        if p.has_shown && (t - p.time_shown) < NONINTERACTIVE_TIME_GRANULARITY[]
-            return
-        end
-        p.time_shown = t
+    t = time()
+    if !p.always_reprint && p.has_shown && (t - p.time_shown) < PROGRESS_BAR_TIME_GRANULARITY[]
+        return
     end
+    p.time_shown = t
     p.prev = p.current
     p.has_shown = true
-    n_filled = ceil(Int, p.width * perc / 100)
-    n_left = p.width - n_filled
-    print(io, " "^p.indent)
-    printstyled(io, p.header, color=p.color, bold=true)
-    print(io, " [")
-    print(io, "="^n_filled, ">")
-    print(io, " "^n_left, "]  ", )
-    if p.percentage
-        @printf io "%2.1f %%" perc
+
+    progress_text = if p.mode == :percentage
+        @sprintf "%2.1f %%" perc
+    elseif p.mode == :int
+        string(p.current, "/",  p.max)
+    elseif p.mode == :data
+        lpad(string(pkg_format_bytes(p.current; sigdigits=1), "/", pkg_format_bytes(p.max; sigdigits=1)), 20)
     else
-        print(io, p.current, "/",  p.max)
+        error("Unknown mode $(p.mode)")
     end
-    print(io, "\r")
+    termwidth = @something termwidth displaysize(io)[2]
+    max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
+    n_filled = floor(Int, max_progress_width * perc / 100)
+    partial_filled = (max_progress_width * perc / 100) - n_filled
+    n_left = max_progress_width - n_filled
+    headers = split(p.header)
+    to_print = sprint(; context=io) do io
+        print(io, " "^p.indent)
+        if p.main
+            printstyled(io, headers[1], " "; color=:green, bold=true)
+            length(headers) > 1 && printstyled(io, join(headers[2:end], ' '), " ")
+        else
+            print(io, p.header, " ")
+        end
+        if !isempty(p.status)
+            print(io, p.status)
+        else
+            hascolor = get(io, :color, false)::Bool
+            printstyled(io, "━"^n_filled; color=p.color)
+            if n_left > 0
+                if hascolor
+                    if partial_filled > 0.5
+                        printstyled(io, "╸"; color=p.color) # More filled, use ╸
+                    else
+                        printstyled(io, "╺"; color=:light_black) # Less filled, use ╺
+                    end
+                end
+                c = hascolor ? "━" : " "
+                printstyled(io, c^(n_left-1+!hascolor); color=:light_black)
+            end
+            printstyled(io, " "; color=:light_black)
+            print(io, progress_text)
+        end
+        carriagereturn && print(io, "\r")
+    end
+    # Print everything in one call
+    print(io, to_print)
 end
 
 function end_progress(io, p::MiniProgressBar)
     ansi_enablecursor = "\e[?25h"
     ansi_clearline = "\e[2K"
-    print(io, ansi_enablecursor)
-    print(io, ansi_clearline)
+    print(io, ansi_enablecursor * ansi_clearline)
 end
 
 # Useful when writing a progress bar in the bottom
@@ -94,20 +120,17 @@ end
 # prog = MiniProgressBar(...)
 # prog.end = n
 # for progress in 1:n
-#     print_progree_bottom(io)
+#     print_progress_bottom(io)
 #     println("stuff")
 #     prog.current = progress
-#     showproress(io, prog)
+#     showprogress(io, prog)
 #  end
 #
 function print_progress_bottom(io::IO)
-    print(io, "\e[S")
     ansi_clearline = "\e[2K"
     ansi_movecol1 = "\e[1G"
     ansi_moveup(n::Int) = string("\e[", n, "A")
-    print(io, ansi_moveup(1))
-    print(io, ansi_clearline)
-    print(io, ansi_movecol1)
+    print(io, "\e[S" * ansi_moveup(1) * ansi_clearline * ansi_movecol1)
 end
 
 end

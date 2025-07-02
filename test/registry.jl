@@ -47,17 +47,14 @@ end
 function test_installed(registries)
     @test setdiff(
         UUID[r.uuid for r in registries],
-        UUID[r.uuid for r in Pkg.Types.collect_registries()]
+        UUID[r.uuid for r in Pkg.Registry.reachable_registries()]
         ) == UUID[]
 end
 
 function is_pkg_available(pkg::PackageSpec)
-    uuids = UUID[]
-    for registry in Pkg.Types.collect_registries()
-        reg_dict = Pkg.Types.read_registry(joinpath(registry.path, "Registry.toml"))
-        for (uuid, pkginfo) in reg_dict["packages"]
-            push!(uuids, UUID(uuid))
-        end
+    uuids = Set{UUID}()
+    for registry in Pkg.Registry.reachable_registries()
+        union!(uuids, keys(registry))
     end
     return in(pkg.uuid, uuids)
 end
@@ -68,16 +65,17 @@ function with_depot2(f)
     Base.DEPOT_PATH[1:2] .= Base.DEPOT_PATH[2:-1:1]
 end
 
-
 @testset "registries" begin
     temp_pkg_dir() do depot; mktempdir() do depot2
         insert!(Base.DEPOT_PATH, 2, depot2)
         # set up registries
         regdir = mktempdir()
         setup_test_registries(regdir)
-        generalurl = Pkg.Types.DEFAULT_REGISTRIES[1].url # hehe
+        general_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+        general_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+        general_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
         General = RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106",
-            url = generalurl)
+            url = general_url, path = general_path, linked = general_linked)
         Foo1 = RegistrySpec(name = "RegistryFoo", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
             url = joinpath(regdir, "RegistryFoo1"))
         Foo2 = RegistrySpec(name = "RegistryFoo", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
@@ -87,7 +85,6 @@ end
         Example  = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
         Example1 = PackageSpec(name = "Example1", uuid = UUID("c5f1542f-b8aa-45da-ab42-05303d706c66"))
         Example2 = PackageSpec(name = "Example2", uuid = UUID("d7897d3a-8e65-4b65-bdc8-28ce4e859565"))
-
 
         # Add General registry
         ## Pkg REPL
@@ -113,7 +110,7 @@ end
         for reg in ("General",
                     RegistrySpec("General"),
                     RegistrySpec(name = "General"),
-                    RegistrySpec(name = "General", url = generalurl),
+                    RegistrySpec(name = "General", path = general_path),
                     RegistrySpec(uuid = "23338594-aafe-5451-b93e-139f81909106"),
                     RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106"))
             Pkg.Registry.add(reg)
@@ -139,36 +136,27 @@ end
         # reset installed registries
         rm.(joinpath.(Base.DEPOT_PATH[1:2], "registries"); force=true, recursive=true)
 
-        Registry.add(RegistrySpec(url = Foo1.url))
+        Registry.add(url = Foo1.url)
         test_installed([Foo1])
         @test is_pkg_available(Example1)
         @test !is_pkg_available(Example2)
-        with_depot2(() -> Registry.add(RegistrySpec(url = Foo2.url)))
+        with_depot2(() -> Registry.add(url = Foo2.url))
         test_installed([Foo1, Foo2])
         @test is_pkg_available(Example1)
         @test is_pkg_available(Example2)
 
-        # Behaviour with conflicting registry names
-        @test_throws PkgError pkgstr("registry up RegistryFoo")
-        @test_throws PkgError Registry.update("RegistryFoo")
-        @test_throws PkgError Registry.update(RegistrySpec("RegistryFoo"))
-        @test_throws PkgError Registry.update(RegistrySpec(name = "RegistryFoo"))
-        @test_throws PkgError pkgstr("registry remove RegistryFoo")
-        @test_throws PkgError Registry.rm("RegistryFoo")
-        @test_throws PkgError Registry.rm(RegistrySpec("RegistryFoo"))
-        @test_throws PkgError Registry.rm(RegistrySpec(name = "RegistryFoo"))
 
         pkgstr("registry up $(Foo1.uuid)")
         pkgstr("registry update $(Foo1.name)=$(Foo1.uuid)")
-        Registry.update(RegistrySpec(uuid = Foo1.uuid))
-        Registry.update(RegistrySpec(name = Foo1.name, uuid = Foo1.uuid))
+        Registry.update(uuid = Foo1.uuid)
+        Registry.update(name = Foo1.name, uuid = Foo1.uuid)
 
         test_installed([Foo1, Foo2])
         pkgstr("registry rm $(Foo1.uuid)")
         test_installed([Foo2])
         @test !is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        Registry.add(RegistrySpec(url = Foo1.url))
+        Registry.add(url = Foo1.url)
         test_installed([Foo1, Foo2])
         @test is_pkg_available(Example1)
         @test is_pkg_available(Example2)
@@ -176,29 +164,33 @@ end
         test_installed([Foo2])
         @test !is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        pkgstr("registry rm $(Foo2.name)")
+        with_depot2() do
+            pkgstr("registry rm $(Foo2.name)")
+        end
         test_installed([])
         @test !is_pkg_available(Example1)
         @test !is_pkg_available(Example2)
 
-        Registry.add(RegistrySpec(url = Foo1.url))
-        with_depot2(() -> Registry.add(RegistrySpec(url = Foo2.url)))
+        Registry.add(url = Foo1.url)
+        with_depot2(() -> Registry.add(url = Foo2.url))
         test_installed([Foo1, Foo2])
         @test is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        Registry.rm(RegistrySpec(uuid = Foo1.uuid))
+        Registry.rm(uuid = Foo1.uuid)
         test_installed([Foo2])
         @test !is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        Registry.add(RegistrySpec(url = Foo1.url))
+        Registry.add(url = Foo1.url)
         test_installed([Foo1, Foo2])
         @test is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        Registry.rm(RegistrySpec(name = Foo1.name, uuid = Foo1.uuid))
+        Registry.rm(name = Foo1.name, uuid = Foo1.uuid)
         test_installed([Foo2])
         @test !is_pkg_available(Example1)
         @test is_pkg_available(Example2)
-        Registry.rm(RegistrySpec(Foo2.name))
+        with_depot2() do
+            Registry.rm(Foo2.name)
+        end
         test_installed([])
         @test !is_pkg_available(Example1)
         @test !is_pkg_available(Example2)
@@ -211,7 +203,10 @@ end
         @test is_pkg_available(Example1)
         @test is_pkg_available(Example2)
         pkgstr("registry up General $(Foo1.uuid) $(Foo2.name)=$(Foo2.uuid)")
-        pkgstr("registry rm General $(Foo1.uuid) $(Foo2.name)=$(Foo2.uuid)")
+        pkgstr("registry rm General $(Foo1.uuid)")
+        with_depot2() do
+            pkgstr("registry rm General $(Foo2.name)=$(Foo2.uuid)")
+        end
         test_installed([])
         @test !is_pkg_available(Example)
         @test !is_pkg_available(Example1)
@@ -229,7 +224,10 @@ end
                          RegistrySpec(name = Foo2.name, uuid = Foo2.uuid)])
         Registry.rm([RegistrySpec("General"),
                      RegistrySpec(uuid = Foo1.uuid),
-                     RegistrySpec(name = Foo2.name, uuid = Foo2.uuid)])
+                     ])
+        with_depot2() do
+            Registry.rm(name = Foo2.name, uuid = Foo2.uuid)
+        end
         test_installed([])
         @test !is_pkg_available(Example)
         @test !is_pkg_available(Example1)
@@ -252,23 +250,49 @@ end
         @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
     end end
 
+    # Test Registry.add and Registry.update with explicit depot values
+    temp_pkg_dir() do depot_on_path; mktempdir() do depot_off_path
+        # No registries anywhere
+        @test isempty(Registry.reachable_registries())
+        @test isempty(Registry.reachable_registries(; depots=[depot_off_path]))
+
+        # After this, we have depots only in the depot that's off the path
+        Registry.add("General"; depots=depot_off_path)
+        @test isempty(Registry.reachable_registries())
+        @test length(Registry.reachable_registries(; depots=[depot_off_path])) == 1
+
+        # Test that `update()` with `depots` runs
+        io = Base.BufferStream()
+        Registry.update(; depots=[depot_off_path], io)
+        closewrite(io)
+        output = read(io, String)
+        @test occursin("registry at `$(depot_off_path)", output)
+
+        # Show that we can install `Example` off of that depot
+        empty!(Base.DEPOT_PATH)
+        push!(Base.DEPOT_PATH, depot_off_path)
+        Pkg.add("Example")
+        @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
+    end end
+
     # only clone default registry if there are no registries installed at all
     temp_pkg_dir() do depot1; mktempdir() do depot2
         append!(empty!(DEPOT_PATH), [depot1, depot2])
-        @test length(Pkg.Types.collect_registries()) == 0
+        Base.append_bundled_depot_path!(DEPOT_PATH)
+        @test length(Pkg.Registry.reachable_registries()) == 0
         Pkg.add("Example")
-        @test length(Pkg.Types.collect_registries()) == 1
+        @test length(Pkg.Registry.reachable_registries()) == 1
         Pkg.rm("Example")
         DEPOT_PATH[1:2] .= DEPOT_PATH[2:-1:1]
         Pkg.add("Example") # should not trigger a clone of default registries
-        @test length(Pkg.Types.collect_registries()) == 1
+        @test length(Pkg.Registry.reachable_registries()) == 1
     end end
 
     @testset "yanking" begin
         uuid = Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
         # Tests that Example@0.5.1 does not get installed
         temp_pkg_dir() do env
-            Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
+            Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
             Pkg.add("Example")
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             Pkg.update() # should not update Example
@@ -282,7 +306,7 @@ end
         end
         # Test that Example@0.5.1 can be obtained from an existing manifest
         temp_pkg_dir() do env
-            Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
+            Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
             write(joinpath(env, "Project.toml"),"""
                 [deps]
                 Example = "7876af07-990d-54b4-ab0e-23690620f79a"
@@ -298,7 +322,7 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
         temp_pkg_dir() do env
-            Pkg.Registry.add(RegistrySpec(url = "https://github.com/JuliaRegistries/Test"))
+            Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
             write(joinpath(env, "Project.toml"),"""
                 [deps]
                 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
@@ -320,6 +344,43 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
     end
+end
+
+if Pkg.Registry.registry_use_pkg_server()
+@testset "compressed registry" begin
+    for unpack in (true, nothing)
+        withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack) do
+            temp_pkg_dir(;linked_reg=false) do depot
+                # These get restored by temp_pkg_dir
+                Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
+                Pkg.Registry.DEFAULT_REGISTRIES[1].url = "https://github.com/JuliaRegistries/General.git"
+
+                # This should not uncompress the registry
+                Registry.add(uuid = UUID("23338594-aafe-5451-b93e-139f81909106"))
+                @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
+                Pkg.add("Example")
+
+                # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
+                if unpack == true
+                    write(joinpath(DEPOT_PATH[1], "registries", "General", ".tree_info.toml"),
+                        """
+                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                        """)
+                else
+                    write(joinpath(DEPOT_PATH[1], "registries", "General.toml"),
+                        """
+                        git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
+                        uuid = "23338594-aafe-5451-b93e-139f81909106"
+                        path = "General.tar.gz"
+                        """)
+                end
+                Pkg.update()
+                Pkg.Registry.rm(name = "General")
+                @test isempty(readdir(joinpath(DEPOT_PATH[1], "registries")))
+            end
+        end
+    end
+end
 end
 
 end # module

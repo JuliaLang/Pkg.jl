@@ -1,10 +1,17 @@
 module ArtifactTests
 import ..Pkg # ensure we are using the correct Pkg
 
-using Test, Random, Pkg.Artifacts, Pkg.BinaryPlatforms, Pkg.PlatformEngines
+using Test, Random, Pkg.Artifacts, Base.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed, extract_all_hashes
 using TOML, Dates
 import Base: SHA1
+
+# Order-dependence in the tests, so we delay this until we need it
+if Base.find_package("Preferences") === nothing
+    @info "Installing Preferences for Pkg tests"
+    Pkg.add("Preferences") # Needed for sandbox and artifacts tests
+end
+using Preferences
 
 using ..Utils
 
@@ -110,8 +117,36 @@ end
         @test artifact_exists(hash)
 
         # Test that the artifact verifies
-        if !Sys.iswindows()
-            @test verify_artifact(hash)
+        @test verify_artifact(hash)
+    end
+
+    @testset "File permissions" begin
+        mktempdir() do artifacts_dir
+            with_artifacts_directory(artifacts_dir) do
+                subdir = "subdir"
+                file1 = "file1"
+                file2 = "file2"
+                dir_link = "dir_link"
+                file_link = "file_link"
+                hash = create_artifact() do dir
+                    # Create files, links, and directories
+                    mkpath(joinpath(dir, subdir))
+                    touch(joinpath(dir, subdir, file1))
+                    touch(joinpath(dir, subdir, file2))
+                    symlink(basename(subdir), joinpath(dir, dir_link))
+                    symlink(basename(file1), joinpath(dir, subdir, file_link))
+                end
+                artifact_dir = artifact_path(hash)
+                # Make sure only files are read-only
+                @test iszero(filemode(joinpath(artifact_dir, file1)) & 0o222)
+                @test iszero(filemode(joinpath(artifact_dir, file2)) & 0o222)
+                @test iszero(filemode(joinpath(artifact_dir, file_link)) & 0o222)
+                @test !iszero(filemode(joinpath(artifact_dir, subdir)) & 0o222)
+                @test !iszero(filemode(joinpath(artifact_dir, dir_link)) & 0o222)
+                # Make sure we can delete the artifact directory without having
+                # to manually change permissions
+                rm(artifact_dir; recursive=true)
+            end
         end
     end
 end
@@ -153,9 +188,7 @@ end
                 @test !artifact_exists(arty_hash)
 
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
-                if !Sys.iswindows()
-                    @test verify_artifact(arty_hash)
-                end
+                @test verify_artifact(arty_hash)
 
                 # Make sure doing it twice "just works"
                 @test ensure_artifact_installed("arty", artifacts_toml) == artifact_path(arty_hash)
@@ -205,8 +238,8 @@ end
 
         # Test platform-specific binding and providing download_info
         download_info = [
-            ("http://google.com/hello_world", "0"^64),
-            ("http://microsoft.com/hello_world", "a"^64),
+            ArtifactDownloadInfo("http://google.com/hello_world", "0"^64),
+            ArtifactDownloadInfo("http://microsoft.com/hello_world", "a"^64, 1),
         ]
 
         # First, test the binding of things with various platforms and overwriting and such works properly
@@ -216,8 +249,8 @@ end
         @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash
         @test artifact_hash("foo_txt", artifacts_toml; platform=Platform("x86_64", "macos")) == nothing
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64)
-        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
         bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=win32)
+        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
         @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash2
         @test artifact_hash("foo_txt", artifacts_toml; platform=win32) == hash
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=linux64) == artifact_path(hash2)
@@ -226,7 +259,29 @@ end
         # Next, check that we can get the download_info properly:
         meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
+        @test !haskey(meta["download"][1], "size")
         @test meta["download"][2]["sha256"] == "a"^64
+        @test meta["download"][2]["size"] == 1
+
+        rm(artifacts_toml)
+
+        # test relative Artifacts.toml paths (https://github.com/simeonschaub/ArtifactUtils.jl/issues/19)
+        cd(path) do
+            hash3 = create_artifact() do path
+                open(joinpath(path, "foo.txt"), "w") do io
+                    print(io, "bla bla")
+                end
+            end
+
+            # Bind this artifact to something
+            artifacts_toml = "Artifacts.toml" # no parent dir specified
+            @test artifact_hash("foo_txt", artifacts_toml) == nothing
+            bind_artifact!(artifacts_toml, "foo_txt", hash3)
+
+            # Test that this binding worked
+            @test artifact_hash("foo_txt", artifacts_toml) == hash3
+            @test ensure_artifact_installed("foo_txt", artifacts_toml) == artifact_path(hash3)
+        end
     end
 
     # Let's test some known-bad Artifacts.toml files
@@ -237,26 +292,28 @@ end
     @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
 
     # Next, test incorrect download errors
-    if !Sys.iswindows()
-        mktempdir() do dir
-            with_artifacts_directory(dir) do
-                @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any begin
-                    # Only warn on wrong tree hash for now (see Pkg.jl#1885)
-                    # @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+    for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
+        with_artifacts_directory(dir) do
+            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+            if !ignore_hash
+                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+            else
+                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
                     path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
                     @test endswith(path, "0000000000000000000000000000000000000000")
+                    @test isdir(path)
+                    end
                 end
             end
-        end
-    end
+    end end end
 
     mktempdir() do dir
         with_artifacts_directory(dir) do
             @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml")) != nothing
-            @test_logs (:error, r"Hash Mismatch!") match_mode=:any begin
-                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
-            end
+            @test_throws r"Hash Mismatch!" ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_sha256.toml"))
+
+            artifact_toml = joinpath(badifact_dir, "doesnotexist.toml")
+            @test_throws ErrorException ensure_artifact_installed("does_not_exist", artifact_toml)
         end
     end
 end
@@ -268,7 +325,7 @@ end
             hash = create_artifact(p -> touch(joinpath(p, "foo")))
             tarball_path = joinpath(art_dir, "foo.tar.gz")
             archive_artifact(hash, tarball_path)
-            @test "foo" in PlatformEngines.list_tarball_files(tarball_path)
+            @test "foo" in list_tarball_files(tarball_path)
 
             # Test archiving something that doesn't exist fails
             remove_artifact(hash)
@@ -283,12 +340,12 @@ end
     # the global artifact namespace and package list, but it should be harmless.
     mktempdir() do project_path
         with_pkg_env(project_path) do
-            copy_test_package(project_path, "ArtifactInstallation")
+            path = git_init_package(project_path, joinpath(@__DIR__, "test_packages", "ArtifactInstallation"))
             add_this_pkg()
             Pkg.add(Pkg.Types.PackageSpec(
                 name="ArtifactInstallation",
                 uuid=Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"),
-                path=joinpath(project_path, "ArtifactInstallation"),
+                path=path,
             ))
 
             # Run test harness
@@ -311,8 +368,8 @@ end
 
         # Manual test that artifact is installed by instantiate()
         artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
-        c_simple_hash = artifact_hash("c_simple", artifacts_toml)
-        @test artifact_exists(c_simple_hash)
+        hwc_hash = artifact_hash("HelloWorldC", artifacts_toml)
+        @test artifact_exists(hwc_hash)
     end
 
     # Ensure that porous platform coverage works with ensure_all_installed()
@@ -320,21 +377,165 @@ end
         copy_test_package(project_path, "ArtifactInstallation")
         artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
 
-        # Install artifacts such that `c_simple` is not installed properly
-        # because of the platform we requested, but `socrates` is.
-        ensure_all_artifacts_installed(artifacts_toml; platform=Platform("powerpc64le", "linux"))
+        # Try to install all artifacts for the given platform, knowing full well that
+        # HelloWorldC will fail to match any artifact to this bogus platform
+        bogus_platform = Platform("bogus", "linux")
+        artifacts = select_downloadable_artifacts(artifacts_toml; platform=bogus_platform)
+        for name in keys(artifacts)
+            ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=bogus_platform)
+        end
 
-        # Test that c_simple doesn't even show up
-        c_simple_hash = artifact_hash("c_simple", artifacts_toml; platform=Platform("powerpc64le", "linux"))
-        @test c_simple_hash == nothing
+        # Test that HelloWorldC doesn't even show up
+        hwc_hash = artifact_hash("HelloWorldC", artifacts_toml; platform=bogus_platform)
+        @test hwc_hash === nothing
 
-        # Test that socrates shows up, but is not installed
-        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=Platform("powerpc64le", "linux"))
+        # Test that socrates shows up, but is not installed, because it's lazy
+        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=bogus_platform)
         @test !artifact_exists(socrates_hash)
 
         # Test that collapse_the_symlink is installed
-        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=Platform("powerpc64le", "linux"))
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=bogus_platform)
         @test artifact_exists(cts_hash)
+    end
+
+    # Ensure that platform augmentation hooks work.  We will switch between two arbitrary artifacts for this,
+    # by inspecting an environment variable in our package hook.
+    engaged_hash = SHA1("a5f8161ca1ab2e94fedd3578586fe06d7906177c")
+    engaged_url = "https://github.com/JuliaBinaryWrappers/HelloWorldGo_jll.jl/releases/download/HelloWorldGo-v1.0.4+0/HelloWorldGo.v1.0.4.aarch64-linux-musl.tar.gz"
+    engaged_sha256 = "9b66d6b02a370d0170a8c217a872cd1f3d53de267d4e63c22a40b49f04367f8a"
+    disengaged_hash = SHA1("ea8ea92ecd57aa602d254ca6c637309642202768")
+    disengaged_url = "https://github.com/JuliaBinaryWrappers/HelloWorldGo_jll.jl/releases/download/HelloWorldGo-v1.0.4+0/HelloWorldGo.v1.0.4.i686-w64-mingw32.tar.gz"
+    disengaged_sha256 = "5c96a327fc6f0dc71d533373bc6cc6719a1e477c72319b800f29abf1b1e7d812"
+
+    function generate_flooblegrank_artifacts(ap_path)
+        # Bind both "engaged" and "disengaged" variants of our `gooblebox` artifact to generate an Artifacts.toml file
+        artifacts_toml = joinpath(ap_path, "Artifacts.toml")
+        engaged_platform = HostPlatform()
+        engaged_platform["flooblecrank"] = "engaged"
+        Pkg.Artifacts.bind_artifact!(
+            artifacts_toml,
+            "gooblebox",
+            engaged_hash;
+            download_info = [(engaged_url, engaged_sha256)],
+            platform = engaged_platform,
+        )
+        disengaged_platform = HostPlatform()
+        disengaged_platform["flooblecrank"] = "disengaged"
+        disengaged_adi = ArtifactDownloadInfo(disengaged_url, disengaged_sha256)
+        Pkg.Artifacts.bind_artifact!(
+            artifacts_toml,
+            "gooblebox",
+            disengaged_hash;
+            download_info = [disengaged_adi],
+            platform = disengaged_platform,
+        )
+    end
+
+    for flooblecrank_status in ("engaged", "disengaged")
+        # Ensure that they're both missing at first so tests can fail properly
+        temp_pkg_dir() do project_path
+            copy_test_package(project_path, "AugmentedPlatform")
+            ap_path = joinpath(project_path, "AugmentedPlatform")
+            generate_flooblegrank_artifacts(ap_path)
+
+            Pkg.activate(ap_path)
+
+            @test !isdir(artifact_path(engaged_hash))
+            @test !isdir(artifact_path(disengaged_hash))
+
+            if flooblecrank_status == "engaged"
+                right_hash = engaged_hash
+                wrong_hash = disengaged_hash
+            else
+                right_hash = disengaged_hash
+                wrong_hash = engaged_hash
+            end
+
+            # Set the flooblecrank via its preference
+            set_preferences!(
+                joinpath(ap_path, "LocalPreferences.toml"),
+                "AugmentedPlatform",
+                "flooblecrank" => flooblecrank_status,
+            )
+
+            add_this_pkg()
+            @test isdir(artifact_path(right_hash))
+            @test !isdir(artifact_path(wrong_hash))
+
+            # Manual test that artifact is installed by instantiate()
+            artifacts_toml = joinpath(ap_path, "Artifacts.toml")
+            p = HostPlatform()
+            p["flooblecrank"] = flooblecrank_status
+            flooblecrank_hash = artifact_hash("gooblebox", artifacts_toml; platform=p)
+            @test flooblecrank_hash == right_hash
+            @test artifact_exists(flooblecrank_hash)
+
+            # Test that if we load the package, it knows how to find its own artifact,
+            # because it feeds the right `Platform` object through to `@artifact_str()`
+            cmd = addenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
+                         "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
+                         "FLOOBLECRANK" => flooblecrank_status)
+            using_output = chomp(String(read(cmd)))
+            @test success(cmd)
+            @test artifact_path(right_hash) == using_output
+
+            tmpdir = mktempdir()
+            mkpath("$tmpdir/foo/$(flooblecrank_status)")
+            rm("$tmpdir/foo/$(flooblecrank_status)"; recursive=true, force=true)
+            cp(project_path, "$tmpdir/foo/$(flooblecrank_status)")
+            cp(Base.DEPOT_PATH[1], "$tmpdir/foo/$(flooblecrank_status)/depot")
+        end
+    end
+
+    # Also run a test of "cross-installation"
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "AugmentedPlatform")
+        ap_path = joinpath(project_path, "AugmentedPlatform")
+        generate_flooblegrank_artifacts(ap_path)
+
+        Pkg.activate(ap_path)
+        @test !isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
+
+        # Set the flooblecrank via its preference
+        set_preferences!(
+            joinpath(ap_path, "LocalPreferences.toml"),
+            "AugmentedPlatform",
+            "flooblecrank" => "disengaged",
+        )
+
+        p = HostPlatform()
+        p["flooblecrank"] = "engaged"
+        add_this_pkg(; platform=p)
+        @test isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
+    end
+
+    # Also run a test of "cross-installation" use `Pkg.API.instantiate(;platform)`
+    temp_pkg_dir() do project_path
+        copy_test_package(project_path, "AugmentedPlatform")
+        ap_path = joinpath(project_path, "AugmentedPlatform")
+        generate_flooblegrank_artifacts(ap_path)
+
+        Pkg.activate(ap_path)
+        @test !isdir(artifact_path(engaged_hash))
+        @test !isdir(artifact_path(disengaged_hash))
+
+        # Set the flooblecrank via its preference
+        set_preferences!(
+            joinpath(ap_path, "LocalPreferences.toml"),
+            "AugmentedPlatform",
+            "flooblecrank" => "disengaged",
+        )
+
+        add_this_pkg()
+
+        p = HostPlatform()
+        p["flooblecrank"] = "engaged"
+        Pkg.API.instantiate(; platform=p)
+
+        @test isdir(artifact_path(engaged_hash))
+        @test isdir(artifact_path(disengaged_hash))
     end
 end
 
@@ -449,9 +650,10 @@ end
         end
 
         # Next, set up our depot path, with `depot1` as the "innermost" depot.
-        old_depot_path = DEPOT_PATH
+        old_depot_path = copy(DEPOT_PATH)
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, [depot1, depot2, depot3])
+        Base.append_bundled_depot_path!(DEPOT_PATH)
 
         # First sanity check; does our depot path searching code actually work properly?
         @test startswith(artifact_path(foo_hash), depot3)
@@ -495,14 +697,14 @@ end
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
             copy_test_package(depot_container, "ArtifactOverrideLoading")
-            add_this_pkg()
-            Pkg.add(Pkg.Types.PackageSpec(
+            Pkg.develop(Pkg.Types.PackageSpec(
                 name="ArtifactOverrideLoading",
                 uuid=aol_uuid,
                 path=joinpath(depot_container, "ArtifactOverrideLoading"),
             ))
 
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
+                # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
                 using ArtifactOverrideLoading
                 arty_path, barty_path
             end)
@@ -532,7 +734,8 @@ end
 
         # Force Julia to re-load ArtifactOverrideLoading from scratch
         pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
-        delete!(Base.loaded_modules, pkgid)
+        Base.unreference_module(pkgid)
+        touch(joinpath(depot_container, "ArtifactOverrideLoading", "src", "ArtifactOverrideLoading.jl"))
 
         # Verify that the hash-based overrides (and clears) worked
         @test artifact_path(foo_hash) == barty_override_path
@@ -541,6 +744,7 @@ end
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
+            # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
             (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
                 using ArtifactOverrideLoading
                 arty_path, barty_path
@@ -575,9 +779,63 @@ end
             Dict("0"^40 => ["not", "a", "string", "or", "dict"]),
             r"failed to parse entry",
         )
+
+        # reset DEPOT_PATH and force Pkg to reload what it knows about artifact overrides
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
+        Pkg.Artifacts.load_overrides(;force=true)
     end
 end
 
+@testset "artifacts for non package project" begin
+    temp_pkg_dir() do tmpdir
+        artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+        cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
+        Pkg.activate(tmpdir)
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
+        @test !artifact_exists(cts_hash)
+        Pkg.instantiate()
+        @test artifact_exists(cts_hash)
+    end
+end
+
+@testset "installing artifacts when symlinks are copied" begin
+    # copy symlinks to simulate the typical Microsoft Windows user experience where
+    # developer mode is not enabled (no admin rights)
+    withenv("BINARYPROVIDER_COPYDEREF"=>"true", "JULIA_PKG_IGNORE_HASHES"=>"true") do
+        temp_pkg_dir() do tmpdir
+            artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+            cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
+            Pkg.activate(tmpdir)
+            cts_real_hash = create_artifact() do dir
+                local meta = Pkg.Artifacts.artifact_meta("collapse_the_symlink", artifacts_toml)
+                local collapse_url = meta["download"][1]["url"]
+                local collapse_hash = meta["download"][1]["sha256"]
+                # Because "BINARYPROVIDER_COPYDEREF"=>"true", this will copy symlinks.
+                download_verify_unpack(collapse_url, collapse_hash, dir; verbose=true, ignore_existence=true)
+            end
+            cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
+            @test !artifact_exists(cts_hash)
+            @test artifact_exists(cts_real_hash)
+            @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any Pkg.instantiate()
+            @test artifact_exists(cts_hash)
+            # Make sure existing artifacts don't get deleted.
+            @test artifact_exists(cts_real_hash)
+        end
+    end
+end
+
+if Sys.iswindows()
+    @testset "filemode(dir) non-executable on windows" begin
+        mktempdir() do dir
+            touch(joinpath(dir, "foo"))
+            @test !isempty(readdir(dir))
+            # This technically should be true, the fact that it's not is
+            # a wrinkle of libuv, it would be nice to fix it and so if we
+            # do, this test will let us know.
+            @test filemode(dir) & 0o001 == 0
+        end
+    end
+end
 end # module
