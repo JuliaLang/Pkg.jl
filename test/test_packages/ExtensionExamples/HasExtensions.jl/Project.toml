@@ -1,0 +1,26 @@
+name = "HasExtensions"
+uuid = "4d3288b3-3afc-4bb6-85f3-489fffe514c8"
+version = "0.1.0"
+
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+IndirectArrays = "9b13fd28-a010-5f03-acff-a1bbcff69959"
+
+[weakdeps]
+IndirectArrays = "9b13fd28-a010-5f03-acff-a1bbcff69959"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+
+[extensions]
+IndirectArraysExt = "IndirectArrays"
+OffsetArraysExt = "OffsetArrays"
+
+[compat]
+Example = "0.5"
+IndirectArrays = "1.0"
+OffsetArrays = "1.12"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["IndirectArrays", "OffsetArrays", "Test"]

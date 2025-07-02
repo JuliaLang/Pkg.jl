@@ -1,4 +1,4 @@
-# [**12.** API Reference](@id API-Reference)
+# [**13.** API Reference](@id API-Reference)
 
 This section describes the functional API for interacting with Pkg.jl.
 It is recommended to use the functional API, rather than the Pkg REPL mode,
@@ -24,9 +24,6 @@ but more complicated commands, which e.g. specify URLs or version range, require
 This is done by creating an instance of [`PackageSpec`](@ref) which is passed in to functions.
 
 ```@docs
-PackageSpec
-PackageMode
-UpgradeLevel
 Pkg.add
 Pkg.develop
 Pkg.activate
@@ -43,19 +40,20 @@ Pkg.status
 Pkg.compat
 Pkg.precompile
 Pkg.offline
-Pkg.respect_sysimage_versions
-Pkg.setprotocol!
+Pkg.why
 Pkg.dependencies
+Pkg.respect_sysimage_versions
 Pkg.project
 Pkg.undo
 Pkg.redo
+Pkg.setprotocol!
+PackageSpec
+PackageMode
+UpgradeLevel
 ```
 
 
 ## Registry API Reference
-
-!!! compat "Julia 1.1"
-    Pkg's registry handling requires at least Julia 1.1.
 
 The functional API for registries uses [`RegistrySpec`](@ref)s, similar to
 [`PackageSpec`](@ref).
@@ -70,9 +68,6 @@ Pkg.Registry.status
 
 ## [Artifacts API Reference](@id Artifacts-Reference)
 
-!!! compat "Julia 1.3"
-    Pkg's artifacts API requires at least Julia 1.3.
-
 ```@docs
 Pkg.Artifacts.create_artifact
 Pkg.Artifacts.remove_artifact
@@ -83,4 +78,11 @@ Pkg.Artifacts.download_artifact
 Pkg.Artifacts.ensure_artifact_installed
 Pkg.Artifacts.ensure_all_artifacts_installed
 Pkg.Artifacts.archive_artifact
+```
+
+## [Package Server Authentication Hooks](@id Package-Server-Authentication-Hooks)
+
+```@docs
+Pkg.PlatformEngines.register_auth_error_handler
+Pkg.PlatformEngines.deregister_auth_error_handler
 ```

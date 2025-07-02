@@ -19,15 +19,18 @@ const Requires = Dict{UUID,VersionSpec}
 struct Fixed
     version::VersionNumber
     requires::Requires
+    weak::Set{UUID}
 end
-Fixed(v::VersionNumber) = Fixed(v, Requires())
+Fixed(v::VersionNumber, requires::Requires = Requires()) = Fixed(v, requires, Set{UUID}())
 
-Base.:(==)(a::Fixed, b::Fixed) = a.version == b.version && a.requires == b.requires
-Base.hash(f::Fixed, h::UInt) = hash((f.version, f.requires), h + (0x68628b809fd417ca % UInt))
+Base.:(==)(a::Fixed, b::Fixed) = a.version == b.version && a.requires == b.requires && a.weak == b.weak
+Base.hash(f::Fixed, h::UInt) = hash((f.version, f.requires, f.weak), h + (0x68628b809fd417ca % UInt))
 
 Base.show(io::IO, f::Fixed) = isempty(f.requires) ?
     print(io, "Fixed(", repr(f.version), ")") :
-    print(io, "Fixed(", repr(f.version), ",", f.requires, ")")
+    isempty(f.weak) ?
+    print(io, "Fixed(", repr(f.version), ",", f.requires, ")") :
+    print(io, "Fixed(", repr(f.version), ",", f.requires, ", weak=", f.weak, ")")
 
 
 struct ResolverError <: Exception
@@ -35,6 +38,12 @@ struct ResolverError <: Exception
     ex::Union{Exception,Nothing}
 end
 ResolverError(msg::AbstractString) = ResolverError(msg, nothing)
+
+struct ResolverTimeoutError <: Exception
+    msg::AbstractString
+    ex::Union{Exception,Nothing}
+end
+ResolverTimeoutError(msg::AbstractString) = ResolverTimeoutError(msg, nothing)
 
 function Base.showerror(io::IO, pkgerr::ResolverError)
     print(io, pkgerr.msg)
@@ -61,6 +70,25 @@ include("maxsum.jl")
 
 "Resolve package dependencies."
 function resolve(graph::Graph)
+    sol = _resolve(graph::Graph, nothing, nothing)
+
+    # return the solution as a Dict mapping UUID => VersionNumber
+    return compute_output_dict(sol, graph)
+end
+
+function _resolve(graph::Graph, lower_bound::Union{Vector{Int},Nothing}, previous_sol::Union{Vector{Int},Nothing})
+    np = graph.np
+    spp = graph.spp
+    gconstr = graph.gconstr
+
+    if lower_bound ≢ nothing
+        for p0 = 1:np
+            v0 = lower_bound[p0]
+            @assert v0 ≠ spp[p0]
+            gconstr[p0][1:(v0-1)] .= false
+        end
+    end
+
     # attempt trivial solution first
     greedy_ok, sol = greedysolver(graph)
 
@@ -69,28 +97,60 @@ function resolve(graph::Graph)
     log_event_global!(graph, "greedy solver failed")
 
     # trivial solution failed, use maxsum solver
-    maxsum_ok, sol, staged = maxsum(graph)
+    maxsum_result, sol, staged = maxsum(graph)
 
-    maxsum_ok && @goto solved
+    maxsum_result == :ok && @goto solved
 
-    log_event_global!(graph, "maxsum solver failed")
+    if maxsum_result == :unsat
+        log_event_global!(graph, "maxsum solver failed")
 
-    # the problem is unsat, force-trigger a failure
-    # in order to produce a log - this will contain
-    # information about the best that the solver could
-    # achieve
-    trigger_failure!(graph, sol, staged)
+        @assert previous_sol ≡ nothing
+
+        # the problem is unsat, force-trigger a failure
+        # in order to produce a log - this will contain
+        # information about the best that the solver could
+        # achieve
+        trigger_failure!(graph, sol, staged)
+    else
+        @assert maxsum_result == :timedout
+        log_event_global!(graph, "maxsum solver timed out")
+        throw(ResolverTimeoutError("""
+            The resolution process timed out. This is likely due to unsatisfiable requirements.
+            You can increase the maximum resolution time via the environment variable JULIA_PKG_RESOLVE_MAX_TIME
+            (the current value is $(get(ENV, "JULIA_PKG_RESOLVE_MAX_TIME", DEFAULT_MAX_TIME))).
+            """))
+    end
+
 
     @label solved
 
     # verify solution (debug code) and enforce its optimality
     @assert verify_solution(sol, graph)
-    greedy_ok || enforce_optimality!(sol, graph)
-
-    log_event_global!(graph, "the solver found $(greedy_ok ? "an optimal" : "a feasible") configuration")
-
-    # return the solution as a Dict mapping UUID => VersionNumber
-    return compute_output_dict(sol, graph)
+    if greedy_ok
+        log_event_global!(graph, "the solver found an optimal configuration")
+        return sol
+    else
+        enforce_optimality!(sol, graph)
+        if lower_bound ≢ nothing
+            @assert all(sol .≥ lower_bound)
+            @assert all((sol .≥ previous_sol) .| (previous_sol .== spp))
+        end
+        if sol ≠ previous_sol
+            log_event_global!(graph, "the solver found a feasible configuration and will try to improve it")
+            new_lower_bound = copy(sol)
+            uninst_mask = sol .== spp
+            new_lower_bound[uninst_mask] .= 1
+            if lower_bound ≢ nothing
+                lb_mask = uninst_mask .& (lower_bound .≠ spp)
+                new_lower_bound[lb_mask] = lower_bound[lb_mask]
+                @assert all(new_lower_bound .≥ lower_bound)
+            end
+            return _resolve(graph, new_lower_bound, sol)
+        else
+            log_event_global!(graph, "the solver found a feasible configuration and can't improve it")
+            return sol
+        end
+    end
 end
 
 """
@@ -116,7 +176,10 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
         Set{Int}(1:graph.np) :
         Set{Int}(graph.data.pdict[p] for p in sources)
 
-    simplify_graph!(graph, isources)
+    propagate_constraints!(graph)
+    disable_unreachable!(graph, isources)
+    prune_graph!(graph)
+    compute_eq_classes!(graph)
 
     np = graph.np
     spp = graph.spp
@@ -174,7 +237,8 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
 
         ok, sol = greedysolver(graph)
         ok && @goto done
-        ok, sol = maxsum(graph)
+        maxsum_result, sol = maxsum(graph)
+        ok = maxsum_result == :ok
 
         @label done
 
@@ -245,7 +309,7 @@ function greedysolver(graph::Graph)
     gconstr = graph.gconstr
 
     # initialize solution: all uninstalled
-    sol = [spp[p0] for p0 = 1:np]
+    sol = Int[spp[p0] for p0 = 1:np]
 
     # packages which are not allowed to be uninstalled
     # (NOTE: this is potentially a superset of graph.req_inds,
@@ -298,6 +362,8 @@ function greedysolver(graph::Graph)
                     return (false, Int[])
                 elseif old_v1 == spp[p1]
                     sol[p1] = v1
+                    fill!(gconstr[p1], false)
+                    gconstr[p1][v1] = true
                     push!(staged_next, p1)
                 end
             end
@@ -436,7 +502,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
         copy!(old_sol, sol)
         push!(allsols, copy(sol))
 
-        # step 1: uninstall unneded packages
+        # step 1: uninstall unneeded packages
         _uninstall_unreachable!(sol, why, graph)
 
         # setp 2: try to bump each installed package in turn

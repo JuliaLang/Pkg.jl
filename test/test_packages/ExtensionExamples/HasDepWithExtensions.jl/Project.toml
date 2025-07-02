@@ -1,0 +1,19 @@
+name = "HasDepWithExtensions"
+uuid = "d4ef3d4a-8e22-4710-85d8-c6cf2eb9efca"
+version = "0.1.0"
+
+[deps]
+HasExtensions = "4d3288b3-3afc-4bb6-85f3-489fffe514c8"
+IndirectArrays = "9b13fd28-a010-5f03-acff-a1bbcff69959"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+
+[compat]
+HasExtensions = "0.1"
+IndirectArrays = "1.0"
+OffsetArrays = "1.12"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

@@ -1,0 +1,4 @@
+name = "LocalPkg"
+uuid = "fcf55292-0d03-4e8a-9e0b-701580031fc3"
+authors = ["KristofferC <kristoffer.carlsson@juliacomputing.com>"]
+version = "0.1.0"
