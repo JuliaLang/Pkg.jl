@@ -724,7 +724,7 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
-# Use HTTPS for GitHub (default, good for most users)  
+# Use HTTPS for GitHub (default, good for most users)
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
 
 # Reset to default (let package developer decide)
