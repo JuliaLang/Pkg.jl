@@ -1250,7 +1250,7 @@ function write_env(env::EnvCache; update_undo=true,
     if env.project.readonly
         pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
     end
-    
+
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end

@@ -6,6 +6,7 @@ Pkg v1.12 Release Notes
   to take a `workspace` option. Read more about this feature in the manual about the TOML-files.
 - `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
 - Packages are also automatically added to `[sources]` when they are added by url or devved.
+- Enhanced fuzzy matching algorithm for package name suggestions.
 
 Pkg v1.11 Release Notes
 =======================
