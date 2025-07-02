@@ -5,13 +5,13 @@ function _shared_envs()
     possible = String[]
     for depot in Base.DEPOT_PATH
         envdir = joinpath(depot, "environments")
-        isdir(envdir) || continue
+        Base.isaccessibledir(envdir) || continue
         append!(possible, readdir(envdir))
     end
     return possible
 end
 
-function complete_activate(options, partial, i1, i2)
+function complete_activate(options, partial, i1, i2; hint::Bool)
     shared = get(options, :shared, false)
     if shared
         return _shared_envs()
@@ -37,7 +37,9 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
     cmp = REPL.REPLCompletions.complete_path(s, i2, shell_escape=true)
     cmp2 = cmp[2]
     completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
-    completions = filter!(x -> isdir(s[1:prevind(s, first(cmp2)-i1+1)]*x), completions)
+    completions = filter!(completions) do x
+        Base.isaccessibledir(s[1:prevind(s, first(cmp2)-i1+1)]*x)
+    end
     if expanded_user
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
             completions = [joinpath(s, "")]
@@ -52,8 +54,9 @@ end
 
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-function complete_remote_package(partial)
-    isempty(partial) && return String[]
+function complete_remote_package!(comps, partial; hint::Bool)
+    isempty(partial) && return true # true means returned early
+    found_match = !isempty(comps)
     cmp = Set{String}()
     for reg in Registry.reachable_registries()
         for (uuid, regpkg) in reg
@@ -69,7 +72,6 @@ function complete_remote_package(partial)
                     is_julia_compat = nothing
                     for (pkg_uuid, vspec) in uncompressed_compat
                         if pkg_uuid == JULIA_UUID
-                            found_julia_compat = true
                             is_julia_compat = VERSION in vspec
                             is_julia_compat && continue
                         end
@@ -77,16 +79,23 @@ function complete_remote_package(partial)
                     # Found a compatible version or compat on julia at all => compatible
                     if is_julia_compat === nothing || is_julia_compat
                         push!(cmp, name)
+                        # In hint mode the result is only used if there is a single matching entry
+                        # so we can return no matches in case of more than one match
+                        if hint && found_match
+                            return true # true means returned early
+                        end
+                        found_match = true
                         break
                     end
                 end
             end
         end
     end
-    return sort!(collect(cmp))
+    append!(comps, sort!(collect(cmp)))
+    return false # false means performed full search
 end
 
-function complete_help(options, partial)
+function complete_help(options, partial; hint::Bool)
     names = String[]
     for cmds in values(SPECS)
          append!(names, [spec.canonical_name for spec in values(cmds)])
@@ -94,7 +103,7 @@ function complete_help(options, partial)
     return sort!(unique!(append!(names, collect(keys(SPECS)))))
 end
 
-function complete_installed_packages(options, partial)
+function complete_installed_packages(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -106,7 +115,7 @@ function complete_installed_packages(options, partial)
         unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
-function complete_all_installed_packages(options, partial)
+function complete_all_installed_packages(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -115,7 +124,7 @@ function complete_all_installed_packages(options, partial)
     return unique!([entry.name for (uuid, entry) in env.manifest])
 end
 
-function complete_installed_packages_and_compat(options, partial)
+function complete_installed_packages_and_compat(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -127,7 +136,7 @@ function complete_installed_packages_and_compat(options, partial)
     end
 end
 
-function complete_fixed_packages(options, partial)
+function complete_fixed_packages(options, partial; hint::Bool)
     env = try EnvCache()
     catch err
         err isa PkgError || rethrow()
@@ -136,16 +145,34 @@ function complete_fixed_packages(options, partial)
     return unique!([entry.name for (uuid, entry) in env.manifest.deps if Operations.isfixed(entry)])
 end
 
-function complete_add_dev(options, partial, i1, i2)
+function complete_add_dev(options, partial, i1, i2; hint::Bool)
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
         return comps, idx, !isempty(comps)
     end
-    comps = vcat(comps, sort(complete_remote_package(partial)))
-    if !isempty(partial)
-        append!(comps, filter!(startswith(partial), first.(values(Types.stdlibs()))))
+    returned_early = complete_remote_package!(comps, partial; hint)
+    # returning early means that no further search should be done here
+    if !returned_early
+        append!(comps, filter!(startswith(partial), [info.name for info in values(Types.stdlib_infos())]))
     end
     return comps, idx, !isempty(comps)
+end
+
+# TODO: Move
+import Pkg: Operations, Types, Apps
+function complete_installed_apps(options, partial; hint)
+    manifest = try
+        Types.read_manifest(joinpath(Apps.app_env_folder(), "AppManifest.toml"))
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    apps = String[]
+    for (uuid, entry) in manifest.deps
+        append!(apps, keys(entry.apps))
+        push!(apps, entry.name)
+    end
+    return unique!(apps)
 end
 
 ########################
@@ -177,7 +204,22 @@ complete_opt(opt_specs) =
 
 function complete_argument(spec::CommandSpec, options::Vector{String},
                            partial::AbstractString, offset::Int,
-                           index::Int)
+                           index::Int; hint::Bool)
+    if spec.completions isa Symbol
+        # if completions is a symbol, it is a function in REPLExt that needs to be forwarded
+        # to REPLMode (couldn't be linked there because REPLExt is not a dependency of REPLMode)
+        completions = try
+            getglobal(REPLExt, spec.completions)
+        catch
+            @error "REPLMode indicates a completion function called :$(spec.completions) that cannot be found in REPLExt"
+            rethrow()
+        end
+        spec.completions = function(opts, partial, offset, index; hint::Bool)
+                applicable(completions, opts, partial, offset, index) ?
+                    completions(opts, partial, offset, index; hint) :
+                    completions(opts, partial; hint)
+            end
+    end
     spec.completions === nothing && return String[]
     # finish parsing opts
     local opts
@@ -187,12 +229,10 @@ function complete_argument(spec::CommandSpec, options::Vector{String},
         e isa PkgError && return String[]
         rethrow()
     end
-    return applicable(spec.completions, opts, partial, offset, index) ?
-        spec.completions(opts, partial, offset, index) :
-        spec.completions(opts, partial)
+    return spec.completions(opts, partial, offset, index; hint)
 end
 
-function _completions(input, final, offset, index)
+function _completions(input, final, offset, index; hint::Bool)
     statement, word_count, partial = nothing, nothing, nothing
     try
         words = tokenize(input)[end]
@@ -215,11 +255,11 @@ function _completions(input, final, offset, index)
         command_is_focused() && return String[], 0:-1, false
 
         if final # complete arg by default
-            x = complete_argument(statement.spec, statement.options, partial, offset, index)
+            x = complete_argument(statement.spec, statement.options, partial, offset, index; hint)
         else # complete arg or opt depending on last token
             x = is_opt(partial) ?
                 complete_opt(statement.spec.option_specs) :
-                complete_argument(statement.spec, statement.options, partial, offset, index)
+                complete_argument(statement.spec, statement.options, partial, offset, index; hint)
         end
     end
 
@@ -234,7 +274,7 @@ function _completions(input, final, offset, index)
     end
 end
 
-function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
+function completions(full, index; hint::Bool=false)::Tuple{Vector{String},UnitRange{Int},Bool}
     pre = full[1:index]
     isempty(pre) && return default_commands(), 0:-1, false # empty input -> complete commands
     offset_adjust = 0
@@ -246,5 +286,5 @@ function completions(full, index)::Tuple{Vector{String},UnitRange{Int},Bool}
     last = split(pre, ' ', keepempty=true)[end]
     offset = isempty(last) ? index+1+offset_adjust : last.offset+1+offset_adjust
     final  = isempty(last) # is the cursor still attached to the final token?
-    return _completions(pre, final, offset, index)
+    return _completions(pre, final, offset, index; hint)
 end

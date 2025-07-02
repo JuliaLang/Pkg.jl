@@ -9,7 +9,7 @@ const formats = Any[
     Documenter.HTML(
         prettyurls = get(ENV, "CI", nothing) == "true",
         canonical = "https://julialang.github.io/Pkg.jl/v1/",
-        assets = ["assets/custom.css"],
+        assets = ["assets/custom.css", "assets/favicon.ico"],
     ),
 ]
 if "pdf" in ARGS
@@ -35,6 +35,7 @@ makedocs(
         "managing-packages.md",
         "environments.md",
         "creating-packages.md",
+        "apps.md",
         "compatibility.md",
         "registries.md",
         "artifacts.md",
@@ -42,6 +43,7 @@ makedocs(
         "toml-files.md",
         "repl.md",
         "api.md",
+        "protocol.md",
     ],
 )
 
