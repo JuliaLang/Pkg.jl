@@ -23,7 +23,7 @@ export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_I
 export Registry, RegistrySpec
 
 public activate, add, build, compat, develop, free, gc, generate, instantiate,
-       pin, precompile, redo, rm, resolve, status, test, undo, update, why
+       pin, precompile, redo, rm, resolve, status, test, undo, update, why, satisfies_compat
 
 depots() = Base.DEPOT_PATH
 function depots1(depot_list::Union{String, Vector{String}}=depots())
@@ -885,6 +885,7 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     end
 end
 
+const satisfies_compat = API.satisfies_compat
 
 ##################
 # Precompilation #

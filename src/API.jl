@@ -1641,4 +1641,27 @@ function auto_gc(on::Bool)
     return pstate
 end
 
+"""
+    satisfies_compat(ver::VersionNumber, compat_entry::String)
+
+Check if a particular version is contained in a particular [compat] entry.
+
+## Examples
+
+```jldoctest
+julia> Pkg.satisfies_compat(v"1.2.3", "1")
+true
+
+julia> Pkg.satisfies_compat(v"1.2.3", "=1.2.3")
+true
+
+julia> Pkg.satisfies_compat(v"1.2.3", "=1.2.4")
+false
+```
+"""
+function satisfies_compat(ver::VersionNumber, compat_entry::AbstractString)
+    spec = Types.semver_spec(compat_entry)
+    return ver in spec
+end
+
 end # module
