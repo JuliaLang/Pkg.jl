@@ -11,6 +11,7 @@ import LibGit2
 using Printf
 
 use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
+const RESOLVING_DELTAS_HEADER = "Resolving Deltas:"
 
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
@@ -18,7 +19,10 @@ function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     bar = p[:transfer_progress]
     @assert typeof(bar) == MiniProgressBar
     if progress.total_deltas != 0
-        bar.header = "Resolving Deltas:"
+        if bar.header != RESOLVING_DELTAS_HEADER
+            bar.header = RESOLVING_DELTAS_HEADER
+            bar.prev = 0
+        end
         bar.max = progress.total_deltas
         bar.current = progress.indexed_deltas
     else
@@ -91,18 +95,8 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
-    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    bar = MiniProgressBar(header = "Cloning:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
-    callbacks = if fancyprint
-        LibGit2.Callbacks(
-            :transfer_progress => (
-                @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
-                bar,
-            )
-        )
-    else
-        LibGit2.Callbacks()
-    end
     fancyprint && start_progress(io, bar)
     if credentials === nothing
         credentials = LibGit2.CachedCredentials()
@@ -117,8 +111,18 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
             end
             return LibGit2.GitRepo(source_path)
         else
+            callbacks = if fancyprint
+                LibGit2.Callbacks(
+                    :transfer_progress => (
+                        @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
+                        bar,
+                    )
+                )
+            else
+                LibGit2.Callbacks()
+            end
             mkpath(source_path)
-            return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+            return LibGit2.clone(url, source_path; callbacks, credentials, kwargs...)
         end
     catch err
         rm(source_path; force=true, recursive=true)
@@ -165,17 +169,15 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     try
         if use_cli_git()
             let remoteurl=remoteurl
-                cd(LibGit2.path(repo)) do
-                    cmd = `git fetch -q $remoteurl $(only(refspecs))`
-                    try
-                        run(pipeline(cmd; stdout=devnull))
-                    catch err
-                        Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
-                    end
+                cmd = `git -C $(LibGit2.path(repo)) fetch -q $remoteurl $(only(refspecs))`
+                try
+                    run(pipeline(cmd; stdout=devnull))
+                catch err
+                    Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
                 end
             end
         else
-            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
+            return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
         end
     catch err
         err isa LibGit2.GitError || rethrow()

@@ -1,4 +1,4 @@
-# [**11.** API Reference](@id API-Reference)
+# [**13.** API Reference](@id API-Reference)
 
 This section describes the functional API for interacting with Pkg.jl.
 It is recommended to use the functional API, rather than the Pkg REPL mode,
@@ -78,4 +78,11 @@ Pkg.Artifacts.download_artifact
 Pkg.Artifacts.ensure_artifact_installed
 Pkg.Artifacts.ensure_all_artifacts_installed
 Pkg.Artifacts.archive_artifact
+```
+
+## [Package Server Authentication Hooks](@id Package-Server-Authentication-Hooks)
+
+```@docs
+Pkg.PlatformEngines.register_auth_error_handler
+Pkg.PlatformEngines.deregister_auth_error_handler
 ```

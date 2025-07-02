@@ -7,9 +7,8 @@ using ..Utils
 temp_pkg_dir() do project_path
     @testset "test Project.toml manifest" begin
         mktempdir() do dir
-            path = abspath(joinpath(dirname(pathof(Pkg)), "../test", "test_packages", "monorepo"))
-            cp(path, joinpath(dir, "monorepo"))
-            cd(joinpath(dir, "monorepo")) do
+            path = copy_test_package(dir, "monorepo")
+            cd(path) do
                 with_current_env() do
                     Pkg.develop(path="packages/B")
                 end

@@ -1,4 +1,4 @@
-# **6.** Registries
+# **8.** Registries
 
 Registries contain information about packages, such as
 available releases and dependencies, and where they can be downloaded.
@@ -21,7 +21,6 @@ registry.
 
 If a custom registry has been installed causing the `General` registry
 to not be automatically installed, it is easy to add it manually:
-be added automatically. In that case, we can simply add the `General`
 
 
 ```julia-repl

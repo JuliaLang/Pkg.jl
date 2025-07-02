@@ -10,6 +10,8 @@ using UUIDs
 using Test
 using TOML
 import LibGit2
+import REPL
+const REPLExt = Base.get_extension(Pkg, :REPLExt)
 
 using ..Utils
 
@@ -55,14 +57,18 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     tmp_pkg_path = mktempdir()
 
     pkg"activate ."
-    pkg"add Example@0.5"
+    pkg"add Example@0.5.3"
     @test isinstalled(TEST_PKG)
     v = Pkg.dependencies()[TEST_PKG.uuid].version
+    @test v == v"0.5.3"
     pkg"rm Example"
     pkg"add Example, Random"
     pkg"rm Example Random"
     pkg"add Example,Random"
     pkg"rm Example,Random"
+    # Test leading whitespace handling (issue #4239)
+    pkg"    add Example, Random"
+    pkg"rm Example Random"
     pkg"add Example#master"
     pkg"rm Example"
     pkg"add https://github.com/JuliaLang/Example.jl#master"
@@ -120,6 +126,8 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
     mktempdir() do tmp_dev_dir
     withenv("JULIA_PKG_DEVDIR" => tmp_dev_dir) do
         pkg"develop Example"
+        pkg"develop Example,PackageCompiler"
+        pkg"develop Example PackageCompiler"
 
         # Copy the manifest + project and see that we can resolve it in a new environment
         # and get all the packages installed
@@ -133,12 +141,14 @@ temp_pkg_dir(;rm=false) do project_path; cd(project_path) do;
                 write("Manifest.toml", manifest)
                 mktempdir() do depot_dir
                     pushfirst!(DEPOT_PATH, depot_dir)
+                    Base.append_bundled_depot_path!(DEPOT_PATH)
                     pkg"instantiate"
                     @test Pkg.dependencies()[pkg2_uuid].version == v"0.2.0"
                 end
             finally
                 empty!(DEPOT_PATH)
                 append!(DEPOT_PATH, old_depot)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
             end
         end # cd_tempdir
     end # withenv
@@ -162,6 +172,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             try
                 empty!(DEPOT_PATH)
                 pushfirst!(DEPOT_PATH, depot_dir)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
                 withenv("JULIA_PKG_DEVDIR" => tmp) do
                     # Test an unregistered package
                     p1_path = joinpath(@__DIR__, "test_packages", "UnregisteredWithProject")
@@ -176,6 +187,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
             finally
                 empty!(DEPOT_PATH)
                 append!(DEPOT_PATH, old_depot)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
             end
         end # withenv
     end # mktempdir
@@ -288,7 +300,7 @@ temp_pkg_dir() do depot
     end
 end
 
-test_complete(s) = Pkg.REPLMode.completions(s, lastindex(s))
+test_complete(s) = REPLExt.completions(s, lastindex(s))
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     str[1:prevind(str, first(r))]*first(c)
@@ -596,32 +608,32 @@ end
     end
 
     with_temp_env("SomeEnv") do
-        @test Pkg.REPLMode.promptf() == "(SomeEnv) pkg> "
+        @test REPLExt.promptf() == "(SomeEnv) pkg> "
     end
 
     with_temp_env("this_is_a_test_for_truncating_long_folder_names_in_the_prompt") do
-        @test Pkg.REPLMode.promptf() == "(this_is_a_test_for_truncati...) pkg> "
+        @test REPLExt.promptf() == "(this_is_a_test_for_truncati...) pkg> "
     end
 
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")
-        @test Pkg.REPLMode.promptf() == "($env_name) pkg> "
+        @test REPLExt.promptf() == "($env_name) pkg> "
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test REPLExt.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
         cd(env_path) do
-            @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+            @test REPLExt.promptf() == "($newname) pkg> "
         end
-        @test Pkg.REPLMode.promptf() == "($newname) pkg> "
+        @test REPLExt.promptf() == "($newname) pkg> "
     end
 end
 
@@ -711,16 +723,30 @@ end
 
 @testset "REPL missing package install hook" begin
     isolate(loaded_depot=true) do
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:notapackage]) == false
+        @test REPLExt.try_prompt_pkg_add(Symbol[:notapackage]) == false
 
         # don't offer to install the dummy "julia" entry that's in General
-        @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:julia]) == false
+        @test REPLExt.try_prompt_pkg_add(Symbol[:julia]) == false
 
         withreply("n") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
         end
         withreply("y") do
-            @test Pkg.REPLMode.try_prompt_pkg_add(Symbol[:Example]) == true
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
+        end
+    end
+end
+
+@testset "JuliaLang/julia #55850" begin
+    mktempdir() do tmp
+        copy_this_pkg_cache(tmp)
+        tmp_sym_link = joinpath(tmp, "sym")
+        symlink(tmp, tmp_sym_link; dir_target=true)
+        depot_path = tmp_sym_link * (Sys.iswindows() ? ";" : ":")
+        # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
+        withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
+            prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+            @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
         end
     end
 end

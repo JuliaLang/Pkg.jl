@@ -57,7 +57,7 @@ let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git
     name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
 
     # Match a `#BRANCH` branch or tag specifier.
-    branch = raw"\#\s*[^@\#\s]*",
+    branch = raw"\#\s*[^@^:\s]+",
 
     # Match an `@VERSION` version specifier.
     version = raw"@\s*[^@\#\s]*",
@@ -94,19 +94,34 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
     # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
     function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
         (isempty(args) || args[1] isa PackageIdentifier) && return
-        modifier = popfirst!(args)
-        if modifier isa Subdir
-            pkg.subdir = modifier.dir
-            (isempty(args) || args[1] isa PackageIdentifier) && return
+        parsed_subdir = false
+        parsed_version = false
+        parsed_rev = false
+        while !isempty(args)
             modifier = popfirst!(args)
-        end
-
-        if modifier isa VersionToken
-            pkg.version = modifier.version
-        elseif modifier isa Rev
-            pkg.rev = modifier.rev
-        else
-            pkgerror("Package name/uuid must precede subdir specifier `$args`.")
+            if modifier isa Subdir
+                if parsed_subdir
+                    pkgerror("Multiple subdir specifiers `$args` found.")
+                end
+                pkg.subdir = modifier.dir
+                (isempty(args) || args[1] isa PackageIdentifier) && return
+                modifier = popfirst!(args)
+                parsed_subdir = true
+            elseif modifier isa VersionToken
+                if parsed_version
+                    pkgerror("Multiple version specifiers `$args` found.")
+                end
+                pkg.version = modifier.version
+                parsed_version = true
+            elseif modifier isa Rev
+                if parsed_rev
+                    pkgerror("Multiple revision specifiers `$args` found.")
+                end
+                pkg.rev = modifier.rev
+                parsed_rev = true
+            else
+                pkgerror("Package name/uuid must precede subdir specifier `$args`.")
+            end
         end
     end
 
@@ -203,6 +218,15 @@ function parse_registry(word::AbstractString; add=false)::RegistrySpec
     end
     return registry
 end
+
+#
+# # Apps
+#
+function parse_app_add(raw_args::Vector{QString}, options)
+    return parse_package(raw_args, options; add_or_dev=true)
+end
+
+
 
 #
 # # Other
