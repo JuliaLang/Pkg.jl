@@ -818,7 +818,7 @@ function install_git(
     end
 end
 
-function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform())
+function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform(), include_lazy::Bool=false)
     # Check to see if this package has an (Julia)Artifacts.toml
     artifacts_tomls = Tuple{String,Base.TOML.TOMLDict}[]
     for f in artifact_names
@@ -842,7 +842,7 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 end
             else
                 # Otherwise, use the standard selector from `Artifacts`
-                artifacts = select_downloadable_artifacts(artifacts_toml; platform)
+                artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
                 push!(artifacts_tomls, (artifacts_toml, artifacts))
             end
             break
@@ -862,7 +862,9 @@ end
 function download_artifacts(ctx::Context;
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
-                            verbose::Bool=false)
+                            verbose::Bool=false,
+                            io::IO=stderr_f(),
+                            include_lazy::Bool=false)
     env = ctx.env
     io = ctx.io
     fancyprint = can_fancyprint(io)
@@ -888,7 +890,7 @@ function download_artifacts(ctx::Context;
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
 
-    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform), pkg_roots))
+    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform, include_lazy), pkg_roots))
     used_artifact_tomls = Set{String}(map(first, all_collected_artifacts))
     longest_name_length = maximum(all_collected_artifacts; init=0) do (artifacts_toml, artifacts)
         maximum(textwidth, keys(artifacts); init=0)
