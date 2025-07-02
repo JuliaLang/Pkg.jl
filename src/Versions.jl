@@ -38,9 +38,6 @@ function ≲(b::VersionBound, v::VersionNumber)
     return (v.major, v.minor, v.patch) >= (b[1], b[2], b[3])
 end
 
-≳(v::VersionNumber, b::VersionBound) = v ≲ b
-≳(b::VersionBound, v::VersionNumber) = b ≲ v
-
 function isless_ll(a::VersionBound, b::VersionBound)
     m, n = a.n, b.n
     for i = 1:min(m, n)
@@ -89,7 +86,7 @@ function isjoinable(up::VersionBound, lo::VersionBound)
     return true
 end
 
-Base.hash(r::VersionBound, h::UInt) = hash(hash(r.t, h), r.n)
+Base.hash(r::VersionBound, h::UInt) = hash(r.t, hash(r.n, h))
 
 # Hot code
 function VersionBound(s::AbstractString)
@@ -164,15 +161,15 @@ function Base.print(io::IO, r::VersionRange)
     if (m, n) == (0, 0)
         print(io, '*')
     elseif m == 0
-        print(io, "0-")
+        print(io, "0 -")
         join(io, r.upper.t, '.')
     elseif n == 0
         join(io, r.lower.t, '.')
-        print(io, "-*")
+        print(io, " - *")
     else
         join(io, r.lower.t[1:m], '.')
         if r.lower != r.upper
-            print(io, '-')
+            print(io, " - ")
             join(io, r.upper.t[1:n], '.')
         end
     end
@@ -282,14 +279,28 @@ function Base.print(io::IO, s::VersionSpec)
     end
     print(io, ']')
 end
-Base.show(io::IO, s::VersionSpec) = print(io, "VersionSpec(\"", s, "\")")
+
+function Base.show(io::IO, s::VersionSpec)
+    print(io, "VersionSpec(")
+    if length(s.ranges) == 1
+        print(io, '"', s.ranges[1], '"')
+    else
+        print(io, "[")
+        for i = 1:length(s.ranges)
+            1 < i && print(io, ", ")
+            print(io, '"', s.ranges[i], '"')
+        end
+        print(io, ']')
+    end
+    print(io, ")")
+end
 
 
 ###################
 # Semver notation #
 ###################
 
-function semver_spec(s::String)
+function semver_spec(s::String; throw = true)
     ranges = VersionRange[]
     for ver in strip.(split(strip(s), ','))
         range = nothing
@@ -301,7 +312,13 @@ function semver_spec(s::String)
                 break
             end
         end
-        found_match || error("invalid version specifier: $s")
+        if !found_match
+            if throw
+                error("invalid version specifier: \"$s\"")
+            else
+                return nothing
+            end
+        end
         push!(ranges, range)
     end
     return VersionSpec(ranges)

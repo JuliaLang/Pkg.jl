@@ -1,11 +1,15 @@
-[[Base64]]
+# This file is machine-generated - editing it directly is not advised
+
+manifest_format = "2.0"
+
+[[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
-[[Example]]
+[[deps.Example]]
 git-tree-sha1 = "902feab6e7a5830f67868832fcf6995fa74143ac"
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 version = "0.3.0"
 
-[[Markdown]]
+[[deps.Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"

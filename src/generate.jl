@@ -1,6 +1,6 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-function generate(path::String; io::IO=stdout_f())
+function generate(path::String; io::IO=stderr_f())
     base = basename(path)
     pkg = endswith(lowercase(base), ".jl") ? chop(base, tail=3) : base
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
@@ -59,7 +59,7 @@ function project(io::IO, pkg::AbstractString, dir::AbstractString)
 end
 
 function entrypoint(io::IO, pkg::AbstractString, dir)
-    genfile(io, dir, "src/$pkg.jl") do file_io
+    genfile(io, joinpath(dir, "src"), "$pkg.jl") do file_io
         print(file_io,
             """
             module $pkg
@@ -78,7 +78,7 @@ function entrypoint(io::IO, pkg::AbstractString, dir)
             \"""
             domath(x::Number) = x + 5
 
-            end # module
+            end # module $pkg
             """
         )
     end

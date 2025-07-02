@@ -40,7 +40,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "OldOnly1")
                 cp(joinpath(test_package_parent_dir, "OldOnly1"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()
@@ -73,7 +73,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "OldOnly2")
                 cp(joinpath(test_package_parent_dir, "OldOnly2"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()
@@ -133,7 +133,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "BothOldAndNew")
                 cp(joinpath(test_package_parent_dir, "BothOldAndNew"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()
@@ -198,7 +198,7 @@ const test_package_parent_dir = joinpath(
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "NewOnly")
                 cp(joinpath(test_package_parent_dir, "NewOnly"), test_package; force = true)
-                Utils.isolate() do
+                Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()
                     Pkg.build()
@@ -261,7 +261,7 @@ const test_package_parent_dir = joinpath(
                 # will break this test. Therefore, we intentionally run this
                 # test using a fixed version of the General registry.
                 registry_url = "https://github.com/JuliaRegistries/General.git"
-                registry_commit = "982ab1618f87a7dc69c3617e124a6ad83a22b1c5"
+                registry_commit = "8129a7701ba2bd95bd83b90178114dd3aa2d3295"
                 Utils.isolate_and_pin_registry(; registry_url, registry_commit) do
                     Pkg.activate(test_package)
                     Pkg.instantiate()

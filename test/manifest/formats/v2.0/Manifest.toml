@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.0-DEV.1199"
+julia_version = "1.7.0-DEV"
 manifest_format = "2.0"
 some_other_field = "other"
 some_other_data = [1,2,3,4]

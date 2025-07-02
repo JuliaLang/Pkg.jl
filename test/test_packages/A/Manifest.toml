@@ -1,17 +1,19 @@
 # This file is machine-generated - editing it directly is not advised
 
-[[B]]
+manifest_format = "2.0"
+
+[[deps.B]]
 path = "dev/B"
 uuid = "dd0d8fba-d7c4-4f8e-a2bb-3a090b3e34f1"
 version = "0.1.0"
 
-[[C]]
+[[deps.C]]
 deps = ["D"]
 path = "dev/C"
 uuid = "4ee78ca3-4e78-462f-a078-747ed543fa85"
 version = "0.1.0"
 
-[[D]]
+[[deps.D]]
 path = "dev/D"
 uuid = "bf733257-898a-45a0-b2f2-c1c188bdd879"
 version = "0.1.0"

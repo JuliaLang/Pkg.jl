@@ -1,0 +1,4 @@
+name = "HasDepWithExtensions"
+uuid = "d4ef3d4a-8e22-4710-85d8-c6cf2eb9efca"
+repo = "https://github.com/KristofferC/GluePkgExamples.jl.git"
+subdir = "HasDepWithExtensions.jl"
