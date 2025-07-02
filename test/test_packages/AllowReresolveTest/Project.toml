@@ -1,0 +1,16 @@
+name = "AllowReresolveTest"
+uuid = "12345678-1234-1234-1234-123456789abc"
+version = "0.1.0"
+
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+
+[compat]
+Example = "0.5"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Example", "Test"]
+build = ["Example"]
