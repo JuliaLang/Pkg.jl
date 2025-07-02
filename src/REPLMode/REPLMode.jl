@@ -4,7 +4,9 @@ module REPLMode
 
 @eval Base.Experimental.@compiler_options optimize = 1
 
-using Markdown, UUIDs, Dates
+using Dates: Dates, Hour
+using Markdown: Markdown, @md_str
+using UUIDs: UUIDs, UUID
 
 import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve, ..Apps

@@ -5,10 +5,9 @@ module GitTools
 using ..Pkg
 using ..MiniProgressBars
 import ..can_fancyprint, ..printpkgstyle, ..stdout_f
-using SHA
-import Base: SHA1
+using SHA: SHA, update!
 import LibGit2
-using Printf
+using Printf: Printf
 
 use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
 const RESOLVING_DELTAS_HEADER = "Resolving Deltas:"
@@ -75,7 +74,7 @@ function ensure_clone(io::IO, target_path, url; kwargs...)
     if ispath(target_path)
         return LibGit2.GitRepo(target_path)
     else
-        return GitTools.clone(io, url, target_path; kwargs...)
+        return clone(io, url, target_path; kwargs...)
     end
 end
 

@@ -13,7 +13,7 @@ end
 
 import Random
 import TOML
-using Dates
+using Dates: Day, Period, Second
 
 export @pkg_str
 export PackageSpec
@@ -25,13 +25,12 @@ export Registry, RegistrySpec
 public activate, add, build, compat, develop, free, gc, generate, instantiate,
     pin, precompile, redo, rm, resolve, status, test, undo, update, why
 
-depots() = Base.DEPOT_PATH
-function depots1(depot_list::Union{String, Vector{String}} = depots())
+function depots1(depot_list::Union{String, Vector{String}} = Base.DEPOT_PATH)
     # Get the first depot from a list, with proper error handling
     if depot_list isa String
         return depot_list
     else
-        isempty(depot_list) && Pkg.Types.pkgerror("no depots provided")
+        isempty(depot_list) && Types.pkgerror("no depots provided")
         return depot_list[1]
     end
 end
@@ -87,7 +86,7 @@ include("Apps/Apps.jl")
 include("REPLMode/REPLMode.jl")
 
 import .REPLMode: @pkg_str
-import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
+import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
 import .Types: PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 
@@ -879,7 +878,7 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     return if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
         printpkgstyle(ctx.io, :Info, "We haven't cleaned this depot up for a bit, running Pkg.gc()...", color = Base.info_color())
         try
-            Pkg.gc(ctx; collect_delay)
+            gc(ctx; collect_delay)
             DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = curr_time
         catch ex
             @error("GC failed", exception = ex)
@@ -894,7 +893,7 @@ end
 
 function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
     if should_autoprecompile()
-        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
     return
 end
@@ -903,7 +902,7 @@ include("precompile.jl")
 
 # Reset globals that might have been mutated during precompilation.
 DEFAULT_IO[] = nothing
-Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
+UPDATED_REGISTRY_THIS_SESSION[] = false
 PREV_ENV_PATH[] = ""
 Types.STDLIB[] = nothing
 
