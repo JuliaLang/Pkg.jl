@@ -724,10 +724,7 @@ end
 ################
 
 function installed()
-    @warn "Pkg.installed() is deprecated. Use Pkg.dependencies() instead.
-    To get a list of package names that have been explicitly added to the 
-    current project (direct dependencies), you can do:
-    `[dep.second.name for dep in Pkg.dependencies() if dep.second.is_direct_dep]`."
+    @warn "`Pkg.installed()` is deprecated. Use `Pkg.dependencies()` instead." maxlog=1
     deps = dependencies()
     installs = Dict{String, VersionNumber}()
     for (uuid, dep) in deps
