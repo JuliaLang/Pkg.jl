@@ -520,10 +520,11 @@ dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
 After packages have been installed the project will be precompiled.
-See more at [Environment Precompilation](@ref).
+See more and how to disable auto-precompilation at [Environment Precompilation](@ref).
 
 !!! compat "Julia 1.12"
     The `julia_version_strict` keyword argument requires at least Julia 1.12.
+
 """
 const instantiate = API.instantiate
 
