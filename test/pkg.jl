@@ -207,6 +207,18 @@ temp_pkg_dir() do project_path
 
     @testset "package with wrong UUID" begin
         @test_throws PkgError Pkg.add(PackageSpec(TEST_PKG.name, UUID(UInt128(1))))
+        @testset "package with wrong UUID but correct name" begin
+            try
+                Pkg.add(PackageSpec(name="Example", uuid=UUID(UInt128(2))))
+            catch e
+                @test e isa PkgError
+                errstr = sprint(showerror, e)
+                @test occursin("expected package `Example [00000000]` to be registered", errstr)
+                @test occursin("You may have provided the wrong UUID for package Example.", errstr)
+                @test occursin("Found the following UUIDs for that name:", errstr)
+                @test occursin("- 7876af07-990d-54b4-ab0e-23690620f79a from registry: General", errstr)
+            end
+        end
         # Missing uuid
         @test_throws PkgError Pkg.add(PackageSpec(uuid = uuid4()))
     end
@@ -269,8 +281,9 @@ temp_pkg_dir() do project_path
     end
 
     @testset "develop / freeing" begin
-        Pkg.add(TEST_PKG.name)
+        Pkg.add(name=TEST_PKG.name, version=v"0.5.3")
         old_v = Pkg.dependencies()[TEST_PKG.uuid].version
+        @test old_v == v"0.5.3"
         Pkg.rm(TEST_PKG.name)
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
@@ -299,11 +312,27 @@ temp_pkg_dir() do project_path
                     touch("deps.jl")
                     """
                 )
+                exa_proj = joinpath(devdir, TEST_PKG.name, "Project.toml")
+                proj_str = read(exa_proj, String)
+                compat_onwards = split(proj_str, "[compat]")[2]
+                open(exa_proj, "w") do io
+                    println(io, """
+                    name = "Example"
+                    uuid = "$(TEST_PKG.uuid)"
+                    version = "100.0.0"
+
+                    [compat]
+                    $compat_onwards
+                    """)
+                end
+                Pkg.resolve()
+                @test Pkg.dependencies()[TEST_PKG.uuid].version == v"100.0.0"
                 Pkg.build(TEST_PKG.name)
                 @test isfile(joinpath(devdir, TEST_PKG.name, "deps", "deps.jl"))
                 Pkg.test(TEST_PKG.name)
                 Pkg.free(TEST_PKG.name)
-                @test Pkg.dependencies()[TEST_PKG.uuid].version == old_v
+                @test Pkg.dependencies()[TEST_PKG.uuid].version < v"100.0.0"
+                @test Pkg.dependencies()[TEST_PKG.uuid].version >= old_v
             end
         end
     end
@@ -384,12 +413,12 @@ temp_pkg_dir() do project_path
         Sys.CPU_THREADS == 1 && error("Cannot test for atomic usage log file interaction effectively with only Sys.CPU_THREADS=1")
         # Precompile Pkg given we're in a different depot
         # and make sure the General registry is installed
-        Utils.show_output_if_command_errors(`$(Base.julia_cmd()[1]) --project="$(pkgdir(Pkg))" -e "import Pkg; isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add()"`)
+        Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add()"`)
         flag_start_dir = tempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
         flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
         for i in 1:Sys.CPU_THREADS
             iob = IOBuffer()
-            t = @async run(pipeline(`$(Base.julia_cmd()[1]) --project="$(pkgdir(Pkg))"
+            t = @async run(pipeline(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
                 -e "import Pkg;
                 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
                 Pkg.activate(temp = true);
@@ -571,6 +600,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
     cd(tmp) do; @testset "instantiating updated repo" begin
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo1)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         LibGit2.close(LibGit2.clone(TEST_PKG.url, "Example.jl"))
         mkdir("machine1")
         cd("machine1")
@@ -580,6 +610,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cp("machine1", "machine2")
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo2)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         cd("machine2")
         Pkg.activate(".")
         Pkg.instantiate()
@@ -595,6 +626,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cd("../machine1")
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo1)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.activate(".")
         Pkg.update()
         cd("..")
@@ -602,6 +634,7 @@ temp_pkg_dir() do project_path; cd(project_path) do
         cd("machine2")
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, depo2)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.activate(".")
         Pkg.instantiate()
     end end
@@ -757,6 +790,7 @@ end
 @testset "undo redo functionality" begin
     unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
     temp_pkg_dir() do project_path; with_temp_env() do
+        Pkg.activate(project_path)
         # Example
         Pkg.add(TEST_PKG.name)
         @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
@@ -1031,6 +1065,41 @@ end
     end
 
     Pkg.activate(prev_project)
+end
+
+@testset "check_registered error paths" begin
+        # Test the "no registries have been installed" error path
+        isolate(loaded_depot=false, linked_reg=false) do
+            with_temp_env() do
+                # Ensure we have no registries available
+                @test isempty(Pkg.Registry.reachable_registries())
+
+                # Should install General registry automatically
+                Pkg.add("Example")
+
+                Pkg.Registry.rm("General")
+                @test isempty(Pkg.Registry.reachable_registries())
+
+                @test_throws r"no registries have been installed\. Cannot resolve the following packages:" begin
+                    Pkg.resolve()
+                end
+            end
+        end
+
+        # Test the "expected package to be registered" error path with a custom unregistered package
+        isolate(loaded_depot=true) do; mktempdir() do tempdir
+            with_temp_env() do
+                # Create a fake package with a manifest that references an unregistered UUID
+                fake_pkg_path = copy_test_package(tempdir, "UnregisteredUUID")
+                Pkg.activate(fake_pkg_path)
+
+                # This should fail with "expected package to be registered" error
+                @test_throws r"expected package.*to be registered" begin
+                    Pkg.add("JSON")  # This will fail because Example UUID in manifest is unregistered
+                end
+            end
+        end
+    end
 end
 
 end # module

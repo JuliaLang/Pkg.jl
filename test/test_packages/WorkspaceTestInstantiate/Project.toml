@@ -1,0 +1,6 @@
+name = "WorkspaceTestInstantiate"
+uuid = "96f64aaf-235f-491a-a76e-24269ac5efad"
+version = "0.1.0"
+
+[workspace]
+projects = ["test"]

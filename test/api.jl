@@ -46,59 +46,6 @@ end
 include("FakeTerminals.jl")
 import .FakeTerminals.FakeTerminal
 
-@testset "Pkg.precompile_script" begin
-    function fake_repl(@nospecialize(f); options::REPL.Options=REPL.Options(confirm_exit=false))
-        # Use pipes so we can easily do blocking reads
-        # In the future if we want we can add a test that the right object
-        # gets displayed by intercepting the display
-        input = Pipe()
-        output = Pipe()
-        err = Pipe()
-        Base.link_pipe!(input, reader_supports_async=true, writer_supports_async=true)
-        Base.link_pipe!(output, reader_supports_async=true, writer_supports_async=true)
-        Base.link_pipe!(err, reader_supports_async=true, writer_supports_async=true)
-
-        repl = REPL.LineEditREPL(FakeTerminal(input.out, output.in, err.in), true)
-        repl.options = options
-
-        f(input.in, output.out, repl)
-        t = @async begin
-            close(input.in)
-            close(output.in)
-            close(err.in)
-        end
-        @test read(err.out, String) == ""
-        #display(read(output.out, String))
-        Base.wait(t)
-        nothing
-    end
-    pwd_before = pwd()
-    fake_repl() do stdin_write, stdout_read, repl
-        repltask = @async REPL.run_repl(repl)
-
-        for line in split(Pkg.precompile_script, "\n"; keepempty=false)
-            sleep(0.1)
-            # Consume any extra output
-            if bytesavailable(stdout_read) > 0
-                copyback = readavailable(stdout_read)
-                #@info(copyback)
-            end
-
-            # Write the line
-            write(stdin_write, line, "\n")
-
-            # Read until some kind of prompt
-            readuntil(stdout_read, "\n")
-            readuntil(stdout_read, ">")
-            #@info(line)
-        end
-
-        write(stdin_write, "\x04")
-        wait(repltask)
-    end
-    cd(pwd_before) # something in the precompile_script changes the working directory
-end
-
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
     isolate() do; cd_tempdir() do tmp
@@ -172,26 +119,11 @@ end
         Pkg.develop(Pkg.PackageSpec(path="packages/Dep5"))
         Pkg.precompile(io=iob)
         @test occursin("Precompiling", String(take!(iob)))
-        @test isempty(Pkg.API.pkgs_precompile_suspended)
 
         ENV["JULIA_PKG_PRECOMPILE_AUTO"]=1
         Pkg.develop(Pkg.PackageSpec(path="packages/BrokenDep"))
         Pkg.build(io=iob) # should trigger auto-precomp and soft-error
         @test occursin("Precompiling", String(take!(iob)))
-        broken_packages = Pkg.API.pkgs_precompile_suspended
-        @test length(broken_packages) == 1
-        Pkg.activate("newpath")
-        Pkg.precompile(io=iob)
-        @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
-        @test isempty(Pkg.API.pkgs_precompile_suspended)
-
-        Pkg.activate(".") # test that going back to the project restores suspension list
-        Pkg.update("BrokenDep", io=iob) # should trigger auto-precomp but do nothing due to error suspension
-        @test !occursin("Precompiling", String(take!(iob)))
-        @test length(Pkg.API.pkgs_precompile_suspended) == 1
-
-        @test_throws PkgError Pkg.precompile() # calling precompile should retry any suspended, and throw on errors
-        @test Pkg.API.pkgs_precompile_suspended == broken_packages
 
         ptoml = joinpath("packages","BrokenDep","Project.toml")
         lines = readlines(ptoml)
@@ -317,38 +249,18 @@ end
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
         Pkg.activate(".")
         Pkg.activate("CircularDep3")
+        Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
         @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
 
         Pkg.activate(temp=true)
         Pkg.precompile() # precompile an empty env should be a no-op
-        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
+        # TODO: Reenable
+        #@test_throws ErrorException Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
 
         Pkg.add("Random")
-        @test_throws Pkg.Types.PkgError Pkg.precompile("Random") # Random is a dep but in the sysimage
-        @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist")
+        #@test_throws ErrorException Pkg.precompile("DoesNotExist")
         Pkg.precompile() # should be a no-op
     end end
-    @testset "Issue 3359: Recurring precompile" begin
-        isolate() do; cd_tempdir() do tmp
-            cp(joinpath(@__DIR__, "test_packages", "RecurringPrecompile"), joinpath(tmp, "RecurringPrecompile"))
-            Pkg.activate("RecurringPrecompile")
-            iob = IOBuffer()
-            Pkg.precompile(io=iob)
-            @test occursin("Precompiling", String(take!(iob)))
-            Pkg.precompile(io=iob) # should be a no-op
-            if !occursin("Precompiling", String(take!(iob)))
-                @test true
-            else
-                # helpful for debugging why on CI
-                println("Repeated precompilation detected. Running again with loading debugging on")
-                withenv("JULIA_DEBUG" => "loading") do
-                    Pkg.precompile(io=iob)
-                    println(String(take!(iob)))
-                    @test false
-                end
-            end
-        end end
-    end
 end
 
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin

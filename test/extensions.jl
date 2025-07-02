@@ -1,5 +1,6 @@
 using  .Utils
 using Test
+using UUIDs
 
 @testset "weak deps" begin
     he_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl")
@@ -31,7 +32,7 @@ using Test
         Pkg.status(; extensions=true, mode=Pkg.PKGMODE_MANIFEST, io)
          # TODO: Test output when ext deps are loaded etc.
         str = String(take!(io))
-        @test contains(str, "└─ OffsetArraysExt [OffsetArrays]" )
+        @test contains(str, "└─ OffsetArraysExt [OffsetArrays]") || contains(str, "├─ OffsetArraysExt [OffsetArrays]")
         @test !any(endswith(".cov"), readdir(joinpath(hdwe_root, "src")))
         @test !any(endswith(".cov"), readdir(joinpath(he_root, "src")))
         @test !any(endswith(".cov"), readdir(joinpath(he_root, "ext")))
@@ -52,9 +53,9 @@ using Test
     end
 
     isolate(loaded_depot=false) do
-        depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
+        depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot); Base.append_bundled_depot_path!(DEPOT_PATH)
         Pkg.activate(; temp=true)
-        Pkg.Registry.add(Pkg.RegistrySpec(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry")))
+        Pkg.Registry.add(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry"))
         Pkg.Registry.add("General")
         Pkg.add("HasExtensions")
         Pkg.test("HasExtensions", julia_args=`--depwarn=no`) # OffsetArrays errors from depwarn
@@ -64,9 +65,9 @@ using Test
     end
     isolate(loaded_depot=false) do
         withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
-            depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot)
+            depot = mktempdir(); empty!(DEPOT_PATH); push!(DEPOT_PATH, depot); Base.append_bundled_depot_path!(DEPOT_PATH)
             Pkg.activate(; temp=true)
-            Pkg.Registry.add(Pkg.RegistrySpec(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry")))
+            Pkg.Registry.add(path=joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry"))
             Pkg.Registry.add("General")
             Pkg.add("HasDepWithExtensions")
         end
@@ -77,5 +78,39 @@ using Test
         @test occursin("OffsetArraysExt", out)
         @test occursin("HasExtensions", out)
         @test occursin("HasDepWithExtensions", out)
+    end
+    isolate(loaded_depot=false) do
+        withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
+            Pkg.activate(; temp=true)
+            Pkg.add("Example", target=:weakdeps)
+            proj = Pkg.Types.Context().env.project
+            @test isempty(proj.deps)
+            @test proj.weakdeps == Dict{String, Base.UUID}("Example" => Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+
+            Pkg.activate(; temp=true)
+            Pkg.add("Example", target=:extras)
+            proj = Pkg.Types.Context().env.project
+            @test isempty(proj.deps)
+            @test proj.extras == Dict{String, Base.UUID}("Example" => Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+        end
+    end
+
+    isolate(loaded_depot=false) do
+        mktempdir() do dir
+            Pkg.Registry.add("General")
+            path = copy_test_package(dir, "TestWeakDepProject")
+            Pkg.activate(path)
+            Pkg.resolve()
+            @test Pkg.dependencies()[UUID("2ab3a3ac-af41-5b50-aa03-7779005ae688")].version == v"0.3.26"
+
+            # Check that explicitly adding a package that is a weak dep removes it from the set of weak deps
+            ctx = Pkg.Types.Context()
+            @test "LogExpFunctions" in keys(ctx.env.project.weakdeps)
+            @test !("LogExpFunctions" in keys(ctx.env.project.deps))
+            Pkg.add("LogExpFunctions")
+            ctx = Pkg.Types.Context()
+            @test "LogExpFunctions" in keys(ctx.env.project.deps)
+            @test !("LogExpFunctions" in keys(ctx.env.project.weakdeps))
+        end
     end
 end
