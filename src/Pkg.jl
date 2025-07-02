@@ -465,9 +465,7 @@ If no `Project.toml` exist in the current active project, create one with all th
 dependencies in the manifest and instantiate the resulting project.
 
 After packages have been installed the project will be precompiled.
-The automatic precompilation can be disabled by setting the environment variable
-`JULIA_PKG_PRECOMPILE_AUTO=0`.
-See more at [Environment Precompilation](@ref).
+See more and how to disable auto-precompilation at [Environment Precompilation](@ref).
 """
 const instantiate = API.instantiate
 
