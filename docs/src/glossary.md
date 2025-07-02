@@ -1,4 +1,4 @@
-# [**9.** Glossary](@id Glossary)
+# [**10.** Glossary](@id Glossary)
 
 **Project:** a source tree with a standard layout, including a `src` directory
 for the main body of Julia code, a `test` directory for testing the project,
@@ -13,7 +13,10 @@ may optionally have a manifest file:
 
 - **Manifest file:** a file in the root directory of a project, named
   `Manifest.toml` (or `JuliaManifest.toml`), describing a complete dependency graph
-  and exact versions of each package and library used by a project.
+  and exact versions of each package and library used by a project. The file name may
+  also be suffixed by `-v{major}.{minor}.toml` which julia will prefer if the version
+  matches `VERSION`, allowing multiple environments to be maintained for different julia
+  versions.
 
 **Package:** a project which provides reusable functionality that can be used by
 other Julia projects via `import X` or `using X`. A package should have a
@@ -30,8 +33,8 @@ identify the package in projects that depend on it.
 to be reused by other Julia projects. For example a web application or a
 command-line utility, or simulation/analytics code accompanying a scientific paper.
 An application may have a UUID but does not need one.
-An application may also provide global configuration options for packages it
-depends on. Packages, on the other hand, may not provide global configuration
+An application may also set and change the global configurations of packages it
+depends on. Packages, on the other hand, may not change the global state of their dependencies
 since that could conflict with the configuration of the main application.
 
 !!! note
@@ -43,7 +46,7 @@ since that could conflict with the configuration of the main application.
 
 **Environment:** the combination of the top-level name map provided by a project
 file combined with the dependency graph and map from packages to their entry points
-provided by a manifest file. For more detail see the manual section on code loading.
+provided by a manifest file. For more detail see the [manual section on code loading](https://docs.julialang.org/en/v1/manual/code-loading/).
 
 - **Explicit environment:** an environment in the form of an explicit project
   file and an optional corresponding manifest file together in a directory. If the

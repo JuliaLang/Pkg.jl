@@ -1,4 +1,4 @@
-# **7.** Registries
+# **8.** Registries
 
 Registries contain information about packages, such as
 available releases and dependencies, and where they can be downloaded.
@@ -21,7 +21,6 @@ registry.
 
 If a custom registry has been installed causing the `General` registry
 to not be automatically installed, it is easy to add it manually:
-be added automatically. In that case, we can simply add the `General`
 
 
 ```julia-repl
@@ -92,6 +91,73 @@ pkg> registry up
 
 Registries automatically update once per session when a package operation is performed so it
 rarely has to be done manually.
+
+## Registry format
+
+In a registry, each package gets its own directory; in that directory
+are the following files: `Compat.toml`, `Deps.toml`, `Package.toml`,
+and `Versions.toml`.
+The formats of these files are described below.
+
+### Registry Compat.toml
+
+The `Compat.toml` file has a series of blocks specifying version
+numbers, with a set of dependencies listed below. For example,
+part of such a file might look like this:
+
+```toml
+["0.8-0.8.3"]
+DependencyA = "0.4-0.5"
+DependencyB = "0.3-0.5"
+
+["0.8.2-0.8.5"]
+DependencyC = "0.7-0"
+```
+
+Dependencies that are unchanged across a range of versions are grouped
+together in these blocks. The interpretation of these ranges is given by the comment after each line below:
+
+```toml
+"0.7-0.8"  # [0.7.0, 0.9.0)
+"0.7-0"    # [0.7.0, 1.0.0)
+"0.8.6-0"  # [0.8.6, 1.0.0)
+"0.7-*"    # [0.7.0, ∞)
+```
+
+So for this package, versions `[0.8.0, 0.8.3]` depend on versions `[0.4.0, 0.6.0)` of `DependencyA` and version `[0.3.0, 0.6.0)` of `DependencyB`.
+Meanwhile, it is also true that versions `[0.8.2, 0.8.5]` require specific versions of `DependencyC` (so that all three are required for versions `0.8.2` and `0.8.3`).
+
+### Registry flavors
+
+The default Pkg Server (`pkg.julialang.org`) offers two different "flavors" of registry.
+
+!!! compat "Julia 1.8"
+    Registry flavors are only available starting with Julia 1.8.
+
+- `conservative`: suitable for most users; all packages and artifacts in this registry flavor are available from the Pkg Server, with no need to download from other sources
+- `eager`: this registry offers the latest versions of packages, even if the Pkg and Storage Servers have not finished processing them; thus, some packages and artifacts may not be available from the Pkg Server, and thus may need to be downloaded from other sources (such as GitHub)
+
+The default registry flavor is `conservative`. We recommend that most users stick to the `conservative` flavor unless they know that they need to use the `eager` flavor.
+
+To select the `eager` flavor:
+
+```julia
+ENV["JULIA_PKG_SERVER_REGISTRY_PREFERENCE"] = "eager"
+
+import Pkg
+
+Pkg.Registry.update()
+```
+
+To select the `conservative` flavor:
+
+```julia
+ENV["JULIA_PKG_SERVER_REGISTRY_PREFERENCE"] = "conservative"
+
+import Pkg
+
+Pkg.Registry.update()
+```
 
 ### Creating and maintaining registries
 
