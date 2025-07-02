@@ -468,7 +468,7 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
     else
         julia_escaped = Base.shell_escape(julia)
         module_spec_escaped = Base.shell_escape(module_spec)
-        bash_shim(julia_escaped, module_spec_escaped, env)
+        shell_shim(julia_escaped, module_spec_escaped, env)
     end
     overwrite_file_if_different(julia_bin_filename, content)
     if Sys.isunix()
@@ -477,9 +477,9 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function bash_shim(julia_escaped::String, module_spec_escaped::String, env)
+function shell_shim(julia_escaped::String, module_spec_escaped::String, env)
     return """
-        #!/usr/bin/env bash
+        #!/bin/sh
 
         $SHIM_HEADER
 
