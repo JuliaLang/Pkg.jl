@@ -87,6 +87,9 @@ manifest = "../Manifest.toml"
 This specified `Manifest.toml` does not need to be a subset of the project's own manifest. 
 The project inherits any version constraints or package specifications from the referenced manifest and is integrated into the dependency resolution process.
 
+!!! compat "Julia 1.11"
+
+    This feature requires at least Julia 1.11. On earlier Julia version, the `manifest` entry in the `Project.toml` file gets ignored.
 
 ### The `[deps]` section
 
