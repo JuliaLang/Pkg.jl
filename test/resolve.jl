@@ -8,8 +8,7 @@ using Pkg.Types
 using Pkg.Types: VersionBound
 using UUIDs
 using Pkg.Resolve
-import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, Fixed, Requires
-import ..HistoricalStdlibVersions
+import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, ResolverTimeoutError, Fixed, Requires
 
 include("utils.jl")
 using .Utils
@@ -161,6 +160,12 @@ end
     ]
     want_data = Dict("B"=>v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
+
+    # require A (must give an error)
+    reqs_data = Any[
+        ["A", "*"]
+    ]
+    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
 
     VERBOSE && @info("SCHEME 5")
@@ -611,7 +616,6 @@ end
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
-
     # require A, D, and lower version of Y
     reqs_data = Any[
         ["A", "*"],
@@ -632,16 +636,48 @@ end
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
+
+    VERBOSE && @info("SCHEME 15")
+    ## DEPENDENCY SCHEME 15: A GRAPH WITH A WEAK DEPENDENCE
+    ## (REDUCED VERSION OF A REALISTIC SCHEME, ref Pkg.jl issue #4030)
+    deps_data = Any[
+        ["A", v"1"],
+        ["A", v"2", "C", "*"],
+        ["B", v"1", "D", "1", :weak],
+        ["C", v"1", "E", "*"],
+        ["C", v"2", "E", "*"],
+        ["C", v"2", "B", "1"],
+        ["E", v"1", "D", "1"],
+        ["E", v"2", "F", "1"],
+        ["F", v"1", "D", "*"],
+        ["D", v"1"],
+        ["D", v"2"],
+    ]
+
+    @test sanity_tst(deps_data)
+
+    reqs_data = Any[
+        ["A", "*"],
+    ]
+    want_data = Dict(
+        "A" => v"2",
+        "B" => v"1",
+        "C" => v"2",
+        "D" => v"1",
+        "E" => v"2",
+        "F" => v"1",
+    )
+    @test resolve_tst(deps_data, reqs_data, want_data)
+
 end
 
 @testset "realistic" begin
-    VERBOSE && @info("SCHEME REALISTIC 1")
-    ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
-    ## ref Julia issue #21485
-
     tmp = mktempdir()
     Pkg.PlatformEngines.unpack(joinpath(@__DIR__, "resolvedata.tar.gz"), tmp; verbose=false)
 
+    VERBOSE && @info("SCHEME REALISTIC 1")
+    ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
+    ## ref Julia issue #21485
 
     include(joinpath(tmp, "resolvedata1.jl"))
 
@@ -665,83 +701,51 @@ end
 
     @test sanity_tst(ResolveData3.deps_data, ResolveData3.problematic_data)
     @test resolve_tst(ResolveData3.deps_data, ResolveData3.reqs_data, ResolveData3.want_data)
+
+    VERBOSE && @info("SCHEME REALISTIC 4")
+    ## DEPENDENCY SCHEME 18: AN UNSAT REALISTIC EXAMPLE IN WHICH THE RESOLVER HANGS FOR MINUTES
+    ## The resolve_tst call is intended to fail (by timeout) with validate_versions=false
+    ## ref Pkg.jl issue #3878
+
+    include(joinpath(tmp, "resolvedata4.jl"))
+
+    @test sanity_tst(ResolveData4.deps_data, ResolveData4.problematic_data)
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>10) do
+        @test_throws ResolverError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data)
+    end
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>1e-5) do
+        # this test may fail if graph preprocessing or the greedy solver get better
+        @test_throws ResolverTimeoutError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data; validate_versions=false)
+    end
+
 end
 
 @testset "nasty" begin
     VERBOSE && @info("SCHEME NASTY")
-    ## DEPENDENCY SCHEME 16: A NASTY CASE
+    ## DEPENDENCY SCHEME 19: A NASTY CASE
 
     include("NastyGenerator.jl")
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = true)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=true)
 
     @test sanity_tst(deps_data, problematic_data)
     @test resolve_tst(deps_data, reqs_data, want_data)
 
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat = false)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=false)
 
     @test sanity_tst(deps_data, problematic_data)
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 end
 
-#=
-@testset "Resolving for another version of Julia" begin
-    append!(empty!(Pkg.Types.STDLIBS_BY_VERSION), HistoricalStdlibVersions.STDLIBS_BY_VERSION)
-    temp_pkg_dir() do dir
-        function find_by_name(versions, name)
-            idx = findfirst(p -> p.name == name, versions)
-            if idx === nothing
-                return nothing
-            end
-            return versions[idx]
-        end
-
-        # First, we're going to resolve for specific versions of Julia, ensuring we get the right dep versions:
-        Pkg.Registry.download_default_registries(Pkg.stdout_f())
-        ctx = Pkg.Types.Context(;julia_version=v"1.5")
-        versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
-            Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),
-        ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version)
-        gmp = find_by_name(versions, "GMP_jll")
-        @test gmp !== nothing
-        @test gmp.version.major == 6 && gmp.version.minor == 1
-        ctx = Pkg.Types.Context(;julia_version=v"1.6")
-        versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
-            Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),
-        ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version)
-        gmp = find_by_name(versions, "GMP_jll")
-        @test gmp !== nothing
-        @test gmp.version.major == 6 && gmp.version.minor == 2
-
-        # We'll also test resolving an "impossible" manifest; one that requires two package versions that
-        # are not both loadable by the same Julia:
-        ctx = Pkg.Types.Context(;julia_version=nothing)
-        versions, deps = Pkg.Operations._resolve(ctx.io, ctx.env, ctx.registries, [
-            # This version of GMP only works on Julia v1.6
-            Pkg.Types.PackageSpec(name="GMP_jll", uuid=Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d"), version=v"6.2.0"),
-            # This version of MPFR only works on Julia v1.5
-            Pkg.Types.PackageSpec(name="MPFR_jll", uuid=Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3"), version=v"4.0.2"),
-        ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version)
-        gmp = find_by_name(versions, "GMP_jll")
-        @test gmp !== nothing
-        @test gmp.version.major == 6 && gmp.version.minor == 2
-        mpfr = find_by_name(versions, "MPFR_jll")
-        @test mpfr !== nothing
-        @test mpfr.version.major == 4 && mpfr.version.minor == 0
-    end
-    empty!(Pkg.Types.STDLIBS_BY_VERSION)
-end
-=#
-
 @testset "Stdlib resolve smoketest" begin
     # All stdlibs should be installable and resolvable
     temp_pkg_dir() do dir
         Pkg.activate(temp=true)
-        Pkg.add(map(first, values(Pkg.Types.load_stdlib())))    # add all stdlibs
+        Pkg.add(map(x -> x.name, values(Pkg.Types.load_stdlib())))    # add all stdlibs
         iob = IOBuffer()
         Pkg.resolve(io = iob)
         str = String(take!(iob))
-        @test occursin(r"No Changes to .*Project.toml", str)
-        @test occursin(r"No Changes to .*Manifest.toml", str)
+        @test occursin(r"No packages added to or removed from .*Project.toml", str)
+        @test occursin(r"No packages added to or removed from .*Manifest.toml", str)
     end
 end
 
