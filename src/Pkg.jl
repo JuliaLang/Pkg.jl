@@ -359,8 +359,8 @@ const gc = API.gc
   - `verbose::Bool=false`: print the build output to `stdout`/`stderr` instead of redirecting to the `build.log` file.
   - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the build environment
 
-!!! compat "Julia 1.10"
-    `allow_reresolve` requires at least Julia 1.10.
+!!! compat "Julia 1.13"
+    `allow_reresolve` requires at least Julia 1.13.
 
 Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in
 depth-first recursive order.
@@ -730,7 +730,7 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
-# Use HTTPS for GitHub (default, good for most users)  
+# Use HTTPS for GitHub (default, good for most users)
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
 
 # Reset to default (let package developer decide)

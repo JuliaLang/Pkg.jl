@@ -1122,7 +1122,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     return
 end
 
-function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
+function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, allow_reresolve::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1137,7 +1137,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
-    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
+    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose; allow_reresolve)
 end
 
 function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
