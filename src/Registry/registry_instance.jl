@@ -1,8 +1,8 @@
 using Base: UUID, SHA1
 using TOML
+using Dates
 using Tar
 using ..Versions: VersionSpec, VersionRange
-using ..LazilyInitializedFields
 
 # The content of a registry is assumed to be constant during the
 # lifetime of a `Registry`. Create a new `Registry` if you want to have
@@ -16,7 +16,7 @@ function to_tar_path_format(file::AbstractString)
 end
 
 # See loading.jl
-const TOML_CACHE = Base.TOMLCache(TOML.Parser(), Dict{String, Dict{String, Any}}())
+const TOML_CACHE = Base.TOMLCache(Base.TOML.Parser{Dates}())
 const TOML_LOCK = ReentrantLock()
 _parsefile(toml_file::AbstractString) = Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK)
 function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, file::AbstractString)
@@ -24,7 +24,8 @@ function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractStr
         return _parsefile(joinpath(folder, file))
     else
         content = in_memory_registry[to_tar_path_format(file)]
-        return TOML.Internals.parse(TOML.Parser(content; filepath=file))
+        parser = Base.TOML.Parser{Dates}(content; filepath=file)
+        return Base.TOML.parse(parser)
     end
 end
 
@@ -32,13 +33,14 @@ custom_isfile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, 
     in_memory_registry === nothing ? isfile(joinpath(folder, file)) : haskey(in_memory_registry, to_tar_path_format(file))
 
 # Info about each version of a package
-@lazy mutable struct VersionInfo
-    git_tree_sha1::Base.SHA1
-    yanked::Bool
-    @lazy uncompressed_compat::Union{Dict{UUID, VersionSpec}}
-    @lazy weak_uncompressed_compat::Union{Dict{UUID, VersionSpec}}
+mutable struct VersionInfo
+    const git_tree_sha1::Base.SHA1
+    const yanked::Bool
+    uncompressed_compat::Dict{UUID, VersionSpec} # lazily initialized
+    weak_uncompressed_compat::Dict{UUID, VersionSpec} # lazily initialized
+
+    VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = new(git_tree_sha1, yanked)
 end
-VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = VersionInfo(git_tree_sha1, yanked, uninit, uninit)
 
 # This is the information that exists in e.g. General/A/ACME
 struct PkgInfo
@@ -103,7 +105,7 @@ const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
     # Only valid to call this with existing versions of the package
     # Remove all versions we have already uncompressed
-    versions = filter!(v -> !isinit(pkg.version_info[v], :uncompressed_compat), collect(versions))
+    versions = filter!(v -> !isdefined(pkg.version_info[v], :uncompressed_compat), collect(versions))
 
     sort!(versions)
 
@@ -121,7 +123,8 @@ function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info
             vspec = get(uncompressed_compat_v, pkg, nothing)
             compat[uuid] = vspec === nothing ? VersionSpec() : vspec
         end
-        @init! vinfo.uncompressed_compat = compat
+        @assert !isdefined(vinfo, :uncompressed_compat)
+        vinfo.uncompressed_compat = compat
     end
     return pkg
 end
@@ -129,7 +132,7 @@ end
 function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
     # Only valid to call this with existing versions of the package
     # Remove all versions we have already uncompressed
-    versions = filter!(v -> !isinit(pkg.version_info[v], :weak_uncompressed_compat), collect(versions))
+    versions = filter!(v -> !isdefined(pkg.version_info[v], :weak_uncompressed_compat), collect(versions))
 
     sort!(versions)
 
@@ -145,7 +148,8 @@ function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version
             vspec = get(weak_uncompressed_compat_v, pkg, nothing)
             weak_compat[uuid] = vspec === nothing ? VersionSpec() : vspec
         end
-        @init! vinfo.weak_uncompressed_compat = weak_compat
+        @assert !isdefined(vinfo, :weak_uncompressed_compat)
+        vinfo.weak_uncompressed_compat = weak_compat
     end
     return pkg
 end
@@ -163,23 +167,25 @@ function weak_compat_info(pkg::PkgInfo)
     return Dict(v => info.weak_uncompressed_compat for (v, info) in pkg.version_info)
 end
 
-@lazy struct PkgEntry
+mutable struct PkgEntry
     # Registry.toml:
-    path::String
-    registry_path::String
-    name::String
-    uuid::UUID
+    const path::String
+    const registry_path::String
+    const name::String
+    const uuid::UUID
 
-    in_memory_registry::Union{Dict{String, String}, Nothing}
+    const in_memory_registry::Union{Dict{String, String}, Nothing}
     # Version.toml / (Compat.toml / Deps.toml):
-    @lazy info::PkgInfo
+    info::PkgInfo # lazily initialized
+
+    PkgEntry(path, registry_path, name, uuid, in_memory_registry) = new(path, registry_path, name, uuid, in_memory_registry, #= undef =#)
 end
 
 registry_info(pkg::PkgEntry) = init_package_info!(pkg)
 
 function init_package_info!(pkg::PkgEntry)
     # Already uncompressed the info for this package, return early
-    @isinit(pkg.info) && return pkg.info
+    isdefined(pkg, :info) && return pkg.info
     path = pkg.registry_path
 
     d_p = parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
@@ -240,7 +246,8 @@ function init_package_info!(pkg::PkgEntry)
         weak_deps[vr] = d
     end
 
-    @init! pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps)
+    @assert !isdefined(pkg, :info)
+    pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps)
 
     return pkg.info
 end
@@ -332,7 +339,7 @@ function RegistryInstance(path::AbstractString)
         info::Dict{String, Any}
         name = info["name"]::String
         pkgpath = info["path"]::String
-        pkg = PkgEntry(pkgpath, path, name, uuid, in_memory_registry, uninit)
+        pkg = PkgEntry(pkgpath, path, name, uuid, in_memory_registry)
         pkgs[uuid] = pkg
     end
     reg = RegistryInstance(
@@ -361,6 +368,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
     end
     println(io, "  packages: ", length(r.pkgs))
 end
+Base.show(io::IO, r::RegistryInstance) = Base.show(io, MIME"text/plain"(), r)
 
 function uuids_from_name(r::RegistryInstance, name::String)
     create_name_uuid_mapping!(r)

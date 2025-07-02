@@ -25,4 +25,6 @@ end
     end
 end
 
+@test eltype([PackageSpec(a) for a in []]) == PackageSpec
+
 end # module

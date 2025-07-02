@@ -2,11 +2,12 @@
 
 module ResolveUtils
 
+using Test
 using UUIDs
 import ..Pkg # ensure we are using the correct Pkg
 using Pkg.Types
 using Pkg.Resolve
-using Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, Fixed, Requires
+using Pkg.Resolve: add_reqs!, simplify_graph!, Fixed, Requires
 
 export sanity_tst, resolve_tst, VERBOSE
 
@@ -116,7 +117,7 @@ function sanity_tst(deps_data, expected_result; pkgs=[])
 end
 sanity_tst(deps_data; kw...) = sanity_tst(deps_data, []; kw...)
 
-function resolve_tst(deps_data, reqs_data, want_data = nothing; clean_graph = false)
+function resolve_tst(deps_data, reqs_data, want_data = nothing; validate_versions = true)
     if VERBOSE
         println()
         @info("resolving")
@@ -126,7 +127,7 @@ function resolve_tst(deps_data, reqs_data, want_data = nothing; clean_graph = fa
     graph = graph_from_data(deps_data)
     reqs = reqs_from_data(reqs_data, graph)
     add_reqs!(graph, reqs)
-    simplify_graph!(graph, clean_graph = clean_graph)
+    simplify_graph!(graph; validate_versions)
     want = resolve(graph)
 
     id(u) = pkgID(u, graph)
@@ -136,7 +137,7 @@ function resolve_tst(deps_data, reqs_data, want_data = nothing; clean_graph = fa
             if u ∉ keys(wd)
                 @info "resolver decided to install $(id(u)) (v$vn), package wasn't expected"
             elseif vn ≠ wd[u]
-            @info "version mismatch for $(id(u)), resolver wants v$vn, expected v$(wd[u])"
+                @info "version mismatch for $(id(u)), resolver wants v$vn, expected v$(wd[u])"
             end
         end
         for (u,vn) in wd

@@ -1,4 +1,4 @@
-# **7.** Registries
+# **8.** Registries
 
 Registries contain information about packages, such as
 available releases and dependencies, and where they can be downloaded.
@@ -21,7 +21,6 @@ registry.
 
 If a custom registry has been installed causing the `General` registry
 to not be automatically installed, it is easy to add it manually:
-be added automatically. In that case, we can simply add the `General`
 
 
 ```julia-repl
@@ -92,6 +91,41 @@ pkg> registry up
 
 Registries automatically update once per session when a package operation is performed so it
 rarely has to be done manually.
+
+## Registry format
+
+In a registry, each package gets its own directory; in that directory
+are the following files: `Compat.toml`, `Deps.toml`, `Package.toml`,
+and `Versions.toml`.
+The formats of these files are described below.
+
+### Registry Compat.toml
+
+The `Compat.toml` file has a series of blocks specifying version
+numbers, with a set of dependencies listed below. For example,
+part of such a file might look like this:
+
+```toml
+["0.8-0.8.3"]
+DependencyA = "0.4-0.5"
+DependencyB = "0.3-0.5"
+
+["0.8.2-0.8.5"]
+DependencyC = "0.7-0"
+```
+
+Dependencies that are unchanged across a range of versions are grouped
+together in these blocks. The interpretation of these ranges is given by the comment after each line below:
+
+```toml
+"0.7-0.8"  # [0.7.0, 0.9.0)
+"0.7-0"    # [0.7.0, 1.0.0)
+"0.8.6-0"  # [0.8.6, 1.0.0)
+"0.7-*"    # [0.7.0, ∞)
+```
+
+So for this package, versions `[0.8.0, 0.8.3]` depend on versions `[0.4.0, 0.6.0)` of `DependencyA` and version `[0.3.0, 0.6.0)` of `DependencyB`.
+Meanwhile, it is also true that versions `[0.8.2, 0.8.5]` require specific versions of `DependencyC` (so that all three are required for versions `0.8.2` and `0.8.3`).
 
 ### Registry flavors
 
