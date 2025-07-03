@@ -582,13 +582,56 @@ function status(io::IO=stderr_f())
     if isempty(regs)
         println(io, "  (no registries found)")
     else
+        registry_update_log = get_registry_update_log()
+        server_registry_info = Pkg.OFFLINE_MODE[] ? nothing : pkg_server_registry_info()
+        flavor = get(ENV, "JULIA_PKG_SERVER_REGISTRY_PREFERENCE", "")
         for reg in regs
             printstyled(io, " [$(string(reg.uuid)[1:8])]"; color = :light_black)
             print(io, " $(reg.name)")
             reg.repo === nothing || print(io, " ($(reg.repo))")
             println(io)
+
+            registry_type = get_registry_type(reg)
+            if registry_type == :git
+                print(io, "    git registry")
+            elseif registry_type == :unpacked
+                print(io, "    unpacked registry with hash $(reg.tree_info)")
+            elseif registry_type == :packed
+                print(io, "    packed registry with hash $(reg.tree_info)")
+            else
+                print(io, "    unknown registry format")
+            end
+            update_time = get(registry_update_log, string(reg.uuid), nothing)
+            if !isnothing(update_time)
+                print(io, ", last updated $(update_time)")
+            end
+            println(io)
+
+            if registry_type != :git && !isnothing(server_registry_info)
+                server_url, registries = server_registry_info
+                if haskey(registries, reg.uuid)
+                    print(io, "    served by $(server_url)")
+                    if flavor != ""
+                        print(io, " ($flavor flavor)")
+                    end
+                    if registries[reg.uuid] != reg.tree_info
+                        print(io, " - update available")
+                    end
+                    println(io)
+                end
+            end
         end
     end
+end
+
+function get_registry_type(reg)
+    isnothing(reg.in_memory_registry) || return :packed
+    isnothing(reg.tree_info) || return :unpacked
+    isdir(joinpath(reg.path, ".git")) && return :git
+    # Indicates either that the registry data is corrupt or that it
+    # has been handled by a future Julia version with non-backwards
+    # compatible conventions.
+    return :unknown
 end
 
 end # module
