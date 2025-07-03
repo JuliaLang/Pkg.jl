@@ -730,6 +730,39 @@ end
     @test sprint(showerror, err) == "foobar"
 end
 
+@testset "issue #2191: better diagnostic for missing package" begin
+    temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
+        Pkg.activate(".")
+
+        # Create a package A that depends on package B
+        Pkg.generate("A")
+        Pkg.generate("B")
+        git_init_and_commit("A")
+        git_init_and_commit("B")
+
+        # Add B as a dependency of A
+        cd("A") do
+            Pkg.develop(PackageSpec(path="../B"))
+        end
+
+        # Now remove the B directory to simulate the missing package scenario
+        rm("B", recursive=true)
+
+        # Try to perform an operation that would trigger the missing package error
+        cd("A") do
+            try
+                Pkg.resolve()
+                @test false "Expected a PkgError to be thrown"
+            catch e
+                @test e isa PkgError
+                error_msg = sprint(showerror, e)
+                # Check that the improved error message contains helpful information
+                @test occursin("This package is referenced in the manifest file:", error_msg)
+            end
+        end
+    end end
+end
+
 @testset "issue #1066: package with colliding name/uuid exists in project" begin
     temp_pkg_dir() do project_path; cd_tempdir() do tmpdir
         Pkg.activate(".")
