@@ -289,17 +289,16 @@ const update = API.up
 !!! compat "Julia 1.9"
     Passing a string to `coverage` requires at least Julia 1.9.
 
-Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
-positional argument is given to `Pkg.test`. A package is tested by running its
-`test/runtests.jl` file.
+Run the tests for the given package(s), or for the current project if no positional argument is given to `Pkg.test`
+(the current project would need to be a package). The package is tested by running its `test/runtests.jl` file.
 
-The tests are run by generating a temporary environment with only the `pkg` package
-and its (recursive) dependencies in it. If a manifest file exists and the `allow_reresolve`
-keyword argument is set to `false`, the versions in the manifest file are used.
-Otherwise a feasible set of packages is resolved and installed.
+The tests are run in a temporary environment that also includes the test specific dependencies
+of the package. The versions of dependencies in the current project are used for the
+test environment unless there is a compatibility conflict between the version of the dependencies and
+the test-specific dependencies. In that case, if `allow_reresolve` is `false` an error is thrown and
+if `allow_reresolve` is `true` a feasible set of versions of the dependencies is resolved and used.
 
-During the tests, test-specific dependencies are active, which are
-given in the project file as e.g.
+Test-specific dependnecies are declared in the project file as:
 
 ```toml
 [extras]
@@ -311,6 +310,7 @@ test = ["Test"]
 
 The tests are executed in a new process with `check-bounds=yes` and by default `startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
+
 Inlining of functions during testing can be disabled (for better coverage accuracy)
 by starting julia with `--inline=no`. The tests can be run as if different command line arguments were
 passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
@@ -520,10 +520,11 @@ dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
 After packages have been installed the project will be precompiled.
-See more at [Environment Precompilation](@ref).
+See more and how to disable auto-precompilation at [Environment Precompilation](@ref).
 
 !!! compat "Julia 1.12"
     The `julia_version_strict` keyword argument requires at least Julia 1.12.
+
 """
 const instantiate = API.instantiate
 
@@ -831,7 +832,7 @@ end
 ################
 
 function installed()
-    @warn "Pkg.installed() is deprecated"
+    @warn "`Pkg.installed()` is deprecated. Use `Pkg.dependencies()` instead." maxlog=1
     deps = dependencies()
     installs = Dict{String, VersionNumber}()
     for (uuid, dep) in deps

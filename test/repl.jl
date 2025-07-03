@@ -25,6 +25,16 @@ using ..Utils
     @test_throws PkgError pkg"helpadd"
 end
 
+@testset "accidental" begin
+    @test_logs (:warn, r"Removing leading.*") pkg"]?"
+    @test_logs (:warn, r"Removing leading.*") pkg"] ?"
+    @test_logs (:warn, r"Removing leading.*") pkg"]st"
+    @test_logs (:warn, r"Removing leading.*") pkg"] st"
+    @test_logs (:warn, r"Removing leading.*") pkg"]st -m"
+    @test_logs (:warn, r"Removing leading.*") pkg"] st -m"
+    @test_logs (:warn, r"Removing leading.*") pkg"]"  # noop
+end
+
 temp_pkg_dir() do project_path
     with_pkg_env(project_path; change_dir=true) do;
         pkg"generate HelloWorld"

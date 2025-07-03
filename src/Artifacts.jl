@@ -6,7 +6,7 @@ using Tar: can_symlink
 using FileWatching: FileWatching
 
 import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
-       ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries
+       ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries, ..atomic_toml_write
 
 import Base: get, SHA1
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
@@ -220,7 +220,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
             meta = artifact_dict[name]
             if !isa(meta, Vector)
                 error("Mapping for '$name' within $(artifacts_toml) already exists!")
-            elseif any(isequal(platform), unpack_platform(x, name, artifacts_toml) for x in meta)
+            elseif any(p -> platforms_match(platform, p), unpack_platform(x, name, artifacts_toml) for x in meta)
                 error("Mapping for '$name'/$(triplet(platform)) within $(artifacts_toml) already exists!")
             end
         end
@@ -267,11 +267,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
     # Spit it out onto disk
     let artifact_dict = artifact_dict
         parent_dir = dirname(artifacts_toml)
-        temp_artifacts_toml = isempty(parent_dir) ? tempname(pwd()) : tempname(parent_dir)
-        open(temp_artifacts_toml, "w") do io
-            TOML.print(io, artifact_dict, sorted=true)
-        end
-        mv(temp_artifacts_toml, artifacts_toml; force=true)
+        atomic_toml_write(artifacts_toml, artifact_dict, sorted=true)
     end
 
     # Mark that we have used this Artifact.toml
@@ -302,9 +298,7 @@ function unbind_artifact!(artifacts_toml::String, name::String;
         )
     end
 
-    open(artifacts_toml, "w") do io
-        TOML.print(io, artifact_dict, sorted=true)
-    end
+    atomic_toml_write(artifacts_toml, artifact_dict, sorted=true)
     return
 end
 

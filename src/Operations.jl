@@ -747,7 +747,7 @@ function install_archive(
         try
             unpack(path, dir; verbose=false)
         catch e
-            e isa InterruptException && rethrow()
+            e isa ProcessFailedException || rethrow()
             @warn "failed to extract archive downloaded from $(url)"
             url_success = false
         end
@@ -824,7 +824,7 @@ function install_git(
     end
 end
 
-function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform())
+function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform(), include_lazy::Bool=false)
     # Check to see if this package has an (Julia)Artifacts.toml
     artifacts_tomls = Tuple{String,Base.TOML.TOMLDict}[]
     for f in artifact_names
@@ -848,7 +848,7 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 end
             else
                 # Otherwise, use the standard selector from `Artifacts`
-                artifacts = select_downloadable_artifacts(artifacts_toml; platform)
+                artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
                 push!(artifacts_tomls, (artifacts_toml, artifacts))
             end
             break
@@ -868,7 +868,9 @@ end
 function download_artifacts(ctx::Context;
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
-                            verbose::Bool=false)
+                            verbose::Bool=false,
+                            io::IO=stderr_f(),
+                            include_lazy::Bool=false)
     env = ctx.env
     io = ctx.io
     fancyprint = can_fancyprint(io)
@@ -894,7 +896,7 @@ function download_artifacts(ctx::Context;
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
 
-    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform), pkg_roots))
+    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform, include_lazy), pkg_roots))
     used_artifact_tomls = Set{String}(map(first, all_collected_artifacts))
     longest_name_length = maximum(all_collected_artifacts; init=0) do (artifacts_toml, artifacts)
         maximum(textwidth, keys(artifacts); init=0)
@@ -1690,7 +1692,8 @@ end
 
 function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
                     pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
-    printpkgstyle(io, :Resolving, "package versions...")
+    usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
+    printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
     if preserve == PRESERVE_TIERED_INSTALLED
         tiered_resolve(env, registries, pkgs, julia_version, true)
     elseif preserve == PRESERVE_TIERED
@@ -2211,7 +2214,15 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
                 @debug err
-                printpkgstyle(ctx.io, :Test, "Could not use exact versions of packages in manifest. Re-resolving dependencies", color=Base.warn_color())
+                msg = string(
+                    "Could not use exact versions of packages in manifest, re-resolving. ",
+                    "Note: if you do not check your manifest file into source control, ",
+                    "then you can probably ignore this message. ",
+                    "However, if you do check your manifest file into source control, ",
+                    "then you probably want to pass the `allow_reresolve = false` kwarg ",
+                    "when calling the `Pkg.test` function.",
+                )
+                printpkgstyle(ctx.io, :Test, msg, color=Base.warn_color())
                 Pkg.update(temp_ctx; skip_writing_project=true, update_registry=false, io=ctx.io)
                 printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
                 @debug "Using _clean_ dep graph"
