@@ -30,23 +30,63 @@ packagetoken(word::String)::PackageToken =
 ###############
 # PackageSpec #
 ###############
-"""
-Parser for PackageSpec objects.
-"""
-function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
-    words′ = package_lex(args)
-    words = String[]
-    for word in words′
-        if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", word)) !== nothing
-            push!(words, "https://github.com/$(m.captures[1])/$(m.captures[2])")
-            push!(words, "#$(m.captures[3])")
+
+# Handle GitHub URLs with tree/commit paths
+function preprocess_github_url(url::AbstractString)
+    if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", url)) !== nothing
+        return ["https://github.com/$(m.captures[1])/$(m.captures[2])", "#$(m.captures[3])"]
+    end
+    return [url]
+end
+
+# Handle Git URLs with branch/tag/subdir specifiers
+function preprocess_git_url(url::AbstractString)
+    if (m = match(r"^(https?://.*?\.git|git@.*?\.git|ssh://.*?\.git)(#.*|@.*|:.*)$", url)) !== nothing
+        return [m.captures[1], m.captures[2]]
+    end
+    return [url]
+end
+
+# Preprocess package arguments to handle special URL formats before lexing
+function preprocess_package_args(args::Vector{QString})
+    processed_args = QString[]
+
+    for arg in args
+        if arg.isquoted
+            # Don't process quoted arguments
+            push!(processed_args, arg)
         else
-            push!(words, word)
+            # Try GitHub URL preprocessing first
+            github_parts = preprocess_github_url(arg.raw)
+            if length(github_parts) > 1
+                # GitHub URL was split
+                for part in github_parts
+                    push!(processed_args, QString(part, false))
+                end
+            else
+                # Try Git URL preprocessing
+                git_parts = preprocess_git_url(arg.raw)
+                for part in git_parts
+                    push!(processed_args, QString(part, false))
+                end
+            end
         end
     end
-    args = PackageToken[packagetoken(pkgword) for pkgword in words]
 
-    return parse_package_args(args; add_or_dev=add_or_dev)
+    return processed_args
+end
+
+function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
+    # Preprocess URLs to handle special formats
+    processed_args = preprocess_package_args(args)
+
+    # Lex the processed arguments
+    words = package_lex(processed_args)
+
+    # Convert to tokens and parse
+    tokens = PackageToken[packagetoken(word) for word in words]
+
+    return parse_package_args(tokens; add_or_dev=add_or_dev)
 end
 
     # Match a git repository URL. This includes uses of `@` and `:` but
@@ -57,7 +97,7 @@ let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git
     name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
 
     # Match a `#BRANCH` branch or tag specifier.
-    branch = raw"\#\s*[^@^:\s]+",
+    branch = raw"\#\s*[^@\#:\s]+",
 
     # Match an `@VERSION` version specifier.
     version = raw"@\s*[^@\#\s]*",

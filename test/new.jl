@@ -1149,6 +1149,111 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;url="https://github.com/00vareladavid/Unregistered.jl", rev="0.1.0")]
         @test isempty(opts)
+
+
+        # Test GitHub URLs with tree/commit paths
+        @testset "GitHub tree/commit URLs" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo/tree/feature-branch")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo"
+            @test args[1].rev == "feature-branch"
+
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo/commit/abc123def")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo"
+            @test args[1].rev == "abc123def"
+        end
+
+        # Test Git URLs with branch specifiers
+        @testset "Git URLs with branch specifiers" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo.git#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo.git"
+            @test args[1].rev == "main"
+
+            api, args, opts = first(Pkg.pkg"add https://bitbucket.org/user/repo.git#develop")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://bitbucket.org/user/repo.git"
+            @test args[1].rev == "develop"
+
+            api, args, opts = first(Pkg.pkg"add git@github.com:user/repo.git#feature")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@github.com:user/repo.git"
+            @test args[1].rev == "feature"
+
+            api, args, opts = first(Pkg.pkg"add ssh://git@server.com/path/repo.git#branch-name")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@server.com/path/repo.git"
+            @test args[1].rev == "branch-name"
+        end
+
+        # Test Git URLs with version specifiers
+        @testset "Git URLs with version specifiers" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo.git@v1.2.3")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo.git"
+            @test args[1].version == "v1.2.3"
+
+            api, args, opts = first(Pkg.pkg"add git@gitlab.com:user/repo.git@0.5.0")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@gitlab.com:user/repo.git"
+            @test args[1].version == "0.5.0"
+        end
+
+        # Test Git URLs with subdir specifiers
+        @testset "Git URLs with subdir specifiers" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/monorepo.git:packages/MyPackage")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/monorepo.git"
+            @test args[1].subdir == "packages/MyPackage"
+
+            api, args, opts = first(Pkg.pkg"add ssh://git@server.com/repo.git:subdir/nested")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@server.com/repo.git"
+            @test args[1].subdir == "subdir/nested"
+        end
+
+        # Test complex URLs (with username in URL + branch/tag/subdir)
+        @testset "Complex Git URLs" begin
+            api, args, opts = first(Pkg.pkg"add https://username@bitbucket.org/org/repo.git#dev")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://username@bitbucket.org/org/repo.git"
+            @test args[1].rev == "dev"
+
+            api, args, opts = first(Pkg.pkg"add https://user:token@gitlab.company.com/group/project.git@v2.1.0")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://user:token@gitlab.company.com/group/project.git"
+            @test args[1].version == "v2.1.0"
+
+            api, args, opts = first(Pkg.pkg"add https://example.com:8080/git/repo.git:packages/core")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://example.com:8080/git/repo.git"
+            @test args[1].subdir == "packages/core"
+        end
+
+        # Test that regular URLs without .git still work
+        @testset "Non-.git URLs (unchanged behavior)" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo"
+            @test args[1].rev === nothing
+            @test args[1].subdir === nothing
+        end
+
         # Add using preserve option
         api, args, opts = first(Pkg.pkg"add --preserve=none Example")
         @test api == Pkg.add
