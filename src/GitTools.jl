@@ -345,7 +345,12 @@ tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_h
 function check_valid_HEAD(repo)
     try LibGit2.head(repo)
     catch err
-        Pkg.Types.pkgerror("invalid git HEAD in $(geturl(repo)) ($(err.msg))")
+        url = try
+            geturl(repo)
+        catch
+            "(unknown url)"
+        end
+        Pkg.Types.pkgerror("invalid git HEAD in $url ($(err.msg))")
     end
 end
 
