@@ -440,6 +440,7 @@ Ensures an artifact is installed, downloading it via the download information st
 function ensure_artifact_installed(name::String, artifacts_toml::String;
                                    platform::AbstractPlatform = HostPlatform(),
                                    pkg_uuid::Union{Base.UUID,Nothing}=nothing,
+                                   pkg_server_eligible::Bool=true,
                                    verbose::Bool = false,
                                    quiet_download::Bool = false,
                                    progress::Union{Function,Nothing} = nothing,
@@ -450,23 +451,23 @@ function ensure_artifact_installed(name::String, artifacts_toml::String;
     end
 
     return ensure_artifact_installed(name, meta, artifacts_toml;
-                                    platform, verbose, quiet_download, progress, io)
+                                     pkg_server_eligible, platform, verbose, quiet_download, progress, io)
 end
 
 function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::String;
+                                   pkg_server_eligible::Bool=true,
                                    platform::AbstractPlatform = HostPlatform(),
                                    verbose::Bool = false,
                                    quiet_download::Bool = false,
                                    progress::Union{Function,Nothing} = nothing,
                                    io::IO=stderr_f())
-
     hash = SHA1(meta["git-tree-sha1"])
     if !artifact_exists(hash)
         if isnothing(progress) || verbose == true
-            return try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, verbose, quiet_download, io)
+            return try_artifact_download_sources(name, hash, meta, artifacts_toml; pkg_server_eligible, platform, verbose, quiet_download, io)
         else
             # if a custom progress handler is given it is taken to mean the caller wants to handle the download scheduling
-            return () -> try_artifact_download_sources(name, hash, meta, artifacts_toml; platform, quiet_download=true, io, progress)
+            return () -> try_artifact_download_sources(name, hash, meta, artifacts_toml; pkg_server_eligible, platform, quiet_download=true, io, progress)
         end
     else
         return artifact_path(hash)
@@ -475,6 +476,7 @@ end
 
 function try_artifact_download_sources(
             name::String, hash::SHA1, meta::Dict, artifacts_toml::String;
+            pkg_server_eligible::Bool=true,
             platform::AbstractPlatform=HostPlatform(),
             verbose::Bool=false,
             quiet_download::Bool=false,
@@ -482,9 +484,8 @@ function try_artifact_download_sources(
             progress::Union{Function,Nothing}=nothing)
 
     errors = Any[]
-    # first try downloading from Pkg server
-    # TODO: only do this if Pkg server knows about this package
-    if (server = pkg_server()) !== nothing
+    # first try downloading from Pkg server if the Pkg server knows about this package
+    if pkg_server_eligible && (server = pkg_server()) !== nothing
         url = "$server/artifact/$hash"
         download_success = let url = url
             @debug "Downloading artifact from Pkg server" name artifacts_toml platform url
