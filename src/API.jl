@@ -1452,7 +1452,7 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         pkgerror("No package named $pkg in current Project")
     end
 end
-compat(pkg::String; kwargs...) = pkg == "current" ? compat_current() : compat(pkg, nothing; kwargs...)
+compat(pkg::String; kwargs...) = pkg == "current" ? compat_current(; kwargs...) : compat(pkg, nothing; kwargs...)
 compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
 compat(;kwargs...) = compat(Context(); kwargs...)
 
