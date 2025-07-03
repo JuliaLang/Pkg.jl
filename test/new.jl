@@ -1193,20 +1193,6 @@ end
             @test args[1].rev == "branch-name"
         end
 
-        # Test Git URLs with version specifiers
-        @testset "Git URLs with version specifiers" begin
-            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo.git@v1.2.3")
-            @test api == Pkg.add
-            @test length(args) == 1
-            @test args[1].url == "https://github.com/user/repo.git"
-            @test args[1].version == "v1.2.3"
-
-            api, args, opts = first(Pkg.pkg"add git@gitlab.com:user/repo.git@0.5.0")
-            @test api == Pkg.add
-            @test length(args) == 1
-            @test args[1].url == "git@gitlab.com:user/repo.git"
-            @test args[1].version == "0.5.0"
-        end
 
         # Test Git URLs with subdir specifiers
         @testset "Git URLs with subdir specifiers" begin
@@ -1231,17 +1217,60 @@ end
             @test args[1].url == "https://username@bitbucket.org/org/repo.git"
             @test args[1].rev == "dev"
 
-            api, args, opts = first(Pkg.pkg"add https://user:token@gitlab.company.com/group/project.git@v2.1.0")
+            api, args, opts = first(Pkg.pkg"add https://user:token@gitlab.company.com/group/project.git")
             @test api == Pkg.add
             @test length(args) == 1
             @test args[1].url == "https://user:token@gitlab.company.com/group/project.git"
-            @test args[1].version == "v2.1.0"
 
             api, args, opts = first(Pkg.pkg"add https://example.com:8080/git/repo.git:packages/core")
             @test api == Pkg.add
             @test length(args) == 1
             @test args[1].url == "https://example.com:8080/git/repo.git"
             @test args[1].subdir == "packages/core"
+
+            # Test URLs with complex authentication and branch names containing #
+            api, args, opts = first(Pkg.pkg"add https://user:pass123@gitlab.example.com:8443/group/project.git#feature/fix-#42")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://user:pass123@gitlab.example.com:8443/group/project.git"
+            @test args[1].rev == "feature/fix-#42"
+
+            # Test URLs with complex authentication and subdirs
+            api, args, opts = first(Pkg.pkg"add https://api_key:secret@company.git.server.com/team/monorepo.git:libs/julia/pkg")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://api_key:secret@company.git.server.com/team/monorepo.git"
+            @test args[1].subdir == "libs/julia/pkg"
+
+            # Test URLs with authentication, branch with #, and subdir
+            api, args, opts = first(Pkg.pkg"add https://deploy:token123@internal.git.company.com/product/backend.git#hotfix/issue-#789:packages/core")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://deploy:token123@internal.git.company.com/product/backend.git"
+            @test args[1].rev == "hotfix/issue-#789"
+            @test args[1].subdir == "packages/core"
+
+            # Test SSH URLs with port numbers and subdirs
+            api, args, opts = first(Pkg.pkg"add ssh://git@custom.server.com:2222/path/to/repo.git:src/package")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@custom.server.com:2222/path/to/repo.git"
+            @test args[1].subdir == "src/package"
+
+            # Test URL with username in URL and multiple # in branch name
+            api, args, opts = first(Pkg.pkg"add https://ci_user@build.company.net/team/project.git#release/v2.0-#123-#456")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://ci_user@build.company.net/team/project.git"
+            @test args[1].rev == "release/v2.0-#123-#456"
+
+            # Test complex case: auth + port + branch with # + subdir
+            api, args, opts = first(Pkg.pkg"add https://robot:abc123@git.enterprise.com:9443/division/platform.git#bugfix/handle-#special-chars:modules/julia-pkg")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://robot:abc123@git.enterprise.com:9443/division/platform.git"
+            @test args[1].rev == "bugfix/handle-#special-chars"
+            @test args[1].subdir == "modules/julia-pkg"
         end
 
         # Test that regular URLs without .git still work
