@@ -1271,6 +1271,27 @@ end
             @test args[1].url == "https://robot:abc123@git.enterprise.com:9443/division/platform.git"
             @test args[1].rev == "bugfix/handle-#special-chars"
             @test args[1].subdir == "modules/julia-pkg"
+
+            # Test quoted URL with separate revision specifier (regression test)
+            api, args, opts = first(Pkg.pkg"add \"https://username@bitbucket.org/orgname/reponame.git\"#dev")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://username@bitbucket.org/orgname/reponame.git"
+            @test args[1].rev == "dev"
+
+            # Test quoted URL with separate version specifier
+            api, args, opts = first(Pkg.pkg"add \"https://company.git.server.com/project.git\"@v2.1.0")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://company.git.server.com/project.git"
+            @test args[1].version == "v2.1.0"
+
+            # Test quoted URL with separate subdir specifier
+            api, args, opts = first(Pkg.pkg"add \"https://gitlab.example.com/monorepo.git\":packages/core")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://gitlab.example.com/monorepo.git"
+            @test args[1].subdir == "packages/core"
         end
 
         # Test that regular URLs without .git still work

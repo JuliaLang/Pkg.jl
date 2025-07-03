@@ -248,12 +248,28 @@ function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector
     # Use new string-based parsing instead of regex-based approach
     tokens = PackageToken[]
     
-    for arg in args
+    i = 1
+    while i <= length(args)
+        arg = args[i]
         input = arg.isquoted ? arg.raw : arg.raw
         
-        # Parse each argument using the new parser
-        arg_tokens = parse_package_spec_new(input)
-        append!(tokens, arg_tokens)
+        # Check if this argument is a standalone modifier (like #dev, @v1.0, :subdir)
+        if !arg.isquoted && (startswith(input, '#') || startswith(input, '@') || startswith(input, ':'))
+            # This is a standalone modifier - it should be treated as a token
+            if startswith(input, '#')
+                push!(tokens, Rev(input[2:end]))
+            elseif startswith(input, '@')
+                push!(tokens, VersionToken(input[2:end]))
+            elseif startswith(input, ':')
+                push!(tokens, Subdir(input[2:end]))
+            end
+        else
+            # Parse this argument normally
+            arg_tokens = parse_package_spec_new(input)
+            append!(tokens, arg_tokens)
+        end
+        
+        i += 1
     end
 
     return parse_package_args(tokens; add_or_dev=add_or_dev)
