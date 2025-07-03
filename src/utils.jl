@@ -152,6 +152,30 @@ function casesensitive_isdir(dir::String)
     isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
 end
 
+"""
+    atomic_toml_write(path::String, data; kws...)
+
+Write TOML data to a file atomically by first writing to a temporary file and then moving it into place.
+This prevents "teared" writes if the process is interrupted or if multiple processes write to the same file.
+
+The `kws` are passed to `TOML.print`.
+"""
+function atomic_toml_write(path::String, data; kws...)
+    dir = dirname(path)
+    isempty(dir) && (dir = pwd())
+
+    temp_path, temp_io = mktemp(dir)
+    return try
+        TOML.print(temp_io, data; kws...)
+        close(temp_io)
+        mv(temp_path, path; force = true)
+    catch
+        close(temp_io)
+        rm(temp_path; force = true)
+        rethrow()
+    end
+end
+
 ## ordering of UUIDs ##
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
     Base.isless(a::UUID, b::UUID) = a.value < b.value
