@@ -604,11 +604,11 @@ See [Compatibility](@ref) for more information on the project [compat] section.
 const compat = API.compat
 
 """
-    Pkg.autocompat()
+    Pkg.compat_current()
 
 If any packages are missing [compat] entries set them based on their current version.
 """
-const autocompat = API.autocompat
+const compat_current = API.compat_current
 
 """
     Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
@@ -730,7 +730,7 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
-# Use HTTPS for GitHub (default, good for most users)  
+# Use HTTPS for GitHub (default, good for most users)
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
 
 # Reset to default (let package developer decide)
