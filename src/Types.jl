@@ -10,7 +10,7 @@ import Base.string
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
@@ -668,15 +668,10 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
             usage[k] = [Dict("time" => maximum(times))]
         end
 
-        tempfile = tempname()
         try
-            open(tempfile, "w") do io
-                TOML.print(io, usage, sorted=true)
-            end
-            TOML.parsefile(tempfile) # compare to `usage` ?
-            mv(tempfile, usage_file; force=true) # only mv if parse succeeds
+            atomic_toml_write(usage_file, usage, sorted=true)
         catch err
-            @error "Failed to write valid usage file `$usage_file`" tempfile
+            @error "Failed to write valid usage file `$usage_file`" exception=err
         end
     end
     return
@@ -699,7 +694,7 @@ function read_package(path::String)
     return project
 end
 
-const refspecs = ["+refs/*:refs/remotes/cache/*"]
+const refspecs = ["+refs/heads/*:refs/remotes/cache/heads/*"]
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
@@ -1250,7 +1245,7 @@ function write_env(env::EnvCache; update_undo=true,
     if env.project.readonly
         pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
     end
-    
+
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end
