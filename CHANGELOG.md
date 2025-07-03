@@ -16,6 +16,7 @@ Pkg v1.12 Release Notes
 - When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from 
   weak dependencies and added as a regular dependency. ([#3865])
 - Packages are also automatically added to `[sources]` when they are added by url or devved.
+- Enhanced fuzzy matching algorithm for package name suggestions.
 
 Pkg v1.11 Release Notes
 =======================
