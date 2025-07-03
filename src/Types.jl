@@ -1236,7 +1236,6 @@ function write_env(env::EnvCache; update_undo=true,
             end
         end
     end
-
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end

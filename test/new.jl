@@ -425,14 +425,31 @@ end
             ) Pkg.add(name="Example", rev="master", version="0.5.0")
         # Adding with a slight typo gives suggestions
         try
-            Pkg.add("Examplle")
+            io = IOBuffer()
+            Pkg.add("Examplle"; io)
             @test false # to fail if add doesn't error
          catch err
             @test err isa PkgError
             @test occursin("The following package names could not be resolved:", err.msg)
             @test occursin("Examplle (not found in project, manifest or registry)", err.msg)
-            @test occursin("Suggestions:", err.msg)
-            # @test occursin("Example", err.msg) # can't test this as each char in "Example" is individually colorized
+            @test occursin("Suggestions: Example", err.msg)
+        end
+        # Adding with lowercase suggests uppercase
+        try
+            io = IOBuffer()
+            Pkg.add("http"; io)
+            @test false # to fail if add doesn't error
+        catch err
+            @test err isa PkgError
+            @test occursin("Suggestions: HTTP", err.msg)
+        end
+         try
+            io = IOBuffer()
+            Pkg.add("Flix"; io)
+            @test false # to fail if add doesn't error
+        catch err
+            @test err isa PkgError
+            @test occursin("Suggestions: Flux", err.msg)
         end
         @test_throws PkgError(
             "name, UUID, URL, or filesystem path specification required when calling `add`"
