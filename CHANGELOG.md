@@ -2,7 +2,7 @@ Pkg v1.13 Release Notes
 =======================
 
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications. ([#4284])
-- Pkg now automatically adds entries to `[sources]` when packages are added by URL or devved, improving workflow consistency. ([#4225])
+- Packages are now automatically added to `[sources]` when they are added by url or devved.
 
 Pkg v1.12 Release Notes
 =======================
@@ -15,7 +15,6 @@ Pkg v1.12 Release Notes
 - `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
 - When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from 
   weak dependencies and added as a regular dependency. ([#3865])
-- Packages are also automatically added to `[sources]` when they are added by url or devved.
 - Enhanced fuzzy matching algorithm for package name suggestions.
 
 Pkg v1.11 Release Notes
