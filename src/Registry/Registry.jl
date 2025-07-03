@@ -161,7 +161,7 @@ function check_registry_state(reg)
     reg_currently_uses_pkg_server = reg.tree_info !== nothing
     reg_should_use_pkg_server = registry_use_pkg_server()
     if reg_currently_uses_pkg_server && !reg_should_use_pkg_server
-        pkg_cmd = Base.isinteractive() ? "pkg> registry rm $(reg.name); registry add $(reg.name)" : "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")"
+        pkg_cmd = Pkg.in_repl_mode() ? "pkg> registry rm $(reg.name); registry add $(reg.name)" : "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")"
         msg = string(
             "Your registry may be outdated. We recommend that you run the ",
             "following command: ",

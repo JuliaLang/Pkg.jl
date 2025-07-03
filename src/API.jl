@@ -1230,17 +1230,22 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Types.check_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file; julia_version_strict)
 
     if Operations.is_manifest_current(ctx.env) === false
+        resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        update_cmd = Pkg.in_repl_mode() ? "pkg> update" : "Pkg.update()"
         @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
-        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
+        It is recommended to `$resolve_cmd` or consider `$update_cmd` if necessary."""
     end
 
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
+        resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        rm_cmd = Pkg.in_repl_mode() ? "pkg> rm $name" : "Pkg.rm(\"$name\")"
+        instantiate_cmd = Pkg.in_repl_mode() ? "pkg> instantiate" : "Pkg.instantiate()"
         pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
-                 " If you intend `$name` to be a direct dependency, run `Pkg.resolve()` to populate the manifest.",
-                 " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
-                 " Finally, run `Pkg.instantiate()` again.")
+                 " If you intend `$name` to be a direct dependency, run `$resolve_cmd` to populate the manifest.",
+                 " Otherwise, remove `$name` with `$rm_cmd`.",
+                 " Finally, run `$instantiate_cmd` again.")
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env, workspace; platform)
