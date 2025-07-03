@@ -175,6 +175,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
     # Use the first depot as the target
     target_depot = depots1(depots)
     populate_known_registries_with_urls!(regs)
+    registry_update_log = get_registry_update_log()
     regdir = joinpath(target_depot, "registries")
     isdir(regdir) || mkpath(regdir)
     # only allow one julia process to download and install registries at a time
@@ -213,6 +214,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                 mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
                 reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ".tar.gz")
                 atomic_toml_write(joinpath(regdir, reg.name * ".toml"), reg_info)
+                registry_update_log[string(reg.uuid)] = now()
                 printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
             else
                 mktempdir() do tmp
@@ -278,12 +280,14 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     elseif (url !== nothing && registry_use_pkg_server()) || reg.linked !== true
                         # if the dir doesn't exist, or exists but doesn't contain a Registry.toml
                         mv(tmp, regpath, force=true)
+                        registry_update_log[string(reg.uuid)] = now()
                         printpkgstyle(io, :Added, "registry `$(registry.name)` to `$(Base.contractuser(regpath))`")
                     end
                 end
             end
         end
     end # mkpidlock
+    save_registry_update_log(registry_update_log)
     return nothing
 end
 
