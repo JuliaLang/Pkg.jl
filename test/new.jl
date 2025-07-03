@@ -2698,6 +2698,63 @@ end
         @test occursin(r"\[7876af07\] *Example *none", output)
         @test occursin(r"julia *1.8", output)
     end
+
+    # Test compat current functionality
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "SimplePackage")
+        Pkg.activate(path)
+        Pkg.add("Example")
+        
+        # Initially no compat entries for Example
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") === nothing
+        
+        # Use compat current to set compat entry based on current version
+        iob = IOBuffer()
+        Pkg.compat("current"; io=iob)
+        output = String(take!(iob))
+        @test occursin("new entry set for Example based on its current version", output)
+        
+        # Check that the compat entry was set
+        compat_str = Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example")
+        @test compat_str !== nothing
+        
+        # Get the current version to verify the compat entry matches
+        example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+        current_version = Pkg.dependencies()[example_uuid].version
+        expected_compat = string(Base.thispatch(current_version))
+        @test compat_str == expected_compat
+        
+        # Test with no missing compat entries
+        iob = IOBuffer()
+        Pkg.compat("current"; io=iob)
+        output = String(take!(iob))
+        @test occursin("no missing compat entries found. No changes made.", output)
+    end end
+
+    # Test compat current with multiple packages  
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "SimplePackage")
+        Pkg.activate(path)
+        Pkg.add("Example")
+        Pkg.add("JSON")
+        
+        # Initially no compat entries
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") === nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "JSON") === nothing
+        
+        # Use compat current to set compat entries for both packages
+        iob = IOBuffer()
+        Pkg.compat("current"; io=iob)
+        output = String(take!(iob))
+        @test occursin("new entries set for", output)
+        @test occursin("Example", output)
+        @test occursin("JSON", output)
+        @test occursin("based on their current versions", output)
+        
+        # Check that both compat entries were set
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "JSON") !== nothing
+    end end
 end
 
 

@@ -463,10 +463,10 @@ PSA[:name => "compat",
     :help => md"""
     compat [pkg] [compat_string]
     compat
-    compat auto
+    compat current
 
 Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments,
-or autofill empty compat entries based on the current version via `compat auto`.
+or autofill empty compat entries based on the current version via `compat current`.
 When directly editing use tab to complete the package name and any existing compat entry.
 Specifying a package with a blank compat entry will remove the entry.
 After changing compat entries a `resolve` will be attempted to check whether the current

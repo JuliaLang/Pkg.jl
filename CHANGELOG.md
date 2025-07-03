@@ -3,6 +3,7 @@ Pkg v1.13 Release Notes
 
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications. ([#4284])
 - Packages are now automatically added to `[sources]` when they are added by url or devved.
+- Added `pkg> compat current` command to automatically populate missing compat entries with the currently resolved package versions. ([#3266])
 
 Pkg v1.12 Release Notes
 =======================
@@ -123,3 +124,4 @@ Pkg v1.7 Release Notes
 [#2995]: https://github.com/JuliaLang/Pkg.jl/issues/2995
 [#3002]: https://github.com/JuliaLang/Pkg.jl/issues/3002
 [#3021]: https://github.com/JuliaLang/Pkg.jl/issues/3021
+[#3266]: https://github.com/JuliaLang/Pkg.jl/pull/3266

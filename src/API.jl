@@ -1452,22 +1452,26 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
         pkgerror("No package named $pkg in current Project")
     end
 end
-compat(pkg::String; kwargs...) = pkg == "auto" ? autocompat() : compat(pkg, nothing; kwargs...)
+compat(pkg::String; kwargs...) = pkg == "current" ? compat_current() : compat(pkg, nothing; kwargs...)
 compat(pkg::String, compat_str::Union{Nothing,String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
 compat(;kwargs...) = compat(Context(); kwargs...)
 
-function autocompat(ctx::Context; io = nothing)
+function compat_current(ctx::Context; io = nothing)
     io = something(io, ctx.io)
     updated_deps = String[]
     for (dep, uuid) in ctx.env.project.deps
         compat_str = Operations.get_compat_str(ctx.env.project, dep)
         isnothing(compat_str) || continue
-        v = ctx.env.manifest[uuid].version
-        Operations.set_compat(ctx.env.project, dep, string(v)) || pkgerror("invalid compat version specifier \"$(string(v))\"")
+        entry = get(ctx.env.manifest, uuid, nothing)
+        entry === nothing && continue
+        v = entry.version
+        v === nothing && continue
+        pkgversion = string(Base.thispatch(v))
+        Operations.set_compat(ctx.env.project, dep, pkgversion) || pkgerror("invalid compat version specifier \"$(pkgversion)\"")
         push!(updated_deps, dep)
     end
     if isempty(updated_deps)
-        printpkgstyle(io, :Info, "no misssing compat entries found. No changes made.", color = Base.info_color())
+        printpkgstyle(io, :Info, "no missing compat entries found. No changes made.", color = Base.info_color())
     elseif length(updated_deps) == 1
         printpkgstyle(io, :Info, "new entry set for $(only(updated_deps)) based on its current version", color = Base.info_color())
     else
@@ -1476,7 +1480,7 @@ function autocompat(ctx::Context; io = nothing)
     write_env(ctx.env)
     Operations.print_compat(ctx; io)
 end
-autocompat(;kwargs...) = autocompat(Context(); kwargs...)
+compat_current(;kwargs...) = compat_current(Context(); kwargs...)
 
 #######
 # why #
