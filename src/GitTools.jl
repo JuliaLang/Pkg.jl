@@ -89,7 +89,7 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
     end
 end
 
-function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
+function clone(io::IO, url, source_path; header=nothing, credentials=nothing, isbare=false, kwargs...)
     url = String(url)::String
     source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
@@ -103,7 +103,9 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
     try
         if use_cli_git()
-            cmd = `git clone --quiet $url $source_path`
+            args = ["--quiet", url, source_path]
+            isbare && pushfirst!(args, "--bare")
+            cmd = `git clone $args`
             try
                 run(pipeline(cmd; stdout=devnull))
             catch err
@@ -122,7 +124,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
                 LibGit2.Callbacks()
             end
             mkpath(source_path)
-            return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+            return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
         end
     catch err
         rm(source_path; force=true, recursive=true)
@@ -151,7 +153,6 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     remoteurl = normalize_url(remoteurl)
     printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
             :transfer_progress => (
