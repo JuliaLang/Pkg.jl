@@ -150,7 +150,7 @@ let
             end
 
             Base.precompile(Tuple{typeof(Pkg.API.status)})
-            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat),Base.Dict{String,Any},Pkg.Types.Project,},)
+            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat),Base.Dict{String,Any},Pkg.Types.Project},)
             Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval),Base.RegexMatch})
 
             Base.precompile(Tuple{typeof(Pkg.REPLMode.do_cmds), Array{Pkg.REPLMode.Command, 1}, Base.TTY})
