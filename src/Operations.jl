@@ -432,7 +432,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
                 if length(dependents) == 1
                     error_msg *= "\nIt is required by: $(dependents[1])"
                 else
-                    error_msg *= "\nIt is required by: $(join(dependents, ", "))"
+                    error_msg *= "\nIt is required by:\n$(join(["  - $dep" for dep in dependents], "\n"))"
                 end
             end
             pkgerror(error_msg)
