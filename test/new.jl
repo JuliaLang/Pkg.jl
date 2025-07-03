@@ -1272,6 +1272,44 @@ end
             @test args[1].rev == "bugfix/handle-#special-chars"
             @test args[1].subdir == "modules/julia-pkg"
 
+            # Test local paths with branch specifiers (paths can be repos)
+            api, args, opts = first(Pkg.pkg"add ./local/repo#feature-branch")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == "local/repo"  # normpath removes "./"
+            @test args[1].rev == "feature-branch"
+
+            # Test local paths with subdir specifiers
+            api, args, opts = first(Pkg.pkg"add ./monorepo:packages/subpkg")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == "monorepo"  # normpath removes "./"
+            @test args[1].subdir == "packages/subpkg"
+
+            # Test local paths with both branch and subdir
+            api, args, opts = first(Pkg.pkg"add ./project#develop:src/package")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == "project"  # normpath removes "./"
+            @test args[1].rev == "develop"
+            @test args[1].subdir == "src/package"
+
+            # Test local paths with branch containing # characters
+            api, args, opts = first(Pkg.pkg"add ../workspace/repo#bugfix/issue-#123")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == "../workspace/repo"
+            @test args[1].rev == "bugfix/issue-#123"
+
+            # Test complex local path case: relative path + branch with # + subdir
+            api, args, opts = first(Pkg.pkg"add ~/projects/myrepo#feature/fix-#456:libs/core")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test startswith(args[1].path, "/")  # ~ gets expanded to absolute path
+            @test endswith(args[1].path, "/projects/myrepo")
+            @test args[1].rev == "feature/fix-#456"
+            @test args[1].subdir == "libs/core"
+
             # Test quoted URL with separate revision specifier (regression test)
             api, args, opts = first(Pkg.pkg"add \"https://username@bitbucket.org/orgname/reponame.git\"#dev")
             @test api == Pkg.add

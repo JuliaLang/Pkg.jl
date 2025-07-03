@@ -51,6 +51,42 @@ function looks_like_complete_url(str::String)
            (contains(str, '.') || contains(str, '/'))
 end
 
+# Extract subdir specifier from the end of input (rightmost :)
+function extract_subdir(input::String)
+    colon_pos = findlast(':', input)
+    if colon_pos === nothing
+        return input, nothing
+    end
+    
+    subdir_part = input[nextind(input, colon_pos):end]
+    remaining = input[1:prevind(input, colon_pos)]
+    return remaining, subdir_part
+end
+
+# Extract revision specifier from input (first # that separates base from revision)
+function extract_revision(input::String)
+    hash_pos = findfirst('#', input)
+    if hash_pos === nothing
+        return input, nothing
+    end
+    
+    rev_part = input[nextind(input, hash_pos):end]
+    remaining = input[1:prevind(input, hash_pos)]
+    return remaining, rev_part
+end
+
+# Extract version specifier from the end of input (rightmost @)
+function extract_version(input::String)
+    at_pos = findlast('@', input)
+    if at_pos === nothing
+        return input, nothing
+    end
+    
+    version_part = input[nextind(input, at_pos):end]
+    remaining = input[1:prevind(input, at_pos)]
+    return remaining, version_part
+end
+
 # Handle GitHub tree/commit URLs by converting them to standard URL + rev format
 function preprocess_github_tree_commit_url(input::String)
     m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", input)
@@ -62,86 +98,101 @@ function preprocess_github_tree_commit_url(input::String)
     return nothing
 end
 
+# Check if a colon in a URL string is part of URL structure (not a subdir separator)
+function is_url_structure_colon(input::String, colon_pos::Int)
+    after_colon = input[nextind(input, colon_pos):end]
+    
+    # Check for git@host:path syntax
+    if startswith(input, "git@")
+        at_pos = findfirst('@', input)
+        if at_pos !== nothing
+            between_at_colon = input[nextind(input, at_pos):prevind(input, colon_pos)]
+            if !contains(between_at_colon, '/')
+                return true
+            end
+        end
+    end
+    
+    # Check for protocol:// syntax
+    if colon_pos <= lastindex(input) - 2
+        next_pos = nextind(input, colon_pos)
+        if next_pos <= lastindex(input) - 1 && 
+           input[colon_pos:nextind(input, nextind(input, colon_pos))] == "://"
+            return true
+        end
+    end
+    
+    # Check for user:password@ syntax (: followed by text then @)
+    if contains(after_colon, '@')
+        at_in_after = findfirst('@', after_colon)
+        if at_in_after !== nothing
+            text_before_at = after_colon[1:prevind(after_colon, at_in_after)]
+            if !contains(text_before_at, '/')
+                return true
+            end
+        end
+    end
+    
+    # Check for port numbers (: followed by digits then /)
+    if occursin(r"^\d+(/|$)", after_colon)
+        return true
+    end
+    
+    return false
+end
+
+# Extract subdir from URL, being careful about URL structure
+function extract_url_subdir(input::String)
+    colon_pos = findlast(':', input)
+    if colon_pos === nothing
+        return input, nothing
+    end
+    
+    # Check if this colon is part of URL structure
+    if is_url_structure_colon(input, colon_pos)
+        return input, nothing
+    end
+    
+    after_colon = input[nextind(input, colon_pos):end]
+    before_colon = input[1:prevind(input, colon_pos)]
+    
+    # Only treat as subdir if it looks like one and the part before looks like a URL
+    if (contains(after_colon, '/') || (!contains(after_colon, '@') && !contains(after_colon, '#'))) &&
+       (contains(before_colon, "://") || contains(before_colon, ".git") || contains(before_colon, '@'))
+        return before_colon, after_colon
+    end
+    
+    return input, nothing
+end
+
+# Extract revision from URL, only after a complete URL
+function extract_url_revision(input::String)
+    hash_pos = findfirst('#', input)
+    if hash_pos === nothing
+        return input, nothing
+    end
+    
+    before_hash = input[1:prevind(input, hash_pos)]
+    after_hash = input[nextind(input, hash_pos):end]
+    
+    if looks_like_complete_url(before_hash)
+        return before_hash, after_hash
+    end
+    
+    return input, nothing
+end
+
 # Parse URLs with specifiers  
 # URLs can only have revisions (#) and subdirs (:), NOT versions (@)
 function parse_url_with_specifiers(input::String)
     tokens = PackageToken[]
     remaining = input
     
-    # First, extract subdir if present (rightmost : that looks like a subdir)
-    subdir_part = nothing
-    colon_pos = findlast(':', remaining)
-    if colon_pos !== nothing
-        after_colon = remaining[nextind(remaining, colon_pos):end]
-        before_colon = remaining[1:prevind(remaining, colon_pos)]
-        
-        # Don't treat : as subdir separator if it's part of URL structure:
-        # 1. git@host:path syntax
-        # 2. protocol:// syntax  
-        # 3. user:password@ syntax
-        # 4. port numbers
-        
-        is_url_structure = false
-        
-        # Check for git@host:path syntax
-        if startswith(remaining, "git@")
-            at_pos = findfirst('@', remaining)
-            if at_pos !== nothing
-                between_at_colon = remaining[nextind(remaining, at_pos):prevind(remaining, colon_pos)]
-                if !contains(between_at_colon, '/')
-                    is_url_structure = true
-                end
-            end
-        end
-        
-        # Check for protocol:// syntax
-        if !is_url_structure && colon_pos <= lastindex(remaining) - 2
-            # Check if the next characters after : are //
-            next_pos = nextind(remaining, colon_pos)
-            if next_pos <= lastindex(remaining) - 1 && 
-               remaining[colon_pos:nextind(remaining, nextind(remaining, colon_pos))] == "://"
-                is_url_structure = true
-            end
-        end
-        
-        # Check for user:password@ syntax (: followed by text then @)
-        if !is_url_structure && contains(after_colon, '@')
-            at_in_after = findfirst('@', after_colon)
-            if at_in_after !== nothing
-                # This could be user:password@host, check if there's no / before @
-                text_before_at = after_colon[1:prevind(after_colon, at_in_after)]
-                if !contains(text_before_at, '/')
-                    is_url_structure = true
-                end
-            end
-        end
-        
-        # Check for port numbers (: followed by digits then /)
-        if !is_url_structure && occursin(r"^\d+(/|$)", after_colon)
-            is_url_structure = true
-        end
-        
-        # Only treat as subdir if it's not part of URL structure
-        if !is_url_structure &&
-           (contains(after_colon, '/') || (!contains(after_colon, '@') && !contains(after_colon, '#'))) &&
-           (contains(before_colon, "://") || contains(before_colon, ".git") || contains(before_colon, '@'))
-            subdir_part = after_colon
-            remaining = before_colon
-        end
-    end
+    # Extract subdir if present (rightmost : that looks like a subdir)
+    remaining, subdir_part = extract_url_subdir(remaining)
     
     # Extract revision (first # that comes after a complete URL)
-    rev_part = nothing
-    hash_pos = findfirst('#', remaining)
-    if hash_pos !== nothing
-        before_hash = remaining[1:prevind(remaining, hash_pos)]
-        after_hash = remaining[nextind(remaining, hash_pos):end]
-        
-        if looks_like_complete_url(before_hash)
-            rev_part = after_hash
-            remaining = before_hash
-        end
-    end
+    remaining, rev_part = extract_url_revision(remaining)
     
     # What's left is the base URL
     push!(tokens, PackageIdentifier(remaining))
@@ -158,8 +209,35 @@ function parse_url_with_specifiers(input::String)
 end
 
 function parse_path_with_specifiers(input::String)
-    # Paths are just plain identifiers, no specifiers allowed
-    return [PackageIdentifier(input)]
+    tokens = PackageToken[]
+    remaining = input
+    
+    # Extract subdir if present (rightmost :)
+    remaining, subdir_part = extract_subdir(remaining)
+    
+    # Extract revision if present (rightmost #)
+    remaining, rev_part = extract_revision(remaining)
+    
+    # Paths cannot have version specifiers (@)
+    if contains(remaining, '@')
+        at_pos = findfirst('@', remaining)
+        base_path = remaining[1:prevind(remaining, at_pos)]
+        version_spec = remaining[nextind(remaining, at_pos):end]
+        pkgerror("Paths cannot have version specifiers. Found `@$version_spec` in path `$base_path`.")
+    end
+    
+    # What's left is the base path
+    push!(tokens, PackageIdentifier(remaining))
+    
+    # Add specifiers in correct order
+    if rev_part !== nothing
+        push!(tokens, Rev(rev_part))
+    end
+    if subdir_part !== nothing
+        push!(tokens, Subdir(subdir_part))
+    end
+    
+    return tokens
 end
 
 # Parse package names with specifiers
@@ -168,28 +246,13 @@ function parse_name_with_specifiers(input::String)
     remaining = input
     
     # Extract subdir if present (rightmost :)
-    subdir_part = nothing
-    colon_pos = findlast(':', remaining)
-    if colon_pos !== nothing
-        subdir_part = remaining[nextind(remaining, colon_pos):end]
-        remaining = remaining[1:prevind(remaining, colon_pos)]
-    end
+    remaining, subdir_part = extract_subdir(remaining)
     
     # Extract version if present (rightmost @)
-    version_part = nothing
-    at_pos = findlast('@', remaining)
-    if at_pos !== nothing
-        version_part = remaining[nextind(remaining, at_pos):end]
-        remaining = remaining[1:prevind(remaining, at_pos)]
-    end
+    remaining, version_part = extract_version(remaining)
     
     # Extract revision if present (rightmost #)
-    rev_part = nothing
-    hash_pos = findlast('#', remaining)
-    if hash_pos !== nothing
-        rev_part = remaining[nextind(remaining, hash_pos):end]
-        remaining = remaining[1:prevind(remaining, hash_pos)]
-    end
+    remaining, rev_part = extract_revision(remaining)
     
     # What's left is the base name
     push!(tokens, PackageIdentifier(remaining))
@@ -344,14 +407,8 @@ function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop=fals
         if isurl(word)
             return PackageSpec(; url=word)
         elseif any(occursin.(['\\','/'], word)) || word == "." || word == ".."
-            if casesensitive_isdir(expanduser(word))
-                return PackageSpec(; path=normpath(expanduser(word)))
-            else
-                pkgerror("`$word` appears to be a local path, but directory does not exist")
-            end
-        end
-        if occursin(name_re, word) && casesensitive_isdir(expanduser(word))
-            @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+            # Parser only handles syntax - don't validate directory existence
+            return PackageSpec(; path=normpath(expanduser(word)))
         end
     end
     if occursin(uuid_re, word)
