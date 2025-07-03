@@ -163,6 +163,40 @@ PkgA = "0.2 - 0.5"     # 0.2.0 - 0.5.* = [0.2.0, 0.6.0)
 PkgA = "0.2 - 0"       # 0.2.0 - 0.*.* = [0.2.0, 1.0.0)
 ```
 
+### Checking specifications
+
+You can check if a particular version of a package is contained in a particular
+range by using the `Pkg.satisfies_compat` function. For example:
+
+```julia
+julia> Pkg.satisfies_compat(v"0.1.0", "=0.1")
+true
+
+julia> Pkg.satisfies_compat(v"0.1.0", "=0.1.1")
+false
+
+julia> Pkg.satisfies_compat(v"0.1.0", "0.1 - 0.2")
+true
+
+julia> Pkg.satisfies_compat(v"0.3.0", "~0.3.2")
+false
+
+julia> Pkg.satisfies_compat(v"0.3.3", "0.1 - 0.2, ~0.3.2")
+true
+
+julia> # Grid of versions:
+       versions = [[VersionNumber(major, minor, patch) for patch=0:8, minor=0:3, major=0:1]...];
+
+julia> filter(v -> Pkg.satisfies_compat(v, "0.1.8 - 0.2.2, ^0.3.6"), versions)
+7-element Vector{VersionNumber}:
+ v"0.1.8"
+ v"0.2.0"
+ v"0.2.1"
+ v"0.2.2"
+ v"0.3.6"
+ v"0.3.7"
+ v"0.3.8"
+```
 
 ## [Fixing conflicts](@id Fixing-conflicts)
 

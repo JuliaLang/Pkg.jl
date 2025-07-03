@@ -3,6 +3,7 @@ Pkg v1.13 Release Notes
 
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications. ([#4284])
 - Pkg now automatically adds entries to `[sources]` when packages are added by URL or devved, improving workflow consistency. ([#4225])
+- New public function `Pkg.satisfies_compat` for checking whether a VersionNumber satisfies a compat string definition. ([#4292])
 
 Pkg v1.12 Release Notes
 =======================

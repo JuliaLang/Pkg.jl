@@ -313,4 +313,10 @@ end
     end end
 end
 
+@testset "satisfies_compat()" begin
+    @test Pkg.satisfies_compat(v"1.2.3", "1")
+    @test Pkg.satisfies_compat(v"1.2.3", "=1.2.3")
+    @test !Pkg.satisfies_compat(v"1.2.3", "=1.2.4")
+end
+
 end # module APITests
