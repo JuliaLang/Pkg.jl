@@ -38,13 +38,13 @@ makedocs(
         "apps.md",
         "compatibility.md",
         "registries.md",
-        "depots.md",
         "artifacts.md",
         "glossary.md",
         "toml-files.md",
         "repl.md",
         "api.md",
         "protocol.md",
+        "depots.md",
     ],
 )
 
