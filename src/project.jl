@@ -99,7 +99,7 @@ function read_project_compat(raw::Dict{String,Any}, project::Project; file=nothi
         try
             compat[name] = Compat(semver_spec(version), version)
         catch err
-            pkgerror("Could not parse compatibility version spec $(repr(version)) for dependency `$name`" * location_string)
+            pkgerror("Could not parse compatibility version spec $(repr(version)) for dependency `$name`$location_string")
         end
     end
     return compat
