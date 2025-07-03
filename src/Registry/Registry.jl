@@ -2,7 +2,7 @@ module Registry
 
 import ..Pkg
 using ..Pkg: depots, depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-             GitTools
+    GitTools, create_cachedir_tag
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
 using UUIDs, LibGit2, TOML, Dates
 import FileWatching
@@ -177,6 +177,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
     populate_known_registries_with_urls!(regs)
     regdir = joinpath(target_depot, "registries")
     isdir(regdir) || mkpath(regdir)
+    create_cachedir_tag(regdir)
     # only allow one julia process to download and install registries at a time
     FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
         # once we're pidlocked check if another process has installed any of the registries
@@ -403,6 +404,7 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
         depot_regs = isempty(regs) ? reachable_registries(; depots=depot) : regs
         regdir = joinpath(depot, "registries")
         isdir(regdir) || mkpath(regdir)
+        create_cachedir_tag(regdir)
         # only allow one julia process to update registries in this depot at a time
         FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
         errors = Tuple{String, String}[]
