@@ -834,19 +834,28 @@ function set_repo_source_from_registry!(ctx, pkg)
     end
     ensure_resolved(ctx, ctx.env.manifest, [pkg]; registry=true)
     # We might have been given a name / uuid combo that does not have an entry in the registry
+    # or has an entry in multiple registries.
+    # `latest_versions` maps `(repo, subdir)` to the latest registered version from that repo
+    # (across all registries), so we can find the repo with the latest registered version.
+    latest_versions = Dict{Tuple{String, Union{String, Nothing}}, VersionNumber}()
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
         info = Pkg.Registry.registry_info(regpkg)
-        url = info.repo
-        url === nothing && continue
-        pkg.repo.source = url
-        if info.subdir !== nothing
-            pkg.repo.subdir = info.subdir
+        info.repo === nothing && continue
+        latest = maximum(keys(info.version_info))
+        current_latest = get!(latest_versions, (info.repo, info.subdir), latest)
+        if latest > current_latest
+            latest_versions[(info.repo, info.subdir)] = latest
         end
-        return
     end
-    pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
+    if isempty(latest_versions)
+        pkgerror("Repository for package with UUID `$(pkg.uuid)` could not be found in a registry.")
+    end
+    info = argmax(latest_versions)
+    pkg.repo.source = info[1]
+    pkg.repo.subdir = info[2]
+    return info # for testing
 end
 
 
