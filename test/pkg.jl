@@ -752,7 +752,7 @@ end
         cd("A") do
             try
                 Pkg.resolve()
-                @test false "Expected a PkgError to be thrown"
+                @test false # a PkgError should be thrown"
             catch e
                 @test e isa PkgError
                 error_msg = sprint(showerror, e)
