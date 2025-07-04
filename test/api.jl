@@ -333,12 +333,12 @@ end
         rm(test_dir, force=true, recursive=true)
         copy_test_package(tempdir, "AllowReresolveTest")
         Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
-        @test_throws PkgError Pkg.build(; allow_reresolve=false)
+        @test_throws Pkg.Resolve.ResolverError Pkg.build(; allow_reresolve=false)
 
         rm(test_dir, force=true, recursive=true)
         copy_test_package(tempdir, "AllowReresolveTest")
         Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
-        @test_throws PkgError Pkg.test(; allow_reresolve=false)
+        @test_throws Pkg.Resolve.ResolverError Pkg.test(; allow_reresolve=false)
     end end
 end
 
