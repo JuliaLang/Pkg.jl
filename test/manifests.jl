@@ -7,24 +7,29 @@ using  ..Utils
 # used with the reference manifests in `test/manifest/formats`
 # ensures the manifests are valid and restored after test
 function reference_manifest_isolated_test(f, dir::String; v1::Bool=false)
-    env_dir = joinpath(@__DIR__, "manifest", "formats", dir)
-    env_manifest = joinpath(env_dir, "Manifest.toml")
-    env_project = joinpath(env_dir, "Project.toml")
-    cp(env_manifest, string(env_manifest, "_backup"))
-    cp(env_project, string(env_project, "_backup"))
+    source_env_dir = joinpath(@__DIR__, "manifest", "formats", dir)
+    source_env_manifest = joinpath(source_env_dir, "Manifest.toml")
+    source_env_project = joinpath(source_env_dir, "Project.toml")
+    
+    # Create a temporary directory for the test files
+    temp_dir = mktempdir()
     try
+        # Copy files to temporary directory
+        env_manifest = joinpath(temp_dir, "Manifest.toml")
+        env_project = joinpath(temp_dir, "Project.toml")
+        cp(source_env_manifest, env_manifest)
+        cp(source_env_project, env_project)
+        
         isfile(env_manifest) || error("Reference manifest is missing")
         if Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == !v1
             error("Reference manifest file at $(env_manifest) is invalid")
         end
         isolate(loaded_depot=true) do
-            f(env_dir, env_manifest)
+            f(temp_dir, env_manifest)
         end
     finally
-        cp(string(env_manifest, "_backup"), env_manifest, force = true)
-        rm(string(env_manifest, "_backup"))
-        cp(string(env_project, "_backup"), env_project, force = true)
-        rm(string(env_project, "_backup"))
+        # Clean up temporary directory
+        rm(temp_dir, recursive=true)
     end
 end
 
