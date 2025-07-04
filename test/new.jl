@@ -1151,7 +1151,7 @@ end
         @test isempty(opts)
 
         api, args, opts = first(Pkg.pkg"add a/path/with/@/deal/with/it")
-        @test args[1].path == "a/path/with/@/deal/with/it"
+        @test normpath(args[1].path) == normpath("a/path/with/@/deal/with/it")
 
         # Test GitHub URLs with tree/commit paths
         @testset "GitHub tree/commit URLs" begin
@@ -1278,7 +1278,7 @@ end
             api, args, opts = first(Pkg.pkg"add ./local/repo#feature-branch")
             @test api == Pkg.add
             @test length(args) == 1
-            @test args[1].path == "local/repo"  # normpath removes "./"
+            @test normpath(args[1].path) == normpath("local/repo")  # normpath removes "./"
             @test args[1].rev == "feature-branch"
 
             # Test local paths with subdir specifiers
@@ -1300,17 +1300,19 @@ end
             api, args, opts = first(Pkg.pkg"add ../workspace/repo#bugfix/issue-#123")
             @test api == Pkg.add
             @test length(args) == 1
-            @test args[1].path == "../workspace/repo"
+            @test normpath(args[1].path) == normpath("../workspace/repo")
             @test args[1].rev == "bugfix/issue-#123"
 
             # Test complex local path case: relative path + branch with # + subdir
-            api, args, opts = first(Pkg.pkg"add ~/projects/myrepo#feature/fix-#456:libs/core")
-            @test api == Pkg.add
-            @test length(args) == 1
-            @test startswith(args[1].path, "/")  # ~ gets expanded to absolute path
-            @test endswith(args[1].path, "/projects/myrepo")
-            @test args[1].rev == "feature/fix-#456"
-            @test args[1].subdir == "libs/core"
+            if !Sys.iswindows()
+                api, args, opts = first(Pkg.pkg"add ~/projects/myrepo#feature/fix-#456:libs/core")
+                @test api == Pkg.add
+                @test length(args) == 1
+                @test startswith(args[1].path, "/")  # ~ gets expanded to absolute path
+                @test endswith(normpath(args[1].path), normpath("/projects/myrepo"))
+                @test args[1].rev == "feature/fix-#456"
+                @test args[1].subdir == "libs/core"
+            end
 
             # Test quoted URL with separate revision specifier (regression test)
             api, args, opts = first(Pkg.pkg"add \"https://username@bitbucket.org/orgname/reponame.git\"#dev")
@@ -1342,6 +1344,29 @@ end
             @test args[1].url == "https://github.com/user/repo"
             @test args[1].rev === nothing
             @test args[1].subdir === nothing
+        end
+
+        @testset "Windows path handling" begin
+            # Test that Windows drive letters are not treated as subdir separators
+            api, args, opts = first(Pkg.pkg"add C:\\Users\\test\\project")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == normpath("C:\\\\Users\\\\test\\\\project")
+            @test args[1].subdir === nothing
+            
+            # Test with forward slashes too
+            api, args, opts = first(Pkg.pkg"add C:/Users/test/project")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == normpath("C:/Users/test/project")
+            @test args[1].subdir === nothing
+            
+            # Test that actual subdir syntax still works with Windows paths
+            api, args, opts = first(Pkg.pkg"add C:\\Users\\test\\project:subdir")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == normpath("C:\\\\Users\\\\test\\\\project")
+            @test args[1].subdir == "subdir"
         end
 
         # Add using preserve option
@@ -1390,7 +1415,7 @@ end
     end end
     isolate() do; cd_tempdir() do dir
         # adding a nonexistent directory
-        @test_throws PkgError("Path `some/really/random/Dir` does not exist."
+        @test_throws PkgError("Path `$(normpath("some/really/random/Dir"))` does not exist."
                               ) Pkg.pkg"add some/really/random/Dir"
         # warn if not explicit about adding directory
         mkdir("Example")

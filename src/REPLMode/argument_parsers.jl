@@ -41,7 +41,8 @@ end
 
 # Simple path detection
 function looks_like_path(str::String)
-    return contains(str, '/') || contains(str, '\\') || str == "." || str == ".."
+    return contains(str, '/') || contains(str, '\\') || str == "." || str == ".." ||
+           (length(str) >= 2 && isletter(str[1]) && str[2] == ':')  # Windows drive letters
 end
 
 # Check if a string looks like a complete URL
@@ -51,10 +52,26 @@ function looks_like_complete_url(str::String)
            (contains(str, '.') || contains(str, '/'))
 end
 
-# Extract subdir specifier from the end of input (rightmost :)
+# Check if a colon at given position is part of a Windows drive letter
+function is_windows_drive_colon(input::String, colon_pos::Int)
+    # Windows drive letters are single letters followed by colon at beginning
+    # Examples: "C:", "D:", etc.
+    if colon_pos == 2 && length(input) >= 2
+        first_char = input[1]
+        return isletter(first_char) && input[2] == ':'
+    end
+    return false
+end
+
+# Extract subdir specifier from the end of input (rightmost : that's not a Windows drive letter)
 function extract_subdir(input::String)
     colon_pos = findlast(':', input)
     if colon_pos === nothing
+        return input, nothing
+    end
+
+    # Skip Windows drive letters (e.g., C:, D:)
+    if is_windows_drive_colon(input, colon_pos)
         return input, nothing
     end
 
