@@ -533,7 +533,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
         # We only fixup a JLL if the old major/minor/patch matches the new major/minor/patch
         if old_v !== nothing && Base.thispatch(old_v) == Base.thispatch(vers_fix[uuid])
             new_v = vers_fix[uuid]
-            if old_v != new_v
+            if old_v != new_v && haskey(compat_map[uuid], old_v)
                 compat_map[uuid][old_v] = compat_map[uuid][new_v]
                 # Note that we don't delete!(compat_map[uuid], old_v) because we want to keep the compat info around
                 # in case there's JLL version confusion between the sysimage pkgorigins version and manifest
@@ -568,6 +568,10 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
                 deps_fixed
             else
                 d = Dict{String, UUID}()
+                if !haskey(compat_map[pkg.uuid], pkg.version)
+                    available_versions = sort!(collect(keys(compat_map[pkg.uuid])))
+                    pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
+                end
                 for (uuid, _) in compat_map[pkg.uuid][pkg.version]
                     d[names[uuid]]  = uuid
                 end
