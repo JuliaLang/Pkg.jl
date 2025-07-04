@@ -12,7 +12,7 @@ import FileWatching
 
 import Base: StaleCacheKey
 
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped
 import ..Operations, ..GitTools, ..Pkg, ..Registry
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
 using ..Types, ..TOML
