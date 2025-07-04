@@ -1,3 +1,3 @@
 # Build script for AllowReresolveTest
-println("Building AllowReresolveTest...")
+using Test
 println("Build completed successfully!")
