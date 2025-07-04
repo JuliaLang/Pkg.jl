@@ -264,7 +264,7 @@ end
         @test isinstalled(dep)
         pkg"rm Package"
 
-        pkgstr("add $(packages_dir):dependencies/Dep#master")
+        pkgstr("add $(packages_dir)#master:dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
@@ -337,7 +337,7 @@ end
         @test isinstalled(dep)
         pkg"rm Package"
 
-        pkgstr("add $(packages_dir_url):dependencies/Dep#master")
+        pkgstr("add $(packages_dir_url)#master:dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
