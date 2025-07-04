@@ -7,6 +7,8 @@ Pkg v1.13 Release Notes
 - `update` now shows a helpful tip when trying to upgrade a specific package that can be upgraded but is held back because it's part of a less optimal resolver solution ([#4266])
 - `Pkg.status` now displays yanked packages with a `[yanked]` indicator and shows a warning when yanked packages are present. `Pkg.resolve` errors also display warnings about yanked packages that are not resolvable. ([#4310])
 - Added `pkg> compat --current` command to automatically populate missing compat entries with the currently resolved package versions. Use `pkg> compat --current` for all packages or `pkg> compat Foo --current` for specific packages. ([#3266])
+- Added `Pkg.precompile() do` block syntax to delay autoprecompilation until after multiple operations complete, improving efficiency when performing several environment changes. ([#4262])
+- Added `Pkg.autoprecompilation_enabled(state::Bool)` to globally enable or disable automatic precompilation for Pkg operations. ([#4262])
 
 Pkg v1.12 Release Notes
 =======================
