@@ -82,7 +82,8 @@ function read_project_apps(raw::Dict{String,Any}, project::Project)
         info isa Dict{String,Any} || pkgerror("""
             Expected value for app `$name` to be a dictionary.
         """)
-        appinfos[name] = AppInfo(name, nothing, nothing, other)
+        submodule = get(info, "submodule", nothing)
+        appinfos[name] = AppInfo(name, nothing, submodule, other)
     end
     return appinfos
 end

@@ -10,14 +10,14 @@ The most frequently used is `add` and its usage is described first.
 In the Pkg REPL, packages can be added with the `add` command followed by the name of the package, for example:
 
 ```julia-repl
-(@v1.8) pkg> add JSON
+(@v1.10) pkg> add JSON
   Installing known registries into `~/`
    Resolving package versions...
    Installed Parsers ─ v2.4.0
    Installed JSON ──── v0.21.3
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [682c06a0] + JSON v0.21.3
-    Updating `~/environments/v1.9/Manifest.toml`
+    Updating `~/.julia/environments/v1.10/Manifest.toml`
   [682c06a0] + JSON v0.21.3
   [69de0a69] + Parsers v2.4.0
   [ade2ca70] + Dates
@@ -40,16 +40,16 @@ It is possible to add multiple packages in one command as `pkg> add A B C`.
 The status output contains the packages you have added yourself, in this case, `JSON`:
 
 ```julia-repl
-(@v1.11) pkg> st
-    Status `~/.julia/environments/v1.8/Project.toml`
+(@v1.10) pkg> st
+    Status `~/.julia/environments/v1.10/Project.toml`
   [682c06a0] JSON v0.21.3
 ```
 
 The manifest status shows all the packages in the environment, including recursive dependencies:
 
 ```julia-repl
-(@v1.11) pkg> st -m
-Status `~/environments/v1.9/Manifest.toml`
+(@v1.10) pkg> st -m
+Status `~/.julia/environments/v1.10/Manifest.toml`
   [682c06a0] JSON v0.21.3
   [69de0a69] Parsers v2.4.0
   [ade2ca70] Dates
@@ -64,18 +64,18 @@ To specify that you want a particular version (or set of versions) of a package,
 to require any patch release of the v0.21 series of JSON after v0.21.4, call `compat JSON 0.21.4`:
 
 ```julia-repl
-(@1.11) pkg> compat JSON 0.21.4
+(@v1.10) pkg> compat JSON 0.21.4
       Compat entry set:
   JSON = "0.21.4"
      Resolve checking for compliance with the new compat rules...
        Error empty intersection between JSON@0.21.3 and project compatibility 0.21.4 - 0.21
   Suggestion Call `update` to attempt to meet the compatibility requirements.
 
-(@1.11) pkg> update
+(@v1.10) pkg> update
     Updating registry at `~/.julia/registries/General.toml`
-    Updating `~/.julia/environments/1.11/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
-    Updating `~/.julia/environments/1.11/Manifest.toml`
+    Updating `~/.julia/environments/v1.10/Manifest.toml`
   [682c06a0] ↑ JSON v0.21.3 ⇒ v0.21.4
 ```
 
@@ -96,11 +96,11 @@ julia> JSON.json(Dict("foo" => [1, "bar"])) |> print
 A specific version of a package can be installed by appending a version after a `@` symbol to the package name:
 
 ```julia-repl
-(@v1.8) pkg> add JSON@0.21.1
+(@v1.10) pkg> add JSON@0.21.1
    Resolving package versions...
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
 ⌃ [682c06a0] + JSON v0.21.1
-    Updating `~/environments/v1.9/Manifest.toml`
+    Updating `~/.julia/environments/v1.10/Manifest.toml`
 ⌃ [682c06a0] + JSON v0.21.1
 ⌅ [69de0a69] + Parsers v1.1.2
   [ade2ca70] + Dates
@@ -118,12 +118,12 @@ If a branch (or a certain commit) of `Example` has a hotfix that is not yet incl
 we can explicitly track that branch (or commit) by appending `#branchname` (or `#commitSHA1`) to the package name:
 
 ```julia-repl
-(@v1.8) pkg> add Example#master
+(@v1.10) pkg> add Example#master
      Cloning git-repo `https://github.com/JuliaLang/Example.jl.git`
    Resolving package versions...
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [7876af07] + Example v0.5.4 `https://github.com/JuliaLang/Example.jl.git#master`
-    Updating `~/environments/v1.9/Manifest.toml`
+    Updating `~/.julia/environments/v1.10/Manifest.toml`
   [7876af07] + Example v0.5.4 `https://github.com/JuliaLang/Example.jl.git#master`
 ```
 
@@ -139,12 +139,12 @@ When updating packages, updates are pulled from that branch.
 To go back to tracking the registry version of `Example`, the command `free` is used:
 
 ```julia-repl
-(@v1.8) pkg> free Example
+(@v1.10) pkg> free Example
    Resolving package versions...
    Installed Example ─ v0.5.3
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [7876af07] ~ Example v0.5.4 `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v0.5.3
-    Updating `~/environments/v1.9/Manifest.toml`
+    Updating `~/.julia/environments/v1.10/Manifest.toml`
   [7876af07] ~ Example v0.5.4 `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v0.5.3
 ```
 
@@ -153,12 +153,12 @@ To go back to tracking the registry version of `Example`, the command `free` is 
 If a package is not in a registry, it can be added by specifying a URL to the Git repository:
 
 ```julia-repl
-(@v1.8) pkg> add https://github.com/fredrikekre/ImportMacros.jl
+(@v1.10) pkg> add https://github.com/fredrikekre/ImportMacros.jl
      Cloning git-repo `https://github.com/fredrikekre/ImportMacros.jl`
    Resolving package versions...
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [92a963f6] + ImportMacros v1.0.0 `https://github.com/fredrikekre/ImportMacros.jl#master`
-    Updating `~/environments/v1.9/Manifest.toml`
+    Updating `~/.julia/environments/v1.10/Manifest.toml`
   [92a963f6] + ImportMacros v1.0.0 `https://github.com/fredrikekre/ImportMacros.jl#master`
 ```
 
@@ -167,7 +167,7 @@ For unregistered packages, we could have given a branch name (or commit SHA1) to
 
 If you want to add a package using the SSH-based `git` protocol, you have to use quotes because the URL contains a `@`. For example,
 ```julia-repl
-(@v1.8) pkg> add "git@github.com:fredrikekre/ImportMacros.jl.git"
+(@v1.10) pkg> add "git@github.com:fredrikekre/ImportMacros.jl.git"
     Cloning git-repo `git@github.com:fredrikekre/ImportMacros.jl.git`
    Updating registry at `~/.julia/registries/General`
   Resolving package versions...
@@ -188,7 +188,7 @@ repository:
 pkg> add https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore
     Cloning git-repo `https://github.com/timholy/SnoopCompile.jl.git`
    Resolving package versions...
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [e2b509da] + SnoopCompileCore v2.9.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
     Updating `~/.julia/environments/v1.8/Manifest.toml`
   [e2b509da] + SnoopCompileCore v2.9.0 `https://github.com/timholy/SnoopCompile.jl.git:SnoopCompileCore#master`
@@ -214,15 +214,15 @@ from that local repo are pulled when packages are updated.
 By only using `add` your environment always has a "reproducible state", in other words, as long as the repositories and registries used are still accessible
 it is possible to retrieve the exact state of all the dependencies in the environment. This has the advantage that you can send your environment (`Project.toml`
 and `Manifest.toml`) to someone else and they can [`Pkg.instantiate`](@ref) that environment in the same state as you had it locally.
-However, when you are developing a package, it is more convenient to load packages at their current state at some path. For this reason, the `dev` command exists.
+However, when you are [developing a package](@ref developing), it is more convenient to load packages at their current state at some path. For this reason, the `dev` command exists.
 
 Let's try to `dev` a registered package:
 
 ```julia-repl
-(@v1.8) pkg> dev Example
+(@v1.10) pkg> dev Example
   Updating git-repo `https://github.com/JuliaLang/Example.jl.git`
    Resolving package versions...
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [7876af07] + Example v0.5.4 `~/.julia/dev/Example`
     Updating `~/.julia/environments/v1.8/Manifest.toml`
   [7876af07] + Example v0.5.4 `~/.julia/dev/Example`
@@ -263,9 +263,9 @@ julia> Example.plusone(1)
 To stop tracking a path and use the registered version again, use `free`:
 
 ```julia-repl
-(@v1.8) pkg> free Example
+(@v1.10) pkg> free Example
    Resolving package versions...
-    Updating `~/.julia/environments/v1.8/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [7876af07] ~ Example v0.5.4 `~/.julia/dev/Example` ⇒ v0.5.3
     Updating `~/.julia/environments/v1.8/Manifest.toml`
   [7876af07] ~ Example v0.5.4 `~/.julia/dev/Example` ⇒ v0.5.3
@@ -300,29 +300,29 @@ When new versions of packages are released, it is a good idea to update. Simply 
 to the latest compatible version. Sometimes this is not what you want. You can specify a subset of the dependencies to upgrade by giving them as arguments to `up`, e.g:
 
 ```julia-repl
-(@v1.8) pkg> up Example
+(@v1.10) pkg> up Example
 ```
 
 This will only allow Example do upgrade. If you also want to allow dependencies of Example to upgrade (with the exception of packages that are in the project) you can pass the `--preserve=direct` flag.
 
 ```julia-repl
-(@v1.8) pkg> up --preserve=direct Example
+(@v1.10) pkg> up --preserve=direct Example
 ```
 
 And if you also want to allow dependencies of Example that are also in the project to upgrade, you can use `--preserve=none`:
 
 
 ```julia-repl
-(@v1.8) pkg> up --preserve=none Example
+(@v1.10) pkg> up --preserve=none Example
 ```
 ## Pinning a package
 
 A pinned package will never be updated. A package can be pinned using `pin`, for example:
 
 ```julia-repl
-(@v1.8) pkg> pin Example
+(@v1.10) pkg> pin Example
  Resolving package versions...
-  Updating `~/.julia/environments/v1.8/Project.toml`
+  Updating `~/.julia/environments/v1.10/Project.toml`
   [7876af07] ~ Example v0.5.3 ⇒ v0.5.3 ⚲
   Updating `~/.julia/environments/v1.8/Manifest.toml`
   [7876af07] ~ Example v0.5.3 ⇒ v0.5.3 ⚲
@@ -331,8 +331,8 @@ A pinned package will never be updated. A package can be pinned using `pin`, for
 Note the pin symbol `⚲` showing that the package is pinned. Removing the pin is done using `free`
 
 ```julia-repl
-(@v1.8) pkg> free Example
-  Updating `~/.julia/environments/v1.8/Project.toml`
+(@v1.10) pkg> free Example
+  Updating `~/.julia/environments/v1.10/Project.toml`
   [7876af07] ~ Example v0.5.3 ⚲ ⇒ v0.5.3
   Updating `~/.julia/environments/v1.8/Manifest.toml`
   [7876af07] ~ Example v0.5.3 ⚲ ⇒ v0.5.3
@@ -343,7 +343,7 @@ Note the pin symbol `⚲` showing that the package is pinned. Removing the pin i
 The tests for a package can be run using `test` command:
 
 ```julia-repl
-(@v1.8) pkg> test Example
+(@v1.10) pkg> test Example
 ...
    Testing Example
    Testing Example tests passed
@@ -356,7 +356,7 @@ The output of the build process is directed to a file.
 To explicitly run the build step for a package, the `build` command is used:
 
 ```julia-repl
-(@v1.8) pkg> build IJulia
+(@v1.10) pkg> build IJulia
     Building Conda ─→ `~/.julia/scratchspaces/44cfe95a-1eb2-52ea-b672-e2afdf69b78f/6e47d11ea2776bc5627421d59cdcc1296c058071/build.log`
     Building IJulia → `~/.julia/scratchspaces/44cfe95a-1eb2-52ea-b672-e2afdf69b78f/98ab633acb0fe071b671f6c1785c46cd70bb86bd/build.log`
 
@@ -486,7 +486,7 @@ To fix such errors, you have a number of options:
 - remove either `A` or `B` from your environment. Perhaps `B` is left over from something you were previously working on, and you don't need it anymore. If you don't need `A` and `B` at the same time, this is the easiest way to fix the problem.
 - try reporting your conflict. In this case, we were able to deduce that `B` requires an outdated version of `D`. You could thus report an issue in the development repository of `B.jl` asking for an updated version.
 - try fixing the problem yourself.
-  This becomes easier once you understand `Project.toml` files and how they declare their compatibility requirements. We'll return to this example in [Fixing conflicts](@ref).
+  This becomes easier once you understand `Project.toml` files and how they declare their compatibility requirements. We'll return to this example in [Fixing conflicts](@ref Fixing-conflicts).
 
 ## Garbage collecting old, unused packages
 
@@ -502,7 +502,7 @@ If you are short on disk space and want to clean out as many unused packages and
 To run a typical garbage collection with default arguments, simply use the `gc` command at the `pkg>` REPL:
 
 ```julia-repl
-(@v1.8) pkg> gc
+(@v1.10) pkg> gc
     Active manifests at:
         `~/BinaryProvider/Manifest.toml`
         ...

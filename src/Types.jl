@@ -241,7 +241,7 @@ Base.hash(t::Compat, h::UInt) = hash(t.val, h)
 struct AppInfo
     name::String
     julia_command::Union{String, Nothing}
-    julia_version::Union{VersionNumber, Nothing}
+    submodule::Union{String, Nothing}
     other::Dict{String,Any}
 end
 Base.@kwdef mutable struct Project
@@ -698,7 +698,7 @@ function read_package(path::String)
     return project
 end
 
-const refspecs = ["+refs/*:refs/remotes/cache/*"]
+const refspecs = ["+refs/heads/*:refs/remotes/cache/heads/*"]
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
@@ -804,7 +804,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         new = true
     end
     if !has_uuid(pkg)
-        resolve_projectfile!(pkg, dev_path)
+        resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir === nothing ? "" : pkg.repo.subdir))
     end
     error_if_in_sysimage(pkg)
     pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
@@ -1236,7 +1236,6 @@ function write_env(env::EnvCache; update_undo=true,
             end
         end
     end
-
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end
