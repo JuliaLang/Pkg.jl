@@ -1923,7 +1923,7 @@ end
 function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
             skip_writing_project::Bool=false, preserve::Union{Nothing,PreserveLevel}=nothing)
 
-    requested_pkgs = copy(pkgs)
+    requested_pkgs = pkgs
 
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
@@ -1958,8 +1958,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         if entry === nothing || (entry.path === nothing && entry.repo.source === nothing)
             # Get current version after the update
-            current_entry = manifest_info(ctx.env.manifest, pkg.uuid)
-            current_version = current_entry !== nothing ? current_entry.version : nothing
+            current_version = entry !== nothing ? entry.version : nothing
             original_entry = manifest_info(ctx.env.original_manifest, pkg.uuid)
             original_version = original_entry !== nothing ? original_entry.version : nothing
 
@@ -1970,8 +1969,8 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
                 if cinfo !== nothing
                     packages_holding_back, max_version, max_version_compat = cinfo
                     if current_version < max_version
-                        printpkgstyle(ctx.io, :Info, """$(pkg.name) can be updated but at the cost of downgrading other packages. \
-                            To force upgrade to the latest version, try `add $(pkg.name)@$(max_version)`""", color=Base.info_color())
+                        printpkgstyle(ctx.io, :Info, "$(pkg.name) can be updated but at the cost of downgrading other packages. " *
+                            "To force upgrade to the latest version, try `add $(pkg.name)@$(max_version)`", color=Base.info_color())
                     end
                 end
             end
