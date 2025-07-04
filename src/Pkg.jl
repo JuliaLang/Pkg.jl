@@ -623,6 +623,13 @@ See [Compatibility](@ref) for more information on the project [compat] section.
 const compat = API.compat
 
 """
+    Pkg.compat_current()
+
+If any packages are missing [compat] entries set them based on their current version.
+"""
+const compat_current = API.compat_current
+
+"""
     Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
     Pkg.activate(; temp::Bool=false, shared::Bool=false, io::IO=stderr)
 
