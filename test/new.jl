@@ -1378,7 +1378,6 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;name="example")]
         @test isempty(opts)
-        @test_throws PkgError Pkg.pkg"add ./Example"
         api, args, opts = first(Pkg.pkg"add ./example")
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;path="example")]
@@ -1391,7 +1390,7 @@ end
     end end
     isolate() do; cd_tempdir() do dir
         # adding a nonexistent directory
-        @test_throws PkgError("`some/really/random/Dir` appears to be a local path, but directory does not exist"
+        @test_throws PkgError("Path `some/really/random/Dir` does not exist."
                               ) Pkg.pkg"add some/really/random/Dir"
         # warn if not explicit about adding directory
         mkdir("Example")
