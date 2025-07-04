@@ -417,7 +417,25 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             path = project_rel_path(env, source_path(env.manifest_file, pkg))
         end
         if !isdir(path)
-            pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
+            # Find which packages depend on this missing package for better error reporting
+            dependents = String[]
+            for (dep_uuid, dep_entry) in env.manifest.deps
+                if pkg.uuid in values(dep_entry.deps) || pkg.uuid in values(dep_entry.weakdeps)
+                    push!(dependents, dep_entry.name === nothing ? "unknown package [$dep_uuid]" : dep_entry.name)
+                end
+            end
+
+            error_msg = "expected package $(err_rep(pkg)) to exist at path `$path`"
+            error_msg *= "\n\nThis package is referenced in the manifest file: $(env.manifest_file)"
+
+            if !isempty(dependents)
+                if length(dependents) == 1
+                    error_msg *= "\nIt is required by: $(dependents[1])"
+                else
+                    error_msg *= "\nIt is required by:\n$(join(["  - $dep" for dep in dependents], "\n"))"
+                end
+            end
+            pkgerror(error_msg)
         end
         deps, weakdeps = collect_project(pkg, path)
         deps_map[pkg.uuid] = deps
