@@ -603,7 +603,8 @@ function status(io::IO=stderr_f())
             end
             update_time = get(registry_update_log, string(reg.uuid), nothing)
             if !isnothing(update_time)
-                print(io, ", last updated $(update_time)")
+                time_string = Dates.format(update_time, dateformat"yyyy-mm-dd HH:MM:SS")
+                print(io, ", last updated $(time_string)")
             end
             println(io)
 
