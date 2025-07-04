@@ -1312,12 +1312,12 @@ function any_package_not_installed(manifest::Manifest)
     return false
 end
 
-function build(ctx::Context, uuids::Set{UUID}, verbose::Bool)
+function build(ctx::Context, uuids::Set{UUID}, verbose::Bool; allow_reresolve::Bool=true)
     if any_package_not_installed(ctx.env.manifest) || !isfile(ctx.env.manifest_file)
         Pkg.instantiate(ctx, allow_build = false, allow_autoprecomp = false)
     end
     all_uuids = get_deps(ctx.env, uuids)
-    build_versions(ctx, all_uuids; verbose)
+    build_versions(ctx, all_uuids; verbose, allow_reresolve)
 end
 
 function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID,Int}
@@ -1377,7 +1377,7 @@ pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 
 builddir(source_path::String) = joinpath(source_path, "deps")
 buildfile(source_path::String) = joinpath(builddir(source_path), "build.jl")
-function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
+function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false, allow_reresolve::Bool=true)
     # collect builds for UUIDs with `deps/build.jl` files
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
@@ -1459,7 +1459,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         fancyprint && show_progress(ctx.io, bar)
 
         let log_file=log_file
-            sandbox(ctx, pkg, builddir(source_path), build_project_override; preferences=build_project_preferences) do
+            sandbox(ctx, pkg, builddir(source_path), build_project_override; preferences=build_project_preferences, allow_reresolve) do
                 flush(ctx.io)
                 ok = open(log_file, "w") do log
                     std = verbose ? ctx.io : log
