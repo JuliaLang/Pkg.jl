@@ -294,7 +294,7 @@ Pkg.add("AnotherPackage")  # Will trigger auto-precompilation
 
 See also [`Pkg.precompile`](@ref).
 """
-const autoprecompilation_enabled = autoprecompilation_enabled
+autoprecompilation_enabled
 
 """
     Pkg.rm(pkg::Union{String, Vector{String}}; mode::PackageMode = PKGMODE_PROJECT)
