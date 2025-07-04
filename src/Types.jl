@@ -1220,7 +1220,7 @@ function write_env(env::EnvCache; update_undo=true,
         path, repo = get_path_repo(env.project, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
-            @assert entry.path == path
+            @assert normpath(entry.path) == normpath(path)
         end
         if repo != GitRepo()
             @assert entry.repo.source == repo.source
