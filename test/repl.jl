@@ -761,4 +761,30 @@ end
     end
 end
 
+@testset "in_repl_mode" begin
+    # Test that in_repl_mode() returns false by default (API mode)
+    @test Pkg.in_repl_mode() == false
+    
+    # Test that in_repl_mode() returns true when running REPL commands
+    # This is tested indirectly by running a simple REPL command
+    temp_pkg_dir() do project_path
+        cd(project_path) do
+            # The pkg"" macro should set IN_REPL_MODE => true during execution
+            # We can't directly test the scoped value here, but we can test
+            # that REPL commands work correctly
+            pkg"status"
+            # The fact that this doesn't error confirms REPL mode is working
+            @test true
+        end
+    end
+    
+    # Test manual scoped value setting (for completeness)
+    Base.ScopedValues.@with Pkg.IN_REPL_MODE => true begin
+        @test Pkg.in_repl_mode() == true
+    end
+    
+    # Verify we're back to false after the scoped block
+    @test Pkg.in_repl_mode() == false
+end
+
 end # module

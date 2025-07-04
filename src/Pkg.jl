@@ -52,6 +52,9 @@ const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 
+# ScopedValue to track whether we're currently in REPL mode
+const IN_REPL_MODE = Base.ScopedValues.ScopedValue{Bool}()
+
 # See discussion in https://github.com/JuliaLang/julia/pull/52249
 function unstableio(@nospecialize(io::IO))
     # Needed to prevent specialization https://github.com/JuliaLang/julia/pull/52249#discussion_r1401199265
@@ -68,6 +71,14 @@ const PREV_ENV_PATH = Ref{String}("")
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
 can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
+
+"""
+    in_repl_mode()
+
+Check if we're currently executing in REPL mode. This is used to determine
+whether to show tips in REPL format (`pkg> add Foo`) or API format (`Pkg.add("Foo")`).
+"""
+in_repl_mode() = @something(Base.ScopedValues.get(IN_REPL_MODE), false)
 
 include("utils.jl")
 include("MiniProgressBars.jl")
@@ -723,7 +734,7 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
-# Use HTTPS for GitHub (default, good for most users)  
+# Use HTTPS for GitHub (default, good for most users)
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
 
 # Reset to default (let package developer decide)

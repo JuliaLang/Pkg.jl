@@ -1627,21 +1627,21 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
         existing_uuid == pkg.uuid ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$(pkg.name)=$(existing_uuid)` with the same name already exists as a direct dependency.
-                     To remove the existing package, use `import Pkg; Pkg.rm("$(pkg.name)")`.
+                     To remove the existing package, use `$(Pkg.in_repl_mode() ? """pkg> rm $(pkg.name)""" : """import Pkg; Pkg.rm("$(pkg.name)")""")`.
                      """)
         # package with the same uuid exist in the project: assert they have the same name
         name = findfirst(==(pkg.uuid), ctx.env.project.deps)
         name === nothing || name == pkg.name ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$name=$(pkg.uuid)` with the same UUID already exists as a direct dependency.
-                     To remove the existing package, use `import Pkg; Pkg.rm("$name")`.
+                     To remove the existing package, use `$(Pkg.in_repl_mode() ? """pkg> rm $name""" : """import Pkg; Pkg.rm("$name")""")`.
                      """)
         # package with the same uuid exist in the manifest: assert they have the same name
         entry = get(ctx.env.manifest, pkg.uuid, nothing)
         entry === nothing || entry.name == pkg.name ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$(entry.name)=$(pkg.uuid)` with the same UUID already exists in the manifest.
-                     To remove the existing package, use `import Pkg; Pkg.rm(Pkg.PackageSpec(uuid="$(pkg.uuid)"); mode=Pkg.PKGMODE_MANIFEST)`.
+                     To remove the existing package, use `$(Pkg.in_repl_mode() ? """pkg> rm --manifest $(entry.name)=$(pkg.uuid)""" : """import Pkg; Pkg.rm(Pkg.PackageSpec(uuid="$(pkg.uuid)"); mode=Pkg.PKGMODE_MANIFEST)""")`.
                      """)
     end
 end
@@ -1932,7 +1932,8 @@ end
 
 function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
     if entry === nothing
-        pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
+        cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        pkgerror("package $(err_rep(pkg)) not found in the manifest, run `$cmd` and retry.")
     end
 
     #if entry.pinned && pkg.version == VersionSpec()
@@ -2961,7 +2962,15 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
-        tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""
+        tip = if show_usagetips
+            if Pkg.in_repl_mode()
+                " It is recommended to `pkg> resolve` or consider `pkg> update` if necessary."
+            else
+                " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."
+            end
+        else
+            ""
+        end
         printpkgstyle(io, :Warning, "The project dependencies or compat requirements have changed since the manifest was last resolved.$tip",
             ignore_indent; color=Base.warn_color())
     end
