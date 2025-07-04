@@ -72,7 +72,7 @@ usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY
 can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
 
 _autoprecompilation_enabled::Bool = true
-_autoprecompilation_enabled_scoped = Base.ScopedValues.ScopedValue{Bool}(true)
+const _autoprecompilation_enabled_scoped = Base.ScopedValues.ScopedValue{Bool}(true)
 autoprecompilation_enabled(state::Bool) = (global _autoprecompilation_enabled = state)
 function should_autoprecompile()
     if Base.JLOptions().use_compiled_modules == 1 &&
