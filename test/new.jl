@@ -1150,6 +1150,8 @@ end
         @test args == [Pkg.PackageSpec(;url="https://github.com/00vareladavid/Unregistered.jl", rev="0.1.0")]
         @test isempty(opts)
 
+        api, args, opts = first(Pkg.pkg"add a/path/with/@/deal/with/it")
+        @test args[1].path == "a/path/with/@/deal/with/it"
 
         # Test GitHub URLs with tree/commit paths
         @testset "GitHub tree/commit URLs" begin

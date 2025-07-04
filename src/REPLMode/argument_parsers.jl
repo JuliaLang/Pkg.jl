@@ -217,15 +217,7 @@ function parse_path_with_specifiers(input::String)
     
     # Extract revision if present (rightmost #)
     remaining, rev_part = extract_revision(remaining)
-    
-    # Paths cannot have version specifiers (@)
-    if contains(remaining, '@')
-        at_pos = findfirst('@', remaining)
-        base_path = remaining[1:prevind(remaining, at_pos)]
-        version_spec = remaining[nextind(remaining, at_pos):end]
-        pkgerror("Paths cannot have version specifiers. Found `@$version_spec` in path `$base_path`.")
-    end
-    
+
     # What's left is the base path
     push!(tokens, PackageIdentifier(remaining))
     
