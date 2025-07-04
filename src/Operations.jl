@@ -1922,6 +1922,9 @@ end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
             skip_writing_project::Bool=false, preserve::Union{Nothing,PreserveLevel}=nothing)
+
+    requested_pkgs = pkgs
+
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1949,6 +1952,31 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     download_artifacts(ctx, julia_version=ctx.julia_version)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io, hidden_upgrades_info = true)
+
+    if length(requested_pkgs) == 1
+        pkg = only(requested_pkgs)
+        entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        if entry === nothing || (entry.path === nothing && entry.repo.source === nothing)
+            # Get current version after the update
+            current_version = entry !== nothing ? entry.version : nothing
+            original_entry = manifest_info(ctx.env.original_manifest, pkg.uuid)
+            original_version = original_entry !== nothing ? original_entry.version : nothing
+
+            # Check if version didn't change and there's a newer version available
+            if current_version == original_version && current_version !== nothing
+                temp_pkg = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=current_version)
+                cinfo = status_compat_info(temp_pkg, ctx.env, ctx.registries)
+                if cinfo !== nothing
+                    packages_holding_back, max_version, max_version_compat = cinfo
+                    if current_version < max_version
+                        printpkgstyle(ctx.io, :Info, "$(pkg.name) can be updated but at the cost of downgrading other packages. " *
+                            "To force upgrade to the latest version, try `add $(pkg.name)@$(max_version)`", color=Base.info_color())
+                    end
+                end
+            end
+        end
+    end
+
     build_versions(ctx, union(new_apply, new_git))
 end
 
@@ -2801,8 +2829,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.manifest_file, new)
 
         new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
-        pkg_upgradable = new_ver_avail && isempty(cinfo[1])
-        pkg_heldback = new_ver_avail && !isempty(cinfo[1])
+        pkg_upgradable = new_ver_avail && cinfo !== nothing && isempty(cinfo[1])
+        pkg_heldback = new_ver_avail && cinfo !== nothing && !isempty(cinfo[1])
 
         if !pkg_downloaded && (pkg_upgradable || pkg_heldback)
             # allow space in the gutter for two icons on a single line
