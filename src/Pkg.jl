@@ -144,7 +144,7 @@ Add a package to the current project. This package will be available by using th
 `import` and `using` keywords in the Julia REPL, and if the current project is
 a package, also inside that package.
 
-If the active environment is a package (the Project has both `name` and `uuid` fields) compat entries will be
+If the active environment is not a shared one compat entries will be
 added automatically with a lower bound of the added version.
 
 To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
