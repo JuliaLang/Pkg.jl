@@ -104,15 +104,16 @@ function extract_version(input::String)
     return remaining, version_part
 end
 
-# Handle GitHub tree/commit URLs by converting them to standard URL + rev format
-function preprocess_github_tree_commit_url(input::String)
-    m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", input)
-    if m !== nothing
-        base_url = "https://github.com/$(m.captures[1])/$(m.captures[2])"
-        rev = m.captures[3]
-        return [PackageIdentifier(base_url), Rev(rev)]
+function preprocess_github_url(input::String)
+    # Handle GitHub tree/commit URLs
+    if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", input)) !== nothing
+        return [PackageIdentifier("https://github.com/$(m.captures[1])/$(m.captures[2])"), Rev(m.captures[3])]
+    # Handle GitHub pull request URLs
+    elseif (m = match(r"https://github.com/(.*?)/(.*?)/pull/(\d+)$", input)) !== nothing
+        return [PackageIdentifier("https://github.com/$(m.captures[1])/$(m.captures[2])"), Rev("pull/$(m.captures[3])/head")]
+    else
+        return nothing
     end
-    return nothing
 end
 
 # Check if a colon in a URL string is part of URL structure (not a subdir separator)
@@ -289,7 +290,7 @@ function parse_package_spec_new(input::String)
     end
 
     # Handle GitHub tree/commit URLs first (special case)
-    github_result = preprocess_github_tree_commit_url(input)
+    github_result = preprocess_github_url(input)
     if github_result !== nothing
         return github_result
     end
