@@ -12,7 +12,7 @@ import FileWatching
 
 import Base: StaleCacheKey
 
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped
 import ..Operations, ..GitTools, ..Pkg, ..Registry
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
 using ..Types, ..TOML
@@ -1182,6 +1182,13 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
         return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest=workspace, io)
+    end
+end
+
+function precompile(f, args...; kwargs...)
+    Base.ScopedValues.@with _autoprecompilation_enabled_scoped => false begin
+        f()
+        Pkg.precompile(args...; kwargs...)
     end
 end
 

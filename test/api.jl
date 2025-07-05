@@ -158,6 +158,63 @@ import .FakeTerminals.FakeTerminal
             @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
         end
 
+        dep8_srcfile = joinpath("packages", "Dep8", "src", "Dep8.jl")
+        @testset "delayed precompilation with do-syntax" begin
+            iob = IOBuffer()
+            Pkg.develop(Pkg.PackageSpec(path="packages/Dep7"))
+
+            # Test that operations inside Pkg.precompile() do block don't trigger auto-precompilation
+            Pkg.precompile(io=iob) do
+                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+                Pkg.add(Pkg.PackageSpec(path="packages/Dep8"))
+                Pkg.rm("Dep8")
+                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+                Pkg.add(Pkg.PackageSpec(path="packages/Dep8"))
+            end
+
+            # The precompile should happen once at the end
+            str = String(take!(iob))
+            @test occursin("Precompiling", str)
+
+            # Verify it was precompiled by checking a second call is a no-op
+            Pkg.precompile(io=iob)
+            @test !occursin("Precompiling", String(take!(iob)))
+        end
+
+        @testset "autoprecompilation_enabled global control" begin
+            iob = IOBuffer()
+
+            # Test disabling autoprecompilation globally
+            original_state = Pkg._autoprecompilation_enabled
+            try
+                Pkg.autoprecompilation_enabled(false)
+                @test Pkg._autoprecompilation_enabled == false
+
+                # Operations should not trigger autoprecompilation when globally disabled
+                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+                Pkg.add(Pkg.PackageSpec(path="packages/Dep8"), io=iob)
+                @test !occursin("Precompiling", String(take!(iob)))
+
+                # Manual precompile should still work
+                Pkg.precompile(io=iob)
+                @test occursin("Precompiling", String(take!(iob)))
+
+                # Re-enable autoprecompilation
+                Pkg.autoprecompilation_enabled(true)
+                @test Pkg._autoprecompilation_enabled == true
+
+                # Operations should now trigger autoprecompilation again
+                Pkg.rm("Dep8", io=iob)
+                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+                Pkg.add(Pkg.PackageSpec(path="packages/Dep8"), io=iob)
+                @test occursin("Precompiling", String(take!(iob)))
+
+            finally
+                # Restore original state
+                Pkg.autoprecompilation_enabled(original_state)
+            end
+        end
+
         @testset "instantiate" begin
             iob = IOBuffer()
             Pkg.activate("packages/Dep7")

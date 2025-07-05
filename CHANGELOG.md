@@ -5,6 +5,8 @@ Pkg v1.13 Release Notes
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve package versions, similar to the existing option for `Pkg.test`. ([#3329])
 - Packages are now automatically added to `[sources]` when they are added by url or devved.
 - `update` now shows a helpful tip when trying to upgrade a specific package that can be upgraded but is held back because it's part of a less optimal resolver solution ([#4266])
+- Added `Pkg.precompile() do` block syntax to delay autoprecompilation until after multiple operations complete, improving efficiency when performing several environment changes. ([#4262])
+- Added `Pkg.autoprecompilation_enabled(state::Bool)` to globally enable or disable automatic precompilation for Pkg operations. ([#4262])
 
 Pkg v1.12 Release Notes
 =======================
