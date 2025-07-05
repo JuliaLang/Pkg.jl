@@ -891,6 +891,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
+            LibGit2.with(LibGit2.GitRepo(pkg.repo.source)) do repo
+                if LibGit2.isdirty(repo)
+                    @warn "The repository at `$(pkg.repo.source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
+                end
+            end
             pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.manifest_file, pkg.repo.source)
             repo_source = normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source))
         else
