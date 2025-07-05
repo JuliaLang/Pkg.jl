@@ -146,7 +146,7 @@ function require_not_empty(pkgs, f::Symbol)
 end
 
 # Provide some convenience calls
-for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :precompile)
+for f in (:develop, :add, :rm, :up, :down, :pin, :free, :test, :build, :status, :why, :precompile)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -162,8 +162,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
-            $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
+            $(f in (:up, :pin, :free, :build, :down)) && Pkg._auto_precompile(ctx)
+            $(f in (:up, :pin, :free, :rm, :down)) && Pkg._auto_gc(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -397,7 +397,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
         return
     end
-    if update_registry
+    if false # update_registry
         Registry.download_default_registries(ctx.io)
         Operations.update_registries(ctx; force=true)
     end
@@ -416,6 +416,14 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     end
     Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
     return
+end
+
+function down(ctx::Context, pkgs::Vector{PackageSpec};
+            kwargs...)
+    if !isempty(pkgs)
+        pkgerror("`down` can only be called without specifying packages")
+    end
+    return up(ctx, pkgs; level=UPLEVEL_DOWN)
 end
 
 resolve(; io::IO=stderr_f(), kwargs...) = resolve(Context(;io); kwargs...)
