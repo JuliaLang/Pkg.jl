@@ -94,11 +94,6 @@ function isfile_nothrow(path::String)
     end
 end
 
-function casesensitive_isdir(dir::String)
-    dir = abspath(dir)
-    lastdir = splitpath(dir)[end]
-    isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
-end
 
 ## ordering of UUIDs ##
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
