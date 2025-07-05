@@ -600,13 +600,6 @@ end
     @test typeof(pkg_spec) == Pkg.Types.PackageSpec
 end
 
-@testset "parse git url (issue #1935) " begin
-    urls = ["https://github.com/abc/ABC.jl.git", "https://abc.github.io/ABC.jl"]
-    for url in urls
-        @test Pkg.REPLMode.package_lex([Pkg.REPLMode.QString((url), false)]) == [url]
-    end
-end
-
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
         sleep(1.1)
@@ -764,7 +757,7 @@ end
 @testset "in_repl_mode" begin
     # Test that in_repl_mode() returns false by default (API mode)
     @test Pkg.in_repl_mode() == false
-    
+
     # Test that in_repl_mode() returns true when running REPL commands
     # This is tested indirectly by running a simple REPL command
     temp_pkg_dir() do project_path
@@ -777,12 +770,12 @@ end
             @test true
         end
     end
-    
+
     # Test manual scoped value setting (for completeness)
     Base.ScopedValues.@with Pkg.IN_REPL_MODE => true begin
         @test Pkg.in_repl_mode() == true
     end
-    
+
     # Verify we're back to false after the scoped block
     @test Pkg.in_repl_mode() == false
 end

@@ -146,11 +146,6 @@ function isfile_nothrow(path::String)
     end
 end
 
-function casesensitive_isdir(dir::String)
-    dir = abspath(dir)
-    lastdir = splitpath(dir)[end]
-    isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
-end
 
 """
     atomic_toml_write(path::String, data; kws...)
