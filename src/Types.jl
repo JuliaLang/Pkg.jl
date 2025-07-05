@@ -177,6 +177,7 @@ end
 
 function projectfile_path(env_path::String; strict=false)
     for name in Base.project_names
+        basename(env_path) == name && isfile(env_path) && return env_path
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
