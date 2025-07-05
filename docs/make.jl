@@ -44,6 +44,7 @@ makedocs(
         "repl.md",
         "api.md",
         "protocol.md",
+        "depots.md",
     ],
 )
 
