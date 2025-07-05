@@ -432,6 +432,11 @@ end
         @test arg.url == "https://github.com/JuliaLang/Pkg.jl"
         @test arg.rev == "aa/gitlab"
 
+        api, args, opts = first(Pkg.pkg"add https://github.com/JuliaPy/PythonCall.jl/pull/529")
+        arg = args[1]
+        @test arg.url == "https://github.com/JuliaPy/PythonCall.jl"
+        @test arg.rev == "pull/529/head"
+
         api, args, opts = first(Pkg.pkg"add https://github.com/TimG1964/XLSX.jl#Bug-fixing-post-#289:subdir")
         arg = args[1]
         @test arg.url == "https://github.com/TimG1964/XLSX.jl"
