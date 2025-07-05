@@ -5,6 +5,7 @@ using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
 using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
+using Dates: Second
 
 using ..Utils
 
@@ -263,7 +264,7 @@ end
 
         # Test that `update()` with `depots` runs
         io = Base.BufferStream()
-        Registry.update(; depots=[depot_off_path], io)
+        Registry.update(; depots=[depot_off_path], io, update_cooldown = Second(0))
         closewrite(io)
         output = read(io, String)
         @test occursin("registry at `$(depot_off_path)", output)
