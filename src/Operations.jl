@@ -107,6 +107,13 @@ end
 function load_project_deps(project::Project, project_file::String, manifest::Manifest, manifest_file::String, pkgs::Vector{PackageSpec}=PackageSpec[];
                           preserve::PreserveLevel=PRESERVE_DIRECT)
     pkgs_direct = PackageSpec[]
+    # Get registries once for efficiency
+    registries = try
+        Registry.reachable_registries()
+    catch
+        Registry.RegistryInstance[]  # Empty array if registries unavailable
+    end
+
     if project.name !== nothing && project.uuid !== nothing && findfirst(pkg -> pkg.uuid == project.uuid, pkgs) === nothing
         path = Types.relative_project_path(manifest_file, dirname(project_file))
         pkg = PackageSpec(;name=project.name, uuid=project.uuid, version=project.version, path)
@@ -117,6 +124,22 @@ function load_project_deps(project::Project, project_file::String, manifest::Man
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         path, repo = get_path_repo(project, name)
         entry = manifest_info(manifest, uuid)
+
+        # Check if this package version is yanked
+        is_yanked = false
+        if entry !== nothing && entry.version isa VersionNumber && !isempty(registries)
+            for reg in registries
+                reg_pkg = get(reg, uuid, nothing)
+                if reg_pkg !== nothing
+                    info = Registry.registry_info(reg_pkg)
+                    if haskey(info.version_info, entry.version) && Registry.isyanked(info, entry.version)
+                        is_yanked = true
+                        break
+                    end
+                end
+            end
+        end
+
         push!(pkgs_direct, entry === nothing ?
               PackageSpec(;uuid, name, path, repo) :
               PackageSpec(;
@@ -127,6 +150,7 @@ function load_project_deps(project::Project, project_file::String, manifest::Man
                 pinned    = entry.pinned,
                 tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
                 version   = load_version(entry.version, isfixed(entry), preserve),
+                yanked    = is_yanked,
               ))
     end
     return pkgs_direct
@@ -135,8 +159,31 @@ end
 function load_manifest_deps(manifest::Manifest, pkgs::Vector{PackageSpec}=PackageSpec[];
                             preserve::PreserveLevel=PRESERVE_ALL)
     pkgs = copy(pkgs)
+    # Get registries once for efficiency
+    registries = try
+        Registry.reachable_registries()
+    catch
+        Registry.RegistryInstance[]  # Empty array if registries unavailable
+    end
+
     for (uuid, entry) in manifest
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+
+        # Check if this package version is yanked
+        is_yanked = false
+        if entry.version isa VersionNumber && !isempty(registries)
+            for reg in registries
+                reg_pkg = get(reg, uuid, nothing)
+                if reg_pkg !== nothing
+                    info = Registry.registry_info(reg_pkg)
+                    if haskey(info.version_info, entry.version) && Registry.isyanked(info, entry.version)
+                        is_yanked = true
+                        break
+                    end
+                end
+            end
+        end
+
         push!(pkgs, PackageSpec(
             uuid      = uuid,
             name      = entry.name,
@@ -145,6 +192,7 @@ function load_manifest_deps(manifest::Manifest, pkgs::Vector{PackageSpec}=Packag
             repo      = entry.repo,
             tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
             version   = load_version(entry.version, isfixed(entry), preserve),
+            yanked    = is_yanked,
         ))
     end
     return pkgs
@@ -1716,12 +1764,26 @@ function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryIns
                     pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
     printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
-    if preserve == PRESERVE_TIERED_INSTALLED
-        tiered_resolve(env, registries, pkgs, julia_version, true)
-    elseif preserve == PRESERVE_TIERED
-        tiered_resolve(env, registries, pkgs, julia_version, false)
-    else
-        targeted_resolve(env, registries, pkgs, preserve, julia_version)
+    try
+        if preserve == PRESERVE_TIERED_INSTALLED
+            tiered_resolve(env, registries, pkgs, julia_version, true)
+        elseif preserve == PRESERVE_TIERED
+            tiered_resolve(env, registries, pkgs, julia_version, false)
+        else
+            targeted_resolve(env, registries, pkgs, preserve, julia_version)
+        end
+    catch err
+
+        if err isa Resolve.ResolverError
+            yanked_pkgs = filter(pkg -> pkg.yanked, load_all_deps(env))
+            if !isempty(yanked_pkgs)
+                indent = " "^(Pkg.pkgstyle_indent)
+                yanked_str = join(map(pkg -> indent * "   - " * err_rep(pkg, quotes=false) * " " * string(pkg.version), yanked_pkgs), "\n")
+                printpkgstyle(io, :Warning, """The following package versions were yanked from their registry and \
+                are not resolvable:\n$yanked_str""", color=Base.warn_color())
+            end
+        end
+        rethrow()
     end
 end
 
@@ -2544,7 +2606,7 @@ end
 # Display
 
 function stat_rep(x::PackageSpec; name=true)
-    name = name ? "$(x.name)" : ""
+    name_str = name ? "$(x.name)" : ""
     version = x.version == VersionSpec() ? "" : "v$(x.version)"
     rev = ""
     if x.repo.rev !== nothing
@@ -2554,7 +2616,8 @@ function stat_rep(x::PackageSpec; name=true)
     repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
     path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
     pinned = x.pinned ? "⚲" : ""
-    return join(filter(!isempty, [name,version,repo,path,pinned]), " ")
+
+    return join(filter(!isempty, [name_str,version,repo,path,pinned]), " ")
 end
 
 print_single(io::IO, pkg::PackageSpec) = print(io, stat_rep(pkg))
@@ -2868,6 +2931,12 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
 
+        # show if package is yanked
+        pkg_spec = something(pkg.new, pkg.old)
+        if pkg_spec.yanked
+            printstyled(io, " [yanked]"; color=:yellow)
+        end
+
         if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
             if pkg.new.version !== max_version_compat && max_version_compat != max_version
@@ -2946,6 +3015,16 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             # only warn if showing project and outdated indirect deps are hidden
             printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
+    end
+
+    # Check if any packages are yanked for warning message
+    any_yanked_packages = any(pkg -> something(pkg.new, pkg.old).yanked, package_statuses)
+
+    # Add warning for yanked packages
+    if any_yanked_packages
+        yanked_str = sprint((io, args) -> printstyled(io, args...; color=:yellow), "[yanked]", context=io)
+        printpkgstyle(io, :Warning, """Package versions marked with $yanked_str have been pulled from their registry. \
+        It is recommended to update them to resolve a valid version.""", color=Base.warn_color(), ignore_indent)
     end
 
     return nothing
