@@ -89,13 +89,13 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
     end
 end
 
-function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kwargs...)
+function clone(io::IO, url, source_path; header=nothing, credentials=nothing, isbare=false, kwargs...)
     url = String(url)::String
     source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
-    bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
+    bar = MiniProgressBar(header = "Cloning:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
     fancyprint && start_progress(io, bar)
     if credentials === nothing
@@ -103,7 +103,9 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
     try
         if use_cli_git()
-            cmd = `git clone --quiet $url $source_path`
+            args = ["--quiet", url, source_path]
+            isbare && pushfirst!(args, "--bare")
+            cmd = `git clone $args`
             try
                 run(pipeline(cmd; stdout=devnull))
             catch err
@@ -122,7 +124,7 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
                 LibGit2.Callbacks()
             end
             mkpath(source_path)
-            return LibGit2.clone(url, source_path; callbacks=callbacks, credentials=credentials, kwargs...)
+            return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
         end
     catch err
         rm(source_path; force=true, recursive=true)
@@ -141,17 +143,20 @@ function clone(io::IO, url, source_path; header=nothing, credentials=nothing, kw
     end
 end
 
+function geturl(repo)
+    return LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
+        LibGit2.url(remote)
+    end
+end
+
 function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing, credentials=nothing, refspecs=[""], kwargs...)
     if remoteurl === nothing
-        remoteurl = LibGit2.with(LibGit2.get(LibGit2.GitRemote, repo, "origin")) do remote
-            LibGit2.url(remote)
-        end
+        remoteurl = geturl(repo)
     end
     fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
     printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    fancyprint = can_fancyprint(io)
     callbacks = if fancyprint
         LibGit2.Callbacks(
             :transfer_progress => (
@@ -169,17 +174,15 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl=nothing; header=nothing,
     try
         if use_cli_git()
             let remoteurl=remoteurl
-                cd(LibGit2.path(repo)) do
-                    cmd = `git fetch -q $remoteurl $(only(refspecs))`
-                    try
-                        run(pipeline(cmd; stdout=devnull))
-                    catch err
-                        Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
-                    end
+                cmd = `git -C $(LibGit2.path(repo)) fetch -q $remoteurl $(only(refspecs))`
+                try
+                    run(pipeline(cmd; stdout=devnull))
+                catch err
+                    Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
                 end
             end
         else
-            return LibGit2.fetch(repo; remoteurl=remoteurl, callbacks=callbacks, refspecs=refspecs, kwargs...)
+            return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
         end
     catch err
         err isa LibGit2.GitError || rethrow()
@@ -343,7 +346,12 @@ tree_hash(root::AbstractString; debug_out::Union{IO,Nothing} = nothing) = tree_h
 function check_valid_HEAD(repo)
     try LibGit2.head(repo)
     catch err
-        Pkg.Types.pkgerror("invalid git HEAD ($(err.msg))")
+        url = try
+            geturl(repo)
+        catch
+            "(unknown url)"
+        end
+        Pkg.Types.pkgerror("invalid git HEAD in $url ($(err.msg))")
     end
 end
 

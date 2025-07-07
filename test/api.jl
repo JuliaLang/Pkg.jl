@@ -313,4 +313,33 @@ end
     end end
 end
 
+@testset "allow_reresolve parameter" begin
+    isolate(loaded_depot=false) do; mktempdir() do tempdir
+        Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
+        # AllowReresolveTest has Example v0.5.1 which is yanked in the test registry.
+        test_dir = joinpath(tempdir, "AllowReresolveTest")
+
+        # Test that we can build and test with allow_reresolve=true
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test Pkg.build(; allow_reresolve=true) == nothing
+
+        rm(test_dir, force=true, recursive=true)
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test Pkg.test(; allow_reresolve=true) == nothing
+
+        # Test that allow_reresolve=false fails with the broken manifest
+        rm(test_dir, force=true, recursive=true)
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test_throws Pkg.Resolve.ResolverError Pkg.build(; allow_reresolve=false)
+
+        rm(test_dir, force=true, recursive=true)
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test_throws Pkg.Resolve.ResolverError Pkg.test(; allow_reresolve=false)
+    end end
+end
+
 end # module APITests

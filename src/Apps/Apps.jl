@@ -1,6 +1,7 @@
 module Apps
 
 using Pkg
+using Pkg: atomic_toml_write
 using Pkg.Versions
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
                  pkgerror, projectfile_path, manifestfile_path
@@ -15,8 +16,41 @@ julia_bin_path() = joinpath(first(DEPOT_PATH), "bin")
 
 app_context() = Context(env=EnvCache(joinpath(app_env_folder(), "Project.toml")))
 
+function validate_app_name(name::AbstractString)
+    if isempty(name)
+        error("App name cannot be empty")
+    end
+    if !occursin(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name)
+        error("App name must start with a letter and contain only letters, numbers, underscores, and hyphens")
+    end
+    if occursin(r"\.\.", name) || occursin(r"[/\\]", name)
+        error("App name cannot contain path traversal sequences or path separators")
+    end
+end
+
+function validate_package_name(name::AbstractString)
+    if isempty(name)
+        error("Package name cannot be empty")
+    end
+    if !occursin(r"^[a-zA-Z][a-zA-Z0-9_]*$", name)
+        error("Package name must start with a letter and contain only letters, numbers, and underscores")
+    end
+end
+
+function validate_submodule_name(name::Union{AbstractString,Nothing})
+    if name !== nothing
+        if isempty(name)
+            error("Submodule name cannot be empty")
+        end
+        if !occursin(r"^[a-zA-Z][a-zA-Z0-9_]*$", name)
+            error("Submodule name must start with a letter and contain only letters, numbers, and underscores")
+        end
+    end
+end
+
 
 function rm_shim(name; kwargs...)
+    validate_app_name(name)
     Base.rm(joinpath(julia_bin_path(), name * (Sys.iswindows() ? ".bat" : "")); kwargs...)
 end
 
@@ -35,6 +69,30 @@ function overwrite_file_if_different(file, content)
     if !isfile(file) || read(file, String) != content
         mkpath(dirname(file))
         write(file, content)
+    end
+end
+
+function check_apps_in_path(apps)
+    for app_name in keys(apps)
+        which_result = Sys.which(app_name)
+        if which_result === nothing
+            @warn """
+            App '$app_name' was installed but is not available in PATH.
+            Consider adding '$(julia_bin_path())' to your PATH environment variable.
+            """ maxlog=1
+            break  # Only show warning once per installation
+        else
+            # Check for collisions
+            expected_path = joinpath(julia_bin_path(), app_name * (Sys.iswindows() ? ".bat" : ""))
+            if which_result != expected_path
+                @warn """
+                App '$app_name' collision detected:
+                Expected: $expected_path
+                Found: $which_result
+                Another application with the same name exists in PATH.
+                """
+            end
+        end
     end
 end
 
@@ -77,28 +135,38 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             continue
         end
 
-        projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
-        sourcepath = source_path(app_manifest_file(), pkg)
-
         # TODO: Add support for existing manifest
+
+        projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
+
+        sourcepath = source_path(app_manifest_file(), pkg)
+        original_project_file = projectfile_path(sourcepath)
+
+        mkpath(dirname(projectfile))
+
+        if isfile(original_project_file)
+            cp(original_project_file, projectfile; force=true)
+            chmod(projectfile, 0o644)  # Make the copied project file writable
+
+            # Add entryfile stanza pointing to the package entry file
+            # TODO: What if project file has its own entryfile?
+            project_data = TOML.parsefile(projectfile)
+            project_data["entryfile"] = joinpath(sourcepath, "src", "$(pkg.name).jl")
+            atomic_toml_write(projectfile, project_data)
+        else
+            error("could not find project file for package $pkg")
+        end
+
         # Create a manifest with the manifest entry
         Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
             ctx = Context()
-            if isempty(ctx.env.project.deps)
-                ctx.env.project.deps[pkg.name] = uuid
-            end
-            if isempty(ctx.env.manifest)
-                ctx.env.manifest.deps[uuid] = pkg
-                Pkg.resolve(ctx)
-            else
-                Pkg.instantiate(ctx)
-            end
+            ctx.env.manifest.deps[uuid] = pkg
+            Pkg.resolve(ctx)
         end
 
         # TODO: Julia path
         generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), joinpath(Sys.BINDIR, "julia"))
     end
-
     write_manifest(manifest, app_manifest_file())
 end
 
@@ -132,10 +200,12 @@ function add(pkg::PackageSpec)
         new = Pkg.Operations.download_source(ctx, pkgs)
     end
 
+    # Run Pkg.build()?
+
+    Base.rm(joinpath(app_env_folder(), pkg.name); force=true, recursive=true)
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
     # TODO: Wrong if package itself has a sourcepath?
-
     entry = PackageEntry(;apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
     manifest.deps[pkg.uuid] = entry
 
@@ -143,6 +213,7 @@ function add(pkg::PackageSpec)
     precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
+    check_apps_in_path(project.apps)
 end
 
 function develop(pkg::Vector{PackageSpec})
@@ -158,6 +229,7 @@ function develop(pkg::PackageSpec)
     handle_package_input!(pkg)
     ctx = app_context()
     handle_repo_develop!(ctx, pkg, #=shared =# true)
+    Base.rm(joinpath(app_env_folder(), pkg.name); force=true, recursive=true)
     sourcepath = abspath(source_path(ctx.env.manifest_file, pkg))
     project = get_project(sourcepath)
 
@@ -177,6 +249,52 @@ function develop(pkg::PackageSpec)
     _resolve(manifest, pkg.name)
     precompile(pkg.name)
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
+    check_apps_in_path(project.apps)
+end
+
+
+update(pkgs_or_apps::String) = update([pkgs_or_apps])
+function update(pkgs_or_apps::Vector)
+    for pkg_or_app in pkgs_or_apps
+        if pkg_or_app isa String
+            pkg_or_app = PackageSpec(pkg_or_app)
+        end
+        update(pkg_or_app)
+    end
+end
+
+# XXX: Is updating an app ever different from rm-ing and adding it from scratch?
+function update(pkg::Union{PackageSpec, Nothing}=nothing)
+    ctx = app_context()
+    manifest = ctx.env.manifest
+    deps = Pkg.Operations.load_manifest_deps(manifest)
+    for dep in deps
+        info = manifest.deps[dep.uuid]
+        if pkg === nothing || info.name !== pkg.name
+            continue
+        end
+        Pkg.activate(joinpath(app_env_folder(), info.name)) do
+            # precompile only after updating all apps?
+            if pkg !== nothing
+                Pkg.update(pkg)
+            else
+                Pkg.update()
+            end
+        end
+        sourcepath = abspath(source_path(ctx.env.manifest_file, info))
+        project = get_project(sourcepath)
+        # Get the tree hash from the project file
+        manifest_file = manifestfile_path(joinpath(app_env_folder(), info.name))
+        manifest_app = Pkg.Types.read_manifest(manifest_file)
+        manifest_entry = manifest_app.deps[info.uuid]
+
+        entry = PackageEntry(;apps = project.apps, name = manifest_entry.name, version = manifest_entry.version, tree_hash = manifest_entry.tree_hash,
+                             path = manifest_entry.path, repo = manifest_entry.repo, uuid = manifest_entry.uuid)
+
+        manifest.deps[dep.uuid] = entry
+        Pkg.Types.write_manifest(manifest, app_manifest_file())
+    end
+    return
 end
 
 function status(pkgs_or_apps::Vector)
@@ -243,8 +361,7 @@ end
 
 
 function require_not_empty(pkgs, f::Symbol)
-
-    if pkgs == nothing || isempty(pkgs)
+    if pkgs === nothing || isempty(pkgs)
         pkgerror("app $f requires at least one package")
     end
 end
@@ -292,7 +409,7 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
             end
         end
     end
-
+    # XXX: What happens if something fails above and we do not write out the updated manifest?
     Pkg.Types.write_manifest(manifest, app_manifest_file())
     return
 end
@@ -327,7 +444,6 @@ const SHIM_VERSION = 1.0
 const SHIM_HEADER = """$SHIM_COMMENT This file is generated by the Julia package manager.
                        $SHIM_COMMENT Shim version: $SHIM_VERSION"""
 
-
 function generate_shims_for_apps(pkgname, apps, env, julia)
     for (_, app) in apps
         generate_shim(pkgname, app, env, julia)
@@ -335,13 +451,23 @@ function generate_shims_for_apps(pkgname, apps, env, julia)
 end
 
 function generate_shim(pkgname, app::AppInfo, env, julia)
+    validate_package_name(pkgname)
+    validate_app_name(app.name)
+    validate_submodule_name(app.submodule)
+
+    module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
+    
     filename = app.name * (Sys.iswindows() ? ".bat" : "")
     julia_bin_filename = joinpath(julia_bin_path(), filename)
-    mkpath(dirname(filename))
+    mkpath(dirname(julia_bin_filename))
     content = if Sys.iswindows()
-        windows_shim(pkgname, julia, env)
+        julia_escaped = "\"$(Base.shell_escape_wincmd(julia))\""
+        module_spec_escaped = "\"$(Base.shell_escape_wincmd(module_spec))\""
+        windows_shim(julia_escaped, module_spec_escaped, env)
     else
-        bash_shim(pkgname, julia, env)
+        julia_escaped = Base.shell_escape(julia)
+        module_spec_escaped = Base.shell_escape(module_spec)
+        shell_shim(julia_escaped, module_spec_escaped, env)
     end
     overwrite_file_if_different(julia_bin_filename, content)
     if Sys.isunix()
@@ -350,22 +476,22 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function bash_shim(pkgname, julia::String, env)
+function shell_shim(julia_escaped::String, module_spec_escaped::String, env)
     return """
-        #!/usr/bin/env bash
+        #!/bin/sh
 
         $SHIM_HEADER
 
         export JULIA_LOAD_PATH=$(repr(env))
         export JULIA_DEPOT_PATH=$(repr(join(DEPOT_PATH, ':')))
-        exec $julia \\
+        exec $julia_escaped \\
             --startup-file=no \\
-            -m $(pkgname) \\
+            -m $module_spec_escaped \\
             "\$@"
         """
 end
 
-function windows_shim(pkgname, julia::String, env)
+function windows_shim(julia_escaped::String, module_spec_escaped::String, env)
     return """
         @echo off
 
@@ -375,9 +501,9 @@ function windows_shim(pkgname, julia::String, env)
         set JULIA_LOAD_PATH=$env
         set JULIA_DEPOT_PATH=$(join(DEPOT_PATH, ';'))
 
-        $julia ^
+        $julia_escaped ^
             --startup-file=no ^
-            -m $(pkgname) ^
+            -m $module_spec_escaped ^
             %*
         """
 end

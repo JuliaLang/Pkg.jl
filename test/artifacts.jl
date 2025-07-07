@@ -238,8 +238,8 @@ end
 
         # Test platform-specific binding and providing download_info
         download_info = [
-            ("http://google.com/hello_world", "0"^64),
-            ("http://microsoft.com/hello_world", "a"^64),
+            ArtifactDownloadInfo("http://google.com/hello_world", "0"^64),
+            ArtifactDownloadInfo("http://microsoft.com/hello_world", "a"^64, 1),
         ]
 
         # First, test the binding of things with various platforms and overwriting and such works properly
@@ -249,17 +249,25 @@ end
         @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash
         @test artifact_hash("foo_txt", artifacts_toml; platform=Platform("x86_64", "macos")) == nothing
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64)
-        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
         bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=win32)
+        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
         @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash2
         @test artifact_hash("foo_txt", artifacts_toml; platform=win32) == hash
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=linux64) == artifact_path(hash2)
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=win32) == artifact_path(hash)
 
+        # Default HostPlatform() adds a compare_strategy key that doesn't get picked up from
+        # the Artifacts.toml
+        testhost = Platform("x86_64", "linux", Dict("libstdcxx_version" => "1.2.3"))
+        BinaryPlatforms.set_compare_strategy!(testhost, "libstdcxx_version", BinaryPlatforms.compare_version_cap)
+        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=testhost)
+
         # Next, check that we can get the download_info properly:
         meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
+        @test !haskey(meta["download"][1], "size")
         @test meta["download"][2]["sha256"] == "a"^64
+        @test meta["download"][2]["size"] == 1
 
         rm(artifacts_toml)
 
@@ -419,11 +427,12 @@ end
         )
         disengaged_platform = HostPlatform()
         disengaged_platform["flooblecrank"] = "disengaged"
+        disengaged_adi = ArtifactDownloadInfo(disengaged_url, disengaged_sha256)
         Pkg.Artifacts.bind_artifact!(
             artifacts_toml,
             "gooblebox",
             disengaged_hash;
-            download_info = [(disengaged_url, disengaged_sha256)],
+            download_info = [disengaged_adi],
             platform = disengaged_platform,
         )
     end
@@ -806,7 +815,7 @@ end
             cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
             Pkg.activate(tmpdir)
             cts_real_hash = create_artifact() do dir
-                local meta = Artifacts.artifact_meta("collapse_the_symlink", artifacts_toml)
+                local meta = Pkg.Artifacts.artifact_meta("collapse_the_symlink", artifacts_toml)
                 local collapse_url = meta["download"][1]["url"]
                 local collapse_hash = meta["download"][1]["sha256"]
                 # Because "BINARYPROVIDER_COPYDEREF"=>"true", this will copy symlinks.

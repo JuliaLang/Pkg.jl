@@ -271,20 +271,74 @@ function uncompress_registry(tar_gz::AbstractString)
     return data
 end
 
-struct RegistryInstance
+mutable struct RegistryInstance
     path::String
+    tree_info::Union{Base.SHA1, Nothing}
+    compressed_file::Union{String, Nothing}
+    
+    # Lazily loaded fields
     name::String
     uuid::UUID
     repo::Union{String, Nothing}
     description::Union{String, Nothing}
     pkgs::Dict{UUID, PkgEntry}
-    tree_info::Union{Base.SHA1, Nothing}
     in_memory_registry::Union{Nothing, Dict{String, String}}
     # various caches
     name_to_uuids::Dict{String, Vector{UUID}}
+    
+    # Inner constructor for lazy loading - leaves fields undefined
+    function RegistryInstance(path::String, tree_info::Union{Base.SHA1, Nothing}, compressed_file::Union{String, Nothing})
+        new(path, tree_info, compressed_file)
+    end
+    
+    # Full constructor for when all fields are known
+    function RegistryInstance(path::String, tree_info::Union{Base.SHA1, Nothing}, compressed_file::Union{String, Nothing},
+                             name::String, uuid::UUID, repo::Union{String, Nothing}, description::Union{String, Nothing},
+                             pkgs::Dict{UUID, PkgEntry}, in_memory_registry::Union{Nothing, Dict{String, String}},
+                             name_to_uuids::Dict{String, Vector{UUID}})
+        new(path, tree_info, compressed_file, name, uuid, repo, description, pkgs, in_memory_registry, name_to_uuids)
+    end
 end
 
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
+
+@noinline function _ensure_registry_loaded_slow!(r::RegistryInstance)
+    isdefined(r, :pkgs) && return r
+    
+    if getfield(r, :compressed_file) !== nothing
+        r.in_memory_registry = uncompress_registry(joinpath(dirname(getfield(r, :path)), getfield(r, :compressed_file)))
+    else
+        r.in_memory_registry = nothing
+    end
+
+    d = parsefile(r.in_memory_registry, getfield(r, :path), "Registry.toml")
+    r.name = d["name"]::String
+    r.uuid = UUID(d["uuid"]::String)
+    r.repo = get(d, "repo", nothing)::Union{String, Nothing}
+    r.description = get(d, "description", nothing)::Union{String, Nothing}
+    
+    r.pkgs = Dict{UUID, PkgEntry}()
+    for (uuid, info) in d["packages"]::Dict{String, Any}
+        uuid = UUID(uuid::String)
+        info::Dict{String, Any}
+        name = info["name"]::String
+        pkgpath = info["path"]::String
+        pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid, r.in_memory_registry)
+        r.pkgs[uuid] = pkg
+    end
+    
+    r.name_to_uuids = Dict{String, Vector{UUID}}()
+    
+    return r
+end
+
+# Property accessors that trigger lazy loading
+@inline function Base.getproperty(r::RegistryInstance, f::Symbol)
+    if f === :name || f === :uuid || f === :repo || f === :description || f === :pkgs || f === :name_to_uuids
+        isdefined(r, :pkgs) || _ensure_registry_loaded_slow!(r)
+    end
+    return getfield(r, f)
+end
 
 function get_cached_registry(path, tree_info::Base.SHA1, compressed::Bool)
     if !ispath(path)
@@ -326,33 +380,9 @@ function RegistryInstance(path::AbstractString)
         end
     end
 
-    in_memory_registry = if compressed_file !== nothing
-        uncompress_registry(joinpath(dirname(path), compressed_file))
-    else
-        nothing
-    end
-
-    d = parsefile(in_memory_registry, path, "Registry.toml")
-    pkgs = Dict{UUID, PkgEntry}()
-    for (uuid, info) in d["packages"]::Dict{String, Any}
-        uuid = UUID(uuid::String)
-        info::Dict{String, Any}
-        name = info["name"]::String
-        pkgpath = info["path"]::String
-        pkg = PkgEntry(pkgpath, path, name, uuid, in_memory_registry)
-        pkgs[uuid] = pkg
-    end
-    reg = RegistryInstance(
-        path,
-        d["name"]::String,
-        UUID(d["uuid"]::String),
-        get(d, "repo", nothing)::Union{String, Nothing},
-        get(d, "description", nothing)::Union{String, Nothing},
-        pkgs,
-        tree_info,
-        in_memory_registry,
-        Dict{String, UUID}(),
-    )
+    # Create partially initialized registry - defer expensive operations
+    reg = RegistryInstance(path, tree_info, compressed_file)
+    
     if tree_info !== nothing
         REGISTRY_CACHE[path] = (tree_info, compressed_file !== nothing, reg)
     end
@@ -368,6 +398,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
     end
     println(io, "  packages: ", length(r.pkgs))
 end
+Base.show(io::IO, r::RegistryInstance) = Base.show(io, MIME"text/plain"(), r)
 
 function uuids_from_name(r::RegistryInstance, name::String)
     create_name_uuid_mapping!(r)

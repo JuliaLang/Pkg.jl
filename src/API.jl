@@ -14,7 +14,7 @@ import Base: StaleCacheKey
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -187,35 +187,57 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
     end
 end
 
-function update_source_if_set(project, pkg)
+function update_source_if_set(env, pkg)
+    project = env.project
     source = get(project.sources, pkg.name, nothing)
-    source === nothing && return
-    # This should probably not modify the dicts directly...
-    if pkg.repo.source !== nothing
-        source["url"] = pkg.repo.source
+    if source !== nothing
+        if pkg.repo == GitRepo()
+            delete!(project.sources, pkg.name)
+        else
+            # This should probably not modify the dicts directly...
+            if pkg.repo.source !== nothing
+                source["url"] = pkg.repo.source
+                delete!(source, "path")
+            end
+            if pkg.repo.rev !== nothing
+                source["rev"] = pkg.repo.rev
+                delete!(source, "path")
+            end
+            if pkg.repo.subdir !== nothing
+                source["subdir"] = pkg.repo.subdir
+            end
+            if pkg.path !== nothing
+                source["path"] = pkg.path
+                delete!(source, "url")
+                delete!(source, "rev")
+            end
+        end
+        if pkg.subdir !== nothing
+            source["subdir"] = pkg.subdir
+        end
+        path, repo = get_path_repo(project, pkg.name)
+        if path !== nothing
+            pkg.path = path
+        end
+        if repo.source !== nothing
+            pkg.repo.source = repo.source
+        end
+        if repo.rev !== nothing
+            pkg.repo.rev = repo.rev
+        end
+        if repo.subdir !== nothing
+            pkg.repo.subdir = repo.subdir
+        end
     end
-    if pkg.repo.rev !== nothing
-        source["rev"] = pkg.repo.rev
+
+    # Packages in manifest should have their paths set to the path in the manifest
+    for (path, wproj) in env.workspace
+        if wproj.uuid == pkg.uuid
+            pkg.path = Types.relative_project_path(env.manifest_file, dirname(path))
+            break
+        end
     end
-    if pkg.path !== nothing
-        source["path"] = pkg.path
-    end
-    if pkg.subdir !== nothing
-        source["subdir"] = pkg.subdir
-    end
-    path, repo = get_path_repo(project, pkg.name)
-    if path !== nothing
-        pkg.path = path
-    end
-    if repo.source !== nothing
-        pkg.repo.source = repo.source
-    end
-    if repo.rev !== nothing
-        pkg.repo.rev = repo.rev
-    end
-    if repo.subdir !== nothing
-        pkg.repo.subdir = repo.subdir
-    end
+    return
 end
 
 function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
@@ -257,7 +279,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
-        update_source_if_set(ctx.env.project, pkg)
+        update_source_if_set(ctx.env, pkg)
     end
 
     Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
@@ -311,7 +333,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
         if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
-        update_source_if_set(ctx.env.project, pkg)
+        update_source_if_set(ctx.env, pkg)
     end
 
     Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target)
@@ -389,7 +411,9 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
-
+    for pkg in pkgs
+        update_source_if_set(ctx.env, pkg)
+    end
     Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
     return
 end
@@ -427,6 +451,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
                 pkgerror("pinning a package requires a single version, not a versionrange")
             end
         end
+        update_source_if_set(ctx.env, pkg)
     end
 
     project_deps_resolve!(ctx.env, pkgs)
@@ -629,9 +654,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             usage_path = joinpath(logdir(depot), fname)
             if !(isempty(usage)::Bool) || isfile(usage_path)
                 let usage=usage
-                    open(usage_path, "w") do io
-                        TOML.print(io, usage, sorted=true)
-                    end
+                    atomic_toml_write(usage_path, usage, sorted=true)
                 end
             end
         end
@@ -961,9 +984,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         # Write out the `new_orphanage` for this depot
         mkpath(dirname(orphanage_file))
-        open(orphanage_file, "w") do io
-            TOML.print(io, new_orphanage, sorted=true)
-        end
+        atomic_toml_write(orphanage_file, new_orphanage, sorted=true)
     end
 
     function recursive_dir_size(path)
@@ -1097,7 +1118,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     return
 end
 
-function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
+function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, allow_reresolve::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1112,7 +1133,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
-    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
+    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose; allow_reresolve)
 end
 
 function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
@@ -1209,17 +1230,22 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Types.check_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file; julia_version_strict)
 
     if Operations.is_manifest_current(ctx.env) === false
+        resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        update_cmd = Pkg.in_repl_mode() ? "pkg> update" : "Pkg.update()"
         @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
-        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
+        It is recommended to `$resolve_cmd` or consider `$update_cmd` if necessary."""
     end
 
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
+        resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        rm_cmd = Pkg.in_repl_mode() ? "pkg> rm $name" : "Pkg.rm(\"$name\")"
+        instantiate_cmd = Pkg.in_repl_mode() ? "pkg> instantiate" : "Pkg.instantiate()"
         pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
-                 " If you intend `$name` to be a direct dependency, run `Pkg.resolve()` to populate the manifest.",
-                 " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
-                 " Finally, run `Pkg.instantiate()` again.")
+                 " If you intend `$name` to be a direct dependency, run `$resolve_cmd` to populate the manifest.",
+                 " Otherwise, remove `$name` with `$rm_cmd`.",
+                 " Finally, run `$instantiate_cmd` again.")
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env, workspace; platform)
@@ -1396,12 +1422,22 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; io
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
     isnothing(compat_str) || (compat_str = string(strip(compat_str, '"')))
+    existing_compat = Operations.get_compat_str(ctx.env.project, pkg)
+    # Double check before deleting a compat entry issue/3567
+    if isinteractive() && (isnothing(compat_str) || isempty(compat_str))
+        if !isnothing(existing_compat)
+            ans = Base.prompt(stdin, ctx.io, "No compat string was given. Delete existing compat entry `$pkg = $(repr(existing_compat))`? [y]/n", default = "y")
+            if lowercase(ans) !== "y"
+                return
+            end
+        end
+    end
     if haskey(ctx.env.project.deps, pkg) || pkg == "julia"
         success = Operations.set_compat(ctx.env.project, pkg, isnothing(compat_str) ? nothing : isempty(compat_str) ? nothing : compat_str)
         success === false && pkgerror("invalid compat version specifier \"$(compat_str)\"")
         write_env(ctx.env)
         if isnothing(compat_str) || isempty(compat_str)
-            printpkgstyle(io, :Compat, "entry removed for $(pkg)")
+            printpkgstyle(io, :Compat, "entry removed:\n  $pkg = $(repr(existing_compat))")
         else
             printpkgstyle(io, :Compat, "entry set:\n  $(pkg) = $(repr(compat_str))")
         end

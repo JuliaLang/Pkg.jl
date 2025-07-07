@@ -10,7 +10,7 @@ import Base.string
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
@@ -85,7 +85,8 @@ end
 
 Base.:(==)(r1::GitRepo, r2::GitRepo) =
     r1.source == r2.source && r1.rev == r2.rev && r1.subdir == r2.subdir
-
+Base.hash(r::GitRepo, h::UInt) =
+    foldr(hash, [r.source, r.rev, r.subdir], init=h)
 
 mutable struct PackageSpec
     name::Union{Nothing,String}
@@ -119,10 +120,14 @@ PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uui
 PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(;name=name, version=version)::PackageSpec
 PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, uuid=u, version=v)::PackageSpec
 
+# XXX: These definitions are a bit fishy. It seems to be used in an `==` call in status printing
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
     a.pinned == b.pinned
+end
+function Base.hash(a::PackageSpec, h::UInt)
+    return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init=h)
 end
 
 function err_rep(pkg::PackageSpec)
@@ -236,7 +241,7 @@ Base.hash(t::Compat, h::UInt) = hash(t.val, h)
 struct AppInfo
     name::String
     julia_command::Union{String, Nothing}
-    julia_version::Union{VersionNumber, Nothing}
+    submodule::Union{String, Nothing}
     other::Dict{String,Any}
 end
 Base.@kwdef mutable struct Project
@@ -261,6 +266,7 @@ Base.@kwdef mutable struct Project
     compat::Dict{String,Compat} = Dict{String,Compat}()
     sources::Dict{String,Dict{String, String}} = Dict{String,Dict{String, String}}()
     workspace::Dict{String, Any} = Dict{String, Any}()
+    readonly::Bool = false
 end
 Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
 Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init=h)
@@ -662,15 +668,10 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
             usage[k] = [Dict("time" => maximum(times))]
         end
 
-        tempfile = tempname()
         try
-            open(tempfile, "w") do io
-                TOML.print(io, usage, sorted=true)
-            end
-            TOML.parsefile(tempfile) # compare to `usage` ?
-            mv(tempfile, usage_file; force=true) # only mv if parse succeeds
+            atomic_toml_write(usage_file, usage, sorted=true)
         catch err
-            @error "Failed to write valid usage file `$usage_file`" tempfile
+            @error "Failed to write valid usage file `$usage_file`" exception=err
         end
     end
     return
@@ -693,7 +694,7 @@ function read_package(path::String)
     return project
 end
 
-const refspecs = ["+refs/*:refs/remotes/cache/*"]
+const refspecs = ["+refs/heads/*:refs/remotes/cache/heads/*"]
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
@@ -799,7 +800,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         new = true
     end
     if !has_uuid(pkg)
-        resolve_projectfile!(pkg, dev_path)
+        resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir === nothing ? "" : pkg.repo.subdir))
     end
     error_if_in_sysimage(pkg)
     pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
@@ -873,7 +874,16 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     repo_source = pkg.repo.source
     if !isurl(pkg.repo.source)
         if isdir(pkg.repo.source)
-            if !isdir(joinpath(pkg.repo.source, ".git"))
+            git_path = joinpath(pkg.repo.source, ".git")
+            if isfile(git_path)
+                # Git submodule: .git is a file containing path to actual git directory
+                git_ref_content = readline(git_path)
+                git_info_path = joinpath(dirname(git_path), last(split(git_ref_content)))
+            else
+                # Regular git repo: .git is a directory
+                git_info_path = git_path
+            end
+            if !isdir(git_info_path)
                 msg = "Did not find a git repository at `$(pkg.repo.source)`"
                 if isfile(joinpath(pkg.repo.source, "Project.toml")) || isfile(joinpath(pkg.repo.source, "JuliaProject.toml"))
                     msg *= ", perhaps you meant `Pkg.develop`?"
@@ -881,6 +891,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
+            LibGit2.with(LibGit2.GitRepo(pkg.repo.source)) do repo
+                if LibGit2.isdirty(repo)
+                    @warn "The repository at `$(pkg.repo.source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
+                end
+            end
             pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.manifest_file, pkg.repo.source)
             repo_source = normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source))
         else
@@ -903,7 +918,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             fetched = false
             if obj_branch === nothing
                 fetched = true
-                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
+                # For pull requests, fetch the specific PR ref
+                if startswith(rev_or_hash, "pull/") && endswith(rev_or_hash, "/head")
+                    pr_number = rev_or_hash[6:end-5]  # Extract number from "pull/X/head"
+                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/remotes/cache/pull/$(pr_number)/head"]
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=pr_refspecs)
+                else
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
+                end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(rev_or_hash) in repository")
@@ -988,6 +1010,16 @@ get_object_or_branch(repo, rev::SHA1) =
 
 # Returns nothing if rev could not be found in repo
 function get_object_or_branch(repo, rev)
+    # Handle pull request references
+    if startswith(rev, "pull/") && endswith(rev, "/head")
+        try
+            gitobject = LibGit2.GitObject(repo, "remotes/cache/" * rev)
+            return gitobject, true
+        catch err
+            err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
+        end
+    end
+    
     try
         gitobject = LibGit2.GitObject(repo, "remotes/cache/heads/" * rev)
         return gitobject, true
@@ -1219,10 +1251,9 @@ function write_env(env::EnvCache; update_undo=true,
         path, repo = get_path_repo(env.project, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
-            @assert entry.path == path
+            @assert normpath(entry.path) == normpath(path)
         end
         if repo != GitRepo()
-            @assert entry.repo.source == repo.source
             if repo.rev !== nothing
                 @assert entry.repo.rev == repo.rev
             end
@@ -1230,6 +1261,22 @@ function write_env(env::EnvCache; update_undo=true,
                 @assert entry.repo.subdir == repo.subdir
             end
         end
+        if entry !== nothing
+            if entry.path !== nothing
+                env.project.sources[pkg] = Dict("path" => entry.path)
+            elseif entry.repo != GitRepo()
+                d = Dict{String, String}()
+                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
+                entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+                entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+                env.project.sources[pkg] = d
+            end
+        end
+    end
+
+    # Check if the environment is readonly before attempting to write
+    if env.project.readonly
+        pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
     end
 
     if (env.project != env.original_project) && (!skip_writing_project)

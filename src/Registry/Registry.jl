@@ -1,8 +1,8 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-             GitTools
+using ..Pkg: depots, depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
+    GitTools, atomic_toml_write
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
 using UUIDs, LibGit2, TOML, Dates
 import FileWatching
@@ -48,11 +48,11 @@ function add(; name=nothing, uuid=nothing, url=nothing, path=nothing, linked=not
         add([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
     end
 end
-function add(regs::Vector{RegistrySpec}; io::IO=stderr_f(), depot=depots1())
+function add(regs::Vector{RegistrySpec}; io::IO=stderr_f(), depots::Union{String, Vector{String}}=depots())
     if isempty(regs)
-        download_default_registries(io, only_if_empty = false; depot)
+        download_default_registries(io, only_if_empty = false; depots=depots)
     else
-        download_registries(io, regs, depot)
+        download_registries(io, regs, depots)
     end
 end
 
@@ -103,12 +103,15 @@ end
 
 pkg_server_url_hash(url::String) = Base.SHA1(split(url, '/')[end])
 
-function download_default_registries(io::IO; only_if_empty::Bool = true, depot=depots1())
-    installed_registries = reachable_registries()
+function download_default_registries(io::IO; only_if_empty::Bool = true, depots::Union{String, Vector{String}}=depots())
+    # Check the specified depots for installed registries
+    installed_registries = reachable_registries(; depots)
     # Only clone if there are no installed registries, unless called
     # with false keyword argument.
     if isempty(installed_registries) || !only_if_empty
-        printpkgstyle(io, :Installing, "known registries into $(pathrepr(depot))")
+        # Install to the first depot in the list
+        target_depot = depots1(depots)
+        printpkgstyle(io, :Installing, "known registries into $(pathrepr(target_depot))")
         registries = copy(DEFAULT_REGISTRIES)
         for uuid in keys(pkg_server_registry_urls())
             if !(uuid in (reg.uuid for reg in registries))
@@ -116,7 +119,7 @@ function download_default_registries(io::IO; only_if_empty::Bool = true, depot=d
             end
         end
         filter!(reg -> !(reg.uuid in installed_registries), registries)
-        download_registries(io, registries, depot)
+        download_registries(io, registries, depots)
         return true
     end
     return false
@@ -158,24 +161,27 @@ function check_registry_state(reg)
     reg_currently_uses_pkg_server = reg.tree_info !== nothing
     reg_should_use_pkg_server = registry_use_pkg_server()
     if reg_currently_uses_pkg_server && !reg_should_use_pkg_server
+        pkg_cmd = Pkg.in_repl_mode() ? "pkg> registry rm $(reg.name); registry add $(reg.name)" : "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")"
         msg = string(
             "Your registry may be outdated. We recommend that you run the ",
             "following command: ",
-            "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")",
+            pkg_cmd,
         )
         @warn(msg)
     end
     return nothing
 end
 
-function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=depots1())
+function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{String, Vector{String}}=depots())
+    # Use the first depot as the target
+    target_depot = depots1(depots)
     populate_known_registries_with_urls!(regs)
-    regdir = joinpath(depot, "registries")
+    regdir = joinpath(target_depot, "registries")
     isdir(regdir) || mkpath(regdir)
     # only allow one julia process to download and install registries at a time
     FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
         # once we're pidlocked check if another process has installed any of the registries
-        reachable_uuids = map(r -> r.uuid, reachable_registries())
+        reachable_uuids = map(r -> r.uuid, reachable_registries(; depots))
         filter!(r -> !in(r.uuid, reachable_uuids), regs)
 
         registry_urls = pkg_server_registry_urls()
@@ -207,9 +213,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depot::String=d
                 end
                 mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
                 reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ".tar.gz")
-                open(joinpath(regdir, reg.name * ".toml"), "w") do io
-                    TOML.print(io, reg_info)
-                end
+                atomic_toml_write(joinpath(regdir, reg.name * ".toml"), reg_info)
                 printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
             else
                 mktempdir() do tmp
@@ -363,9 +367,7 @@ function save_registry_update_log(d::Dict)
     pkg_scratch_space = joinpath(DEPOT_PATH[1], "scratchspaces", "44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
     mkpath(pkg_scratch_space)
     pkg_reg_updated_file = joinpath(pkg_scratch_space, "registry_updates.toml")
-    open(pkg_reg_updated_file, "w") do io
-        TOML.print(io, d)
-    end
+    atomic_toml_write(pkg_reg_updated_file, d)
 end
 
 """
@@ -445,13 +447,14 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                                     registry_path = dirname(reg.path)
                                     mv(tmp, joinpath(registry_path, reg.name * ".tar.gz"); force=true)
                                     reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ".tar.gz")
-                                    open(joinpath(registry_path, reg.name * ".toml"), "w") do io
-                                        TOML.print(io, reg_info)
-                                    end
+                                    atomic_toml_write(joinpath(registry_path, reg.name * ".toml"), reg_info)
                                     registry_update_log[string(reg.uuid)] = now()
                                     @label done_tarball_read
                                 else
-                                    if reg.name == "General" && Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true)
+                                    if reg.name == "General" &&
+                                            Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true) &&
+                                            get(ENV, "JULIA_PKG_SERVER", nothing) != ""
+                                            # warn if JULIA_PKG_SERVER is set to a non-empty string or not set
                                         @info """
                                             The General registry is installed via unpacked tarball.
                                             Consider reinstalling it via the newer faster direct from
@@ -478,7 +481,10 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                         end
                     elseif isdir(joinpath(reg.path, ".git"))
                         printpkgstyle(io, :Updating, "registry at " * regpath)
-                        if reg.name == "General" && Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true)
+                        if reg.name == "General" &&
+                                Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true) &&
+                                get(ENV, "JULIA_PKG_SERVER", nothing) != ""
+                            # warn if JULIA_PKG_SERVER is set to a non-empty string or not set
                             @info """
                                 The General registry is installed via git. Consider reinstalling it via
                                 the newer faster direct from tarball format by running:

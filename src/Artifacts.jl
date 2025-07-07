@@ -1,4 +1,4 @@
-module Artifacts
+module PkgArtifacts
 
 using Artifacts, Base.BinaryPlatforms, SHA
 using ..MiniProgressBars, ..PlatformEngines
@@ -6,7 +6,7 @@ using Tar: can_symlink
 using FileWatching: FileWatching
 
 import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
-       ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries
+       ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries, ..atomic_toml_write
 
 import Base: get, SHA1
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
@@ -14,11 +14,11 @@ import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, ar
                   query_override, with_artifacts_directory, load_overrides
 import ..Types: write_env_usage, parse_toml
 
-
-export create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
+const Artifacts = PkgArtifacts # This is to preserve compatability for folks who depend on the internals of this module
+export Artifacts, create_artifact, artifact_exists, artifact_path, remove_artifact, verify_artifact,
        artifact_meta, artifact_hash, bind_artifact!, unbind_artifact!, download_artifact,
        find_artifacts_toml, ensure_artifact_installed, @artifact_str, archive_artifact,
-       select_downloadable_artifacts
+       select_downloadable_artifacts, ArtifactDownloadInfo
 
 """
     create_artifact(f::Function)
@@ -139,6 +139,56 @@ function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Boo
 end
 
 """
+    ArtifactDownloadInfo
+
+Auxilliary information about an artifact to be used with `bind_artifact!()` to give
+a download location for that artifact, as well as the hash and size of that artifact.
+"""
+struct ArtifactDownloadInfo
+    # URL the artifact is available at as a gzip-compressed tarball
+    url::String
+
+    # SHA256 hash of the tarball
+    hash::Vector{UInt8}
+
+    # Size in bytes of the tarball.  `size <= 0` means unknown.
+    size::Int64
+
+    function ArtifactDownloadInfo(url, hash::AbstractVector, size = 0)
+        valid_hash_len = SHA.digestlen(SHA256_CTX)
+        hash_len = length(hash)
+        if hash_len != valid_hash_len
+            throw(ArgumentError("Invalid hash length '$(hash_len)', must be $(valid_hash_len)"))
+        end
+        return new(
+            String(url),
+            Vector{UInt8}(hash),
+            Int64(size),
+        )
+    end
+end
+
+# Convenience constructor for string hashes
+ArtifactDownloadInfo(url, hash::AbstractString, args...) = ArtifactDownloadInfo(url, hex2bytes(hash), args...)
+
+# Convenience constructor for legacy Tuple representation
+ArtifactDownloadInfo(args::Tuple) = ArtifactDownloadInfo(args...)
+
+ArtifactDownloadInfo(adi::ArtifactDownloadInfo) = adi
+
+# Make the dict that will be embedded in the TOML
+function make_dict(adi::ArtifactDownloadInfo)
+    ret = Dict{String,Any}(
+        "url" => adi.url,
+        "sha256" => bytes2hex(adi.hash),
+    )
+    if adi.size > 0
+        ret["size"] = adi.size
+    end
+    return ret
+end
+
+"""
     bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                    platform::Union{AbstractPlatform,Nothing} = nothing,
                    download_info::Union{Vector{Tuple},Nothing} = nothing,
@@ -159,7 +209,7 @@ downloaded until it is accessed via the `artifact"name"` syntax, or
 """
 function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
                         platform::Union{AbstractPlatform,Nothing} = nothing,
-                        download_info::Union{Vector{<:Tuple},Nothing} = nothing,
+                        download_info::Union{Vector{<:Tuple},Vector{<:ArtifactDownloadInfo},Nothing} = nothing,
                         lazy::Bool = false,
                         force::Bool = false)
     # First, check to see if this artifact is already bound:
@@ -170,7 +220,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
             meta = artifact_dict[name]
             if !isa(meta, Vector)
                 error("Mapping for '$name' within $(artifacts_toml) already exists!")
-            elseif any(isequal(platform), unpack_platform(x, name, artifacts_toml) for x in meta)
+            elseif any(p -> platforms_match(platform, p), unpack_platform(x, name, artifacts_toml) for x in meta)
                 error("Mapping for '$name'/$(triplet(platform)) within $(artifacts_toml) already exists!")
             end
         end
@@ -188,15 +238,11 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
         meta["lazy"] = true
     end
 
-    # Integrate download info, if it is given.  We represent the download info as a
-    # vector of dicts, each with its own `url` and `sha256`, since different tarballs can
-    # expand to the same tree hash.
+    # Integrate download info, if it is given.  Note that there can be multiple
+    # download locations, each with its own tarball with its own hash, but which
+    # expands to the same content/treehash.
     if download_info !== nothing
-        meta["download"] = [
-            Dict("url" => dl[1],
-                 "sha256" => dl[2],
-            ) for dl in download_info
-        ]
+        meta["download"] = make_dict.(ArtifactDownloadInfo.(download_info))
     end
 
     if platform === nothing
@@ -221,11 +267,7 @@ function bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
     # Spit it out onto disk
     let artifact_dict = artifact_dict
         parent_dir = dirname(artifacts_toml)
-        temp_artifacts_toml = isempty(parent_dir) ? tempname(pwd()) : tempname(parent_dir)
-        open(temp_artifacts_toml, "w") do io
-            TOML.print(io, artifact_dict, sorted=true)
-        end
-        mv(temp_artifacts_toml, artifacts_toml; force=true)
+        atomic_toml_write(artifacts_toml, artifact_dict, sorted=true)
     end
 
     # Mark that we have used this Artifact.toml
@@ -256,9 +298,7 @@ function unbind_artifact!(artifacts_toml::String, name::String;
         )
     end
 
-    open(artifacts_toml, "w") do io
-        TOML.print(io, artifact_dict, sorted=true)
-    end
+    atomic_toml_write(artifacts_toml, artifact_dict, sorted=true)
     return
 end
 
@@ -282,7 +322,7 @@ function download_artifact(
     io::IO=stderr_f(),
     progress::Union{Function, Nothing} = nothing,
 )
-    _artifact_paths = Artifacts.artifact_paths(tree_hash)
+    _artifact_paths = artifact_paths(tree_hash)
     pidfile = _artifact_paths[1] * ".pid"
     mkpath(dirname(pidfile))
     t_wait_msg = Timer(2) do t
@@ -618,4 +658,6 @@ ensure_all_artifacts_installed(artifacts_toml::AbstractString; kwargs...) =
 extract_all_hashes(artifacts_toml::AbstractString; kwargs...) =
     extract_all_hashes(string(artifacts_toml)::String; kwargs...)
 
-end # module Artifacts
+end # module PkgArtifacts
+
+const Artifacts = PkgArtifacts

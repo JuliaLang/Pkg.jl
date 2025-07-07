@@ -163,4 +163,19 @@ end
     end
 end
 
+@testset "workspace path resolution issue #4222" begin
+    mktempdir() do dir
+        path = copy_test_package(dir, "WorkspacePathResolution")
+        cd(path) do
+            with_current_env() do
+                # First resolve SubProjectB (non-root project) without existing Manifest
+                Pkg.activate("SubProjectB")
+                @test !isfile("Manifest.toml")
+                # Should be able to find SubProjectA and succeed
+                Pkg.update()
+            end
+        end
+    end
+end
+
 end # module

@@ -241,6 +241,8 @@ end
         pkgstr("add $(packages_dir):dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
+        pkg"dev Dep" # 4269
+        @test isinstalled("Dep")
         pkg"rm Dep"
 
         # Add from path at branch.
@@ -256,13 +258,13 @@ end
         pkg"rm Dep"
 
         # Add from path at branch, REPL subdir syntax
-        pkgstr("add $(packages_dir):julia#master")
+        pkgstr("add $(packages_dir)#master:julia")
         @test isinstalled("Package")
         @test !isinstalled("Dep")
         @test isinstalled(dep)
         pkg"rm Package"
 
-        pkgstr("add $(packages_dir):dependencies/Dep#master")
+        pkgstr("add $(packages_dir)#master:dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"
@@ -329,13 +331,13 @@ end
         pkg"rm Dep"
 
         # Add from url at branch, REPL subdir syntax.
-        pkgstr("add $(packages_dir_url):julia#master")
+        pkgstr("add $(packages_dir_url)#master:julia")
         @test isinstalled("Package")
         @test !isinstalled("Dep")
         @test isinstalled(dep)
         pkg"rm Package"
 
-        pkgstr("add $(packages_dir_url):dependencies/Dep#master")
+        pkgstr("add $(packages_dir_url)#master:dependencies/Dep")
         @test !isinstalled("Package")
         @test isinstalled("Dep")
         pkg"rm Dep"

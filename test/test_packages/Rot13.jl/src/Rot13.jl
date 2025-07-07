@@ -14,4 +14,6 @@ function (@main)(ARGS)
     return 0
 end
 
+include("CLI.jl")
+
 end # module Rot13
