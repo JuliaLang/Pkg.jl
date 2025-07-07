@@ -19,8 +19,9 @@ end
 end
 
 @testset "safe_realpath" begin
+    realpath(Sys.BINDIR) == Pkg.safe_realpath(Sys.BINDIR)
     # issue #3085
-    for p in ("", "some-non-existing-path")
+    for p in ("", "some-non-existing-path", "some-non-existing-drive:")
         @test p == Pkg.safe_realpath(p)
     end
 end
