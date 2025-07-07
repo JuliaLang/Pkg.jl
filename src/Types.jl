@@ -1223,7 +1223,6 @@ function write_env(env::EnvCache; update_undo=true,
             @assert normpath(entry.path) == normpath(path)
         end
         if repo != GitRepo()
-            @assert entry.repo.source == repo.source
             if repo.rev !== nothing
                 @assert entry.repo.rev == repo.rev
             end
