@@ -598,6 +598,10 @@ function status(io::IO=stderr_f())
                 print(io, "    unpacked registry with hash $(reg.tree_info)")
             elseif registry_type == :packed
                 print(io, "    packed registry with hash $(reg.tree_info)")
+            elseif registry_type == :bare
+                # We could try to detect a symlink but this is too
+                # rarely used to be worth the complexity.
+                print(io, "    bare registry")
             else
                 print(io, "    unknown registry format")
             end
@@ -625,10 +629,35 @@ function status(io::IO=stderr_f())
     end
 end
 
+# The registry can be installed in a number of different ways, for
+# evolutionary reasons.
+#
+# 1. A tarball that is not unpacked. In this case Pkg handles the
+# registry in memory. The tarball is distributed by a package server.
+# This is the preferred option, in particular for the General
+# registry.
+#
+# 2. A tarball that is unpacked. This only differs from above by
+# having the files on disk instead of in memory. In both cases Pkg
+# keeps track of the tarball's tree hash to know if it can be updated.
+#
+# 3. A clone of a git repository. This is characterized by the
+# presence of a .git directory. All updating is handled with git.
+# This is not preferred for the General registry but may be the only
+# practical option for private registries.
+#
+# 4. A bare registry with only the registry files and no metadata.
+# This can be installed by adding or symlinking from a local path but
+# there is no way to update it from Pkg.
+#
+# It is also possible for a packed/unpacked registry to coexist on
+# disk with a git/bare registry, in which case a new Julia may use the
+# former and a sufficiently old Julia the latter.
 function get_registry_type(reg)
     isnothing(reg.in_memory_registry) || return :packed
     isnothing(reg.tree_info) || return :unpacked
     isdir(joinpath(reg.path, ".git")) && return :git
+    isfile(joinpath(reg.path, "Registry.toml")) && return :bare
     # Indicates either that the registry data is corrupt or that it
     # has been handled by a future Julia version with non-backwards
     # compatible conventions.
