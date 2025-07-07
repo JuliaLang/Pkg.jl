@@ -1358,14 +1358,14 @@ end
             @test length(args) == 1
             @test args[1].path == normpath("C:\\\\Users\\\\test\\\\project")
             @test args[1].subdir === nothing
-            
+
             # Test with forward slashes too
             api, args, opts = first(Pkg.pkg"add C:/Users/test/project")
             @test api == Pkg.add
             @test length(args) == 1
             @test args[1].path == normpath("C:/Users/test/project")
             @test args[1].subdir === nothing
-            
+
             # Test that actual subdir syntax still works with Windows paths
             api, args, opts = first(Pkg.pkg"add C:\\Users\\test\\project:subdir")
             @test api == Pkg.add
@@ -3512,6 +3512,21 @@ end
                     Pkg.resolve()
                 end
             end
+        end
+    end
+end
+
+@testset "status diff non-root" begin
+    isolate(loaded_depot=true) do
+        cd_tempdir() do dir
+            Pkg.generate("A")
+            git_init_and_commit(".")
+            Pkg.activate("A")
+            Pkg.add("Example")
+            io = IOBuffer()
+            Pkg.status(; io, diff=true)
+            str = String(take!(io))
+            @test occursin("+ Example", str)
         end
     end
 end
