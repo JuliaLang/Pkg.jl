@@ -918,7 +918,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             fetched = false
             if obj_branch === nothing
                 fetched = true
-                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
+                # For pull requests, fetch the specific PR ref
+                if startswith(rev_or_hash, "pull/") && endswith(rev_or_hash, "/head")
+                    pr_number = rev_or_hash[6:end-5]  # Extract number from "pull/X/head"
+                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/remotes/cache/pull/$(pr_number)/head"]
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=pr_refspecs)
+                else
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
+                end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(rev_or_hash) in repository")
@@ -1003,6 +1010,16 @@ get_object_or_branch(repo, rev::SHA1) =
 
 # Returns nothing if rev could not be found in repo
 function get_object_or_branch(repo, rev)
+    # Handle pull request references
+    if startswith(rev, "pull/") && endswith(rev, "/head")
+        try
+            gitobject = LibGit2.GitObject(repo, "remotes/cache/" * rev)
+            return gitobject, true
+        catch err
+            err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
+        end
+    end
+    
     try
         gitobject = LibGit2.GitObject(repo, "remotes/cache/heads/" * rev)
         return gitobject, true
@@ -1234,10 +1251,9 @@ function write_env(env::EnvCache; update_undo=true,
         path, repo = get_path_repo(env.project, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
-            @assert entry.path == path
+            @assert normpath(entry.path) == normpath(path)
         end
         if repo != GitRepo()
-            @assert entry.repo.source == repo.source
             if repo.rev !== nothing
                 @assert entry.repo.rev == repo.rev
             end
@@ -1249,7 +1265,8 @@ function write_env(env::EnvCache; update_undo=true,
             if entry.path !== nothing
                 env.project.sources[pkg] = Dict("path" => entry.path)
             elseif entry.repo != GitRepo()
-                d = Dict("url" => entry.repo.source)
+                d = Dict{String, String}()
+                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
                 entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
                 entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
                 env.project.sources[pkg] = d

@@ -19,6 +19,7 @@ Pkg v1.12 Release Notes
 - When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from
   weak dependencies and added as a regular dependency. ([#3865])
 - Enhanced fuzzy matching algorithm for package name suggestions.
+- The Pkg REPL now supports GitHub pull request URLs, allowing direct package installation from PRs via `pkg> add https://github.com/Org/Package.jl/pull/123` ([#4295])
 
 Pkg v1.11 Release Notes
 =======================

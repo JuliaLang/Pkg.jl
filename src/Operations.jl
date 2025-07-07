@@ -15,7 +15,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io
+import ...Pkg: usable_io, discover_repo
 
 #########
 # Utils #
@@ -379,7 +379,7 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
 end
 
 is_tracking_path(pkg) = pkg.path !== nothing
-is_tracking_repo(pkg) = pkg.repo.source !== nothing
+is_tracking_repo(pkg) = (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)
 is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
@@ -3046,10 +3046,11 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     old_env = nothing
     if git_diff
         project_dir = dirname(env.project_file)
-        if !ispath(joinpath(project_dir, ".git"))
+        git_repo_dir = discover_repo(project_dir)
+        if git_repo_dir == nothing
             @warn "diff option only available for environments in git repositories, ignoring."
         else
-            old_env = git_head_env(env, project_dir)
+            old_env = git_head_env(env, git_repo_dir)
             if old_env === nothing
                 @warn "could not read project from HEAD, displaying absolute status instead."
             end
