@@ -1254,7 +1254,6 @@ function write_env(env::EnvCache; update_undo=true,
             @assert entry.path == path
         end
         if repo != GitRepo()
-            @assert entry.repo.source == repo.source
             if repo.rev !== nothing
                 @assert entry.repo.rev == repo.rev
             end
@@ -1266,7 +1265,8 @@ function write_env(env::EnvCache; update_undo=true,
             if entry.path !== nothing
                 env.project.sources[pkg] = Dict("path" => entry.path)
             elseif entry.repo != GitRepo()
-                d = Dict("url" => entry.repo.source)
+                d = Dict{String, String}()
+                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
                 entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
                 entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
                 env.project.sources[pkg] = d
