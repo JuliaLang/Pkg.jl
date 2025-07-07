@@ -1,6 +1,7 @@
 module Apps
 
 using Pkg
+using Pkg: atomic_toml_write
 using Pkg.Versions
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
                  pkgerror, projectfile_path, manifestfile_path
@@ -151,9 +152,7 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             # TODO: What if project file has its own entryfile?
             project_data = TOML.parsefile(projectfile)
             project_data["entryfile"] = joinpath(sourcepath, "src", "$(pkg.name).jl")
-            open(projectfile, "w") do io
-                TOML.print(io, project_data)
-            end
+            atomic_toml_write(projectfile, project_data)
         else
             error("could not find project file for package $pkg")
         end

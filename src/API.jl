@@ -14,7 +14,7 @@ import Base: StaleCacheKey
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -654,9 +654,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             usage_path = joinpath(logdir(depot), fname)
             if !(isempty(usage)::Bool) || isfile(usage_path)
                 let usage=usage
-                    open(usage_path, "w") do io
-                        TOML.print(io, usage, sorted=true)
-                    end
+                    atomic_toml_write(usage_path, usage, sorted=true)
                 end
             end
         end
@@ -986,9 +984,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         # Write out the `new_orphanage` for this depot
         mkpath(dirname(orphanage_file))
-        open(orphanage_file, "w") do io
-            TOML.print(io, new_orphanage, sorted=true)
-        end
+        atomic_toml_write(orphanage_file, new_orphanage, sorted=true)
     end
 
     function recursive_dir_size(path)
@@ -1122,7 +1118,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     return
 end
 
-function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...)
+function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, allow_reresolve::Bool=true, kwargs...)
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1137,7 +1133,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, kwargs...
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
-    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
+    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose; allow_reresolve)
 end
 
 function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
@@ -1234,17 +1230,22 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     Types.check_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file; julia_version_strict)
 
     if Operations.is_manifest_current(ctx.env) === false
+        resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        update_cmd = Pkg.in_repl_mode() ? "pkg> update" : "Pkg.update()"
         @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
-        It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."""
+        It is recommended to `$resolve_cmd` or consider `$update_cmd` if necessary."""
     end
 
     Operations.prune_manifest(ctx.env)
     for (name, uuid) in ctx.env.project.deps
         get(ctx.env.manifest, uuid, nothing) === nothing || continue
+        resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        rm_cmd = Pkg.in_repl_mode() ? "pkg> rm $name" : "Pkg.rm(\"$name\")"
+        instantiate_cmd = Pkg.in_repl_mode() ? "pkg> instantiate" : "Pkg.instantiate()"
         pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
-                 " If you intend `$name` to be a direct dependency, run `Pkg.resolve()` to populate the manifest.",
-                 " Otherwise, remove `$name` with `Pkg.rm(\"$name\")`.",
-                 " Finally, run `Pkg.instantiate()` again.")
+                 " If you intend `$name` to be a direct dependency, run `$resolve_cmd` to populate the manifest.",
+                 " Otherwise, remove `$name` with `$rm_cmd`.",
+                 " Finally, run `$instantiate_cmd` again.")
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env, workspace; platform)

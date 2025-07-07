@@ -52,6 +52,9 @@ const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
 
+# ScopedValue to track whether we're currently in REPL mode
+const IN_REPL_MODE = Base.ScopedValues.ScopedValue{Bool}()
+
 # See discussion in https://github.com/JuliaLang/julia/pull/52249
 function unstableio(@nospecialize(io::IO))
     # Needed to prevent specialization https://github.com/JuliaLang/julia/pull/52249#discussion_r1401199265
@@ -68,6 +71,14 @@ const PREV_ENV_PATH = Ref{String}("")
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
 can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
 should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
+
+"""
+    in_repl_mode()
+
+Check if we're currently executing in REPL mode. This is used to determine
+whether to show tips in REPL format (`pkg> add Foo`) or API format (`Pkg.add("Foo")`).
+"""
+in_repl_mode() = @something(Base.ScopedValues.get(IN_REPL_MODE), false)
 
 include("utils.jl")
 include("MiniProgressBars.jl")
@@ -289,17 +300,16 @@ const update = API.up
 !!! compat "Julia 1.9"
     Passing a string to `coverage` requires at least Julia 1.9.
 
-Run the tests for package `pkg`, or for the current project (which thus needs to be a package) if no
-positional argument is given to `Pkg.test`. A package is tested by running its
-`test/runtests.jl` file.
+Run the tests for the given package(s), or for the current project if no positional argument is given to `Pkg.test`
+(the current project would need to be a package). The package is tested by running its `test/runtests.jl` file.
 
-The tests are run by generating a temporary environment with only the `pkg` package
-and its (recursive) dependencies in it. If a manifest file exists and the `allow_reresolve`
-keyword argument is set to `false`, the versions in the manifest file are used.
-Otherwise a feasible set of packages is resolved and installed.
+The tests are run in a temporary environment that also includes the test specific dependencies
+of the package. The versions of dependencies in the current project are used for the
+test environment unless there is a compatibility conflict between the version of the dependencies and
+the test-specific dependencies. In that case, if `allow_reresolve` is `false` an error is thrown and
+if `allow_reresolve` is `true` a feasible set of versions of the dependencies is resolved and used.
 
-During the tests, test-specific dependencies are active, which are
-given in the project file as e.g.
+Test-specific dependnecies are declared in the project file as:
 
 ```toml
 [extras]
@@ -311,6 +321,7 @@ test = ["Test"]
 
 The tests are executed in a new process with `check-bounds=yes` and by default `startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
+
 Inlining of functions during testing can be disabled (for better coverage accuracy)
 by starting julia with `--inline=no`. The tests can be run as if different command line arguments were
 passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
@@ -355,14 +366,22 @@ const gc = API.gc
     Pkg.build(pkg::Union{String, Vector{String}}; verbose = false, io::IO=stderr)
     Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false, io::IO=stderr)
 
+**Keyword arguments:**
+  - `verbose::Bool=false`: print the build output to `stdout`/`stderr` instead of redirecting to the `build.log` file.
+  - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the build environment
+
+!!! compat "Julia 1.13"
+    `allow_reresolve` requires at least Julia 1.13.
+
 Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in
 depth-first recursive order.
 If no argument is given to `build`, the current project is built, which thus needs
 to be a package.
 This function is called automatically on any package that gets installed
 for the first time.
-`verbose = true` prints the build output to `stdout`/`stderr` instead of
-redirecting to the `build.log` file.
+
+The build takes place in a new process matching the current process with default of `startup-file=no`.
+If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with an explicit `--startup-file=yes`.
 """
 const build = API.build
 
@@ -520,10 +539,11 @@ dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
 After packages have been installed the project will be precompiled.
-See more at [Environment Precompilation](@ref).
+See more and how to disable auto-precompilation at [Environment Precompilation](@ref).
 
 !!! compat "Julia 1.12"
     The `julia_version_strict` keyword argument requires at least Julia 1.12.
+
 """
 const instantiate = API.instantiate
 
@@ -722,7 +742,7 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
-# Use HTTPS for GitHub (default, good for most users)  
+# Use HTTPS for GitHub (default, good for most users)
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
 
 # Reset to default (let package developer decide)
@@ -831,7 +851,7 @@ end
 ################
 
 function installed()
-    @warn "Pkg.installed() is deprecated"
+    @warn "`Pkg.installed()` is deprecated. Use `Pkg.dependencies()` instead." maxlog=1
     deps = dependencies()
     installs = Dict{String, VersionNumber}()
     for (uuid, dep) in deps

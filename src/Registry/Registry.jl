@@ -2,7 +2,7 @@ module Registry
 
 import ..Pkg
 using ..Pkg: depots, depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-             GitTools
+    GitTools, atomic_toml_write
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
 using UUIDs, LibGit2, TOML, Dates
 import FileWatching
@@ -161,10 +161,11 @@ function check_registry_state(reg)
     reg_currently_uses_pkg_server = reg.tree_info !== nothing
     reg_should_use_pkg_server = registry_use_pkg_server()
     if reg_currently_uses_pkg_server && !reg_should_use_pkg_server
+        pkg_cmd = Pkg.in_repl_mode() ? "pkg> registry rm $(reg.name); registry add $(reg.name)" : "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")"
         msg = string(
             "Your registry may be outdated. We recommend that you run the ",
             "following command: ",
-            "using Pkg; Pkg.Registry.rm(\"$(reg.name)\"); Pkg.Registry.add(\"$(reg.name)\")",
+            pkg_cmd,
         )
         @warn(msg)
     end
@@ -212,9 +213,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                 end
                 mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
                 reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ".tar.gz")
-                open(joinpath(regdir, reg.name * ".toml"), "w") do io
-                    TOML.print(io, reg_info)
-                end
+                atomic_toml_write(joinpath(regdir, reg.name * ".toml"), reg_info)
                 printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
             else
                 mktempdir() do tmp
@@ -368,9 +367,7 @@ function save_registry_update_log(d::Dict)
     pkg_scratch_space = joinpath(DEPOT_PATH[1], "scratchspaces", "44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
     mkpath(pkg_scratch_space)
     pkg_reg_updated_file = joinpath(pkg_scratch_space, "registry_updates.toml")
-    open(pkg_reg_updated_file, "w") do io
-        TOML.print(io, d)
-    end
+    atomic_toml_write(pkg_reg_updated_file, d)
 end
 
 """
@@ -450,9 +447,7 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                                     registry_path = dirname(reg.path)
                                     mv(tmp, joinpath(registry_path, reg.name * ".tar.gz"); force=true)
                                     reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ".tar.gz")
-                                    open(joinpath(registry_path, reg.name * ".toml"), "w") do io
-                                        TOML.print(io, reg_info)
-                                    end
+                                    atomic_toml_write(joinpath(registry_path, reg.name * ".toml"), reg_info)
                                     registry_update_log[string(reg.uuid)] = now()
                                     @label done_tarball_read
                                 else

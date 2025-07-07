@@ -2,7 +2,9 @@ Pkg v1.13 Release Notes
 =======================
 
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications. ([#4284])
-- Pkg now automatically adds entries to `[sources]` when packages are added by URL or devved, improving workflow consistency. ([#4225])
+- `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve package versions, similar to the existing option for `Pkg.test`. ([#3329])
+- Packages are now automatically added to `[sources]` when they are added by url or devved.
+- `update` now shows a helpful tip when trying to upgrade a specific package that can be upgraded but is held back because it's part of a less optimal resolver solution ([#4266])
 
 Pkg v1.12 Release Notes
 =======================
@@ -13,9 +15,10 @@ Pkg v1.12 Release Notes
 - Pkg now supports "apps" which are Julia packages that can be run directly from the terminal after installation.
   Apps can be defined in a package's Project.toml and installed via Pkg. ([#3772])
 - `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
-- When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from 
+- When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from
   weak dependencies and added as a regular dependency. ([#3865])
-- Packages are also automatically added to `[sources]` when they are added by url or devved.
+- Enhanced fuzzy matching algorithm for package name suggestions.
+- The Pkg REPL now supports GitHub pull request URLs, allowing direct package installation from PRs via `pkg> add https://github.com/Org/Package.jl/pull/123` ([#4295])
 
 Pkg v1.11 Release Notes
 =======================

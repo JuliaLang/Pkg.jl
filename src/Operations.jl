@@ -15,7 +15,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io
+import ...Pkg: usable_io, discover_repo
 
 #########
 # Utils #
@@ -351,7 +351,7 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
 end
 
 is_tracking_path(pkg) = pkg.path !== nothing
-is_tracking_repo(pkg) = pkg.repo.source !== nothing
+is_tracking_repo(pkg) = (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)
 is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
@@ -417,7 +417,25 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             path = project_rel_path(env, source_path(env.manifest_file, pkg))
         end
         if !isdir(path)
-            pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
+            # Find which packages depend on this missing package for better error reporting
+            dependents = String[]
+            for (dep_uuid, dep_entry) in env.manifest.deps
+                if pkg.uuid in values(dep_entry.deps) || pkg.uuid in values(dep_entry.weakdeps)
+                    push!(dependents, dep_entry.name === nothing ? "unknown package [$dep_uuid]" : dep_entry.name)
+                end
+            end
+
+            error_msg = "expected package $(err_rep(pkg)) to exist at path `$path`"
+            error_msg *= "\n\nThis package is referenced in the manifest file: $(env.manifest_file)"
+
+            if !isempty(dependents)
+                if length(dependents) == 1
+                    error_msg *= "\nIt is required by: $(dependents[1])"
+                else
+                    error_msg *= "\nIt is required by:\n$(join(["  - $dep" for dep in dependents], "\n"))"
+                end
+            end
+            pkgerror(error_msg)
         end
         deps, weakdeps = collect_project(pkg, path)
         deps_map[pkg.uuid] = deps
@@ -534,7 +552,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
         # We only fixup a JLL if the old major/minor/patch matches the new major/minor/patch
         if old_v !== nothing && Base.thispatch(old_v) == Base.thispatch(vers_fix[uuid])
             new_v = vers_fix[uuid]
-            if old_v != new_v
+            if old_v != new_v && haskey(compat_map[uuid], old_v)
                 compat_map[uuid][old_v] = compat_map[uuid][new_v]
                 # Note that we don't delete!(compat_map[uuid], old_v) because we want to keep the compat info around
                 # in case there's JLL version confusion between the sysimage pkgorigins version and manifest
@@ -569,6 +587,10 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
                 deps_fixed
             else
                 d = Dict{String, UUID}()
+                if !haskey(compat_map[pkg.uuid], pkg.version)
+                    available_versions = sort!(collect(keys(compat_map[pkg.uuid])))
+                    pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
+                end
                 for (uuid, _) in compat_map[pkg.uuid][pkg.version]
                     d[names[uuid]]  = uuid
                 end
@@ -747,7 +769,7 @@ function install_archive(
         try
             unpack(path, dir; verbose=false)
         catch e
-            e isa InterruptException && rethrow()
+            e isa ProcessFailedException || rethrow()
             @warn "failed to extract archive downloaded from $(url)"
             url_success = false
         end
@@ -824,7 +846,7 @@ function install_git(
     end
 end
 
-function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform())
+function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlatform(), include_lazy::Bool=false)
     # Check to see if this package has an (Julia)Artifacts.toml
     artifacts_tomls = Tuple{String,Base.TOML.TOMLDict}[]
     for f in artifact_names
@@ -848,7 +870,7 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform=HostPlat
                 end
             else
                 # Otherwise, use the standard selector from `Artifacts`
-                artifacts = select_downloadable_artifacts(artifacts_toml; platform)
+                artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
                 push!(artifacts_tomls, (artifacts_toml, artifacts))
             end
             break
@@ -868,7 +890,9 @@ end
 function download_artifacts(ctx::Context;
                             platform::AbstractPlatform=HostPlatform(),
                             julia_version = VERSION,
-                            verbose::Bool=false)
+                            verbose::Bool=false,
+                            io::IO=stderr_f(),
+                            include_lazy::Bool=false)
     env = ctx.env
     io = ctx.io
     fancyprint = can_fancyprint(io)
@@ -894,7 +918,7 @@ function download_artifacts(ctx::Context;
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
 
-    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform), pkg_roots))
+    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform, include_lazy), pkg_roots))
     used_artifact_tomls = Set{String}(map(first, all_collected_artifacts))
     longest_name_length = maximum(all_collected_artifacts; init=0) do (artifacts_toml, artifacts)
         maximum(textwidth, keys(artifacts); init=0)
@@ -1288,12 +1312,12 @@ function any_package_not_installed(manifest::Manifest)
     return false
 end
 
-function build(ctx::Context, uuids::Set{UUID}, verbose::Bool)
+function build(ctx::Context, uuids::Set{UUID}, verbose::Bool; allow_reresolve::Bool=true)
     if any_package_not_installed(ctx.env.manifest) || !isfile(ctx.env.manifest_file)
         Pkg.instantiate(ctx, allow_build = false, allow_autoprecomp = false)
     end
     all_uuids = get_deps(ctx.env, uuids)
-    build_versions(ctx, all_uuids; verbose)
+    build_versions(ctx, all_uuids; verbose, allow_reresolve)
 end
 
 function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID,Int}
@@ -1353,7 +1377,7 @@ pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 
 builddir(source_path::String) = joinpath(source_path, "deps")
 buildfile(source_path::String) = joinpath(builddir(source_path), "build.jl")
-function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
+function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false, allow_reresolve::Bool=true)
     # collect builds for UUIDs with `deps/build.jl` files
     builds = Tuple{UUID,String,String,VersionNumber}[]
     for uuid in uuids
@@ -1435,7 +1459,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose=false)
         fancyprint && show_progress(ctx.io, bar)
 
         let log_file=log_file
-            sandbox(ctx, pkg, builddir(source_path), build_project_override; preferences=build_project_preferences) do
+            sandbox(ctx, pkg, builddir(source_path), build_project_override; preferences=build_project_preferences, allow_reresolve) do
                 flush(ctx.io)
                 ok = open(log_file, "w") do log
                     std = verbose ? ctx.io : log
@@ -1625,21 +1649,21 @@ function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
         existing_uuid == pkg.uuid ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$(pkg.name)=$(existing_uuid)` with the same name already exists as a direct dependency.
-                     To remove the existing package, use `import Pkg; Pkg.rm("$(pkg.name)")`.
+                     To remove the existing package, use `$(Pkg.in_repl_mode() ? """pkg> rm $(pkg.name)""" : """import Pkg; Pkg.rm("$(pkg.name)")""")`.
                      """)
         # package with the same uuid exist in the project: assert they have the same name
         name = findfirst(==(pkg.uuid), ctx.env.project.deps)
         name === nothing || name == pkg.name ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$name=$(pkg.uuid)` with the same UUID already exists as a direct dependency.
-                     To remove the existing package, use `import Pkg; Pkg.rm("$name")`.
+                     To remove the existing package, use `$(Pkg.in_repl_mode() ? """pkg> rm $name""" : """import Pkg; Pkg.rm("$name")""")`.
                      """)
         # package with the same uuid exist in the manifest: assert they have the same name
         entry = get(ctx.env.manifest, pkg.uuid, nothing)
         entry === nothing || entry.name == pkg.name ||
             pkgerror("""Refusing to add package $(err_rep(pkg)).
                      Package `$(entry.name)=$(pkg.uuid)` with the same UUID already exists in the manifest.
-                     To remove the existing package, use `import Pkg; Pkg.rm(Pkg.PackageSpec(uuid="$(pkg.uuid)"); mode=Pkg.PKGMODE_MANIFEST)`.
+                     To remove the existing package, use `$(Pkg.in_repl_mode() ? """pkg> rm --manifest $(entry.name)=$(pkg.uuid)""" : """import Pkg; Pkg.rm(Pkg.PackageSpec(uuid="$(pkg.uuid)"); mode=Pkg.PKGMODE_MANIFEST)""")`.
                      """)
     end
 end
@@ -1898,6 +1922,9 @@ end
 
 function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
             skip_writing_project::Bool=false, preserve::Union{Nothing,PreserveLevel}=nothing)
+
+    requested_pkgs = pkgs
+
     new_git = Set{UUID}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
@@ -1925,12 +1952,38 @@ function up(ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
     download_artifacts(ctx, julia_version=ctx.julia_version)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io=ctx.io, hidden_upgrades_info = true)
+
+    if length(requested_pkgs) == 1
+        pkg = only(requested_pkgs)
+        entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        if entry === nothing || (entry.path === nothing && entry.repo.source === nothing)
+            # Get current version after the update
+            current_version = entry !== nothing ? entry.version : nothing
+            original_entry = manifest_info(ctx.env.original_manifest, pkg.uuid)
+            original_version = original_entry !== nothing ? original_entry.version : nothing
+
+            # Check if version didn't change and there's a newer version available
+            if current_version == original_version && current_version !== nothing
+                temp_pkg = PackageSpec(name=pkg.name, uuid=pkg.uuid, version=current_version)
+                cinfo = status_compat_info(temp_pkg, ctx.env, ctx.registries)
+                if cinfo !== nothing
+                    packages_holding_back, max_version, max_version_compat = cinfo
+                    if current_version < max_version
+                        printpkgstyle(ctx.io, :Info, "$(pkg.name) can be updated but at the cost of downgrading other packages. " *
+                            "To force upgrade to the latest version, try `add $(pkg.name)@$(max_version)`", color=Base.info_color())
+                    end
+                end
+            end
+        end
+    end
+
     build_versions(ctx, union(new_apply, new_git))
 end
 
 function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
     if entry === nothing
-        pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
+        cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+        pkgerror("package $(err_rep(pkg)) not found in the manifest, run `$cmd` and retry.")
     end
 
     #if entry.pinned && pkg.version == VersionSpec()
@@ -2212,7 +2265,15 @@ function sandbox(fn::Function, ctx::Context, target::PackageSpec,
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
                 @debug err
-                printpkgstyle(ctx.io, :Test, "Could not use exact versions of packages in manifest. Re-resolving dependencies", color=Base.warn_color())
+                msg = string(
+                    "Could not use exact versions of packages in manifest, re-resolving. ",
+                    "Note: if you do not check your manifest file into source control, ",
+                    "then you can probably ignore this message. ",
+                    "However, if you do check your manifest file into source control, ",
+                    "then you probably want to pass the `allow_reresolve = false` kwarg ",
+                    "when calling the `Pkg.test` function.",
+                )
+                printpkgstyle(ctx.io, :Test, msg, color=Base.warn_color())
                 Pkg.update(temp_ctx; skip_writing_project=true, update_registry=false, io=ctx.io)
                 printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
                 @debug "Using _clean_ dep graph"
@@ -2768,8 +2829,8 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.manifest_file, new)
 
         new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
-        pkg_upgradable = new_ver_avail && isempty(cinfo[1])
-        pkg_heldback = new_ver_avail && !isempty(cinfo[1])
+        pkg_upgradable = new_ver_avail && cinfo !== nothing && isempty(cinfo[1])
+        pkg_heldback = new_ver_avail && cinfo !== nothing && !isempty(cinfo[1])
 
         if !pkg_downloaded && (pkg_upgradable || pkg_heldback)
             # allow space in the gutter for two icons on a single line
@@ -2927,10 +2988,11 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     old_env = nothing
     if git_diff
         project_dir = dirname(env.project_file)
-        if !ispath(joinpath(project_dir, ".git"))
+        git_repo_dir = discover_repo(project_dir)
+        if git_repo_dir == nothing
             @warn "diff option only available for environments in git repositories, ignoring."
         else
-            old_env = git_head_env(env, project_dir)
+            old_env = git_head_env(env, git_repo_dir)
             if old_env === nothing
                 @warn "could not read project from HEAD, displaying absolute status instead."
             end
@@ -2951,7 +3013,15 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if is_manifest_current(env) === false
-        tip = show_usagetips ? " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary." : ""
+        tip = if show_usagetips
+            if Pkg.in_repl_mode()
+                " It is recommended to `pkg> resolve` or consider `pkg> update` if necessary."
+            else
+                " It is recommended to `Pkg.resolve()` or consider `Pkg.update()` if necessary."
+            end
+        else
+            ""
+        end
         printpkgstyle(io, :Warning, "The project dependencies or compat requirements have changed since the manifest was last resolved.$tip",
             ignore_indent; color=Base.warn_color())
     end
