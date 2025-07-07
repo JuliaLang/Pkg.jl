@@ -438,6 +438,8 @@ versions that may be installed, e.g. via `pkg> up`. Those marked with `⌅` have
 new versions available, but cannot be installed due to compatibility
 constraints. To see why use `pkg> status --outdated` which shows any packages
 that are not at their latest version and if any packages are holding them back.
+Packages marked with `[yanked]` have been yanked from the registry and should be
+updated or removed.
 
 Use `pkg> status --extensions` to show dependencies with extensions and what extension dependencies
 of those that are currently loaded.

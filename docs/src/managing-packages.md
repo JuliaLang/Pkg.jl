@@ -488,6 +488,30 @@ To fix such errors, you have a number of options:
 - try fixing the problem yourself.
   This becomes easier once you understand `Project.toml` files and how they declare their compatibility requirements. We'll return to this example in [Fixing conflicts](@ref Fixing-conflicts).
 
+## Yanked packages
+
+Package registries can mark specific versions of packages as "yanked". A yanked package version
+is one that should no longer be used, typically because it contains serious bugs, security
+vulnerabilities, or other critical issues. When a package version is yanked, it becomes
+unavailable for new installations but remains accessible (i.e. via `instantiate`) to maintain reproducibility
+of existing environments.
+
+When you run `pkg> status`, yanked packages are clearly marked with a warning symbol:
+
+```julia-repl
+(@v1.13) pkg> status
+    Status `~/.julia/environments/v1.13/Project.toml`
+  [682c06a0] JSON v0.21.3
+  [f4259836] Example v1.2.0 [yanked]
+```
+
+The `[yanked]` annotation indicate that version `v1.2.0` of the `Example` package
+has been yanked and should be updated or replaced.
+
+When resolving dependencies, Pkg will warn you if yanked packages are present and may provide
+guidance on how to resolve the situation. It's important to address yanked packages promptly
+to ensure the security and stability of your Julia environment.
+
 ## Garbage collecting old, unused packages
 
 As packages are updated and projects are deleted, installed package versions and artifacts that were
