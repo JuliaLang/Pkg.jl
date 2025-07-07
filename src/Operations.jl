@@ -350,7 +350,7 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
 end
 
 is_tracking_path(pkg) = pkg.path !== nothing
-is_tracking_repo(pkg) = pkg.repo.source !== nothing
+is_tracking_repo(pkg) = (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)
 is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 

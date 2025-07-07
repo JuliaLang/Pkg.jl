@@ -3204,6 +3204,23 @@ end
     end
 end
 
+@testset "test instantiate with sources with only rev" begin
+    isolate() do
+        mktempdir() do dir
+            cp(joinpath(@__DIR__, "test_packages", "sources_only_rev", "Project.toml"), joinpath(dir, "Project.toml"))
+            cd(dir) do
+                with_current_env() do
+                    @test !isfile("Manifest.toml")
+                    Pkg.instantiate()
+                    uuid, info = only(Pkg.dependencies())
+                    @test info.git_revision == "ba3d6704f09330ae973773496a4212f85e0ffe45"
+                    @test info.git_source == "https://github.com/JuliaLang/Example.jl.git"
+                end
+            end
+        end
+    end
+end
+
 @testset "status showing incompatible loaded deps" begin
     cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
         using Pkg
