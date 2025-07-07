@@ -3423,6 +3423,21 @@ end
     end
 end
 
+@testset "status diff non-root" begin
+    isolate(loaded_depot=true) do
+        cd_tempdir() do dir
+            Pkg.generate("A")
+            git_init_and_commit(".")
+            Pkg.activate("A")
+            Pkg.add("Example")
+            io = IOBuffer()
+            Pkg.status(; io, diff=true)
+            str = String(take!(io))
+            @test occursin("+ Example", str)
+        end
+    end
+end
+
 @testset "test instantiate with sources with only rev" begin
     isolate() do
         mktempdir() do dir

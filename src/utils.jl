@@ -99,3 +99,19 @@ end
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
     Base.isless(a::UUID, b::UUID) = a.value < b.value
 end
+
+function discover_repo(path::AbstractString)
+    dir = abspath(path)
+    stop_dir = homedir()
+
+    while true
+        gitdir = joinpath(dir, ".git")
+        if isdir(gitdir) || isfile(gitdir)
+            return dir
+        end
+        dir == stop_dir && return nothing
+        parent = dirname(dir)
+        parent == dir && return nothing
+        dir = parent
+    end
+end
