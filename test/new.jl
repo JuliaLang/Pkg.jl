@@ -1358,14 +1358,14 @@ end
             @test length(args) == 1
             @test args[1].path == normpath("C:\\\\Users\\\\test\\\\project")
             @test args[1].subdir === nothing
-            
+
             # Test with forward slashes too
             api, args, opts = first(Pkg.pkg"add C:/Users/test/project")
             @test api == Pkg.add
             @test length(args) == 1
             @test args[1].path == normpath("C:/Users/test/project")
             @test args[1].subdir === nothing
-            
+
             # Test that actual subdir syntax still works with Windows paths
             api, args, opts = first(Pkg.pkg"add C:\\Users\\test\\project:subdir")
             @test api == Pkg.add
@@ -3510,6 +3510,23 @@ end
                     @test isdir(joinpath(DEPOT_PATH[1], "packages", "Example"))
                     rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive=true)
                     Pkg.resolve()
+                end
+            end
+        end
+    end
+end
+
+@testset "test instantiate with sources with only rev" begin
+    isolate() do
+        mktempdir() do dir
+            cp(joinpath(@__DIR__, "test_packages", "sources_only_rev", "Project.toml"), joinpath(dir, "Project.toml"))
+            cd(dir) do
+                with_current_env() do
+                    @test !isfile("Manifest.toml")
+                    Pkg.instantiate()
+                    uuid, info = only(Pkg.dependencies())
+                    @test info.git_revision == "ba3d6704f09330ae973773496a4212f85e0ffe45"
+                    @test info.git_source == "https://github.com/JuliaLang/Example.jl.git"
                 end
             end
         end
