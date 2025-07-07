@@ -160,20 +160,19 @@ import .FakeTerminals.FakeTerminal
 
         dep8_path = git_init_package(tmp, joinpath("packages", "Dep8"))
         dep8_srcfile = joinpath(dep8_path, "src", "Dep8.jl")
+        change_dep8() = write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
         @testset "delayed precompilation with do-syntax" begin
             iob = IOBuffer()
             # Test that operations inside Pkg.precompile() do block don't trigger auto-precompilation
             Pkg.precompile(io=iob) do
-                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
                 Pkg.add(Pkg.PackageSpec(path=dep8_path))
                 Pkg.rm("Dep8")
-                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+                change_dep8()
                 Pkg.add(Pkg.PackageSpec(path=dep8_path))
             end
 
             # The precompile should happen once at the end
-            str = String(take!(iob))
-            @test occursin("Precompiling", str)
+            @test count(r"Precompiling", String(take!(iob))) == 1 # should only precompile once
 
             # Verify it was precompiled by checking a second call is a no-op
             Pkg.precompile(io=iob)
@@ -192,7 +191,7 @@ import .FakeTerminals.FakeTerminal
                 @test Pkg._autoprecompilation_enabled == false
 
                 # Operations should not trigger autoprecompilation when globally disabled
-                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+                change_dep8()
                 Pkg.add(Pkg.PackageSpec(path=dep8_path), io=iob)
                 @test !occursin("Precompiling", String(take!(iob)))
 
@@ -206,7 +205,7 @@ import .FakeTerminals.FakeTerminal
 
                 # Operations should now trigger autoprecompilation again
                 Pkg.rm("Dep8", io=iob)
-                write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+                change_dep8()
                 Pkg.add(Pkg.PackageSpec(path=dep8_path), io=iob)
                 @test occursin("Precompiling", String(take!(iob)))
 
