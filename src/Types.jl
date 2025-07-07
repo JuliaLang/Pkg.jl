@@ -96,7 +96,6 @@ mutable struct PackageSpec
     repo::GitRepo
     path::Union{Nothing,String}
     pinned::Bool
-    yanked::Bool
     # used for input only
     url::Union{Nothing, String}
     rev::Union{Nothing, String}
@@ -110,12 +109,11 @@ function PackageSpec(; name::Union{Nothing,AbstractString} = nothing,
                        repo::GitRepo = GitRepo(),
                        path::Union{Nothing,AbstractString} = nothing,
                        pinned::Bool = false,
-                       yanked::Bool = false,
                        url = nothing,
                        rev = nothing,
                        subdir = nothing)
     uuid = uuid === nothing ? nothing : UUID(uuid)
-    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, yanked, url, rev, subdir)
+    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
 end
 PackageSpec(name::AbstractString) = PackageSpec(;name=name)::PackageSpec
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(;name=name, uuid=uuid)::PackageSpec
@@ -126,10 +124,10 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(;name=n, 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
     a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-    a.pinned == b.pinned && a.yanked == b.yanked
+    a.pinned == b.pinned
 end
 function Base.hash(a::PackageSpec, h::UInt)
-    return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned, a.yanked], init=h)
+    return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init=h)
 end
 
 function err_rep(pkg::PackageSpec; quotes::Bool=true)
@@ -156,7 +154,6 @@ function Base.show(io::IO, pkg::PackageSpec)
     pkg.rev !== nothing && push!(f, "rev" => pkg.rev)
     pkg.subdir !== nothing && push!(f, "subdir" => pkg.subdir)
     pkg.pinned && push!(f, "pinned" => pkg.pinned)
-    pkg.yanked && push!(f, "yanked" => pkg.yanked)
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
         push!(f, "repo/source" => string("\"", pkg.repo.source::String, "\""))
