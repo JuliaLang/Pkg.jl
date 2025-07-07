@@ -162,8 +162,6 @@ import .FakeTerminals.FakeTerminal
         dep8_srcfile = joinpath(dep8_path, "src", "Dep8.jl")
         @testset "delayed precompilation with do-syntax" begin
             iob = IOBuffer()
-            Pkg.develop(Pkg.PackageSpec(path="packages/Dep7"))
-
             # Test that operations inside Pkg.precompile() do block don't trigger auto-precompilation
             Pkg.precompile(io=iob) do
                 write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
@@ -181,6 +179,8 @@ import .FakeTerminals.FakeTerminal
             Pkg.precompile(io=iob)
             @test !occursin("Precompiling", String(take!(iob)))
         end
+
+        Pkg.rm("Dep8")
 
         @testset "autoprecompilation_enabled global control" begin
             iob = IOBuffer()
