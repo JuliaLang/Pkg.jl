@@ -461,11 +461,20 @@ PSA[:name => "compat",
     :api => API.compat,
     :arg_count => 0 => 2,
     :completions => :complete_installed_packages_and_compat,
+    :option_spec => [
+        PSA[:name => "current", :api => :current => true],
+    ],
     :description => "edit compat entries in the current Project and re-resolve",
     :help => md"""
     compat [pkg] [compat_string]
+    compat
+    compat --current
+    compat <pkg> --current
 
 Edit project [compat] entries directly, or via an interactive menu by not specifying any arguments.
+Use --current flag to automatically populate missing compat entries with currently resolved versions.
+When used alone, applies to all packages missing compat entries.
+When combined with a package name, applies only to that package.
 When directly editing use tab to complete the package name and any existing compat entry.
 Specifying a package with a blank compat entry will remove the entry.
 After changing compat entries a `resolve` will be attempted to check whether the current

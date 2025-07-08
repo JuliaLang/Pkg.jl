@@ -10,12 +10,15 @@ import REPL
 import .REPL: LineEdit, REPLCompletions, TerminalMenus
 
 import Pkg
-import .Pkg: linewrap, pathrepr, compat, can_fancyprint, printpkgstyle, PKGMODE_PROJECT
+import .Pkg: linewrap, pathrepr, can_fancyprint, printpkgstyle, PKGMODE_PROJECT
 using .Pkg: Types, Operations, API, Registry, Resolve, REPLMode, safe_realpath
 
 using .REPLMode: Statement, CommandSpec, Command, prepare_cmd, tokenize, core_parse, SPECS, api_options, parse_option, api_options, is_opt, wrap_option
 
 using .Types: Context, PkgError, pkgerror, EnvCache
+
+using .API: set_current_compat
+import .API: _compat
 
 
 include("completions.jl")
