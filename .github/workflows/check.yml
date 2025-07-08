@@ -45,7 +45,7 @@ jobs:
           # Add ExplicitImports.jl
           using Pkg
           Pkg.add([
-            PackageSpec(name = "ExplicitImports", version = "1.6"),
+            PackageSpec(name = "ExplicitImports", version = "1.12"),
           ])
       - name: ExplicitImports.jl code checks
         shell: julia --project {0}
