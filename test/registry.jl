@@ -5,6 +5,7 @@ using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
 using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
+using Dates: Second
 
 using ..Utils
 
@@ -263,7 +264,7 @@ end
 
         # Test that `update()` with `depots` runs
         io = Base.BufferStream()
-        Registry.update(; depots=[depot_off_path], io)
+        Registry.update(; depots=[depot_off_path], io, update_cooldown = Second(0))
         closewrite(io)
         output = read(io, String)
         @test occursin("registry at `$(depot_off_path)", output)
@@ -274,6 +275,20 @@ end
         Pkg.add("Example")
         @test isinstalled((name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")))
     end end
+
+    # Registry status. Mostly verify that it runs without errors but
+    # also make some sanity checks on the output. We can't really know
+    # whether it was installed as a git clone or a tarball, so that
+    # limits how much information we are guaranteed to get from
+    # status.
+    temp_pkg_dir() do depot
+        Registry.add("General")
+        buf = IOBuffer()
+        Pkg.Registry.status(buf)
+        status = String(take!(buf))
+        @test contains(status, "[23338594] General (https://github.com/JuliaRegistries/General.git)")
+        @test contains(status, "last updated")
+    end
 
     # only clone default registry if there are no registries installed at all
     temp_pkg_dir() do depot1; mktempdir() do depot2

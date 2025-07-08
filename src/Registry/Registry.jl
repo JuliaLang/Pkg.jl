@@ -176,6 +176,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
     # Use the first depot as the target
     target_depot = depots1(depots)
     populate_known_registries_with_urls!(regs)
+    registry_update_log = get_registry_update_log()
     regdir = joinpath(target_depot, "registries")
     isdir(regdir) || mkpath(regdir)
     # only allow one julia process to download and install registries at a time
@@ -214,6 +215,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                 mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force=true)
                 reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ".tar.gz")
                 atomic_toml_write(joinpath(regdir, reg.name * ".toml"), reg_info)
+                registry_update_log[string(reg.uuid)] = now()
                 printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
             else
                 mktempdir() do tmp
@@ -279,12 +281,14 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     elseif (url !== nothing && registry_use_pkg_server()) || reg.linked !== true
                         # if the dir doesn't exist, or exists but doesn't contain a Registry.toml
                         mv(tmp, regpath, force=true)
+                        registry_update_log[string(reg.uuid)] = now()
                         printpkgstyle(io, :Added, "registry `$(registry.name)` to `$(Base.contractuser(regpath))`")
                     end
                 end
             end
         end
     end # mkpidlock
+    save_registry_update_log(registry_update_log)
     return nothing
 end
 
@@ -579,13 +583,86 @@ function status(io::IO=stderr_f())
     if isempty(regs)
         println(io, "  (no registries found)")
     else
+        registry_update_log = get_registry_update_log()
+        server_registry_info = Pkg.OFFLINE_MODE[] ? nothing : pkg_server_registry_info()
+        flavor = get(ENV, "JULIA_PKG_SERVER_REGISTRY_PREFERENCE", "")
         for reg in regs
             printstyled(io, " [$(string(reg.uuid)[1:8])]"; color = :light_black)
             print(io, " $(reg.name)")
             reg.repo === nothing || print(io, " ($(reg.repo))")
             println(io)
+
+            registry_type = get_registry_type(reg)
+            if registry_type == :git
+                print(io, "    git registry")
+            elseif registry_type == :unpacked
+                print(io, "    unpacked registry with hash $(reg.tree_info)")
+            elseif registry_type == :packed
+                print(io, "    packed registry with hash $(reg.tree_info)")
+            elseif registry_type == :bare
+                # We could try to detect a symlink but this is too
+                # rarely used to be worth the complexity.
+                print(io, "    bare registry")
+            else
+                print(io, "    unknown registry format")
+            end
+            update_time = get(registry_update_log, string(reg.uuid), nothing)
+            if !isnothing(update_time)
+                time_string = Dates.format(update_time, dateformat"yyyy-mm-dd HH:MM:SS")
+                print(io, ", last updated $(time_string)")
+            end
+            println(io)
+
+            if registry_type != :git && !isnothing(server_registry_info)
+                server_url, registries = server_registry_info
+                if haskey(registries, reg.uuid)
+                    print(io, "    served by $(server_url)")
+                    if flavor != ""
+                        print(io, " ($flavor flavor)")
+                    end
+                    if registries[reg.uuid] != reg.tree_info
+                        print(io, " - update available")
+                    end
+                    println(io)
+                end
+            end
         end
     end
+end
+
+# The registry can be installed in a number of different ways, for
+# evolutionary reasons.
+#
+# 1. A tarball that is not unpacked. In this case Pkg handles the
+# registry in memory. The tarball is distributed by a package server.
+# This is the preferred option, in particular for the General
+# registry.
+#
+# 2. A tarball that is unpacked. This only differs from above by
+# having the files on disk instead of in memory. In both cases Pkg
+# keeps track of the tarball's tree hash to know if it can be updated.
+#
+# 3. A clone of a git repository. This is characterized by the
+# presence of a .git directory. All updating is handled with git.
+# This is not preferred for the General registry but may be the only
+# practical option for private registries.
+#
+# 4. A bare registry with only the registry files and no metadata.
+# This can be installed by adding or symlinking from a local path but
+# there is no way to update it from Pkg.
+#
+# It is also possible for a packed/unpacked registry to coexist on
+# disk with a git/bare registry, in which case a new Julia may use the
+# former and a sufficiently old Julia the latter.
+function get_registry_type(reg)
+    isnothing(reg.in_memory_registry) || return :packed
+    isnothing(reg.tree_info) || return :unpacked
+    isdir(joinpath(reg.path, ".git")) && return :git
+    isfile(joinpath(reg.path, "Registry.toml")) && return :bare
+    # Indicates either that the registry data is corrupt or that it
+    # has been handled by a future Julia version with non-backwards
+    # compatible conventions.
+    return :unknown
 end
 
 end # module
