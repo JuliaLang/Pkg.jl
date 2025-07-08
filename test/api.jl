@@ -160,7 +160,7 @@ import .FakeTerminals.FakeTerminal
 
         dep8_path = git_init_package(tmp, joinpath("packages", "Dep8"))
         dep8_srcfile = joinpath(dep8_path, "src", "Dep8.jl")
-        change_dep8() = write(dep8_srcfile, read(dep8_srcfile, String) * " ") # Modify the source to ensure it is recompiled
+        change_dep8() = write(dep8_srcfile, read(dep8_srcfile, String) * "#") # Modify the source to ensure it is recompiled
         @testset "delayed precompilation with do-syntax" begin
             iob = IOBuffer()
             # Test that operations inside Pkg.precompile() do block don't trigger auto-precompilation
@@ -183,35 +183,35 @@ import .FakeTerminals.FakeTerminal
 
         @testset "autoprecompilation_enabled global control" begin
             iob = IOBuffer()
+            withenv("JULIA_PKG_PRECOMPILE_AUTO" => nothing) do
+                original_state = Pkg._autoprecompilation_enabled
+                try
+                    Pkg.autoprecompilation_enabled(false)
+                    @test Pkg._autoprecompilation_enabled == false
 
-            # Test disabling autoprecompilation globally
-            original_state = Pkg._autoprecompilation_enabled
-            try
-                Pkg.autoprecompilation_enabled(false)
-                @test Pkg._autoprecompilation_enabled == false
+                    # Operations should not trigger autoprecompilation when globally disabled
+                    change_dep8()
+                    Pkg.add(Pkg.PackageSpec(path=dep8_path), io=iob)
+                    @test !occursin("Precompiling", String(take!(iob)))
 
-                # Operations should not trigger autoprecompilation when globally disabled
-                change_dep8()
-                Pkg.add(Pkg.PackageSpec(path=dep8_path), io=iob)
-                @test !occursin("Precompiling", String(take!(iob)))
+                    # Manual precompile should still work
+                    Pkg.precompile(io=iob)
+                    @test occursin("Precompiling", String(take!(iob)))
 
-                # Manual precompile should still work
-                Pkg.precompile(io=iob)
-                @test occursin("Precompiling", String(take!(iob)))
+                    # Re-enable autoprecompilation
+                    Pkg.autoprecompilation_enabled(true)
+                    @test Pkg._autoprecompilation_enabled == true
 
-                # Re-enable autoprecompilation
-                Pkg.autoprecompilation_enabled(true)
-                @test Pkg._autoprecompilation_enabled == true
+                    # Operations should now trigger autoprecompilation again
+                    Pkg.rm("Dep8", io=iob)
+                    change_dep8()
+                    Pkg.add(Pkg.PackageSpec(path=dep8_path), io=iob)
+                    @test occursin("Precompiling", String(take!(iob)))
 
-                # Operations should now trigger autoprecompilation again
-                Pkg.rm("Dep8", io=iob)
-                change_dep8()
-                Pkg.add(Pkg.PackageSpec(path=dep8_path), io=iob)
-                @test occursin("Precompiling", String(take!(iob)))
-
-            finally
-                # Restore original state
-                Pkg.autoprecompilation_enabled(original_state)
+                finally
+                    # Restore original state
+                    Pkg.autoprecompilation_enabled(original_state)
+                end
             end
         end
 
