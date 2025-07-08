@@ -1,10 +1,14 @@
 module Registry
 
 import ..Pkg
-using ..Pkg: depots, depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-    GitTools
+using ..Pkg: depots1, printpkgstyle, stderr_f, pathrepr,
+    GitTools, pkg_server
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
-using UUIDs, LibGit2, TOML, Dates
+using UUIDs: UUIDs
+using LibGit2: LibGit2
+using TOML: TOML
+using Dates: Dates, DateTime, Millisecond, Second, now
+using Tar: Tar
 import FileWatching
 
 public add, rm, status, update
@@ -50,7 +54,7 @@ function add(; name = nothing, uuid = nothing, url = nothing, path = nothing, li
         add([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
     end
 end
-function add(regs::Vector{RegistrySpec}; io::IO = stderr_f(), depots::Union{String, Vector{String}} = depots())
+function add(regs::Vector{RegistrySpec}; io::IO = stderr_f(), depots::Union{String, Vector{String}} = Base.DEPOT_PATH)
     return if isempty(regs)
         download_default_registries(io, only_if_empty = false; depots = depots)
     else
@@ -109,7 +113,7 @@ end
 
 pkg_server_url_hash(url::String) = Base.SHA1(split(url, '/')[end])
 
-function download_default_registries(io::IO; only_if_empty::Bool = true, depots::Union{String, Vector{String}} = depots())
+function download_default_registries(io::IO; only_if_empty::Bool = true, depots::Union{String, Vector{String}} = Base.DEPOT_PATH)
     # Check the specified depots for installed registries
     installed_registries = reachable_registries(; depots)
     # Only clone if there are no installed registries, unless called
@@ -176,7 +180,7 @@ function check_registry_state(reg)
     return nothing
 end
 
-function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{String, Vector{String}} = depots())
+function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{String, Vector{String}} = Base.DEPOT_PATH)
     # Use the first depot as the target
     target_depot = depots1(depots)
     populate_known_registries_with_urls!(regs)
@@ -225,13 +229,13 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
             else
                 mktempdir() do tmp
                     if reg.path !== nothing && reg.linked == true # symlink to local source
-                        registry = Registry.RegistryInstance(reg.path)
+                        registry = RegistryInstance(reg.path)
                         regpath = joinpath(regdir, registry.name)
                         printpkgstyle(io, :Symlinking, "registry from `$(Base.contractuser(reg.path))`")
                         isdir(dirname(regpath)) || mkpath(dirname(regpath))
                         symlink(reg.path, regpath)
                         isfile(joinpath(regpath, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in linked registry.")
-                        registry = Registry.RegistryInstance(regpath)
+                        registry = RegistryInstance(regpath)
                         printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
                         return
                     elseif reg.url !== nothing && reg.linked == true
@@ -254,7 +258,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     elseif reg.path !== nothing # copy from local source
                         printpkgstyle(io, :Copying, "registry from `$(Base.contractuser(reg.path))`")
                         isfile(joinpath(reg.path, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in source directory.")
-                        registry = Registry.RegistryInstance(reg.path)
+                        registry = RegistryInstance(reg.path)
                         regpath = joinpath(regdir, registry.name)
                         cp(reg.path, regpath; force = true) # has to be cp given we're copying
                         printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
@@ -262,7 +266,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     elseif reg.url !== nothing # clone from url
                         # retry to help spurious connection issues, particularly on CI
                         repo = retry(GitTools.clone, delays = fill(1.0, 5), check = (s, e) -> isa(e, LibGit2.GitError))(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
-                        LibGit2.close(repo)
+                        close(repo)
                     else
                         Pkg.Types.pkgerror("no path or url specified for registry")
                     end
@@ -270,12 +274,12 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     if !isfile(joinpath(tmp, "Registry.toml"))
                         Pkg.Types.pkgerror("no `Registry.toml` file in cloned registry.")
                     end
-                    registry = Registry.RegistryInstance(tmp)
+                    registry = RegistryInstance(tmp)
                     regpath = joinpath(regdir, registry.name)
                     # copy to `depot`
                     ispath(dirname(regpath)) || mkpath(dirname(regpath))
                     if isfile(joinpath(regpath, "Registry.toml"))
-                        existing_registry = Registry.RegistryInstance(regpath)
+                        existing_registry = RegistryInstance(regpath)
                         if registry.uuid == existing_registry.uuid
                             println(
                                 io,
@@ -337,11 +341,11 @@ end
 # Search for the input registries among installed ones
 function find_installed_registries(
         io::IO,
-        needles::Union{Vector{Registry.RegistryInstance}, Vector{RegistrySpec}};
+        needles::Union{Vector{RegistryInstance}, Vector{RegistrySpec}};
         depots = Base.DEPOT_PATH
     )
     haystack = reachable_registries(; depots)
-    output = Registry.RegistryInstance[]
+    output = RegistryInstance[]
     for needle in needles
         if needle.name === nothing && needle.uuid === nothing
             Pkg.Types.pkgerror("no name or uuid specified for registry.")
