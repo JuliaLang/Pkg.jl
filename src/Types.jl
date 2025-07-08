@@ -93,7 +93,7 @@ mutable struct PackageSpec
     uuid::Union{Nothing,UUID}
     version::Union{Nothing,VersionTypes,String}
     tree_hash::Union{Nothing,SHA1}
-    repo::GitRepo
+    repo::GitRepo # private
     path::Union{Nothing,String}
     pinned::Bool
     # used for input only
