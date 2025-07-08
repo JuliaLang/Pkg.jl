@@ -228,6 +228,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                         isfile(joinpath(regpath, "Registry.toml")) || Pkg.Types.pkgerror("no `Registry.toml` file in linked registry.")
                         registry = Registry.RegistryInstance(regpath)
                         printpkgstyle(io, :Symlinked, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
+                        registry_update_log[string(reg.uuid)] = now()
+                        save_registry_update_log(registry_update_log)
                         return
                     elseif reg.url !== nothing && reg.linked == true
                         Pkg.Types.pkgerror("""
@@ -251,6 +253,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                         regpath = joinpath(regdir, registry.name)
                         cp(reg.path, regpath; force=true) # has to be cp given we're copying
                         printpkgstyle(io, :Copied, "registry `$(Base.contractuser(registry.name))` to `$(Base.contractuser(regpath))`")
+                        registry_update_log[string(reg.uuid)] = now()
+                        save_registry_update_log(registry_update_log)
                         return
                     elseif reg.url !== nothing # clone from url
                         # retry to help spurious connection issues, particularly on CI
