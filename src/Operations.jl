@@ -21,6 +21,34 @@ import ...Pkg: usable_io, discover_repo
 # Utils #
 #########
 
+# Helper functions for yanked package checking
+function is_pkgversion_yanked(uuid::UUID, version::VersionNumber, registries::Vector{Registry.RegistryInstance}=Registry.reachable_registries())
+    for reg in registries
+        reg_pkg = get(reg, uuid, nothing)
+        if reg_pkg !== nothing
+            info = Registry.registry_info(reg_pkg)
+            if haskey(info.version_info, version) && Registry.isyanked(info, version)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function is_pkgversion_yanked(pkg::PackageSpec, registries::Vector{Registry.RegistryInstance}=Registry.reachable_registries())
+    if pkg.uuid === nothing || pkg.version === nothing || !(pkg.version isa VersionNumber)
+        return false
+    end
+    return is_pkgversion_yanked(pkg.uuid, pkg.version, registries)
+end
+
+function is_pkgversion_yanked(entry::PackageEntry, registries::Vector{Registry.RegistryInstance}=Registry.reachable_registries())
+    if entry.version === nothing || !(entry.version isa VersionNumber)
+        return false
+    end
+    return is_pkgversion_yanked(entry.uuid, entry.version, registries)
+end
+
 function default_preserve()
     if Base.get_bool_env("JULIA_PKG_PRESERVE_TIERED_INSTALLED", false)
         PRESERVE_TIERED_INSTALLED
@@ -1716,12 +1744,26 @@ function _resolve(io::IO, env::EnvCache, registries::Vector{Registry.RegistryIns
                     pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
     printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
-    if preserve == PRESERVE_TIERED_INSTALLED
-        tiered_resolve(env, registries, pkgs, julia_version, true)
-    elseif preserve == PRESERVE_TIERED
-        tiered_resolve(env, registries, pkgs, julia_version, false)
-    else
-        targeted_resolve(env, registries, pkgs, preserve, julia_version)
+    try
+        if preserve == PRESERVE_TIERED_INSTALLED
+            tiered_resolve(env, registries, pkgs, julia_version, true)
+        elseif preserve == PRESERVE_TIERED
+            tiered_resolve(env, registries, pkgs, julia_version, false)
+        else
+            targeted_resolve(env, registries, pkgs, preserve, julia_version)
+        end
+    catch err
+
+        if err isa Resolve.ResolverError
+            yanked_pkgs = filter(pkg -> is_pkgversion_yanked(pkg, registries), load_all_deps(env))
+            if !isempty(yanked_pkgs)
+                indent = " "^(Pkg.pkgstyle_indent)
+                yanked_str = join(map(pkg -> indent * "   - " * err_rep(pkg, quotes=false) * " " * string(pkg.version), yanked_pkgs), "\n")
+                printpkgstyle(io, :Warning, """The following package versions were yanked from their registry and \
+                are not resolvable:\n$yanked_str""", color=Base.warn_color())
+            end
+        end
+        rethrow()
     end
 end
 
@@ -2868,6 +2910,12 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
 
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
 
+        # show if package is yanked
+        pkg_spec = something(pkg.new, pkg.old)
+        if is_pkgversion_yanked(pkg_spec, registries)
+            printstyled(io, " [yanked]"; color=:yellow)
+        end
+
         if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
             if pkg.new.version !== max_version_compat && max_version_compat != max_version
@@ -2946,6 +2994,16 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
             # only warn if showing project and outdated indirect deps are hidden
             printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color=Base.info_color(), ignore_indent)
         end
+    end
+
+    # Check if any packages are yanked for warning message
+    any_yanked_packages = any(pkg -> is_pkgversion_yanked(something(pkg.new, pkg.old), registries), package_statuses)
+
+    # Add warning for yanked packages
+    if any_yanked_packages
+        yanked_str = sprint((io, args) -> printstyled(io, args...; color=:yellow), "[yanked]", context=io)
+        printpkgstyle(io, :Warning, """Package versions marked with $yanked_str have been pulled from their registry. \
+        It is recommended to update them to resolve a valid version.""", color=Base.warn_color(), ignore_indent)
     end
 
     return nothing

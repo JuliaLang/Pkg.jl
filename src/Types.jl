@@ -130,12 +130,12 @@ function Base.hash(a::PackageSpec, h::UInt)
     return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init=h)
 end
 
-function err_rep(pkg::PackageSpec)
+function err_rep(pkg::PackageSpec; quotes::Bool=true)
     x = pkg.name !== nothing && pkg.uuid !== nothing ? x = "$(pkg.name) [$(string(pkg.uuid)[1:8])]" :
         pkg.name !== nothing ? pkg.name :
         pkg.uuid !== nothing ? string(pkg.uuid)[1:8] :
         pkg.repo.source
-    return "`$x`"
+    return quotes ? "`$x`" : x
 end
 
 has_name(pkg::PackageSpec) = pkg.name !== nothing
