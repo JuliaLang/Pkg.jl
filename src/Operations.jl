@@ -956,15 +956,10 @@ function download_artifacts(ctx::Context;
     print_lock = Base.ReentrantLock() # for non-fancyprint printing
 
     download_states = Dict{SHA1, DownloadState}()
+    main_progress = MiniProgressBar(; indent = 2, header = "Installing artifacts", color = :green, mode = :int, always_reprint = true)
 
     errors = Channel{Any}(Inf)
     is_done = Ref{Bool}(false)
-    ansi_moveup(n::Int) = string("\e[", n, "A")
-    ansi_movecol1 = "\e[1G"
-    ansi_cleartoend = "\e[0J"
-    ansi_cleartoendofline = "\e[0K"
-    ansi_enablecursor = "\e[?25h"
-    ansi_disablecursor = "\e[?25l"
 
     all_collected_artifacts = reduce(
         vcat, map(
@@ -981,15 +976,16 @@ function download_artifacts(ctx::Context;
         for name in keys(artifacts)
             local rname = rpad(name, longest_name_length)
             local hash = SHA1(artifacts[name]["git-tree-sha1"]::String)
-            local bar = MiniProgressBar(;header=rname, main=false, indent=2, color = Base.info_color()::Symbol, mode=:data, always_reprint=true)
+            local bar = MiniProgressBar(; header = rname, main = false, indent = 2, color = Base.info_color()::Symbol, mode = :data, always_reprint = true)
+            MiniProgressBars.add_child_progress(main_progress, bar)
             local dstate = DownloadState(:ready, "", time_ns(), Base.ReentrantLock(), bar)
-            function progress(total, current; status="")
+            function progress(total, current; status = "")
                 local t = time_ns()
                 if isempty(status)
                     dstate.bar.max = total
                     dstate.bar.current = current
                 end
-                lock(dstate.status_lock) do
+                return lock(dstate.status_lock) do
                     dstate.status = status
                     dstate.status_update_time = t
                 end
@@ -998,75 +994,81 @@ function download_artifacts(ctx::Context;
             local pkg_server_eligible = pkg_uuid !== nothing && Registry.is_pkg_in_pkgserver_registry(pkg_uuid, server_registry_info, ctx.registries)
 
             # returns a string if exists, or function that downloads the artifact if not
-            local ret = ensure_artifact_installed(name, artifacts[name], artifacts_toml;
-                                        pkg_server_eligible, verbose, quiet_download=!(usable_io(io)), io, progress)
+            local ret = ensure_artifact_installed(
+                name, artifacts[name], artifacts_toml;
+                pkg_server_eligible, verbose, quiet_download = !(usable_io(io)), io, progress
+            )
             if ret isa Function
                 download_states[hash] = dstate
                 download_jobs[hash] =
                     () -> begin
-                        try
-                            dstate.state = :running
-                            ret()
-                            if !fancyprint && dstate.bar.max > 1 # if another process downloaded, then max is never set greater than 1
-                                @lock print_lock printpkgstyle(io, :Installed, "artifact $rname $(MiniProgressBars.pkg_format_bytes(dstate.bar.max; sigdigits=1))")
-                            end
-                        catch
-                            dstate.state = :failed
-                            rethrow()
-                        else
-                            dstate.state = :done
+                    try
+                        dstate.state = :running
+                        ret()
+                        if !fancyprint && dstate.bar.max > 1 # if another process downloaded, then max is never set greater than 1
+                            @lock print_lock printpkgstyle(io, :Installed, "artifact $rname $(MiniProgressBars.pkg_format_bytes(dstate.bar.max; sigdigits = 1))")
                         end
+                    catch
+                        dstate.state = :failed
+                        rethrow()
+                    else
+                        dstate.state = :done
+                    finally
+                        # Clean up child progress bar when download is done
+                        MiniProgressBars.remove_child_progress(main_progress, dstate.bar)
                     end
+                end
             end
         end
     end
 
     if !isempty(download_jobs)
+        main_progress.max = length(download_states)
+
         if fancyprint
-            t_print = Threads.@spawn begin
-                try
-                    print(io, ansi_disablecursor)
-                    first = true
-                    timer = Timer(0, interval=1/10)
-                    # TODO: Implement as a new MiniMultiProgressBar
-                    main_bar = MiniProgressBar(; indent=2, header = "Installing artifacts", color = :green, mode = :int, always_reprint=true)
-                    main_bar.max = length(download_states)
-                    while !is_done[]
-                        main_bar.current = count(x -> x.state == :done, values(download_states))
-                        local str = sprint(context=io) do iostr
-                            first || print(iostr, ansi_cleartoend)
-                            n_printed = 1
-                            show_progress(iostr, main_bar; carriagereturn=false)
-                            println(iostr)
-                            for dstate in sort!(collect(values(download_states)), by=v->v.bar.max, rev=true)
-                                local status, status_update_time = lock(()->(dstate.status, dstate.status_update_time), dstate.status_lock)
-                                # only update the bar's status message if it is stalled for at least 0.5 s.
-                                # If the new status message is empty, go back to showing the bar without waiting.
-                                if isempty(status) || time_ns() - status_update_time > UInt64(500_000_000)
-                                    dstate.bar.status = status
-                                end
-                                dstate.state == :running && (dstate.bar.max > 1000 || !isempty(dstate.bar.status)) || continue
-                                show_progress(iostr, dstate.bar; carriagereturn=false)
-                                println(iostr)
-                                n_printed += 1
-                            end
-                            is_done[] || print(iostr, ansi_moveup(n_printed), ansi_movecol1)
-                            first = false
-                        end
-                        print(io, str)
-                        wait(timer)
+            # Create the multi-progress display
+            display = MiniProgressBars.MultiProgressDisplay(main_progress, io; update_interval = 0.1)
+            
+            # Define filter function to show only running downloads
+            child_filter = child -> begin
+                # Find the download state for this child
+                dstate = nothing
+                for ds in values(download_states)
+                    if ds.bar === child
+                        dstate = ds
+                        break
                     end
-                    print(io, ansi_cleartoend)
-                    main_bar.current = count(x -> x[2].state == :done, download_states)
-                    show_progress(io, main_bar; carriagereturn=false)
-                    println(io)
+                end
+                return dstate !== nothing && dstate.state == :running && (child.max > 1000 || !isempty(child.status))
+            end
+
+            # Start the display in a separate thread
+            display_task = MiniProgressBars.start_multi_progress(display; child_filter)
+            Base.errormonitor(display_task)
+
+            # Update loop for status messages
+            status_update_task = Threads.@spawn begin
+                try
+                    while !is_done[]
+                        main_progress.current = count(x -> x.state == :done, values(download_states))
+
+                        # Update child progress bar statuses
+                        for dstate in values(download_states)
+                            local status, status_update_time = lock(() -> (dstate.status, dstate.status_update_time), dstate.status_lock)
+                            # only update the bar's status message if it is stalled for at least 0.5 s.
+                            # If the new status message is empty, go back to showing the bar without waiting.
+                            if isempty(status) || time_ns() - status_update_time > UInt64(500_000_000)
+                                dstate.bar.status = status
+                            end
+                        end
+
+                        sleep(0.1)
+                    end
                 catch e
                     e isa InterruptException || rethrow()
-                finally
-                    print(io, ansi_enablecursor)
                 end
             end
-            Base.errormonitor(t_print)
+            Base.errormonitor(status_update_task)
         else
             printpkgstyle(io, :Installing, "$(length(download_jobs)) artifacts")
         end
@@ -1085,7 +1087,10 @@ function download_artifacts(ctx::Context;
             end
         end
         is_done[] = true
-        fancyprint && wait(t_print)
+        if fancyprint
+            wait(status_update_task)
+            MiniProgressBars.stop_multi_progress(display, display_task)
+        end
         close(errors)
 
         if !isempty(errors)
