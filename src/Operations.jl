@@ -936,14 +936,22 @@ function download_artifacts(ctx::Context;
     env = ctx.env
     io = ctx.io
     fancyprint = can_fancyprint(io)
-    pkg_roots = String[]
+    pkg_info = Tuple{String, Union{Base.UUID, Nothing}}[]
     for (uuid, pkg) in env.manifest
         pkg = manifest_info(env.manifest, uuid)
         pkg_root = source_path(env.manifest_file, pkg, julia_version)
-        pkg_root === nothing || push!(pkg_roots, pkg_root)
+        pkg_root === nothing || push!(pkg_info, (pkg_root, uuid))
     end
-    push!(pkg_roots, dirname(env.project_file))
+    push!(pkg_info, (dirname(env.project_file), env.pkg !== nothing ? env.pkg.uuid : nothing))
     download_jobs = Dict{SHA1, Function}()
+
+    # Check what registries the current pkg server tracks
+    # Disable if precompiling to not access internet
+    server_registry_info = if Base.JLOptions().incremental == 0
+        Registry.pkg_server_registry_info()
+    else
+        nothing
+    end
 
     print_lock = Base.ReentrantLock() # for non-fancyprint printing
 
@@ -958,12 +966,17 @@ function download_artifacts(ctx::Context;
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
 
-    all_collected_artifacts = reduce(vcat, map(pkg_root -> collect_artifacts(pkg_root; platform, include_lazy), pkg_roots))
-    used_artifact_tomls = Set{String}(map(first, all_collected_artifacts))
-    longest_name_length = maximum(all_collected_artifacts; init=0) do (artifacts_toml, artifacts)
-        maximum(textwidth, keys(artifacts); init=0)
+    all_collected_artifacts = reduce(
+        vcat, map(
+            ((pkg_root, pkg_uuid),) ->
+            map(ca -> (ca[1], ca[2], pkg_uuid), collect_artifacts(pkg_root; platform, include_lazy)), pkg_info
+        )
+    )
+    used_artifact_tomls = Set{String}(map(ca -> ca[1], all_collected_artifacts))
+    longest_name_length = maximum(all_collected_artifacts; init = 0) do (artifacts_toml, artifacts, pkg_uuid)
+        maximum(textwidth, keys(artifacts); init = 0)
     end
-    for (artifacts_toml, artifacts) in all_collected_artifacts
+    for (artifacts_toml, artifacts, pkg_uuid) in all_collected_artifacts
         # For each Artifacts.toml, install each artifact we've collected from it
         for name in keys(artifacts)
             local rname = rpad(name, longest_name_length)
@@ -981,9 +994,12 @@ function download_artifacts(ctx::Context;
                     dstate.status_update_time = t
                 end
             end
+            # Check if the current package is eligible for PkgServer artifact downloads
+            local pkg_server_eligible = pkg_uuid !== nothing && Registry.is_pkg_in_pkgserver_registry(pkg_uuid, server_registry_info, ctx.registries)
+
             # returns a string if exists, or function that downloads the artifact if not
             local ret = ensure_artifact_installed(name, artifacts[name], artifacts_toml;
-                                        verbose, quiet_download=!(usable_io(io)), io, progress)
+                                        pkg_server_eligible, verbose, quiet_download=!(usable_io(io)), io, progress)
             if ret isa Function
                 download_states[hash] = dstate
                 download_jobs[hash] =
@@ -1175,17 +1191,10 @@ function download_source(ctx::Context, pkgs; readonly=true)
                         archive_urls = Pair{String,Bool}[]
                         # Check if the current package is available in one of the registries being tracked by the pkg server
                         # In that case, download from the package server
-                        if server_registry_info !== nothing
+                        if Registry.is_pkg_in_pkgserver_registry(pkg.uuid, server_registry_info, ctx.registries)
                             server, registry_info = server_registry_info
-                            for reg in ctx.registries
-                                if reg.uuid in keys(registry_info)
-                                    if haskey(reg, pkg.uuid)
-                                        url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
-                                        push!(archive_urls, url => true)
-                                        break
-                                    end
-                                end
-                            end
+                            url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
+                            push!(archive_urls, url => true)
                         end
                         for repo_url in urls
                             url = get_archive_url_for_version(repo_url, pkg.tree_hash)

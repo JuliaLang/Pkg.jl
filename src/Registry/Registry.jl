@@ -103,6 +103,27 @@ end
 
 pkg_server_url_hash(url::String) = Base.SHA1(split(url, '/')[end])
 
+"""
+    is_pkg_in_pkgserver_registry(pkg_uuid::Base.UUID, server_registry_info, registries)
+
+Check if a package UUID is tracked by the PkgServer by verifying it exists in
+a registry that is known to the PkgServer.
+"""
+function is_pkg_in_pkgserver_registry(pkg_uuid::Base.UUID, server_registry_info, registries)
+    server_registry_info === nothing && return false
+    registries === nothing && return false
+
+    server, registry_info = server_registry_info
+    for reg in registries
+        if reg.uuid in keys(registry_info)
+            if haskey(reg, pkg_uuid)
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function download_default_registries(io::IO; only_if_empty::Bool = true, depots::Union{String, Vector{String}}=depots())
     # Check the specified depots for installed registries
     installed_registries = reachable_registries(; depots)
