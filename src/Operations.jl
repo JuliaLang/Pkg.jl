@@ -838,6 +838,17 @@ function install_git(
     urls::Set{String},
     version_path::String
 )::Nothing
+    if isempty(urls)
+        pkgerror(
+            "Package $name [$uuid] has no repository URL available. This could happen if:\n" *
+                "  - The package is not registered in any configured registry\n" *
+                "  - The package exists in a registry but lacks repository information\n" *
+                "  - Registry files are corrupted or incomplete\n" *
+                "  - Network issues prevented registry updates\n" *
+                "Please check that the package name is correct and that your registries are up to date."
+        )
+    end
+
     repo = nothing
     tree = nothing
     # TODO: Consolidate this with some of the repo handling in Types.jl
@@ -845,8 +856,9 @@ function install_git(
         clones_dir = joinpath(depots1(), "clones")
         ispath(clones_dir) || mkpath(clones_dir)
         repo_path = joinpath(clones_dir, string(uuid))
-        repo = GitTools.ensure_clone(io, repo_path, first(urls); isbare=true,
-                                     header = "[$uuid] $name from $(first(urls))")
+        first_url = first(urls)
+        repo = GitTools.ensure_clone(io, repo_path, first_url; isbare=true,
+                                     header = "[$uuid] $name from $first_url")
         git_hash = LibGit2.GitHash(hash.bytes)
         for url in urls
             try LibGit2.with(LibGit2.GitObject, repo, git_hash) do g
