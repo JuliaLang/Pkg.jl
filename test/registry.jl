@@ -35,7 +35,6 @@ function setup_test_registries(dir = pwd())
             """)
         write(joinpath(regpath, "Example", "Deps.toml"), """
             ["0.5"]
-            julia = "0.6-1.0"
             """)
         write(joinpath(regpath, "Example", "Compat.toml"), """
             ["0.5"]
@@ -359,6 +358,90 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
     end
+end
+
+# Set up registries for the "Multiple registries, same package" tests
+function setup_test_registries2(dir = pwd())
+    # Set up three registries with different names and different uuids
+    reg_uuids = ["e9fceed0-5623-4384-aff0-6db4c442647a", "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
+                 "9b48f051-cf83-418c-9cc0-9c86d2171a80"]
+    # Same package (name + uuid) in both registries; different repos and versions
+    pkg_uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+    for i in 1:3
+        regpath = joinpath(dir, "RegistryFoo$(i)")
+        mkpath(joinpath(regpath, "Example"))
+        write(joinpath(regpath, "Registry.toml"), """
+            name = "RegistryFoo$i"
+            uuid = "$(reg_uuids[i])"
+            repo = "https://github.com"
+            [packages]
+            $(pkg_uuid) = { name = "Example", path = "Example" }
+            """)
+        write(joinpath(regpath, "Example", "Package.toml"), """
+            name = "Example"
+            uuid = "$(pkg_uuid)"
+            repo = "https://github.com/JuliaLang/OtherExampleRepo.jl.git"
+            $(i == 3 ? "subdir = \"subdir\"" : "")
+            """)
+        write(joinpath(regpath, "Example", "Versions.toml"), """
+            ["0.4.$i"]
+            git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
+            """)
+        write(joinpath(regpath, "Example", "Deps.toml"), """
+            ["0.4"]
+            """)
+        write(joinpath(regpath, "Example", "Compat.toml"), """
+            ["0.4"]
+            julia = "0.6-1.0"
+            """)
+        git_init_and_commit(regpath)
+    end
+end
+
+@testset "Multiple registries, same package (#2525)" begin
+    temp_pkg_dir() do depot; mktempdir() do depot2
+        insert!(Base.DEPOT_PATH, 2, depot2)
+        # set up registries
+        regdir = mktempdir()
+
+        setup_test_registries2(regdir)
+        general_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
+        general_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
+        general_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
+        General = RegistrySpec(name = "General", uuid = "23338594-aafe-5451-b93e-139f81909106",
+            url = general_url, path = general_path, linked = general_linked)
+        Foo1 = RegistrySpec(name = "RegistryFoo1", uuid = "e9fceed0-5623-4384-aff0-6db4c442647a",
+            url = joinpath(regdir, "RegistryFoo1"))
+        Foo2 = RegistrySpec(name = "RegistryFoo2", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
+            url = joinpath(regdir, "RegistryFoo2"))
+        Foo3 = RegistrySpec(name = "RegistryFoo3", uuid = "9b48f051-cf83-418c-9cc0-9c86d2171a80",
+            url = joinpath(regdir, "RegistryFoo3"))
+
+        # Package in registries
+        Example = PackageSpec(name = "Example",  uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+
+        # Use 2 registries with the same repo
+        pkgstr("registry add $(Foo1.url)")
+        with_depot2(() -> pkgstr("registry add $(Foo2.url)"))
+        test_installed([Foo1, Foo2])
+        @test is_pkg_available(Example)
+        info = Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+        @test info == ("https://github.com/JuliaLang/OtherExampleRepo.jl.git", nothing)
+
+        pkgstr("registry add $(Foo3.url)")
+        test_installed([Foo1, Foo2, Foo3])
+        info = Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+        @test info == ("https://github.com/JuliaLang/OtherExampleRepo.jl.git", "subdir")
+
+
+        pkgstr("registry add General")
+        test_installed([General, Foo1, Foo2, Foo3])
+        @test is_pkg_available(Example)
+        info = Pkg.Types.set_repo_source_from_registry!(Pkg.Types.Context(), Example)
+        @test info == ("https://github.com/JuliaLang/Example.jl.git", nothing)
+
+
+    end end
 end
 
 if Pkg.Registry.registry_use_pkg_server()
