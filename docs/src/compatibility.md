@@ -22,7 +22,7 @@ The format of the version specifier is described in detail below.
     The rules below apply to the `Project.toml` file; for registries, see [Registry Compat.toml](@ref).
 
 !!! info
-    Note that registration into Julia's General Registry requires each dependency to have a `[compat`] entry with an upper bound.
+    Note that registration into Julia's General Registry requires each dependency to have a `[compat]` entry with an upper bound.
 
 ## Version specifier format
 

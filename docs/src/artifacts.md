@@ -230,7 +230,7 @@ This is deduced automatically by the `artifacts""` string macro, however, if you
 !!! compat "Julia 1.7"
     Pkg's extended platform selection requires at least Julia 1.7, and is considered experimental.
 
-New in Julia 1.6, `Platform` objects can have extended attributes applied to them, allowing artifacts to be tagged with things such as CUDA driver version compatibility, microarchitectural compatibility, julia version compatibility and more!
+New in Julia 1.7, `Platform` objects can have extended attributes applied to them, allowing artifacts to be tagged with things such as CUDA driver version compatibility, microarchitectural compatibility, julia version compatibility and more!
 Note that this feature is considered experimental and may change in the future.
 If you as a package developer find yourself needing this feature, please get in contact with us so it can evolve for the benefit of the whole ecosystem.
 In order to support artifact selection at `Pkg.add()` time, `Pkg` will run the specially-named file `<project_root>/.pkg/select_artifacts.jl`, passing the current platform triplet as the first argument.

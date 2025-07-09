@@ -4,7 +4,7 @@ EditURL = "https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/basedocs.md"
 
 # Pkg
 
-Pkg is Julia's builtin package manager, and handles operations
+Pkg is Julia's built-in package manager, and handles operations
 such as installing, updating and removing packages.
 
 !!! note

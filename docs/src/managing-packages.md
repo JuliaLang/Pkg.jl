@@ -28,7 +28,7 @@ Precompiling environment...
   2 dependencies successfully precompiled in 2 seconds
 ```
 
-Here we added the package `JSON` to the current environment (which is the default `@v1.8` environment).
+Here we added the package `JSON` to the current environment (which is the default `@v1.10` environment).
 In this example, we are using a fresh Julia installation,
 and this is our first time adding a package using Pkg. By default, Pkg installs the General registry
 and uses this registry to look up packages requested for inclusion in the current environment.
