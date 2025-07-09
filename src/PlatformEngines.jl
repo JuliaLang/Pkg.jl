@@ -5,7 +5,7 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar
-import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f
+import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f, atomic_toml_write
 using ..MiniProgressBars
 using Base.BinaryPlatforms, p7zip_jll
 
@@ -188,12 +188,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
             auth_info["expires_at"] = expires_at
         end
     end
-    let auth_info = auth_info
-        open(tmp, write=true) do io
-            TOML.print(io, auth_info, sorted=true)
-        end
-    end
-    mv(tmp, auth_file, force=true)
+    atomic_toml_write(auth_file, auth_info, sorted=true)
     access_token = auth_info["access_token"]::String
     return "Authorization" => "Bearer $access_token"
 end

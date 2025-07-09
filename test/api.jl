@@ -313,4 +313,60 @@ end
     end end
 end
 
+@testset "allow_reresolve parameter" begin
+    isolate(loaded_depot=false) do; mktempdir() do tempdir
+        Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
+        # AllowReresolveTest has Example v0.5.1 which is yanked in the test registry.
+        test_dir = joinpath(tempdir, "AllowReresolveTest")
+
+        # Test that we can build and test with allow_reresolve=true
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test Pkg.build(; allow_reresolve=true) == nothing
+
+        rm(test_dir, force=true, recursive=true)
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test Pkg.test(; allow_reresolve=true) == nothing
+
+        # Test that allow_reresolve=false fails with the broken manifest
+        rm(test_dir, force=true, recursive=true)
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test_throws Pkg.Resolve.ResolverError Pkg.build(; allow_reresolve=false)
+
+        rm(test_dir, force=true, recursive=true)
+        copy_test_package(tempdir, "AllowReresolveTest")
+        Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
+        @test_throws Pkg.Resolve.ResolverError Pkg.test(; allow_reresolve=false)
+    end end
+end
+
+@testset "Yanked package handling" begin
+    isolate() do; mktempdir() do tempdir
+        # Copy the yanked test environment
+        test_env_dir = joinpath(tempdir, "yanked_test")
+        cp(joinpath(@__DIR__, "manifest", "yanked"), test_env_dir)
+        Pkg.activate(test_env_dir)
+
+        @testset "status shows yanked packages" begin
+            iob = IOBuffer()
+            Pkg.status(io=iob)
+            status_output = String(take!(iob))
+
+            @test occursin("Mocking v0.7.4 [yanked]", status_output)
+            @test occursin("Package versions marked with [yanked] have been pulled from their registry.", status_output)
+        end
+        @testset "resolve error shows yanked packages warning" begin
+            # Try to add a package that will cause resolve conflicts with yanked package
+            iob = IOBuffer()
+            @test_throws Pkg.Resolve.ResolverError Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL, io=iob)
+            error_output = String(take!(iob))
+
+            @test occursin("The following package versions were yanked from their registry and are not resolvable:", error_output)
+            @test occursin("Mocking [78c3b35d] 0.7.4", error_output)
+        end
+    end end
+end
+
 end # module APITests

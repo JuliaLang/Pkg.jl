@@ -1,4 +1,4 @@
-# [**10.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
+# [**11.** `Project.toml` and `Manifest.toml`](@id Project-and-Manifest)
 
 Two files that are central to Pkg are `Project.toml` and `Manifest.toml`. `Project.toml`
 and `Manifest.toml` are written in [TOML](https://github.com/toml-lang/toml) (hence the
@@ -22,7 +22,7 @@ are described below.
 
 ### The `authors` field
 
-For a package, the optional `authors` field is a TOML array describing the package authors. 
+For a package, the optional `authors` field is a TOML array describing the package authors.
 Entries in the array can either be a string in the form `"NAME"` or `"NAME <EMAIL>"`, or a table keys following the [Citation File Format schema](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md) for either a
 [`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an[`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
 
@@ -64,7 +64,7 @@ name = "Example"
 The name must be a valid [identifier](https://docs.julialang.org/en/v1/base/base/#Base.isidentifier)
 (a sequence of Unicode characters that does not start with a number and is neither `true` nor `false`).
 For packages, it is recommended to follow the
-[package naming rules](@ref Package-naming-rules). The `name` field is mandatory
+[package naming rules](@ref Package-naming-guidelines). The `name` field is mandatory
 for packages.
 
 
@@ -102,6 +102,18 @@ Note that Pkg.jl deviates from the SemVer specification when it comes to version
 the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 
+### The `readonly` field
+
+The `readonly` field is a boolean that, when set to `true`, marks the environment as read-only. This prevents any modifications to the environment, including adding, removing, or updating packages. For example:
+
+```toml
+readonly = true
+```
+
+When an environment is marked as readonly, Pkg will throw an error if any operation that would modify the environment is attempted.
+If the `readonly` field is not present or set to `false` (the default), the environment can be modified normally.
+
+
 ### The `[deps]` section
 
 All dependencies of the package/project are listed in the `[deps]` section. Each dependency
@@ -121,6 +133,15 @@ handled by Pkg operations such as `add`.
 Specifiying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
 corresponding manifest file.
+
+Each entry in the `[sources]` section supports the following keys:
+
+- **`url`**: The URL of the Git repository. Cannot be used with `path`.
+- **`rev`**: The Git revision (branch name, tag, or commit hash) to use. Only valid with `url`.
+- **`subdir`**: A subdirectory within the repository containing the package.
+- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`.
+
+This might in practice look something like:
 
 ```toml
 [sources]

@@ -1,6 +1,7 @@
 module Apps
 
 using Pkg
+using Pkg: atomic_toml_write
 using Pkg.Versions
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
                  pkgerror, projectfile_path, manifestfile_path
@@ -151,9 +152,7 @@ function _resolve(manifest::Manifest, pkgname=nothing)
             # TODO: What if project file has its own entryfile?
             project_data = TOML.parsefile(projectfile)
             project_data["entryfile"] = joinpath(sourcepath, "src", "$(pkg.name).jl")
-            open(projectfile, "w") do io
-                TOML.print(io, project_data)
-            end
+            atomic_toml_write(projectfile, project_data)
         else
             error("could not find project file for package $pkg")
         end
@@ -468,7 +467,7 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
     else
         julia_escaped = Base.shell_escape(julia)
         module_spec_escaped = Base.shell_escape(module_spec)
-        bash_shim(julia_escaped, module_spec_escaped, env)
+        shell_shim(julia_escaped, module_spec_escaped, env)
     end
     overwrite_file_if_different(julia_bin_filename, content)
     if Sys.isunix()
@@ -477,9 +476,9 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function bash_shim(julia_escaped::String, module_spec_escaped::String, env)
+function shell_shim(julia_escaped::String, module_spec_escaped::String, env)
     return """
-        #!/usr/bin/env bash
+        #!/bin/sh
 
         $SHIM_HEADER
 

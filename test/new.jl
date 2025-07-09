@@ -432,6 +432,11 @@ end
         @test arg.url == "https://github.com/JuliaLang/Pkg.jl"
         @test arg.rev == "aa/gitlab"
 
+        api, args, opts = first(Pkg.pkg"add https://github.com/JuliaPy/PythonCall.jl/pull/529")
+        arg = args[1]
+        @test arg.url == "https://github.com/JuliaPy/PythonCall.jl"
+        @test arg.rev == "pull/529/head"
+
         api, args, opts = first(Pkg.pkg"add https://github.com/TimG1964/XLSX.jl#Bug-fixing-post-#289:subdir")
         arg = args[1]
         @test arg.url == "https://github.com/TimG1964/XLSX.jl"
@@ -511,14 +516,31 @@ end
             ) Pkg.add(name="Example", rev="master", version="0.5.0")
         # Adding with a slight typo gives suggestions
         try
-            Pkg.add("Examplle")
+            io = IOBuffer()
+            Pkg.add("Examplle"; io)
             @test false # to fail if add doesn't error
          catch err
             @test err isa PkgError
             @test occursin("The following package names could not be resolved:", err.msg)
             @test occursin("Examplle (not found in project, manifest or registry)", err.msg)
-            @test occursin("Suggestions:", err.msg)
-            # @test occursin("Example", err.msg) # can't test this as each char in "Example" is individually colorized
+            @test occursin("Suggestions: Example", err.msg)
+        end
+        # Adding with lowercase suggests uppercase
+        try
+            io = IOBuffer()
+            Pkg.add("http"; io)
+            @test false # to fail if add doesn't error
+        catch err
+            @test err isa PkgError
+            @test occursin("Suggestions: HTTP", err.msg)
+        end
+         try
+            io = IOBuffer()
+            Pkg.add("Flix"; io)
+            @test false # to fail if add doesn't error
+        catch err
+            @test err isa PkgError
+            @test occursin("Suggestions: Flux", err.msg)
         end
         @test_throws PkgError(
             "name, UUID, URL, or filesystem path specification required when calling `add`"
@@ -1132,6 +1154,226 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;url="https://github.com/00vareladavid/Unregistered.jl", rev="0.1.0")]
         @test isempty(opts)
+
+        api, args, opts = first(Pkg.pkg"add a/path/with/@/deal/with/it")
+        @test normpath(args[1].path) == normpath("a/path/with/@/deal/with/it")
+
+        # Test GitHub URLs with tree/commit paths
+        @testset "GitHub tree/commit URLs" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo/tree/feature-branch")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo"
+            @test args[1].rev == "feature-branch"
+
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo/commit/abc123def")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo"
+            @test args[1].rev == "abc123def"
+        end
+
+        # Test Git URLs with branch specifiers
+        @testset "Git URLs with branch specifiers" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo.git#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo.git"
+            @test args[1].rev == "main"
+
+            api, args, opts = first(Pkg.pkg"add https://bitbucket.org/user/repo.git#develop")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://bitbucket.org/user/repo.git"
+            @test args[1].rev == "develop"
+
+            api, args, opts = first(Pkg.pkg"add git@github.com:user/repo.git#feature")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@github.com:user/repo.git"
+            @test args[1].rev == "feature"
+
+            api, args, opts = first(Pkg.pkg"add ssh://git@server.com/path/repo.git#branch-name")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@server.com/path/repo.git"
+            @test args[1].rev == "branch-name"
+        end
+
+
+        # Test Git URLs with subdir specifiers
+        @testset "Git URLs with subdir specifiers" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/monorepo.git:packages/MyPackage")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/monorepo.git"
+            @test args[1].subdir == "packages/MyPackage"
+
+            api, args, opts = first(Pkg.pkg"add ssh://git@server.com/repo.git:subdir/nested")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@server.com/repo.git"
+            @test args[1].subdir == "subdir/nested"
+        end
+
+        # Test complex URLs (with username in URL + branch/tag/subdir)
+        @testset "Complex Git URLs" begin
+            api, args, opts = first(Pkg.pkg"add https://username@bitbucket.org/org/repo.git#dev")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://username@bitbucket.org/org/repo.git"
+            @test args[1].rev == "dev"
+
+            api, args, opts = first(Pkg.pkg"add https://user:token@gitlab.company.com/group/project.git")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://user:token@gitlab.company.com/group/project.git"
+
+            api, args, opts = first(Pkg.pkg"add https://example.com:8080/git/repo.git:packages/core")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://example.com:8080/git/repo.git"
+            @test args[1].subdir == "packages/core"
+
+            # Test URLs with complex authentication and branch names containing #
+            api, args, opts = first(Pkg.pkg"add https://user:pass123@gitlab.example.com:8443/group/project.git#feature/fix-#42")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://user:pass123@gitlab.example.com:8443/group/project.git"
+            @test args[1].rev == "feature/fix-#42"
+
+            # Test URLs with complex authentication and subdirs
+            api, args, opts = first(Pkg.pkg"add https://api_key:secret@company.git.server.com/team/monorepo.git:libs/julia/pkg")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://api_key:secret@company.git.server.com/team/monorepo.git"
+            @test args[1].subdir == "libs/julia/pkg"
+
+            # Test URLs with authentication, branch with #, and subdir
+            api, args, opts = first(Pkg.pkg"add https://deploy:token123@internal.git.company.com/product/backend.git#hotfix/issue-#789:packages/core")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://deploy:token123@internal.git.company.com/product/backend.git"
+            @test args[1].rev == "hotfix/issue-#789"
+            @test args[1].subdir == "packages/core"
+
+            # Test SSH URLs with port numbers and subdirs
+            api, args, opts = first(Pkg.pkg"add ssh://git@custom.server.com:2222/path/to/repo.git:src/package")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@custom.server.com:2222/path/to/repo.git"
+            @test args[1].subdir == "src/package"
+
+            # Test URL with username in URL and multiple # in branch name
+            api, args, opts = first(Pkg.pkg"add https://ci_user@build.company.net/team/project.git#release/v2.0-#123-#456")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://ci_user@build.company.net/team/project.git"
+            @test args[1].rev == "release/v2.0-#123-#456"
+
+            # Test complex case: auth + port + branch with # + subdir
+            api, args, opts = first(Pkg.pkg"add https://robot:abc123@git.enterprise.com:9443/division/platform.git#bugfix/handle-#special-chars:modules/julia-pkg")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://robot:abc123@git.enterprise.com:9443/division/platform.git"
+            @test args[1].rev == "bugfix/handle-#special-chars"
+            @test args[1].subdir == "modules/julia-pkg"
+
+            # Test local paths with branch specifiers (paths can be repos)
+            api, args, opts = first(Pkg.pkg"add ./local/repo#feature-branch")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test normpath(args[1].path) == normpath("local/repo")  # normpath removes "./"
+            @test args[1].rev == "feature-branch"
+
+            # Test local paths with subdir specifiers
+            api, args, opts = first(Pkg.pkg"add ./monorepo:packages/subpkg")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == "monorepo"  # normpath removes "./"
+            @test args[1].subdir == "packages/subpkg"
+
+            # Test local paths with both branch and subdir
+            api, args, opts = first(Pkg.pkg"add ./project#develop:src/package")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == "project"  # normpath removes "./"
+            @test args[1].rev == "develop"
+            @test args[1].subdir == "src/package"
+
+            # Test local paths with branch containing # characters
+            api, args, opts = first(Pkg.pkg"add ../workspace/repo#bugfix/issue-#123")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test normpath(args[1].path) == normpath("../workspace/repo")
+            @test args[1].rev == "bugfix/issue-#123"
+
+            # Test complex local path case: relative path + branch with # + subdir
+            if !Sys.iswindows()
+                api, args, opts = first(Pkg.pkg"add ~/projects/myrepo#feature/fix-#456:libs/core")
+                @test api == Pkg.add
+                @test length(args) == 1
+                @test startswith(args[1].path, "/")  # ~ gets expanded to absolute path
+                @test endswith(normpath(args[1].path), normpath("/projects/myrepo"))
+                @test args[1].rev == "feature/fix-#456"
+                @test args[1].subdir == "libs/core"
+            end
+
+            # Test quoted URL with separate revision specifier (regression test)
+            api, args, opts = first(Pkg.pkg"add \"https://username@bitbucket.org/orgname/reponame.git\"#dev")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://username@bitbucket.org/orgname/reponame.git"
+            @test args[1].rev == "dev"
+
+            # Test quoted URL with separate version specifier
+            api, args, opts = first(Pkg.pkg"add \"https://company.git.server.com/project.git\"@v2.1.0")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://company.git.server.com/project.git"
+            @test args[1].version == "v2.1.0"
+
+            # Test quoted URL with separate subdir specifier
+            api, args, opts = first(Pkg.pkg"add \"https://gitlab.example.com/monorepo.git\":packages/core")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://gitlab.example.com/monorepo.git"
+            @test args[1].subdir == "packages/core"
+        end
+
+        # Test that regular URLs without .git still work
+        @testset "Non-.git URLs (unchanged behavior)" begin
+            api, args, opts = first(Pkg.pkg"add https://github.com/user/repo")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "https://github.com/user/repo"
+            @test args[1].rev === nothing
+            @test args[1].subdir === nothing
+        end
+
+        @testset "Windows path handling" begin
+            # Test that Windows drive letters are not treated as subdir separators
+            api, args, opts = first(Pkg.pkg"add C:\\Users\\test\\project")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == normpath("C:\\\\Users\\\\test\\\\project")
+            @test args[1].subdir === nothing
+
+            # Test with forward slashes too
+            api, args, opts = first(Pkg.pkg"add C:/Users/test/project")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == normpath("C:/Users/test/project")
+            @test args[1].subdir === nothing
+
+            # Test that actual subdir syntax still works with Windows paths
+            api, args, opts = first(Pkg.pkg"add C:\\Users\\test\\project:subdir")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].path == normpath("C:\\\\Users\\\\test\\\\project")
+            @test args[1].subdir == "subdir"
+        end
+
         # Add using preserve option
         api, args, opts = first(Pkg.pkg"add --preserve=none Example")
         @test api == Pkg.add
@@ -1166,7 +1408,6 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;name="example")]
         @test isempty(opts)
-        @test_throws PkgError Pkg.pkg"add ./Example"
         api, args, opts = first(Pkg.pkg"add ./example")
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;path="example")]
@@ -1179,7 +1420,7 @@ end
     end end
     isolate() do; cd_tempdir() do dir
         # adding a nonexistent directory
-        @test_throws PkgError("`some/really/random/Dir` appears to be a local path, but directory does not exist"
+        @test_throws PkgError("Path `$(normpath("some/really/random/Dir"))` does not exist."
                               ) Pkg.pkg"add some/really/random/Dir"
         # warn if not explicit about adding directory
         mkdir("Example")
@@ -1923,6 +2164,8 @@ end
         Pkg.dependencies(exuuid) do pkg
             @test pkg.version > v"0.3.0"
         end
+
+        @test_throws PkgError("`repo` is a private field of PackageSpec and should not be set directly") Pkg.add([Pkg.PackageSpec(;repo=Pkg.Types.GitRepo(source="someurl"))])
     end
 end
 
@@ -2654,7 +2897,8 @@ end
 #
 @testset "Pkg.compat" begin
     # State changes
-    isolate(loaded_depot=true) do
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        Pkg.activate(tempdir)
         Pkg.add("Example")
         iob = IOBuffer()
         Pkg.status(compat=true, io = iob)
@@ -2680,8 +2924,73 @@ end
         @test occursin(r"Compat `.+Project.toml`", output)
         @test occursin(r"\[7876af07\] *Example *none", output)
         @test occursin(r"julia *1.8", output)
-    end
+    end end
+
+    # Test compat --current functionality
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "SimplePackage")
+        Pkg.activate(path)
+        # Add Example - this will automatically set a compat entry
+        Pkg.add("Example")
+
+        # Example now has a compat entry from the add operation
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") !== nothing
+
+        # Use compat current to set compat entry for packages without compat entries (like Markdown)
+        iob = IOBuffer()
+        Pkg.compat("Markdown", current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("new entry set for Markdown based on its current version", output)
+
+        Pkg.compat(current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("new entry set for julia based on its current version", output)
+
+        # Check that all compat entries are set
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "julia") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Markdown") !== nothing
+
+        # Test with no missing compat entries
+        iob = IOBuffer()
+        Pkg.compat(current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("no missing compat entries found. No changes made.", output)
+    end end
+
+    # Test compat current with multiple packages
+    isolate(loaded_depot=true) do; mktempdir() do tempdir
+        path = copy_test_package(tempdir, "SimplePackage")
+        Pkg.activate(path)
+        # Add both packages - this will automatically set compat entries for them
+        Pkg.add("Example")
+        Pkg.add("JSON")
+        Pkg.compat("Example", nothing)
+        Pkg.compat("JSON", nothing)
+
+        # Both packages now have compat entries from the add operations
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") === nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "JSON") === nothing
+
+        # Use compat current to set compat entries for packages without compat entries (like Markdown)
+        iob = IOBuffer()
+        Pkg.compat(current=true, io=iob)
+        output = String(take!(iob))
+        @test occursin("new entries set for", output)
+        @test occursin("julia", output)
+        @test occursin("Markdown", output)
+        @test occursin("Example", output)
+        @test occursin("JSON", output)
+
+        # Check that all compat entries are set
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "julia") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Example") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "JSON") !== nothing
+        @test Pkg.Operations.get_compat_str(Pkg.Types.Context().env.project, "Markdown") !== nothing
+    end end
 end
+
+Pkg.activate()
 
 
 #
@@ -3275,6 +3584,38 @@ end
     end
 end
 
+@testset "status diff non-root" begin
+    isolate(loaded_depot=true) do
+        cd_tempdir() do dir
+            Pkg.generate("A")
+            git_init_and_commit(".")
+            Pkg.activate("A")
+            Pkg.add("Example")
+            io = IOBuffer()
+            Pkg.status(; io, diff=true)
+            str = String(take!(io))
+            @test occursin("+ Example", str)
+        end
+    end
+end
+
+@testset "test instantiate with sources with only rev" begin
+    isolate() do
+        mktempdir() do dir
+            cp(joinpath(@__DIR__, "test_packages", "sources_only_rev", "Project.toml"), joinpath(dir, "Project.toml"))
+            cd(dir) do
+                with_current_env() do
+                    @test !isfile("Manifest.toml")
+                    Pkg.instantiate()
+                    uuid, info = only(Pkg.dependencies())
+                    @test info.git_revision == "ba3d6704f09330ae973773496a4212f85e0ffe45"
+                    @test info.git_source == "https://github.com/JuliaLang/Example.jl.git"
+                end
+            end
+        end
+    end
+end
+
 @testset "status showing incompatible loaded deps" begin
     cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
         using Pkg
@@ -3291,5 +3632,32 @@ end
 end
 
 @test allunique(unique([Pkg.PackageSpec(path="foo"), Pkg.PackageSpec(path="foo")]))
+
+# Test the readonly functionality
+@testset "Readonly Environment Tests" begin
+    mktempdir() do dir
+        project_file = joinpath(dir, "Project.toml")
+
+        # Test that normal environment works
+        cd(dir) do
+            # Activate the environment
+            Pkg.activate(".")
+
+            # This should work fine
+            Pkg.add("Test")  # Add Test package
+
+            # Now make it readonly
+            project_data = Dict("readonly" => true)
+            open(project_file, "w") do io
+                TOML.print(io, project_data)
+            end
+
+            # Now these should fail
+            @test_throws Pkg.Types.PkgError Pkg.add("Dates")
+            @test_throws Pkg.Types.PkgError Pkg.rm("Test")
+            @test_throws Pkg.Types.PkgError Pkg.update()
+        end
+    end
+end
 
 end #module

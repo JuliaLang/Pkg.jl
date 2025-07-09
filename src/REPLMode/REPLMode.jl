@@ -6,7 +6,7 @@ module REPLMode
 
 using Markdown, UUIDs, Dates
 
-import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
+import ..OFFLINE_MODE, ..linewrap, ..pathrepr, ..IN_REPL_MODE
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve, ..Apps
 import ..stdout_f, ..stderr_f
 
@@ -225,6 +225,10 @@ end
 
 function tokenize(cmd::AbstractString)
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ") # for multiline commands
+    if startswith(cmd, ']')
+        @warn "Removing leading `]`, which should only be used once to switch to pkg> mode"
+        cmd = string(lstrip(cmd, ']'))
+    end
     qstrings = lex(cmd)
     statements = foldl(qstrings; init=[QString[]]) do collection, next
         (next.raw == ";" && !next.isquoted) ?
@@ -398,15 +402,18 @@ function do_cmds(commands::Vector{Command}, io)
 end
 
 function do_cmd(command::Command, io)
-    # REPL specific commands
-    command.spec === SPECS["package"]["help"] && return Base.invokelatest(do_help!, command, io)
-    # API commands
-    if command.spec.should_splat
-        TEST_MODE[] && return command.spec.api, command.arguments..., command.options
-        command.spec.api(command.arguments...; collect(command.options)...) # TODO is invokelatest still needed?
-    else
-        TEST_MODE[] && return command.spec.api, command.arguments, command.options
-        command.spec.api(command.arguments; collect(command.options)...)
+    # Set the scoped value to indicate we're in REPL mode
+    Base.ScopedValues.@with IN_REPL_MODE => true begin
+        # REPL specific commands
+        command.spec === SPECS["package"]["help"] && return Base.invokelatest(do_help!, command, io)
+        # API commands
+        if command.spec.should_splat
+            TEST_MODE[] && return command.spec.api, command.arguments..., command.options
+            command.spec.api(command.arguments...; collect(command.options)...) # TODO is invokelatest still needed?
+        else
+            TEST_MODE[] && return command.spec.api, command.arguments, command.options
+            command.spec.api(command.arguments; collect(command.options)...)
+        end
     end
 end
 

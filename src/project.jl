@@ -90,21 +90,22 @@ function read_project_apps(raw::Dict{String,Any}, project::Project)
     return appinfos
 end
 
-read_project_compat(::Nothing, project::Project) = Dict{String,Compat}()
-function read_project_compat(raw::Dict{String,Any}, project::Project)
+read_project_compat(::Nothing, project::Project; file=nothing) = Dict{String,Compat}()
+function read_project_compat(raw::Dict{String,Any}, project::Project; file=nothing)
     compat = Dict{String,Compat}()
+    location_string = file === nothing ? "" : " in $(repr(file))"
     for (name, version) in raw
         version = version::String
         try
             compat[name] = Compat(semver_spec(version), version)
         catch err
-            pkgerror("Could not parse compatibility version for dependency `$name`")
+            pkgerror("Could not parse compatibility version spec $(repr(version)) for dependency `$name`$location_string")
         end
     end
     return compat
 end
-read_project_compat(raw, project::Project) =
-    pkgerror("Expected `compat` section to be a key-value list")
+read_project_compat(raw, project::Project; file=nothing) =
+    pkgerror("Expected `compat` section to be a key-value list" * (file === nothing ? "" : " in $(repr(file))"))
 
 read_project_sources(::Nothing, project::Project) = Dict{String,Dict{String,String}}()
 function read_project_sources(raw::Dict{String,Any}, project::Project)
@@ -209,10 +210,11 @@ function Project(raw::Dict; file=nothing)
     project.exts     = get(Dict{String, String}, raw, "extensions")
     project.sources  = read_project_sources(get(raw, "sources", nothing), project)
     project.extras   = read_project_deps(get(raw, "extras", nothing), "extras")
-    project.compat   = read_project_compat(get(raw, "compat", nothing), project)
+    project.compat   = read_project_compat(get(raw, "compat", nothing), project; file)
     project.targets  = read_project_targets(get(raw, "targets", nothing), project)
     project.workspace = read_project_workspace(get(raw, "workspace", nothing), project)
     project.apps     = read_project_apps(get(raw, "apps", nothing), project)
+    project.readonly = get(raw, "readonly", false)::Bool
 
     # Handle deps in both [deps] and [weakdeps]
     project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
@@ -270,14 +272,25 @@ function destructure(project::Project)::Dict
     entry!("extras",   project.extras)
     entry!("compat",   Dict(name => x.str for (name, x) in project.compat))
     entry!("targets",  project.targets)
+
+    # Only write readonly if it's true (not the default false)
+    if project.readonly
+        raw["readonly"] = true
+    else
+        delete!(raw, "readonly")
+    end
+
     return raw
 end
 
-const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "workspace", "deps", "weakdeps", "sources", "extensions", "compat"]
+const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "readonly", "workspace", "deps", "weakdeps", "sources", "extensions", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
 function write_project(env::EnvCache)
+    if env.project.readonly
+        pkgerror("Cannot write to readonly project file at $(env.project_file)")
+    end
     write_project(env.project, env.project_file)
 end
 write_project(project::Project, project_file::AbstractString) =

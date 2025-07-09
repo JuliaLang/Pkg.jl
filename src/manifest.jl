@@ -361,6 +361,9 @@ function destructure(manifest::Manifest)::Dict
 end
 
 function write_manifest(env::EnvCache)
+    if env.project.readonly
+        pkgerror("Cannot write to readonly manifest file at $(env.manifest_file)")
+    end
     mkpath(dirname(env.manifest_file))
     write_manifest(env.manifest, env.manifest_file)
 end

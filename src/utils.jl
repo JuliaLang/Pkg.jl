@@ -119,7 +119,6 @@ end
 
 # try to call realpath on as much as possible
 function safe_realpath(path)
-    isempty(path) && return path
     if ispath(path)
         try
             return realpath(path)
@@ -128,6 +127,8 @@ function safe_realpath(path)
         end
     end
     a, b = splitdir(path)
+    # path cannot be reduced at the root or drive, avoid stack overflow
+    isempty(b) && return path
     return joinpath(safe_realpath(a), b)
 end
 
@@ -146,13 +147,48 @@ function isfile_nothrow(path::String)
     end
 end
 
-function casesensitive_isdir(dir::String)
-    dir = abspath(dir)
-    lastdir = splitpath(dir)[end]
-    isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
+
+"""
+    atomic_toml_write(path::String, data; kws...)
+
+Write TOML data to a file atomically by first writing to a temporary file and then moving it into place.
+This prevents "teared" writes if the process is interrupted or if multiple processes write to the same file.
+
+The `kws` are passed to `TOML.print`.
+"""
+function atomic_toml_write(path::String, data; kws...)
+    dir = dirname(path)
+    isempty(dir) && (dir = pwd())
+
+    temp_path, temp_io = mktemp(dir)
+    return try
+        TOML.print(temp_io, data; kws...)
+        close(temp_io)
+        mv(temp_path, path; force = true)
+    catch
+        close(temp_io)
+        rm(temp_path; force = true)
+        rethrow()
+    end
 end
 
 ## ordering of UUIDs ##
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
     Base.isless(a::UUID, b::UUID) = a.value < b.value
+end
+
+function discover_repo(path::AbstractString)
+    dir = abspath(path)
+    stop_dir = homedir()
+
+    while true
+        gitdir = joinpath(dir, ".git")
+        if isdir(gitdir) || isfile(gitdir)
+            return dir
+        end
+        dir == stop_dir && return nothing
+        parent = dirname(dir)
+        parent == dir && return nothing
+        dir = parent
+    end
 end
