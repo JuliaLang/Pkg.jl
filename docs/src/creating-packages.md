@@ -127,7 +127,7 @@ just as public as those marked as public with the `export` keyword, but when fol
 `YourPackage.that_symbol`.
 
 Let's say we would like our `greet` function to be part of the public API, but not the
-`greet_alien` function. We could the write the following and release it as version `1.0.0`.
+`greet_alien` function. We could then write the following and release it as version `1.0.0`.
 
 ```julia
 module HelloWorld

@@ -4,7 +4,7 @@ The following discusses Pkg's interaction with environments. For more on the rol
 
 ## Creating your own environments
 
-So far we have added packages to the default environment at `~/.julia/environments/v1.9`. It is however easy to create other, independent, projects.
+So far we have added packages to the default environment at `~/.julia/environments/v1.10`. It is however easy to create other, independent, projects.
 This approach has the benefit of allowing you to check in a `Project.toml`, and even a `Manifest.toml` if you wish, into version control (e.g. git) alongside your code.
 It should be pointed out that when two projects use the same package at the same version, the content of this package is not duplicated.
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project", which package operations manipulate:
@@ -117,12 +117,12 @@ between several incompatible packages.
 
 ## Shared environments
 
-A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v1.9` environment is
+A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v1.10` environment is
 therefore a shared environment:
 
 ```julia-repl
 (@v1.10) pkg> st
-Status `~/.julia/environments/v1.9/Project.toml`
+Status `~/.julia/environments/v1.10/Project.toml`
 ```
 
 Shared environments can be activated with the `--shared` flag to `activate`:
@@ -167,9 +167,9 @@ with its dependencies.
 ```julia-repl
 (@v1.10) pkg> add Images
    Resolving package versions...
-    Updating `~/.julia/environments/v1.9/Project.toml`
+    Updating `~/.julia/environments/v1.10/Project.toml`
   [916415d5] + Images v0.25.2
-    Updating `~/.julia/environments/v1.9/Manifest.toml`
+    Updating `~/.julia/environments/v1.10/Manifest.toml`
     ...
 Precompiling environment...
   Progress [===================>                     ]  45/97

@@ -24,7 +24,7 @@ are described below.
 
 For a package, the optional `authors` field is a TOML array describing the package authors.
 Entries in the array can either be a string in the form `"NAME"` or `"NAME <EMAIL>"`, or a table keys following the [Citation File Format schema](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md) for either a
-[`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an[`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
+[`person`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsperson) or an [`entity`](https://github.com/citation-file-format/citation-file-format/blob/main/schema-guide.md#definitionsentity).
 
 For example:
 ```toml
@@ -130,7 +130,7 @@ handled by Pkg operations such as `add`.
 
 ### The `[sources]` section
 
-Specifiying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
+Specifying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
 corresponding manifest file.
 

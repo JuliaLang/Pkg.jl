@@ -14,8 +14,8 @@ may optionally have a manifest file:
 - **Manifest file:** a file in the root directory of a project, named
   `Manifest.toml` (or `JuliaManifest.toml`), describing a complete dependency graph
   and exact versions of each package and library used by a project. The file name may
-  also be suffixed by `-v{major}.{minor}.toml` which julia will prefer if the version
-  matches `VERSION`, allowing multiple environments to be maintained for different julia
+  also be suffixed by `-v{major}.{minor}.toml` which Julia will prefer if the version
+  matches `VERSION`, allowing multiple environments to be maintained for different Julia
   versions.
 
 **Package:** a project which provides reusable functionality that can be used by
