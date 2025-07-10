@@ -160,7 +160,12 @@ import .FakeTerminals.FakeTerminal
 
         dep8_path = git_init_package(tmp, joinpath("packages", "Dep8"))
         dep8_srcfile = joinpath(dep8_path, "src", "Dep8.jl")
-        change_dep8() = write(dep8_srcfile, read(dep8_srcfile, String) * "#") # Modify the source to ensure it is recompiled
+        function change_dep8()
+             # Modify the source to ensure it is recompiled
+            write(dep8_srcfile, read(dep8_srcfile, String) * "#")
+            @info "updated Dep8.jl source file:" dep8_srcfile
+            println(read(dep8_srcfile, String))
+        end
         @testset "delayed precompilation with do-syntax" begin
             iob = IOBuffer()
             # Test that operations inside Pkg.precompile() do block don't trigger auto-precompilation
