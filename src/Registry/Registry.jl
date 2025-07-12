@@ -427,7 +427,7 @@ function update(; name=nothing, uuid=nothing, url=nothing, path=nothing, linked=
         update([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
     end
 end
-function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true, depots = [depots1()], update_cooldown = Second(1))
+function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true, depots = [depots1()], update_cooldown = Second(1), throw_on_error = false)
     registry_update_log = get_registry_update_log()
     for depot in depots
         depot_regs = isempty(regs) ? reachable_registries(; depots=depot) : regs
@@ -587,6 +587,9 @@ function update(regs::Vector{RegistrySpec}; io::IO=stderr_f(), force::Bool=true,
                 warn_str *= "\n    — $reg — $err"
             end
             @error warn_str
+            if throw_on_error
+                Pkg.Types.pkgerror(warn_str)
+            end
         end
         end # mkpidlock
     end
