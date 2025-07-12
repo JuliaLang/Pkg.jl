@@ -1,28 +1,69 @@
 Pkg v1.13 Release Notes
 =======================
 
-- Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications. ([#4284])
-- `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve package versions, similar to the existing option for `Pkg.test`. ([#3329])
-- Packages are now automatically added to `[sources]` when they are added by url or devved.
-- `update` now shows a helpful tip when trying to upgrade a specific package that can be upgraded but is held back because it's part of a less optimal resolver solution ([#4266])
-- `Pkg.status` now displays yanked packages with a `[yanked]` indicator and shows a warning when yanked packages are present. `Pkg.resolve` errors also display warnings about yanked packages that are not resolvable. ([#4310])
-- Added `pkg> compat --current` command to automatically populate missing compat entries with the currently resolved package versions. Use `pkg> compat --current` for all packages or `pkg> compat Foo --current` for specific packages. ([#3266])
-- Added `Pkg.precompile() do` block syntax to delay autoprecompilation until after multiple operations complete, improving efficiency when performing several environment changes. ([#4262])
-- Added `Pkg.autoprecompilation_enabled(state::Bool)` to globally enable or disable automatic precompilation for Pkg operations. ([#4262])
+- Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
+  ([#4284])
+- `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve
+  package versions, similar to the existing option for `Pkg.test`. ([#3329])
+- Packages are now automatically added to `[sources]` when they are added by url or devved. ([#4225])
+- `update` now shows a helpful tip when trying to upgrade a specific package that can be upgraded but is held back
+  because it's part of a less optimal resolver solution ([#4266])
+- `Pkg.status` now displays yanked packages with a `[yanked]` indicator and shows a warning when yanked packages are
+  present. `Pkg.resolve` errors also display warnings about yanked packages that are not resolvable. ([#4310])
+- Added `pkg> compat --current` command to automatically populate missing compat entries with the currently resolved
+  package versions. Use `pkg> compat --current` for all packages or `pkg> compat Foo --current` for specific packages.
+  ([#3266])
+- Added `Pkg.precompile() do` block syntax to delay autoprecompilation until after multiple operations complete,
+  improving efficiency when performing several environment changes. ([#4262])
+- Added `Pkg.autoprecompilation_enabled(state::Bool)` to globally enable or disable automatic precompilation for Pkg
+  operations. ([#4262])
+- Implemented atomic TOML writes to prevent data corruption when Pkg operations are interrupted or multiple processes
+  write simultaneously. All TOML files are now written atomically using temporary files and atomic moves. ([#4293])
+- Implemented lazy loading for RegistryInstance to significantly improve startup performance for operations that don't
+  require full registry data. This reduces `Pkg.instantiate()` time by approximately 60% in many cases. ([#4304])
+- Added support for directly adding git submodules via `Pkg.add(path="/path/to/git-submodule.jl")`. ([#3344])
+- Enhanced REPL user experience by automatically detecting and stripping accidental leading `]` characters in commands.
+  ([#3122])
+- Improved tip messages to show REPL mode syntax when operating in REPL mode. ([#3854])
+- Enhanced error handling with more descriptive error messages when operations fail on empty URLs during git repository
+  installation or registry discovery. ([#4282])
+- Improved error messages for invalid compat entries to provide better guidance for fixing them. ([#4302])
+- Added warnings when attempting to add local paths that contain dirty git repositories. ([#4309])
+- Enhanced package parsing to better handle complex URLs and paths with branch/tag/subdir specifiers. ([#4299])
+- Improved artifact download behavior to only attempt downloads from the Pkg server when the package is registered on
+  that server's registries. ([#4297])
+- Added comprehensive documentation page about depots, including depot layouts and configuration. ([#2245])
+- Enhanced error handling for packages missing from registries or manifests with more informative messages. ([#4303])
+- Added more robust error handling when packages have revisions but no source information. ([#4311])
+- Enhanced registry status reporting with more detailed information. ([#4300])
+- Fixed various edge cases in package resolution and manifest handling. ([#4307], [#4308], [#4312])
+- Improved handling of path separators across different operating systems. ([#4305])
+- Added better error messages when accessing private PackageSpec.repo field. ([#4170])
 
 Pkg v1.12 Release Notes
 =======================
 
 - Pkg now has support for "workspaces" which is a way to resolve multiple project files into a single manifest.
-  The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
-  to take a `workspace` option. Read more about this feature in the manual about the TOML-files. ([#3841])
+  The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been
+  updated to take a `workspace` option, with fixes for workspace path collection and package resolution in workspace
+  environments. Read more about this feature in the manual about the TOML-files. ([#3841], [#4229])
 - Pkg now supports "apps" which are Julia packages that can be run directly from the terminal after installation.
-  Apps can be defined in a package's Project.toml and installed via Pkg. ([#3772])
-- `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
+  Apps can be defined in a package's Project.toml and installed via Pkg. Apps now support multiple apps per package
+  via submodules, allowing packages to define multiple command-line applications, with enhanced functionality including
+  update capabilities and better handling of already installed apps. ([#3772], [#4277], [#4263])
+- `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the
+  manifest ([#4109])
 - When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from
   weak dependencies and added as a regular dependency. ([#3865])
-- Enhanced fuzzy matching algorithm for package name suggestions.
-- The Pkg REPL now supports GitHub pull request URLs, allowing direct package installation from PRs via `pkg> add https://github.com/Org/Package.jl/pull/123` ([#4295])
+- Enhanced fuzzy matching algorithm for package name suggestions with improved multi-factor scoring for better package
+  name suggestions. ([#4287])
+- The Pkg REPL now supports GitHub pull request URLs, allowing direct package installation from PRs via
+  `pkg> add https://github.com/Org/Package.jl/pull/123` ([#4295])
+- Improved git repository cloning performance by changing from `refs/*` to `refs/heads/*` to speed up operations on
+  repositories with many branches. ([#2330])
+- Improved REPL command parsing to handle leading whitespace with comma-separated packages. ([#4274])
+- Improved error messages when providing incorrect package UUIDs. ([#4270])
+- Added confirmation prompts before removing compat entries to prevent accidental deletions. ([#4254])
 
 Pkg v1.11 Release Notes
 =======================
@@ -131,3 +172,35 @@ Pkg v1.7 Release Notes
 [#3002]: https://github.com/JuliaLang/Pkg.jl/issues/3002
 [#3021]: https://github.com/JuliaLang/Pkg.jl/issues/3021
 [#3266]: https://github.com/JuliaLang/Pkg.jl/pull/3266
+[#4266]: https://github.com/JuliaLang/Pkg.jl/pull/4266
+[#4310]: https://github.com/JuliaLang/Pkg.jl/pull/4310
+[#3329]: https://github.com/JuliaLang/Pkg.jl/pull/3329
+[#4262]: https://github.com/JuliaLang/Pkg.jl/pull/4262
+[#4293]: https://github.com/JuliaLang/Pkg.jl/pull/4293
+[#4304]: https://github.com/JuliaLang/Pkg.jl/pull/4304
+[#3344]: https://github.com/JuliaLang/Pkg.jl/pull/3344
+[#2330]: https://github.com/JuliaLang/Pkg.jl/pull/2330
+[#3122]: https://github.com/JuliaLang/Pkg.jl/pull/3122
+[#3854]: https://github.com/JuliaLang/Pkg.jl/pull/3854
+[#4282]: https://github.com/JuliaLang/Pkg.jl/pull/4282
+[#4302]: https://github.com/JuliaLang/Pkg.jl/pull/4302
+[#4309]: https://github.com/JuliaLang/Pkg.jl/pull/4309
+[#4299]: https://github.com/JuliaLang/Pkg.jl/pull/4299
+[#4295]: https://github.com/JuliaLang/Pkg.jl/pull/4295
+[#4277]: https://github.com/JuliaLang/Pkg.jl/pull/4277
+[#4297]: https://github.com/JuliaLang/Pkg.jl/pull/4297
+[#2245]: https://github.com/JuliaLang/Pkg.jl/pull/2245
+[#4303]: https://github.com/JuliaLang/Pkg.jl/pull/4303
+[#4254]: https://github.com/JuliaLang/Pkg.jl/pull/4254
+[#4270]: https://github.com/JuliaLang/Pkg.jl/pull/4270
+[#4263]: https://github.com/JuliaLang/Pkg.jl/pull/4263
+[#4229]: https://github.com/JuliaLang/Pkg.jl/pull/4229
+[#4274]: https://github.com/JuliaLang/Pkg.jl/pull/4274
+[#4311]: https://github.com/JuliaLang/Pkg.jl/pull/4311
+[#4300]: https://github.com/JuliaLang/Pkg.jl/pull/4300
+[#4307]: https://github.com/JuliaLang/Pkg.jl/pull/4307
+[#4308]: https://github.com/JuliaLang/Pkg.jl/pull/4308
+[#4312]: https://github.com/JuliaLang/Pkg.jl/pull/4312
+[#4305]: https://github.com/JuliaLang/Pkg.jl/pull/4305
+[#4170]: https://github.com/JuliaLang/Pkg.jl/pull/4170
+[#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
