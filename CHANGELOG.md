@@ -9,6 +9,16 @@ Pkg v1.13 Release Notes
 - Added `pkg> compat --current` command to automatically populate missing compat entries with the currently resolved package versions. Use `pkg> compat --current` for all packages or `pkg> compat Foo --current` for specific packages. ([#3266])
 - Added `Pkg.precompile() do` block syntax to delay autoprecompilation until after multiple operations complete, improving efficiency when performing several environment changes. ([#4262])
 - Added `Pkg.autoprecompilation_enabled(state::Bool)` to globally enable or disable automatic precompilation for Pkg operations. ([#4262])
+- Implemented atomic TOML writes to prevent data corruption when Pkg operations are interrupted or multiple processes write simultaneously. All TOML files are now written atomically using temporary files and atomic moves. ([#4293])
+- Implemented lazy loading for RegistryInstance to significantly improve startup performance for operations that don't require full registry data. This reduces `Pkg.instantiate()` time by approximately 60% in many cases. ([#4304])
+- Added support for directly adding git submodules via `Pkg.add(path="/path/to/git-submodule.jl")`. ([#3344])
+- Improved git repository cloning performance by changing from `refs/*` to `refs/heads/*` to speed up operations on repositories with many branches. ([#2330])
+- Enhanced REPL user experience by automatically detecting and stripping accidental leading `]` characters in commands. ([#3122])
+- Improved tip messages to show REPL mode syntax when operating in REPL mode. ([#3854])
+- Enhanced error handling with more descriptive error messages when operations fail on empty URLs during git repository installation or registry discovery. ([#4282])
+- Improved error messages for invalid compat entries to provide better guidance for fixing them. ([#4302])
+- Added warnings when attempting to add local paths that contain dirty git repositories. ([#4309])
+- Enhanced package parsing to better handle complex URLs and paths with branch/tag/subdir specifiers. ([#4299])
 
 Pkg v1.12 Release Notes
 =======================
@@ -131,3 +141,18 @@ Pkg v1.7 Release Notes
 [#3002]: https://github.com/JuliaLang/Pkg.jl/issues/3002
 [#3021]: https://github.com/JuliaLang/Pkg.jl/issues/3021
 [#3266]: https://github.com/JuliaLang/Pkg.jl/pull/3266
+[#4266]: https://github.com/JuliaLang/Pkg.jl/pull/4266
+[#4310]: https://github.com/JuliaLang/Pkg.jl/pull/4310
+[#3329]: https://github.com/JuliaLang/Pkg.jl/pull/3329
+[#4262]: https://github.com/JuliaLang/Pkg.jl/pull/4262
+[#4293]: https://github.com/JuliaLang/Pkg.jl/pull/4293
+[#4304]: https://github.com/JuliaLang/Pkg.jl/pull/4304
+[#3344]: https://github.com/JuliaLang/Pkg.jl/pull/3344
+[#2330]: https://github.com/JuliaLang/Pkg.jl/pull/2330
+[#3122]: https://github.com/JuliaLang/Pkg.jl/pull/3122
+[#3854]: https://github.com/JuliaLang/Pkg.jl/pull/3854
+[#4282]: https://github.com/JuliaLang/Pkg.jl/pull/4282
+[#4302]: https://github.com/JuliaLang/Pkg.jl/pull/4302
+[#4309]: https://github.com/JuliaLang/Pkg.jl/pull/4309
+[#4299]: https://github.com/JuliaLang/Pkg.jl/pull/4299
+[#4295]: https://github.com/JuliaLang/Pkg.jl/pull/4295
