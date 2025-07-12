@@ -70,7 +70,20 @@ const PREV_ENV_PATH = Ref{String}("")
 
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
 can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
-should_autoprecompile() = Base.JLOptions().use_compiled_modules == 1 && Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
+
+_autoprecompilation_enabled::Bool = true
+const _autoprecompilation_enabled_scoped = Base.ScopedValues.ScopedValue{Bool}(true)
+autoprecompilation_enabled(state::Bool) = (global _autoprecompilation_enabled = state)
+function should_autoprecompile()
+    if Base.JLOptions().use_compiled_modules == 1 &&
+        _autoprecompilation_enabled &&
+        _autoprecompilation_enabled_scoped[] &&
+        Base.get_bool_env("JULIA_PKG_PRECOMPILE_AUTO", true)
+        return true
+    else
+        return false
+    end
+end
 
 """
     in_repl_mode()
@@ -206,10 +219,20 @@ const add = API.add
     Pkg.precompile(; strict::Bool=false, timing::Bool=false)
     Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false)
     Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(f, args...; kwargs...)
 
 Precompile all or specific dependencies of the project in parallel.
 
 Set `timing=true` to show the duration of the precompilation of each dependency.
+
+To delay autoprecompilation of multiple Pkg actions until the end use.
+This may be most efficient while manipulating the environment in various ways.
+
+```julia
+Pkg.precompile() do
+    # Pkg actions here
+end
+```
 
 !!! note
     Errors will only throw when precompiling the top-level dependencies, given that
@@ -228,6 +251,9 @@ Set `timing=true` to show the duration of the precompilation of each dependency.
 !!! compat "Julia 1.9"
     Timing mode requires at least Julia 1.9.
 
+!!! compat "Julia 1.13"
+    The `Pkg.precompile(f, args...; kwargs...)` do-block syntax requires at least Julia 1.13.
+
 # Examples
 ```julia
 Pkg.precompile()
@@ -236,6 +262,39 @@ Pkg.precompile(["Foo", "Bar"])
 ```
 """
 const precompile = API.precompile
+
+"""
+    Pkg.autoprecompilation_enabled(state::Bool)
+
+Enable or disable automatic precompilation for Pkg operations.
+
+When `state` is `true` (default), Pkg operations that modify the project environment
+will automatically trigger precompilation of affected packages. When `state` is `false`,
+automatic precompilation is disabled and packages will only be precompiled when
+explicitly requested via [`Pkg.precompile`](@ref).
+
+This setting affects the global state and persists across Pkg operations in the same
+Julia session. It can be used in combination with [`Pkg.precompile`](@ref) do-syntax
+for more fine-grained control over when precompilation occurs.
+
+!!! compat "Julia 1.13"
+    This function requires at least Julia 1.13.
+
+# Examples
+```julia
+# Disable automatic precompilation
+Pkg.autoprecompilation_enabled(false)
+Pkg.add("Example")  # Will not trigger auto-precompilation
+Pkg.precompile()    # Manual precompilation
+
+# Re-enable automatic precompilation
+Pkg.autoprecompilation_enabled(true)
+Pkg.add("AnotherPackage")  # Will trigger auto-precompilation
+```
+
+See also [`Pkg.precompile`](@ref).
+"""
+autoprecompilation_enabled
 
 """
     Pkg.rm(pkg::Union{String, Vector{String}}; mode::PackageMode = PKGMODE_PROJECT)

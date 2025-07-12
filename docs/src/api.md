@@ -39,6 +39,7 @@ Pkg.gc
 Pkg.status
 Pkg.compat
 Pkg.precompile
+Pkg.autoprecompilation_enabled
 Pkg.offline
 Pkg.why
 Pkg.dependencies

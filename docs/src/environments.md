@@ -190,15 +190,52 @@ If a given package version errors during auto-precompilation, Pkg will remember 
 automatically tries and will skip that package with a brief warning. Manual precompilation can be used to
 force these packages to be retried, as `pkg> precompile` will always retry all packages.
 
-To disable the auto-precompilation, set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0`.
-
 The indicators next to the package names displayed during precompilation
-indicate the status of that package's precompilation. 
+indicate the status of that package's precompilation.
 
 - `[◐, ◓, ◑, ◒]` Animated "clock" characters indicate that the package is currently being precompiled.
 - `✓` A green checkmark indicates that the package has been successfully precompiled (after which that package will disappear from the list). If the checkmark is yellow it means that the package is currently loaded so the session will need to be restarted to access the version that was just precompiled.
 - `?` A question mark character indicates that a `PrecompilableError` was thrown, indicating that precompilation was disallowed, i.e. `__precompile__(false)` in that package.
 - `✗` A cross indicates that the package failed to precompile.
+
+#### Controlling Auto-precompilation
+
+Auto-precompilation can be controlled in several ways:
+
+- **Environment variable**: Set `ENV["JULIA_PKG_PRECOMPILE_AUTO"]=0` to disable auto-precompilation globally.
+- **Programmatically**: Use `Pkg.autoprecompilation_enabled(false)` to disable auto-precompilation for the current session, or `Pkg.autoprecompilation_enabled(true)` to re-enable it.
+- **Scoped control**: Use `Pkg.precompile(f, args...; kwargs...)` to execute a function `f` with auto-precompilation temporarily disabled, then automatically trigger precompilation afterward if any packages were modified during the execution.
+
+!!! compat "Julia 1.13"
+    The `Pkg.autoprecompilation_enabled()` function and `Pkg.precompile()` do-block syntax require at least Julia 1.13.
+
+For example, to add multiple packages without triggering precompilation after each one:
+
+```julia-repl
+julia> Pkg.precompile() do
+           Pkg.add("Example")
+           Pkg.dev("JSON")
+           Pkg.update("HTTP")
+       end
+   Resolving package versions...
+   ...
+Precompiling environment...
+  14 dependencies successfully precompiled in 25 seconds
+```
+
+Or to temporarily disable auto-precompilation:
+
+```julia-repl
+julia> Pkg.autoprecompilation_enabled(false)
+false
+
+julia> Pkg.add("Example")  # No precompilation happens
+   Resolving package versions...
+   ...
+
+julia> Pkg.autoprecompilation_enabled(true)
+true
+```
 
 ### Precompiling new versions of loaded packages
 
