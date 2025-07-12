@@ -34,17 +34,16 @@ Pkg v1.12 Release Notes
   The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
   to take a `workspace` option. Read more about this feature in the manual about the TOML-files. ([#3841])
 - Pkg now supports "apps" which are Julia packages that can be run directly from the terminal after installation.
-  Apps can be defined in a package's Project.toml and installed via Pkg. ([#3772])
+  Apps can be defined in a package's Project.toml and installed via Pkg. Apps now support multiple apps per package via submodules, allowing packages to define multiple command-line applications, with enhanced functionality including update capabilities and better handling of already installed apps. ([#3772], [#4277], [#4263])
 - `status` now shows when different versions/sources of dependencies are loaded than that which is expected by the manifest ([#4109])
 - When adding or developing a package that exists in the `[weakdeps]` section, it is now automatically removed from
   weak dependencies and added as a regular dependency. ([#3865])
-- Enhanced fuzzy matching algorithm for package name suggestions.
+- Enhanced fuzzy matching algorithm for package name suggestions with improved multi-factor scoring for better package name suggestions. ([#4287])
 - The Pkg REPL now supports GitHub pull request URLs, allowing direct package installation from PRs via `pkg> add https://github.com/Org/Package.jl/pull/123` ([#4295])
-- Fixed issues with workspace path collection and package resolution in workspace environments. ([#4229])
-- Enhanced fuzzy matching algorithm with improved multi-factor scoring for better package name suggestions. ([#4287])
+- Pkg now has support for "workspaces" which is a way to resolve multiple project files into a single manifest.
+  The functions `Pkg.status`, `Pkg.why`, `Pkg.instantiate`, `Pkg.precompile` (and their REPL variants) have been updated
+  to take a `workspace` option, with fixes for workspace path collection and package resolution in workspace environments. Read more about this feature in the manual about the TOML-files. ([#3841], [#4229])
 - Improved git repository cloning performance by changing from `refs/*` to `refs/heads/*` to speed up operations on repositories with many branches. ([#2330])
-- Apps now support multiple apps per package via submodules, allowing packages to define multiple command-line applications. ([#4277])
-- Enhanced apps functionality with update capabilities and better handling of already installed apps. ([#4263])
 - Improved REPL command parsing to handle leading whitespace with comma-separated packages. ([#4274])
 - Improved error messages when providing incorrect package UUIDs. ([#4270])
 - Added confirmation prompts before removing compat entries to prevent accidental deletions. ([#4254])
