@@ -2998,8 +2998,13 @@ function print_status(env::EnvCache, old_env::Union{Nothing,EnvCache}, registrie
         println(io)
     end
 
+    # figure out if we are at the end of status prints, given this is called twice for combined mode
+    last_status_report = mode != PKGMODE_COMBINED || mode == PKGMODE_COMBINED && manifest
+
     if !no_changes && !all_packages_downloaded
-        printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color=Base.info_color(), ignore_indent)
+            printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download. Use `undo/redo` to revert changes.", color=Base.info_color(), ignore_indent)
+    elseif last_status_report && old_env !== nothing && !no_changes
+        printpkgstyle(io, :Info, "Use `undo/redo` to revert changes.", color=Base.info_color(), ignore_indent)
     end
     if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
         tipend = manifest ? " -m" : ""
