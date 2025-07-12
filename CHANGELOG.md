@@ -19,6 +19,21 @@ Pkg v1.13 Release Notes
 - Improved error messages for invalid compat entries to provide better guidance for fixing them. ([#4302])
 - Added warnings when attempting to add local paths that contain dirty git repositories. ([#4309])
 - Enhanced package parsing to better handle complex URLs and paths with branch/tag/subdir specifiers. ([#4299])
+- Apps now support multiple apps per package via submodules, allowing packages to define multiple command-line applications. ([#4277])
+- Improved artifact download behavior to only attempt downloads from the Pkg server when the package is registered on that server's registries. ([#4297])
+- Added comprehensive documentation page about depots, including depot layouts and configuration. ([#2245])
+- Enhanced error handling for packages missing from registries or manifests with more informative messages. ([#4303])
+- Added confirmation prompts before removing compat entries to prevent accidental deletions. ([#4254])
+- Improved error messages when providing incorrect package UUIDs. ([#4270])
+- Enhanced apps functionality with update capabilities and better handling of already installed apps. ([#4263])
+- Fixed issues with workspace path collection and package resolution in workspace environments. ([#4229])
+- Improved REPL command parsing to handle leading whitespace with comma-separated packages. ([#4274])
+- Added more robust error handling when packages have revisions but no source information. ([#4311])
+- Enhanced registry status reporting with more detailed information. ([#4300])
+- Fixed various edge cases in package resolution and manifest handling. ([#4307], [#4308], [#4312])
+- Improved handling of path separators across different operating systems. ([#4305])
+- Added better error messages when accessing private PackageSpec.repo field. ([#4170])
+- Enhanced fuzzy matching algorithm with improved multi-factor scoring for better package name suggestions. ([#4287])
 
 Pkg v1.12 Release Notes
 =======================
@@ -156,3 +171,20 @@ Pkg v1.7 Release Notes
 [#4309]: https://github.com/JuliaLang/Pkg.jl/pull/4309
 [#4299]: https://github.com/JuliaLang/Pkg.jl/pull/4299
 [#4295]: https://github.com/JuliaLang/Pkg.jl/pull/4295
+[#4277]: https://github.com/JuliaLang/Pkg.jl/pull/4277
+[#4297]: https://github.com/JuliaLang/Pkg.jl/pull/4297
+[#2245]: https://github.com/JuliaLang/Pkg.jl/pull/2245
+[#4303]: https://github.com/JuliaLang/Pkg.jl/pull/4303
+[#4254]: https://github.com/JuliaLang/Pkg.jl/pull/4254
+[#4270]: https://github.com/JuliaLang/Pkg.jl/pull/4270
+[#4263]: https://github.com/JuliaLang/Pkg.jl/pull/4263
+[#4229]: https://github.com/JuliaLang/Pkg.jl/pull/4229
+[#4274]: https://github.com/JuliaLang/Pkg.jl/pull/4274
+[#4311]: https://github.com/JuliaLang/Pkg.jl/pull/4311
+[#4300]: https://github.com/JuliaLang/Pkg.jl/pull/4300
+[#4307]: https://github.com/JuliaLang/Pkg.jl/pull/4307
+[#4308]: https://github.com/JuliaLang/Pkg.jl/pull/4308
+[#4312]: https://github.com/JuliaLang/Pkg.jl/pull/4312
+[#4305]: https://github.com/JuliaLang/Pkg.jl/pull/4305
+[#4170]: https://github.com/JuliaLang/Pkg.jl/pull/4170
+[#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
