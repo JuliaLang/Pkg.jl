@@ -1172,19 +1172,17 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
     end
 
     io = ctx.io
-    if io isa IOContext{IO}
+    if io isa IOContext{IO} && !isa(io.io, Base.PipeEndpoint)
         # precompile does quite a bit of output and using the IOContext{IO} can cause
         # some slowdowns, the important part here is to not specialize the whole
-        # precompile function on the io
+        # precompile function on the io.
+        # But don't unwrap the IOContext if it is a PipeEndpoint, as that would
+        # cause the output to lose color.
         io = io.io
     end
 
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
-        @show io typeof(io)
-        printstyled(io, "io with color\n", color=:green, bold=true)
-        @show ctx.io typeof(ctx.io)
-        printstyled(ctx.io, "ctx.io with color\n", color=:green, bold=true)
         return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest=workspace, io)
     end
 end
