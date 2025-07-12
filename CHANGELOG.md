@@ -12,28 +12,20 @@ Pkg v1.13 Release Notes
 - Implemented atomic TOML writes to prevent data corruption when Pkg operations are interrupted or multiple processes write simultaneously. All TOML files are now written atomically using temporary files and atomic moves. ([#4293])
 - Implemented lazy loading for RegistryInstance to significantly improve startup performance for operations that don't require full registry data. This reduces `Pkg.instantiate()` time by approximately 60% in many cases. ([#4304])
 - Added support for directly adding git submodules via `Pkg.add(path="/path/to/git-submodule.jl")`. ([#3344])
-- Improved git repository cloning performance by changing from `refs/*` to `refs/heads/*` to speed up operations on repositories with many branches. ([#2330])
 - Enhanced REPL user experience by automatically detecting and stripping accidental leading `]` characters in commands. ([#3122])
 - Improved tip messages to show REPL mode syntax when operating in REPL mode. ([#3854])
 - Enhanced error handling with more descriptive error messages when operations fail on empty URLs during git repository installation or registry discovery. ([#4282])
 - Improved error messages for invalid compat entries to provide better guidance for fixing them. ([#4302])
 - Added warnings when attempting to add local paths that contain dirty git repositories. ([#4309])
 - Enhanced package parsing to better handle complex URLs and paths with branch/tag/subdir specifiers. ([#4299])
-- Apps now support multiple apps per package via submodules, allowing packages to define multiple command-line applications. ([#4277])
 - Improved artifact download behavior to only attempt downloads from the Pkg server when the package is registered on that server's registries. ([#4297])
 - Added comprehensive documentation page about depots, including depot layouts and configuration. ([#2245])
 - Enhanced error handling for packages missing from registries or manifests with more informative messages. ([#4303])
-- Added confirmation prompts before removing compat entries to prevent accidental deletions. ([#4254])
-- Improved error messages when providing incorrect package UUIDs. ([#4270])
-- Enhanced apps functionality with update capabilities and better handling of already installed apps. ([#4263])
-- Fixed issues with workspace path collection and package resolution in workspace environments. ([#4229])
-- Improved REPL command parsing to handle leading whitespace with comma-separated packages. ([#4274])
 - Added more robust error handling when packages have revisions but no source information. ([#4311])
 - Enhanced registry status reporting with more detailed information. ([#4300])
 - Fixed various edge cases in package resolution and manifest handling. ([#4307], [#4308], [#4312])
 - Improved handling of path separators across different operating systems. ([#4305])
 - Added better error messages when accessing private PackageSpec.repo field. ([#4170])
-- Enhanced fuzzy matching algorithm with improved multi-factor scoring for better package name suggestions. ([#4287])
 
 Pkg v1.12 Release Notes
 =======================
@@ -48,6 +40,14 @@ Pkg v1.12 Release Notes
   weak dependencies and added as a regular dependency. ([#3865])
 - Enhanced fuzzy matching algorithm for package name suggestions.
 - The Pkg REPL now supports GitHub pull request URLs, allowing direct package installation from PRs via `pkg> add https://github.com/Org/Package.jl/pull/123` ([#4295])
+- Fixed issues with workspace path collection and package resolution in workspace environments. ([#4229])
+- Enhanced fuzzy matching algorithm with improved multi-factor scoring for better package name suggestions. ([#4287])
+- Improved git repository cloning performance by changing from `refs/*` to `refs/heads/*` to speed up operations on repositories with many branches. ([#2330])
+- Apps now support multiple apps per package via submodules, allowing packages to define multiple command-line applications. ([#4277])
+- Enhanced apps functionality with update capabilities and better handling of already installed apps. ([#4263])
+- Improved REPL command parsing to handle leading whitespace with comma-separated packages. ([#4274])
+- Improved error messages when providing incorrect package UUIDs. ([#4270])
+- Added confirmation prompts before removing compat entries to prevent accidental deletions. ([#4254])
 
 Pkg v1.11 Release Notes
 =======================
