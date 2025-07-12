@@ -2476,7 +2476,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
-                Pkg.precompile(; io=ctx.io, configs = flags => cacheflags)
+                # Don't warn about already loaded packages, since we are going to run tests in a new
+                # subprocess anyway.
+                Pkg.precompile(; io=ctx.io, warn_loaded = false, configs = flags => cacheflags)
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
