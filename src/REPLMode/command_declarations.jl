@@ -308,11 +308,13 @@ packages have changed causing the current Manifest to be out of sync.
 ],
 PSA[:name => "activate",
     :api => API.activate,
-    :arg_count => 0 => 1,
+    :arg_count => 0 => 2,
     :arg_parser => parse_activate,
     :option_spec => [
         PSA[:name => "shared", :api => :shared => true],
         PSA[:name => "temp", :api => :temp => true],
+        PSA[:name => "test", :api => :target => :test],
+        PSA[:name => "build", :api => :target => :build],
     ],
     :completions => :complete_activate,
     :description => "set the primary environment the package manager manipulates",
@@ -321,6 +323,8 @@ PSA[:name => "activate",
     activate [--shared] path
     activate --temp
     activate - (activates the previously active environment)
+    activate --test (activates the test target within the current environment)
+    activate --build (activates the build target within the current environment)
 
 Activate the environment at the given `path`, or use the first project found in
 `LOAD_PATH` (ignoring `"@"`) if no `path` is specified.

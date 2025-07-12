@@ -2372,11 +2372,15 @@ function parse_REQUIRE(require_path::String)
 end
 
 # "targets" based test deps -> "test/Project.toml" based deps
-function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String, target::String)
+function gen_target_project(ctx::Context, pkg::Union{PackageSpec,Nothing}, source_path::String, target::String)
     env = ctx.env
     registries = ctx.registries
     test_project = Types.Project()
     if projectfile_path(source_path; strict=true) === nothing
+        if pkg === nothing
+            # don't support REQUIRE if pkg isn't provided
+            pkgerror("No project file found in $(source_path)")
+        end
         # no project file, assuming this is an old REQUIRE package
         test_project.deps = copy(env.manifest[pkg.uuid].deps)
         if target == "test"
