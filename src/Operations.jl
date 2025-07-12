@@ -1907,10 +1907,38 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
         r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
             level == UPLEVEL_MINOR ? VersionRange(ver.major) :
             level == UPLEVEL_MAJOR ? VersionRange() :
-                error("unexpected upgrade level: $level")
+            level == UPLEVEL_DOWN ? begin
+                if !is_tracking_registry(pkg) || is_stdlib(pkg.uuid)
+                    VersionRange()
+                else
+                    compat = get(ctx.env.project.compat, pkg.name, nothing)
+                    vr = compat === nothing ? VersionRange() : compat.val
+                    lowest_version(pkg, ctx.registries, vr)
+                end
+            end :
+            error("unexpected upgrade level: $level")
         pkg.version = VersionSpec(r)
     end
     return false
+end
+
+function lowest_version(pkg, registries, vr::VersionSpec)
+    minv = nothing
+    for reg in registries
+        rpkg = get(reg, pkg.uuid, nothing)
+        rpkg === nothing && continue
+        pkginfo = Registry.registry_info(rpkg)
+        matching_versions = filter(in(vr), keys(pkginfo.version_info))
+        if !isempty(matching_versions)
+            min_match = minimum(matching_versions)
+            minv = minv === nothing ? min_match : minv < min_match ? minv : min_match
+        end
+    end
+    if minv === nothing
+        pkgerror("Did not find any version matching $vr in registries")
+    end
+    @info "Fixing $(pkg.name) to version $minv"
+    return minv
 end
 
 up_load_manifest_info!(pkg::PackageSpec, ::Nothing) = nothing

@@ -18,7 +18,7 @@ using Dates
 export @pkg_str
 export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
-export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
+export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_DOWN
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
@@ -109,7 +109,7 @@ include("Apps/Apps.jl")
 include("REPLMode/REPLMode.jl")
 
 import .REPLMode: @pkg_str
-import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED
+import .Types: UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH, UPLEVEL_FIXED, UPLEVEL_DOWN
 import .Types: PKGMODE_MANIFEST, PKGMODE_PROJECT
 import .Types: PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 
@@ -140,6 +140,7 @@ An enum with the instances
   * `UPLEVEL_PATCH`
   * `UPLEVEL_MINOR`
   * `UPLEVEL_MAJOR`
+  * `UPLEVEL_DOWN`
 
 Determines how much a package is allowed to be updated.
 Used as an argument to  [`PackageSpec`](@ref) or as an argument to [`Pkg.update`](@ref).

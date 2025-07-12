@@ -18,7 +18,7 @@ import FileWatching
 import Base: SHA1
 using SHA
 
-export UUID, SHA1, VersionRange, VersionSpec,
+export UUID, SHA1, VersionRange, VersionSpec, Compat,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
     PkgError, pkgerror,
     has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, stdlib_infos, write_env, write_env_usage, parse_toml,
@@ -27,7 +27,7 @@ export UUID, SHA1, VersionRange, VersionSpec,
     manifest_info,
     read_project, read_package, read_manifest, get_path_repo,
     PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT, PKGMODE_COMBINED,
-    UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
+    UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR, UPLEVEL_DOWN,
     PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED,
     PRESERVE_TIERED_INSTALLED, PRESERVE_NONE,
     projectfile_path, manifestfile_path
@@ -71,7 +71,7 @@ Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 ###############
 # PackageSpec #
 ###############
-@enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR)
+@enum(UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR, UPLEVEL_DOWN)
 @enum(PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED, PRESERVE_TIERED_INSTALLED, PRESERVE_NONE)
 @enum(PackageMode, PKGMODE_PROJECT, PKGMODE_MANIFEST, PKGMODE_COMBINED)
 
