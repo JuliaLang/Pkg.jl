@@ -1181,7 +1181,10 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
 
     activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
-        @show io typeof(io) ctx.io typeof(ctx.io)
+        @show io typeof(io)
+        printstyled(io, "io with color\n", color=:green, bold=true)
+        @show ctx.io typeof(ctx.io)
+        printstyled(ctx.io, "ctx.io with color\n", color=:green, bold=true)
         return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest=workspace, io)
     end
 end
