@@ -1337,8 +1337,11 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=
 end
 
 
-function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
+function activate(;temp=false, shared=false, prev=false, target::Union{Symbol,Nothing}=nothing, io::IO=stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
+    if target !== nothing
+        return activate(Base.active_project(); target, io)
+    end
     temp && return activate(mktempdir(); io=io)
     if prev
         if isempty(PREV_ENV_PATH[])
@@ -1368,12 +1371,12 @@ function _activate_dep(dep_name::AbstractString)
     uuid = get(ctx.env.project.deps, dep_name, nothing)
     if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
-        if entry.path !== nothing
+        if entry !== nothing && entry.path !== nothing
             return joinpath(dirname(ctx.env.manifest_file), entry.path::String)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f())
+function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, target::Union{Symbol,Nothing}=nothing, io::IO=stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1404,6 +1407,14 @@ function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io
         if !isdir(fullpath)
             fullpath = joinpath(Pkg.envdir(Pkg.depots1()), path)
         end
+    end
+    if target !== nothing
+        printpkgstyle(io, :Creating, "temporary project based on the target `$target` in $(pathrepr(fullpath))", color = Base.info_color())
+        target_project = Operations.gen_target_project(Context(), nothing, fullpath, "test")
+        temp_project_dir = mktempdir()
+        temp_projectfile = joinpath(temp_project_dir, "Project.toml")
+        Types.write_project(target_project, temp_projectfile)
+        fullpath = temp_projectfile
     end
     if !isnothing(Base.active_project())
         PREV_ENV_PATH[] = Base.active_project()
