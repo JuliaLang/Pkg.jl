@@ -19,6 +19,23 @@ If you need to build Julia from source with a Git checkout of Pkg, then instead 
 
 If you need to build Julia from source with Git checkouts of two or more stdlibs, please see the instructions in the [`Building Julia from source with a Git checkout of a stdlib`](https://github.com/JuliaLang/julia/blob/master/doc/src/devdocs/build/build.md#building-julia-from-source-with-a-git-checkout-of-a-stdlib) section of the [`doc/src/devdocs/build/build.md`](https://github.com/JuliaLang/julia/blob/master/doc/src/devdocs/build/build.md) file within the Julia devdocs.
 
+## Pre-commit hooks
+
+This repository uses pre-commit hooks to automatically check and format code before commits. The hooks perform various checks including:
+
+- File size and case conflict validation
+- YAML syntax checking
+- Trailing whitespace removal and line ending fixes
+- Julia code formatting with Runic
+
+To install and use the pre-commit hooks:
+
+1. Install pre-commit: `pip install pre-commit` (or use your system's package manager)
+2. Install the hooks: `pre-commit install` from the root of the repository
+3. Run on all files: `pre-commit run --all-files` from the root of the repository
+
+Once installed, the hooks will run automatically on each commit. You can also run them manually anytime with `pre-commit run`.
+
 ## Synchronization with the Julia repo
 
 To check which commit julia master uses see [JuliaLang/julia/stdlib/Pkg.version](https://github.com/JuliaLang/julia/blob/master/stdlib/Pkg.version).
