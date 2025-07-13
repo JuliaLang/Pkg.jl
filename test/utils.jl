@@ -9,9 +9,9 @@ using TOML
 using UUIDs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
-       with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
-       git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-       list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache
+    with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
+    git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
+    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache
 
 const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
 
@@ -31,6 +31,7 @@ function copy_this_pkg_cache(new_depot)
         mkpath(dirname(dest))
         cp(source, dest)
     end
+    return
 end
 
 function check_init_reg()
@@ -45,21 +46,24 @@ function check_init_reg()
         write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
     else
         Base.shred!(LibGit2.CachedCredentials()) do creds
-            f = retry(delays = fill(5.0, 3), check=(s,e)->isa(e, Pkg.Types.PkgError)) do
-                LibGit2.with(Pkg.GitTools.clone(
-                    stderr_f(),
-                    "https://github.com/JuliaRegistries/General.git",
-                    REGISTRY_DIR,
-                    credentials = creds)) do repo
+            f = retry(delays = fill(5.0, 3), check = (s, e) -> isa(e, Pkg.Types.PkgError)) do
+                LibGit2.with(
+                    Pkg.GitTools.clone(
+                        stderr_f(),
+                        "https://github.com/JuliaRegistries/General.git",
+                        REGISTRY_DIR,
+                        credentials = creds
+                    )
+                ) do repo
                 end
             end
             f() # retry returns a function that should be called
         end
     end
-    isfile(joinpath(REGISTRY_DIR, "Registry.toml")) || error("Registry did not install properly")
+    return isfile(joinpath(REGISTRY_DIR, "Registry.toml")) || error("Registry did not install properly")
 end
 
-function isolate(fn::Function; loaded_depot=false, linked_reg=true)
+function isolate(fn::Function; loaded_depot = false, linked_reg = true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -68,7 +72,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
     old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
     old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
-    try
+    return try
         # Clone/download the registry only once
         check_init_reg()
 
@@ -81,9 +85,11 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
         Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         Pkg.REPLMode.TEST_MODE[] = false
-        withenv("JULIA_PROJECT" => nothing,
-                "JULIA_LOAD_PATH" => nothing,
-                "JULIA_PKG_DEVDIR" => nothing) do
+        withenv(
+            "JULIA_PROJECT" => nothing,
+            "JULIA_LOAD_PATH" => nothing,
+            "JULIA_PKG_DEVDIR" => nothing
+        ) do
             target_depot = realpath(mktempdir())
             push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
             push!(DEPOT_PATH, target_depot)
@@ -102,7 +108,7 @@ function isolate(fn::Function; loaded_depot=false, linked_reg=true)
                 end
                 if !haskey(ENV, "CI") && target_depot !== nothing && isdir(target_depot)
                     try
-                        Base.rm(target_depot; force=true, recursive=true)
+                        Base.rm(target_depot; force = true, recursive = true)
                     catch err
                         println("warning: isolate failed to clean up depot.\n  $err")
                     end
@@ -138,7 +144,7 @@ function isolate_and_pin_registry(fn::Function; registry_url::String, registry_c
     return nothing
 end
 
-function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
+function temp_pkg_dir(fn::Function; rm = true, linked_reg = true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -146,7 +152,7 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     old_general_registry_url = Pkg.Registry.DEFAULT_REGISTRIES[1].url
     old_general_registry_path = Pkg.Registry.DEFAULT_REGISTRIES[1].path
     old_general_registry_linked = Pkg.Registry.DEFAULT_REGISTRIES[1].linked
-    try
+    return try
         # Clone/download the registry only once
         check_init_reg()
 
@@ -157,9 +163,11 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
         Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
         Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
         Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
-        withenv("JULIA_PROJECT" => nothing,
-                "JULIA_LOAD_PATH" => nothing,
-                "JULIA_PKG_DEVDIR" => nothing) do
+        withenv(
+            "JULIA_PROJECT" => nothing,
+            "JULIA_LOAD_PATH" => nothing,
+            "JULIA_PKG_DEVDIR" => nothing
+        ) do
             env_dir = realpath(mktempdir())
             depot_dir = realpath(mktempdir())
             try
@@ -170,8 +178,8 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
             finally
                 if rm && !haskey(ENV, "CI")
                     try
-                        Base.rm(env_dir; force=true, recursive=true)
-                        Base.rm(depot_dir; force=true, recursive=true)
+                        Base.rm(env_dir; force = true, recursive = true)
+                        Base.rm(depot_dir; force = true, recursive = true)
                     catch err
                         # Avoid raising an exception here as it will mask the original exception
                         println(stderr_f(), "Exception in finally: $(sprint(showerror, err))")
@@ -192,12 +200,12 @@ function temp_pkg_dir(fn::Function;rm=true, linked_reg=true)
     end
 end
 
-function cd_tempdir(f; rm=true)
+function cd_tempdir(f; rm = true)
     tmp = realpath(mktempdir())
     cd(tmp) do
         f(tmp)
     end
-    if rm && !haskey(ENV, "CI")
+    return if rm && !haskey(ENV, "CI")
         try
             Base.rm(tmp; force = true, recursive = true)
         catch err
@@ -214,25 +222,25 @@ isinstalled(pkg::String) = Base.find_package(pkg) !== nothing
 function write_build(path, content)
     build_filename = joinpath(path, "deps", "build.jl")
     mkpath(dirname(build_filename))
-    write(build_filename, content)
+    return write(build_filename, content)
 end
 
 function with_current_env(f)
     prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(".")
-    try
+    return try
         f()
     finally
         Base.ACTIVE_PROJECT[] = prev_active
     end
 end
 
-function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
+function with_temp_env(f, env_name::AbstractString = "Dummy"; rm = true)
     prev_active = Base.ACTIVE_PROJECT[]
     env_path = joinpath(realpath(mktempdir()), env_name)
     Pkg.generate(env_path)
     Pkg.activate(env_path)
-    try
+    return try
         applicable(f, env_path) ? f(env_path) : f()
     finally
         Base.ACTIVE_PROJECT[] = prev_active
@@ -247,10 +255,10 @@ function with_temp_env(f, env_name::AbstractString="Dummy"; rm=true)
     end
 end
 
-function with_pkg_env(fn::Function, path::AbstractString="."; change_dir=false)
+function with_pkg_env(fn::Function, path::AbstractString = "."; change_dir = false)
     prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(path)
-    try
+    return try
         if change_dir
             cd(fn, path)
         else
@@ -267,9 +275,9 @@ const TEST_SIG = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
 const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
 
 function git_init_and_commit(path; msg = "initial commit")
-    LibGit2.with(LibGit2.init(path)) do repo
+    return LibGit2.with(LibGit2.init(path)) do repo
         LibGit2.add!(repo, "*")
-        LibGit2.commit(repo, msg; author=TEST_SIG, committer=TEST_SIG)
+        LibGit2.commit(repo, msg; author = TEST_SIG, committer = TEST_SIG)
     end
 end
 
@@ -290,9 +298,10 @@ function ensure_test_package_user_writable(dir)
             chmod(filepath, filemode(filepath) | 0o200)
         end
     end
+    return
 end
 
-function copy_test_package(tmpdir::String, name::String; use_pkg=true)
+function copy_test_package(tmpdir::String, name::String; use_pkg = true)
     target = joinpath(tmpdir, name)
     cp(joinpath(@__DIR__, "test_packages", name), target)
     ensure_test_package_user_writable(target)
@@ -313,15 +322,15 @@ function copy_test_package(tmpdir::String, name::String; use_pkg=true)
     return target
 end
 
-function add_this_pkg(; platform=Base.BinaryPlatforms.HostPlatform())
-    try
+function add_this_pkg(; platform = Base.BinaryPlatforms.HostPlatform())
+    return try
         Pkg.respect_sysimage_versions(false)
         pkg_dir = dirname(@__DIR__)
         pkg_uuid = TOML.parsefile(joinpath(pkg_dir, "Project.toml"))["uuid"]
         spec = Pkg.PackageSpec(
-            name="Pkg",
-            uuid=UUID(pkg_uuid),
-            path=pkg_dir,
+            name = "Pkg",
+            uuid = UUID(pkg_uuid),
+            path = pkg_dir,
         )
         Pkg.develop(spec; platform)
     finally
@@ -339,7 +348,7 @@ end
 
 function show_output_if_command_errors(cmd::Cmd)
     out = IOBuffer()
-    proc = run(pipeline(cmd; stdout=out); wait = false)
+    proc = run(pipeline(cmd; stdout = out); wait = false)
     wait(proc)
     if !success(proc)
         seekstart(out)
@@ -355,6 +364,7 @@ function recursive_rm_cov_files(rootdir::String)
             endswith(file, ".cov") && rm(joinpath(root, file))
         end
     end
+    return
 end
 
 end

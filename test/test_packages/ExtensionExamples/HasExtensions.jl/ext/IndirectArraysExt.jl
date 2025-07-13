@@ -8,7 +8,7 @@ function foo(::IndirectArray)
 end
 
 function __init__()
-    HasExtensions.indirectarrays_loaded = true
+    return HasExtensions.indirectarrays_loaded = true
 end
 
 end

@@ -27,17 +27,17 @@ include("generate.jl")
 
 Base.@kwdef struct PackageInfo
     name::String
-    version::Union{Nothing,VersionNumber}
-    tree_hash::Union{Nothing,String}
+    version::Union{Nothing, VersionNumber}
+    tree_hash::Union{Nothing, String}
     is_direct_dep::Bool
     is_pinned::Bool
     is_tracking_path::Bool
     is_tracking_repo::Bool
     is_tracking_registry::Bool
-    git_revision::Union{Nothing,String}
-    git_source::Union{Nothing,String}
+    git_revision::Union{Nothing, String}
+    git_source::Union{Nothing, String}
     source::String
-    dependencies::Dict{String,UUID}
+    dependencies::Dict{String, UUID}
 end
 
 function Base.:(==)(a::PackageInfo, b::PackageInfo)
@@ -53,34 +53,36 @@ end
 function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
     entry = manifest_info(env.manifest, pkg.uuid)
     if entry === nothing
-        pkgerror("expected package $(err_rep(pkg)) to exist in the manifest",
-                 " (use `resolve` to populate the manifest)")
+        pkgerror(
+            "expected package $(err_rep(pkg)) to exist in the manifest",
+            " (use `resolve` to populate the manifest)"
+        )
     end
-    package_info(env, pkg, entry)
+    return package_info(env, pkg, entry)
 end
 
 function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
         isurl(pkg.repo.source::String) ? pkg.repo.source::String :
         Operations.project_rel_path(env, pkg.repo.source::String)
-        _source_path = Operations.source_path(env.manifest_file, pkg)
-        if _source_path === nothing
-            @debug "Manifest file $(env.manifest_file) contents:\n$(read(env.manifest_file, String))"
-            pkgerror("could not find source path for package $(err_rep(pkg)) based on $(env.manifest_file)")
-        end
+    _source_path = Operations.source_path(env.manifest_file, pkg)
+    if _source_path === nothing
+        @debug "Manifest file $(env.manifest_file) contents:\n$(read(env.manifest_file, String))"
+        pkgerror("could not find source path for package $(err_rep(pkg)) based on $(env.manifest_file)")
+    end
     info = PackageInfo(
-        name                 = pkg.name,
-        version              = pkg.version != VersionSpec() ? pkg.version : nothing,
-        tree_hash            = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
-        is_direct_dep        = pkg.uuid in values(env.project.deps),
-        is_pinned            = pkg.pinned,
-        is_tracking_path     = pkg.path !== nothing,
-        is_tracking_repo     = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
+        name = pkg.name,
+        version = pkg.version != VersionSpec() ? pkg.version : nothing,
+        tree_hash = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
+        is_direct_dep = pkg.uuid in values(env.project.deps),
+        is_pinned = pkg.pinned,
+        is_tracking_path = pkg.path !== nothing,
+        is_tracking_repo = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
         is_tracking_registry = Operations.is_tracking_registry(pkg),
-        git_revision         = pkg.repo.rev,
-        git_source           = git_source,
-        source               = Operations.project_rel_path(env, _source_path),
-        dependencies         = copy(entry.deps), #TODO is copy needed?
+        git_revision = pkg.repo.rev,
+        git_source = git_source,
+        source = Operations.project_rel_path(env, _source_path),
+        dependencies = copy(entry.deps), #TODO is copy needed?
     )
     return info
 end
@@ -95,17 +97,17 @@ function dependencies(fn::Function, uuid::UUID)
     if dep === nothing
         pkgerror("dependency with UUID `$uuid` does not exist")
     end
-    fn(dep)
+    return fn(dep)
 end
 
 
 Base.@kwdef struct ProjectInfo
-    name::Union{Nothing,String}
-    uuid::Union{Nothing,UUID}
-    version::Union{Nothing,VersionNumber}
+    name::Union{Nothing, String}
+    uuid::Union{Nothing, UUID}
+    version::Union{Nothing, VersionNumber}
     ispackage::Bool
-    dependencies::Dict{String,UUID}
-    sources::Dict{String,Dict{String,String}}
+    dependencies::Dict{String, UUID}
+    sources::Dict{String, Dict{String, String}}
     path::String
 end
 
@@ -113,26 +115,28 @@ project() = project(EnvCache())
 function project(env::EnvCache)::ProjectInfo
     pkg = env.pkg
     return ProjectInfo(
-        name         = pkg === nothing ? nothing : pkg.name,
-        uuid         = pkg === nothing ? nothing : pkg.uuid,
-        version      = pkg === nothing ? nothing : pkg.version::VersionNumber,
-        ispackage    = pkg !== nothing,
+        name = pkg === nothing ? nothing : pkg.name,
+        uuid = pkg === nothing ? nothing : pkg.uuid,
+        version = pkg === nothing ? nothing : pkg.version::VersionNumber,
+        ispackage = pkg !== nothing,
         dependencies = env.project.deps,
-        sources      = env.project.sources,
-        path         = env.project_file
+        sources = env.project.sources,
+        path = env.project_file
     )
 end
 
-function check_package_name(x::AbstractString, mode::Union{Nothing,String,Symbol}=nothing)
+function check_package_name(x::AbstractString, mode::Union{Nothing, String, Symbol} = nothing)
     if !Base.isidentifier(x)
         message = sprint() do iostr
             print(iostr, "`$x` is not a valid package name")
             if endswith(lowercase(x), ".jl")
-                print(iostr, ". Perhaps you meant `$(chop(x; tail=3))`")
+                print(iostr, ". Perhaps you meant `$(chop(x; tail = 3))`")
             end
-            if mode !== nothing && any(occursin.(['\\','/'], x)) # maybe a url or a path
-                print(iostr, "\nThe argument appears to be a URL or path, perhaps you meant ",
-                    "`Pkg.$mode(url=\"...\")` or `Pkg.$mode(path=\"...\")`.")
+            if mode !== nothing && any(occursin.(['\\', '/'], x)) # maybe a url or a path
+                print(
+                    iostr, "\nThe argument appears to be a URL or path, perhaps you meant ",
+                    "`Pkg.$mode(url=\"...\")` or `Pkg.$mode(path=\"...\")`."
+                )
             end
         end
         pkgerror(message)
@@ -142,15 +146,15 @@ end
 check_package_name(::Nothing, ::Any) = nothing
 
 function require_not_empty(pkgs, f::Symbol)
-    isempty(pkgs) && pkgerror("$f requires at least one package")
+    return isempty(pkgs) && pkgerror("$f requires at least one package")
 end
 
 # Provide some convenience calls
 for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :precompile)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
-        $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        function $f(pkgs::Vector{PackageSpec}; io::IO=$(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
+        $f(pkgs::Vector{<:AbstractString}; kwargs...) = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+        function $f(pkgs::Vector{PackageSpec}; io::IO = $(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
             $(f != :precompile) && Registry.download_default_registries(io)
             ctx = Context()
             # Save initial environment for undo/redo functionality
@@ -158,7 +162,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
                 add_snapshot_to_undo(ctx.env)
                 saved_initial_snapshot[] = true
             end
-            kwargs = merge((;kwargs...), (:io => io,))
+            kwargs = merge((; kwargs...), (:io => io,))
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
@@ -167,22 +171,24 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
-        function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
-                      version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
-                      url=nothing, rev=nothing, path=nothing, mode=PKGMODE_PROJECT, subdir=nothing, kwargs...)
+        function $f(;
+                name::Union{Nothing, AbstractString} = nothing, uuid::Union{Nothing, String, UUID} = nothing,
+                version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
+                url = nothing, rev = nothing, path = nothing, mode = PKGMODE_PROJECT, subdir = nothing, kwargs...
+            )
             pkg = PackageSpec(; name, uuid, version, url, rev, path, subdir)
             if $f === status || $f === rm || $f === up
-                kwargs = merge((;kwargs...), (:mode => mode,))
+                kwargs = merge((; kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            if all(isnothing, [name,uuid,version,url,rev,path,subdir])
+            return if all(isnothing, [name, uuid, version, url, rev, path, subdir])
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
             end
         end
         function $f(pkgs::Vector{<:NamedTuple}; kwargs...)
-            $f([PackageSpec(;pkg...) for pkg in pkgs]; kwargs...)
+            return $f([PackageSpec(; pkg...) for pkg in pkgs]; kwargs...)
         end
     end
 end
@@ -240,8 +246,10 @@ function update_source_if_set(env, pkg)
     return
 end
 
-function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
-                 preserve::PreserveLevel=Operations.default_preserve(), platform::AbstractPlatform=HostPlatform(), kwargs...)
+function develop(
+        ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool = true,
+        preserve::PreserveLevel = Operations.default_preserve(), platform::AbstractPlatform = HostPlatform(), kwargs...
+    )
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
 
@@ -257,8 +265,10 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
             pkgerror("rev argument not supported by `develop`; consider using `add` instead")
         end
         if pkg.version != VersionSpec()
-            pkgerror("version specification invalid when calling `develop`:",
-                     " `$(pkg.version)` specified for package $(err_rep(pkg))")
+            pkgerror(
+                "version specification invalid when calling `develop`:",
+                " `$(pkg.version)` specified for package $(err_rep(pkg))"
+            )
         end
         # not strictly necessary to check these fields early, but it is more efficient
         if pkg.name !== nothing && (length(findall(x -> x.name == pkg.name, pkgs)) > 1)
@@ -282,12 +292,14 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
         update_source_if_set(ctx.env, pkg)
     end
 
-    Operations.develop(ctx, pkgs, new_git; preserve=preserve, platform=platform)
+    Operations.develop(ctx, pkgs, new_git; preserve = preserve, platform = platform)
     return
 end
 
-function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Operations.default_preserve(),
-             platform::AbstractPlatform=HostPlatform(), target::Symbol=:deps, allow_autoprecomp::Bool=true, kwargs...)
+function add(
+        ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel = Operations.default_preserve(),
+        platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true, kwargs...
+    )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
 
@@ -301,8 +313,10 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
         end
         if pkg.repo.source !== nothing || pkg.repo.rev !== nothing
             if pkg.version != VersionSpec()
-                pkgerror("version specification invalid when tracking a repository:",
-                         " `$(pkg.version)` specified for package $(err_rep(pkg))")
+                pkgerror(
+                    "version specification invalid when tracking a repository:",
+                    " `$(pkg.version)` specified for package $(err_rep(pkg))"
+                )
             end
         end
         # not strictly necessary to check these fields early, but it is more efficient
@@ -319,12 +333,12 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Operations.update_registries(ctx; force=false, update_cooldown=Day(1))
+    Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
 
     project_deps_resolve!(ctx.env, pkgs)
     registry_resolve!(ctx.registries, pkgs)
     stdlib_resolve!(pkgs)
-    ensure_resolved(ctx, ctx.env.manifest, pkgs, registry=true)
+    ensure_resolved(ctx, ctx.env.manifest, pkgs, registry = true)
 
     for pkg in pkgs
         if Types.collides_with_project(ctx.env, pkg)
@@ -340,7 +354,7 @@ function add(ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel=Op
     return
 end
 
-function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_pkgs::Bool=false, kwargs...)
+function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -353,9 +367,11 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode=PKGMODE_PROJECT, all_p
         if pkg.name === nothing && pkg.uuid === nothing
             pkgerror("name or UUID specification required when calling `rm`")
         end
-        if !(pkg.version == VersionSpec() && pkg.pinned == false &&
-             pkg.tree_hash === nothing && pkg.repo.source === nothing &&
-             pkg.repo.rev === nothing && pkg.path === nothing)
+        if !(
+                pkg.version == VersionSpec() && pkg.pinned == false &&
+                    pkg.tree_hash === nothing && pkg.repo.source === nothing &&
+                    pkg.repo.rev === nothing && pkg.path === nothing
+            )
             pkgerror("packages may only be specified by name or UUID when calling `rm`")
         end
     end
@@ -374,24 +390,26 @@ function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
             path, repo = get_path_repo(ctx.env.project, name)
-            push!(pkgs, PackageSpec(name=name, uuid=uuid, path=path, repo=repo))
+            push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         for (uuid, entry) in ctx.env.manifest
             path, repo = get_path_repo(ctx.env.project, entry.name)
-            push!(pkgs, PackageSpec(name=entry.name, uuid=uuid, path=path, repo=repo))
+            push!(pkgs, PackageSpec(name = entry.name, uuid = uuid, path = path, repo = repo))
         end
     end
     return
 end
 
-function up(ctx::Context, pkgs::Vector{PackageSpec};
-            level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode=PKGMODE_PROJECT,
-            preserve::Union{Nothing,PreserveLevel}= isempty(pkgs) ? nothing : PRESERVE_ALL,
-            update_registry::Bool=true,
-            skip_writing_project::Bool=false,
-            kwargs...)
+function up(
+        ctx::Context, pkgs::Vector{PackageSpec};
+        level::UpgradeLevel = UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT,
+        preserve::Union{Nothing, PreserveLevel} = isempty(pkgs) ? nothing : PRESERVE_ALL,
+        update_registry::Bool = true,
+        skip_writing_project::Bool = false,
+        kwargs...
+    )
     Context!(ctx; kwargs...)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
@@ -399,7 +417,7 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     end
     if update_registry
         Registry.download_default_registries(ctx.io)
-        Operations.update_registries(ctx; force=true)
+        Operations.update_registries(ctx; force = true)
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
@@ -418,13 +436,13 @@ function up(ctx::Context, pkgs::Vector{PackageSpec};
     return
 end
 
-resolve(; io::IO=stderr_f(), kwargs...) = resolve(Context(;io); kwargs...)
-function resolve(ctx::Context; skip_writing_project::Bool=false, kwargs...)
-    up(ctx; level=UPLEVEL_FIXED, mode=PKGMODE_MANIFEST, update_registry=false, skip_writing_project, kwargs...)
+resolve(; io::IO = stderr_f(), kwargs...) = resolve(Context(; io); kwargs...)
+function resolve(ctx::Context; skip_writing_project::Bool = false, kwargs...)
+    up(ctx; level = UPLEVEL_FIXED, mode = PKGMODE_MANIFEST, update_registry = false, skip_writing_project, kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -438,12 +456,16 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
             pkgerror("name or UUID specification required when calling `pin`")
         end
         if pkg.repo.source !== nothing
-            pkgerror("repository specification invalid when calling `pin`:",
-                     " `$(pkg.repo.source)` specified for package $(err_rep(pkg))")
+            pkgerror(
+                "repository specification invalid when calling `pin`:",
+                " `$(pkg.repo.source)` specified for package $(err_rep(pkg))"
+            )
         end
         if pkg.repo.rev !== nothing
-            pkgerror("git revision specification invalid when calling `pin`:",
-                     " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))")
+            pkgerror(
+                "git revision specification invalid when calling `pin`:",
+                " `$(pkg.repo.rev)` specified for package $(err_rep(pkg))"
+            )
         end
         version = pkg.version
         if version isa VersionSpec
@@ -460,7 +482,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwar
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwargs...)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -473,9 +495,11 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
         if pkg.name === nothing && pkg.uuid === nothing
             pkgerror("name or UUID specification required when calling `free`")
         end
-        if !(pkg.version == VersionSpec() && pkg.pinned == false &&
-             pkg.tree_hash === nothing && pkg.repo.source === nothing &&
-             pkg.repo.rev === nothing && pkg.path === nothing)
+        if !(
+                pkg.version == VersionSpec() && pkg.pinned == false &&
+                    pkg.tree_hash === nothing && pkg.repo.source === nothing &&
+                    pkg.repo.rev === nothing && pkg.path === nothing
+            )
             pkgerror("packages may only be specified by name or UUID when calling `free`")
         end
     end
@@ -487,14 +511,16 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool=false, kwa
     return
 end
 
-function test(ctx::Context, pkgs::Vector{PackageSpec};
-              coverage=false, test_fn=nothing,
-              julia_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
-              test_args::Union{Cmd, AbstractVector{<:AbstractString}}=``,
-              force_latest_compatible_version::Bool=false,
-              allow_earlier_backwards_compatible_versions::Bool=true,
-              allow_reresolve::Bool=true,
-              kwargs...)
+function test(
+        ctx::Context, pkgs::Vector{PackageSpec};
+        coverage = false, test_fn = nothing,
+        julia_args::Union{Cmd, AbstractVector{<:AbstractString}} = ``,
+        test_args::Union{Cmd, AbstractVector{<:AbstractString}} = ``,
+        force_latest_compatible_version::Bool = false,
+        allow_earlier_backwards_compatible_versions::Bool = true,
+        allow_reresolve::Bool = true,
+        kwargs...
+    )
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)
     Context!(ctx; kwargs...)
@@ -532,8 +558,8 @@ function is_manifest_current(path::AbstractString)
     return Operations.is_manifest_current(env)
 end
 
-const UsageDict = Dict{String,DateTime}
-const UsageByDepotDict = Dict{String,UsageDict}
+const UsageDict = Dict{String, DateTime}
+const UsageByDepotDict = Dict{String, UsageDict}
 
 """
     gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
@@ -551,7 +577,7 @@ admin privileges depending on the setup).
 
 Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, force=false, kwargs...)
+function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = false, force = false, kwargs...)
     Context!(ctx; kwargs...)
     env = ctx.env
 
@@ -585,6 +611,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             for (filename, infos) in parse_toml(usage_filepath)
                 f.(Ref(filename), infos)
             end
+            return
         end
 
         # Extract usage data from this depot, (taking only the latest state for each
@@ -592,7 +619,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         # into the overall list across depots to create a single, coherent view across
         # all depots.
         usage = UsageDict()
-        let usage=usage
+        let usage = usage
             reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
                 # For Manifest usage, store only the last DateTime for each filename found
                 usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
@@ -601,7 +628,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         manifest_usage_by_depot[depot] = usage
 
         usage = UsageDict()
-        let usage=usage
+        let usage = usage
             reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
                 usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
@@ -612,7 +639,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         # track last-used
         usage = UsageDict()
         parents = Dict{String, Set{String}}()
-        let usage=usage
+        let usage = usage
             reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
                 usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
@@ -653,19 +680,20 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             # Write out the TOML file for this depot
             usage_path = joinpath(logdir(depot), fname)
             if !(isempty(usage)::Bool) || isfile(usage_path)
-                let usage=usage
-                    atomic_toml_write(usage_path, usage, sorted=true)
+                let usage = usage
+                    atomic_toml_write(usage_path, usage, sorted = true)
                 end
             end
         end
+        return
     end
 
     # Write condensed Manifest usage
-    let all_manifest_tomls=all_manifest_tomls
+    let all_manifest_tomls = all_manifest_tomls
         write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
             # Keep only manifest usage markers that are still existent
-            let usage=usage
-                filter!(((k,v),) -> k in all_manifest_tomls, usage)
+            let usage = usage
+                filter!(((k, v),) -> k in all_manifest_tomls, usage)
 
                 # Expand it back into a dict-of-dicts
                 return Dict(k => [Dict("time" => v)] for (k, v) in usage)
@@ -674,23 +702,23 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     end
 
     # Write condensed Artifact usage
-    let all_artifact_tomls=all_artifact_tomls
+    let all_artifact_tomls = all_artifact_tomls
         write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
             let usage = usage
-                filter!(((k,v),) -> k in all_artifact_tomls, usage)
+                filter!(((k, v),) -> k in all_artifact_tomls, usage)
                 return Dict(k => [Dict("time" => v)] for (k, v) in usage)
             end
         end
     end
 
     # Write condensed scratch space usage
-    let all_scratch_parents=all_scratch_parents, all_scratch_dirs=all_scratch_dirs
+    let all_scratch_parents = all_scratch_parents, all_scratch_dirs = all_scratch_dirs
         write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
             # Keep only scratch directories that still exist
-            filter!(((k,v),) -> k in all_scratch_dirs, usage)
+            filter!(((k, v),) -> k in all_scratch_dirs, usage)
 
             # Expand it back into a dict-of-dicts
-            expanded_usage = Dict{String,Vector{Dict}}()
+            expanded_usage = Dict{String, Vector{Dict}}()
             for (k, v) in usage
                 # Drop scratch spaces whose parents are all non-existent
                 parents = scratch_parents_by_depot[depot][k]
@@ -699,10 +727,12 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
                     continue
                 end
 
-                expanded_usage[k] = [Dict(
-                    "time" => v,
-                    "parent_projects" => collect(parents),
-                )]
+                expanded_usage[k] = [
+                    Dict(
+                        "time" => v,
+                        "parent_projects" => collect(parents),
+                    ),
+                ]
             end
             return expanded_usage
         end
@@ -790,7 +820,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     end
 
     # Mark packages/artifacts as active or not by calling the appropriate user function
-    function mark(process_func::Function, index_files, ctx::Context; do_print=true, verbose=false, file_str=nothing)
+    function mark(process_func::Function, index_files, ctx::Context; do_print = true, verbose = false, file_str = nothing)
         marked_paths = String[]
         active_index_files = Set{String}()
         for index_file in index_files
@@ -841,13 +871,16 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
                 push!(deletion_list, path)
             end
         end
+        return
     end
 
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
     # printpkgstyle(ctx.io, :Active, "manifests:")
-    packages_to_keep = mark(process_manifest_pkgs, all_manifest_tomls, ctx,
-        verbose=verbose, file_str="manifest files")
+    packages_to_keep = mark(
+        process_manifest_pkgs, all_manifest_tomls, ctx,
+        verbose = verbose, file_str = "manifest files"
+    )
 
     # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
     packages_to_delete = String[]
@@ -876,15 +909,19 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
     # `Artifacts.toml` files that will be deleted by the future culling operation.
     # printpkgstyle(ctx.io, :Active, "artifacts:")
-    artifacts_to_keep = let packages_to_delete=packages_to_delete
-        mark(x -> process_artifacts_toml(x, packages_to_delete),
-             all_artifact_tomls, ctx; verbose=verbose, file_str="artifact files")
+    artifacts_to_keep = let packages_to_delete = packages_to_delete
+        mark(
+            x -> process_artifacts_toml(x, packages_to_delete),
+            all_artifact_tomls, ctx; verbose = verbose, file_str = "artifact files"
+        )
     end
-    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print=false)
+    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print = false)
     # printpkgstyle(ctx.io, :Active, "scratchspaces:")
-    spaces_to_keep = let packages_to_delete=packages_to_delete
-        mark(x -> process_scratchspace(x, packages_to_delete),
-             all_scratch_dirs, ctx; verbose=verbose, file_str="scratchspaces")
+    spaces_to_keep = let packages_to_delete = packages_to_delete
+        mark(
+            x -> process_scratchspace(x, packages_to_delete),
+            all_scratch_dirs, ctx; verbose = verbose, file_str = "scratchspaces"
+        )
     end
 
     # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
@@ -956,8 +993,8 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
                         end
                     elseif uuid == Operations.PkgUUID && isfile(space_dir_or_file)
                         # special cleanup for the precompile cache files that Pkg saves
-                        if any(prefix->startswith(basename(space_dir_or_file), prefix), ("suspend_cache_", "pending_cache_"))
-                            if mtime(space_dir_or_file) < (time() - (24*60*60))
+                        if any(prefix -> startswith(basename(space_dir_or_file), prefix), ("suspend_cache_", "pending_cache_"))
+                            if mtime(space_dir_or_file) < (time() - (24 * 60 * 60))
                                 push!(depot_orphaned_scratchspaces, space_dir_or_file)
                             end
                         end
@@ -984,7 +1021,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         # Write out the `new_orphanage` for this depot
         mkpath(dirname(orphanage_file))
-        atomic_toml_write(orphanage_file, new_orphanage, sorted=true)
+        atomic_toml_write(orphanage_file, new_orphanage, sorted = true)
     end
 
     function recursive_dir_size(path)
@@ -996,12 +1033,12 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
                     try
                         size += lstat(path).size
                     catch ex
-                        @error("Failed to calculate size of $path", exception=ex)
+                        @error("Failed to calculate size of $path", exception = ex)
                     end
                 end
             end
         catch ex
-            @error("Failed to calculate size of $path", exception=ex)
+            @error("Failed to calculate size of $path", exception = ex)
         end
         return size
     end
@@ -1012,7 +1049,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
             try
                 lstat(path).size
             catch ex
-                @error("Failed to calculate size of $path", exception=ex)
+                @error("Failed to calculate size of $path", exception = ex)
                 0
             end
         else
@@ -1020,14 +1057,16 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
         end
         try
             Base.Filesystem.prepare_for_deletion(path)
-            Base.rm(path; recursive=true, force=true)
+            Base.rm(path; recursive = true, force = true)
         catch e
-            @warn("Failed to delete $path", exception=e)
+            @warn("Failed to delete $path", exception = e)
             return 0
         end
         if verbose
-            printpkgstyle(ctx.io, :Deleted, pathrepr(path) * " (" *
-                Base.format_bytes(path_size) * ")")
+            printpkgstyle(
+                ctx.io, :Deleted, pathrepr(path) * " (" *
+                    Base.format_bytes(path_size) * ")"
+            )
         end
         return path_size
     end
@@ -1081,12 +1120,12 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     # Do this silently because it's out of scope for Pkg.gc() but it's helpful to use this opportunity to do it
     if isdefined(Base.Filesystem, :delayed_delete_dir)
         if isdir(Base.Filesystem.delayed_delete_dir())
-            for p in readdir(Base.Filesystem.delayed_delete_dir(), join=true)
+            for p in readdir(Base.Filesystem.delayed_delete_dir(), join = true)
                 try
                     Base.Filesystem.prepare_for_deletion(p)
-                    Base.rm(p; recursive=true, force=true, allow_delayed_delete=false)
+                    Base.rm(p; recursive = true, force = true, allow_delayed_delete = false)
                 catch e
-                    @debug "Failed to delete $p" exception=e
+                    @debug "Failed to delete $p" exception = e
                 end
             end
         end
@@ -1104,7 +1143,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
 
         s = ndel == 1 ? "" : "s"
         bytes_saved_string = Base.format_bytes(freed)
-        printpkgstyle(ctx.io, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
+        return printpkgstyle(ctx.io, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
     end
     print_deleted(ndel_pkg, package_space_freed, "package installation")
     print_deleted(ndel_repo, repo_space_freed, "repo")
@@ -1118,7 +1157,7 @@ function gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false,
     return
 end
 
-function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, allow_reresolve::Bool=true, kwargs...)
+function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose = false, allow_reresolve::Bool = true, kwargs...)
     Context!(ctx; kwargs...)
 
     if isempty(pkgs)
@@ -1133,7 +1172,7 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose=false, allow_rer
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
-    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose; allow_reresolve)
+    return Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose; allow_reresolve)
 end
 
 function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
@@ -1155,13 +1194,15 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     end
 end
 
-function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool=false,
-                    strict::Bool=false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
-                    _from_loading::Bool=false, configs::Union{Base.Precompilation.Config,Vector{Base.Precompilation.Config}}=(``=>Base.CacheFlags()),
-                    workspace::Bool=false, kwargs...)
+function precompile(
+        ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool = false,
+        strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
+        _from_loading::Bool = false, configs::Union{Base.Precompilation.Config, Vector{Base.Precompilation.Config}} = (`` => Base.CacheFlags()),
+        workspace::Bool = false, kwargs...
+    )
     Context!(ctx; kwargs...)
     if !already_instantiated
-        instantiate(ctx; allow_autoprecomp=false, kwargs...)
+        instantiate(ctx; allow_autoprecomp = false, kwargs...)
         @debug "precompile: instantiated"
     end
 
@@ -1181,14 +1222,14 @@ function precompile(ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool
         io = io.io
     end
 
-    activate(dirname(ctx.env.project_file)) do
+    return activate(dirname(ctx.env.project_file)) do
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest=workspace, io)
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
     end
 end
 
 function precompile(f, args...; kwargs...)
-    Base.ScopedValues.@with _autoprecompilation_enabled_scoped => false begin
+    return Base.ScopedValues.@with _autoprecompilation_enabled_scoped => false begin
         f()
         Pkg.precompile(args...; kwargs...)
     end
@@ -1204,10 +1245,12 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
-function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
-                     update_registry::Bool=true, verbose::Bool=false,
-                     platform::AbstractPlatform=HostPlatform(), allow_build::Bool=true, allow_autoprecomp::Bool=true,
-                     workspace::Bool=false, julia_version_strict::Bool=false, kwargs...)
+function instantiate(
+        ctx::Context; manifest::Union{Bool, Nothing} = nothing,
+        update_registry::Bool = true, verbose::Bool = false,
+        platform::AbstractPlatform = HostPlatform(), allow_build::Bool = true, allow_autoprecomp::Bool = true,
+        workspace::Bool = false, julia_version_strict::Bool = false, kwargs...
+    )
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
@@ -1215,7 +1258,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         Types.check_manifest_julia_version_compat(_manifest, ctx.env.manifest_file; julia_version_strict)
-        deps = Dict{String,String}()
+        deps = Dict{String, String}()
         for (uuid, pkg) in _manifest
             if pkg.name in keys(deps)
                 # TODO, query what package to put in Project when in interactive mode?
@@ -1224,7 +1267,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             deps[pkg.name] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
-        return instantiate(Context(); manifest=manifest, update_registry=update_registry, allow_autoprecomp=allow_autoprecomp, verbose=verbose, platform=platform, kwargs...)
+        return instantiate(Context(); manifest = manifest, update_registry = update_registry, allow_autoprecomp = allow_autoprecomp, verbose = verbose, platform = platform, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
@@ -1251,10 +1294,12 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
         rm_cmd = Pkg.in_repl_mode() ? "pkg> rm $name" : "Pkg.rm(\"$name\")"
         instantiate_cmd = Pkg.in_repl_mode() ? "pkg> instantiate" : "Pkg.instantiate()"
-        pkgerror("`$name` is a direct dependency, but does not appear in the manifest.",
-                 " If you intend `$name` to be a direct dependency, run `$resolve_cmd` to populate the manifest.",
-                 " Otherwise, remove `$name` with `$rm_cmd`.",
-                 " Finally, run `$instantiate_cmd` again.")
+        pkgerror(
+            "`$name` is a direct dependency, but does not appear in the manifest.",
+            " If you intend `$name` to be a direct dependency, run `$resolve_cmd` to populate the manifest.",
+            " Otherwise, remove `$name` with `$rm_cmd`.",
+            " Finally, run `$instantiate_cmd` again."
+        )
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env, workspace; platform)
@@ -1274,7 +1319,7 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
         if !(e isa PkgError) || update_registry == false
             rethrow(e)
         end
-        Operations.update_registries(ctx; force=false)
+        Operations.update_registries(ctx; force = false)
         Operations.check_registered(ctx.registries, pkgs)
     end
     new_git = UUID[]
@@ -1293,12 +1338,12 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
         end
         repo_path = Types.add_repo_cache_path(repo_source)
-        let repo_source=repo_source
-            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare=true)) do repo
+        let repo_source = repo_source
+            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare = true)) do repo
                 # We only update the clone if the tree hash can't be found
                 tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
                 if tree_hash_object === nothing
-                    GitTools.fetch(ctx.io, repo, repo_source; refspecs=Types.refspecs)
+                    GitTools.fetch(ctx.io, repo, repo_source; refspecs = Types.refspecs)
                     tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
                 end
                 if tree_hash_object === nothing
@@ -1316,35 +1361,35 @@ function instantiate(ctx::Context; manifest::Union{Bool, Nothing}=nothing,
     # Install all artifacts
     Operations.download_artifacts(ctx; platform, verbose)
     # Run build scripts
-    allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose=verbose)
+    allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose = verbose)
 
-    allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+    return allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
 end
 
 
-@deprecate status(mode::PackageMode) status(mode=mode)
+@deprecate status(mode::PackageMode) status(mode = mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool=false, mode=PKGMODE_PROJECT, workspace::Bool=false, outdated::Bool=false, compat::Bool=false, extensions::Bool=false, io::IO=stdout_f())
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mode = PKGMODE_PROJECT, workspace::Bool = false, outdated::Bool = false, compat::Bool = false, extensions::Bool = false, io::IO = stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
         extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff=diff, io, outdated, extensions, workspace)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, extensions, workspace)
     end
     return nothing
 end
 
 
-function activate(;temp=false, shared=false, prev=false, io::IO=stderr_f())
+function activate(; temp = false, shared = false, prev = false, io::IO = stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
-    temp && return activate(mktempdir(); io=io)
+    temp && return activate(mktempdir(); io = io)
     if prev
         if isempty(PREV_ENV_PATH[])
             pkgerror("No previously active environment found")
         else
-            return activate(PREV_ENV_PATH[]; io=io)
+            return activate(PREV_ENV_PATH[]; io = io)
         end
     end
     if !isnothing(Base.active_project())
@@ -1366,14 +1411,14 @@ function _activate_dep(dep_name::AbstractString)
         return
     end
     uuid = get(ctx.env.project.deps, dep_name, nothing)
-    if uuid !== nothing
+    return if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing
             return joinpath(dirname(ctx.env.manifest_file), entry.path::String)
         end
     end
 end
-function activate(path::AbstractString; shared::Bool=false, temp::Bool=false, io::IO=stderr_f())
+function activate(path::AbstractString; shared::Bool = false, temp::Bool = false, io::IO = stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
         # `pkg> activate path`/`Pkg.activate(path)` does the following
@@ -1420,19 +1465,19 @@ end
 function activate(f::Function, new_project::AbstractString)
     old = Base.ACTIVE_PROJECT[]
     Base.ACTIVE_PROJECT[] = new_project
-    try
+    return try
         f()
     finally
         Base.ACTIVE_PROJECT[] = old
     end
 end
 
-function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; current::Bool=false, io = nothing, kwargs...)
+function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing, String}; current::Bool = false, io = nothing, kwargs...)
     if current
         if compat_str !== nothing
             pkgerror("`current` is true, but `compat_str` is not nothing. This is not allowed.")
         end
-        return set_current_compat(ctx, pkg; io=io)
+        return set_current_compat(ctx, pkg; io = io)
     end
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
@@ -1472,16 +1517,16 @@ function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing,String}; c
         pkgerror("No package named $pkg in current Project")
     end
 end
-function compat(ctx::Context=Context(); current::Bool=false, kwargs...)
+function compat(ctx::Context = Context(); current::Bool = false, kwargs...)
     if current
         return set_current_compat(ctx; kwargs...)
     end
     return _compat(ctx; kwargs...)
 end
-compat(pkg::String, compat_str::Union{Nothing,String}=nothing;  kwargs...) = _compat(Context(), pkg, compat_str; kwargs...)
+compat(pkg::String, compat_str::Union{Nothing, String} = nothing; kwargs...) = _compat(Context(), pkg, compat_str; kwargs...)
 
 
-function set_current_compat(ctx::Context, target_pkg::Union{Nothing,String}=nothing; io = nothing)
+function set_current_compat(ctx::Context, target_pkg::Union{Nothing, String} = nothing; io = nothing)
     io = something(io, ctx.io)
     updated_deps = String[]
 
@@ -1538,15 +1583,15 @@ function set_current_compat(ctx::Context, target_pkg::Union{Nothing,String}=noth
     end
 
     write_env(ctx.env)
-    Operations.print_compat(ctx; io)
+    return Operations.print_compat(ctx; io)
 end
-set_current_compat(;kwargs...) = set_current_compat(Context(); kwargs...)
+set_current_compat(; kwargs...) = set_current_compat(Context(); kwargs...)
 
 #######
 # why #
 #######
 
-function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=false, kwargs...)
+function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = false, kwargs...)
     require_not_empty(pkgs, :why)
 
     manifest_resolve!(ctx.env.manifest, pkgs)
@@ -1584,6 +1629,7 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=fa
             end
             find_paths!(final_paths, p, copy(path))
         end
+        return
     end
 
     first = true
@@ -1595,11 +1641,12 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool=fa
         foreach(reverse!, final_paths)
         final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], collect(final_paths))
         sort!(final_paths_names, by = x -> (x, length(x)))
-        delimiter = sprint((io, args) -> printstyled(io, args...; color=:light_green), "→", context=io)
+        delimiter = sprint((io, args) -> printstyled(io, args...; color = :light_green), "→", context = io)
         for path in final_paths_names
             println(io, "  ", join(path, " $delimiter "))
         end
     end
+    return
 end
 
 
@@ -1621,7 +1668,7 @@ const undo_entries = Dict{String, UndoState}()
 const max_undo_limit = 50
 const saved_initial_snapshot = Ref(false)
 
-function add_snapshot_to_undo(env=nothing)
+function add_snapshot_to_undo(env = nothing)
     # only attempt to take a snapshot if there is
     # an active project to be found
     if env === nothing
@@ -1639,14 +1686,14 @@ function add_snapshot_to_undo(env=nothing)
         return
     end
     snapshot = UndoSnapshot(now(), env.project, env.manifest)
-    deleteat!(state.entries, 1:(state.idx-1))
+    deleteat!(state.entries, 1:(state.idx - 1))
     pushfirst!(state.entries, snapshot)
     state.idx = 1
 
-    resize!(state.entries, min(length(state.entries), max_undo_limit))
+    return resize!(state.entries, min(length(state.entries), max_undo_limit))
 end
 
-undo(ctx = Context()) = redo_undo(ctx, :undo,  1)
+undo(ctx = Context()) = redo_undo(ctx, :undo, 1)
 redo(ctx = Context()) = redo_undo(ctx, :redo, -1)
 function redo_undo(ctx, mode::Symbol, direction::Int)
     @assert direction == 1 || direction == -1
@@ -1657,16 +1704,16 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     state.idx += direction
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
-    write_env(ctx.env; update_undo=false)
-    Operations.show_update(ctx.env, ctx.registries; io=ctx.io)
+    write_env(ctx.env; update_undo = false)
+    return Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
 end
 
 
 function setprotocol!(;
-    domain::AbstractString="github.com",
-    protocol::Union{Nothing, AbstractString}=nothing
-)
-    GitTools.setprotocol!(domain=domain, protocol=protocol)
+        domain::AbstractString = "github.com",
+        protocol::Union{Nothing, AbstractString} = nothing
+    )
+    GitTools.setprotocol!(domain = domain, protocol = protocol)
     return nothing
 end
 
@@ -1679,8 +1726,10 @@ function handle_package_input!(pkg::PackageSpec)
     if pkg.repo.source !== nothing || pkg.repo.rev !== nothing || pkg.repo.subdir !== nothing
         pkgerror("`repo` is a private field of PackageSpec and should not be set directly")
     end
-    pkg.repo = Types.GitRepo(rev = pkg.rev, source = pkg.url !== nothing ? pkg.url : pkg.path,
-                         subdir = pkg.subdir)
+    pkg.repo = Types.GitRepo(
+        rev = pkg.rev, source = pkg.url !== nothing ? pkg.url : pkg.path,
+        subdir = pkg.subdir
+    )
     pkg.path = nothing
     pkg.tree_hash = nothing
     if pkg.version === nothing
@@ -1689,7 +1738,7 @@ function handle_package_input!(pkg::PackageSpec)
     if !(pkg.version isa VersionNumber)
         pkg.version = VersionSpec(pkg.version)
     end
-    pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
+    return pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
 function upgrade_manifest(man_path::String)
@@ -1698,7 +1747,7 @@ function upgrade_manifest(man_path::String)
     Pkg.activate(dir) do
         Pkg.upgrade_manifest()
     end
-    mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
+    return mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
 end
 function upgrade_manifest(ctx::Context = Context())
     before_format = ctx.env.manifest.manifest_format

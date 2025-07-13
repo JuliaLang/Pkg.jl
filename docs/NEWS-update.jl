@@ -7,11 +7,11 @@ s = read(NEWS, String)
 
 m = match(r"\[#[0-9]+\]:", s)
 if m !== nothing
-    s = s[1:m.offset-1]
+    s = s[1:(m.offset - 1)]
 end
 
 footnote(n) = "[#$n]: https://github.com/JuliaLang/Pkg.jl/issues/$n"
-N = map(m -> parse(Int,m.captures[1]), eachmatch(r"\[#([0-9]+)\]", s))
+N = map(m -> parse(Int, m.captures[1]), eachmatch(r"\[#([0-9]+)\]", s))
 foots = join(map(footnote, sort!(unique(N))), "\n")
 
 open(NEWS, "w") do f

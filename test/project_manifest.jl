@@ -10,7 +10,7 @@ temp_pkg_dir() do project_path
             path = copy_test_package(dir, "monorepo")
             cd(path) do
                 with_current_env() do
-                    Pkg.develop(path="packages/B")
+                    Pkg.develop(path = "packages/B")
                 end
             end
             # test subpackage instantiates/tests
@@ -24,7 +24,7 @@ temp_pkg_dir() do project_path
             # to make those Manifest changes "stick" before adding Test.
             cd(joinpath(dir, "monorepo", "packages", "C")) do
                 with_current_env() do
-                    Pkg.develop(path="../D") # add unregistered local dependency
+                    Pkg.develop(path = "../D") # add unregistered local dependency
                     Pkg.test()
                 end
             end
@@ -36,7 +36,7 @@ temp_pkg_dir() do project_path
             @test haskey(pkgC.deps, "D")
             cd(joinpath(dir, "monorepo")) do
                 with_current_env() do
-                    Pkg.develop(path="packages/C")
+                    Pkg.develop(path = "packages/C")
                     Pkg.add("Test")
                     Pkg.test()
                 end

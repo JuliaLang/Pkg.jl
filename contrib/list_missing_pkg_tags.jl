@@ -7,7 +7,7 @@ const PKG_REPO_URL = "https://github.com/JuliaLang/Pkg.jl.git"
 const PKG_REPO_DIR = "Pkg.jl"
 
 function checkout_or_update_repo(url, dir)
-    if isdir(dir)
+    return if isdir(dir)
         println("Updating existing repository: $dir")
         repo = LibGit2.GitRepo(dir)
         LibGit2.fetch(repo)
@@ -33,7 +33,7 @@ function extract_pkg_sha1(text::AbstractString)
 end
 
 function get_commit_hash_for_pkg_version(repo, tag)
-    try
+    return try
         tag_ref = LibGit2.GitReference(repo, "refs/tags/" * tag)
         LibGit2.checkout!(repo, string(LibGit2.GitHash(LibGit2.peel(tag_ref))))
         version_file = joinpath(JULIA_REPO_DIR, PKG_VERSION_PATH)
@@ -78,7 +78,7 @@ cd(tempdir) do
     missing_versions = filter(v -> v ∉ pkg_tags, collect(keys(version_commit_map)))
 
     # Sort versions numerically
-    sort!(missing_versions, by=VersionNumber)
+    sort!(missing_versions, by = VersionNumber)
 
     # Generate `git tag` commands
     println("\nGit tag commands for missing Pkg.jl versions:")

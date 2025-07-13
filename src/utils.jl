@@ -1,10 +1,10 @@
 # "Precompiling" is the longest operation
 const pkgstyle_indent = textwidth(string(:Precompiling))
 
-function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false; color=:green)
+function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool = false; color = :green)
     indent = ignore_indent ? 0 : pkgstyle_indent
-    @lock io begin
-        printstyled(io, lpad(string(cmd), indent), color=color, bold=true)
+    return @lock io begin
+        printstyled(io, lpad(string(cmd), indent), color = color, bold = true)
         println(io, " ", text)
     end
 end
@@ -71,7 +71,7 @@ Either rename the directory at `temp_dir` to `new_path` and set it to read-only
 or if `new_path` already exists try to do nothing. Both `temp_dir` and `new_path` must
 be on the same filesystem.
 """
-function mv_temp_dir_retries(temp_dir::String, new_path::String; set_permissions::Bool=true)::Nothing
+function mv_temp_dir_retries(temp_dir::String, new_path::String; set_permissions::Bool = true)::Nothing
     # Sometimes a rename can fail because the temp_dir is locked by
     # anti-virus software scanning the new files.
     # In this case we want to sleep and try again.
@@ -108,13 +108,14 @@ function mv_temp_dir_retries(temp_dir::String, new_path::String; set_permissions
             isdir(new_path) && return
             if retry < max_num_retries && err ∈ (Base.UV_EACCES, Base.UV_EPERM, Base.UV_EBUSY)
                 sleep(sleep_amount)
-                sleep_amount = min(sleep_amount*2.0, max_sleep_amount)
+                sleep_amount = min(sleep_amount * 2.0, max_sleep_amount)
                 retry += 1
             else
                 Base.uv_error("rename of $(repr(temp_dir)) to $(repr(new_path))", err)
             end
         end
     end
+    return
 end
 
 # try to call realpath on as much as possible
@@ -134,14 +135,16 @@ end
 
 # Windows sometimes throw on `isdir`...
 function isdir_nothrow(path::String)
-    try isdir(path)
+    return try
+        isdir(path)
     catch e
         false
     end
 end
 
 function isfile_nothrow(path::String)
-    try isfile(path)
+    return try
+        isfile(path)
     catch e
         false
     end
@@ -191,4 +194,5 @@ function discover_repo(path::AbstractString)
         parent == dir && return nothing
         dir = parent
     end
+    return
 end

@@ -17,10 +17,10 @@ function do_test()
     # Test that we can use a variable, not just a literal:
     hello_world = "HelloWorldC"
     hello_world_exe = joinpath(@artifact_str(hello_world), "bin", "hello_world")
-    if Sys.iswindows()                                                                                    
+    if Sys.iswindows()
         hello_world_exe = "$(hello_world_exe).exe"
     end
-    @test isfile(hello_world_exe)
+    return @test isfile(hello_world_exe)
 end
 
 end
