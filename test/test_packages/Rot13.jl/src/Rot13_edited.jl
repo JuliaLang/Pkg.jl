@@ -1,7 +1,7 @@
 module Rot13
 
 function (@main)(ARGS)
-    println("Updated!")
+    return println("Updated!")
 end
 
 end # module Rot13

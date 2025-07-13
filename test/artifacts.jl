@@ -19,7 +19,7 @@ using ..Utils
 # important to keep hashes stable across platforms that have different umasks, changing
 # the permissions within a tree hash, breaking our tests.
 function create_artifact_chmod(f::Function)
-    create_artifact() do path
+    return create_artifact() do path
         f(path)
 
         # Change all files to have 644 permissions, leave directories alone
@@ -36,51 +36,59 @@ end
     # We're going to ensure that our artifact creation does in fact give git-tree-sha1's.
     creators = [
         # First test the empty artifact
-        (path -> begin
-            # add no contents
-        end, "4b825dc642cb6eb9a060e54bf8d69288fbee4904"),
+        (
+            path -> begin
+                # add no contents
+            end, "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+        ),
 
         # Next test creating a single file
-        (path -> begin
-            open(joinpath(path, "foo"), "w") do io
-                print(io, "Hello, world!")
-            end
-        end, "339aad93c0f854604248ea3b7c5b7edea20625a9"),
+        (
+            path -> begin
+                open(joinpath(path, "foo"), "w") do io
+                    print(io, "Hello, world!")
+                end
+            end, "339aad93c0f854604248ea3b7c5b7edea20625a9",
+        ),
 
         # Next we will test creating multiple files
-        (path -> begin
-            open(joinpath(path, "foo1"), "w") do io
-                print(io, "Hello")
-            end
-            open(joinpath(path, "foo2"), "w") do io
-                print(io, "world!")
-            end
-        end, "98cda294312216b19e2a973e9c291c0f5181c98c"),
+        (
+            path -> begin
+                open(joinpath(path, "foo1"), "w") do io
+                    print(io, "Hello")
+                end
+                open(joinpath(path, "foo2"), "w") do io
+                    print(io, "world!")
+                end
+            end, "98cda294312216b19e2a973e9c291c0f5181c98c",
+        ),
 
         # Finally, we will have nested directories and all that good stuff
-        (path -> begin
-            mkpath(joinpath(path, "bar", "bar"))
-            open(joinpath(path, "bar", "bar", "foo1"), "w") do io
-                print(io, "Hello")
-            end
-            open(joinpath(path, "bar", "foo2"), "w") do io
-                print(io, "world!")
-            end
-            open(joinpath(path, "foo3"), "w") do io
-                print(io, "baz!")
-            end
+        (
+            path -> begin
+                mkpath(joinpath(path, "bar", "bar"))
+                open(joinpath(path, "bar", "bar", "foo1"), "w") do io
+                    print(io, "Hello")
+                end
+                open(joinpath(path, "bar", "foo2"), "w") do io
+                    print(io, "world!")
+                end
+                open(joinpath(path, "foo3"), "w") do io
+                    print(io, "baz!")
+                end
 
-            # Empty directories do nothing to effect the hash, so we create one with a
-            # random name to prove that it does not get hashed into the rest.  Also, it
-            # turns out that life is cxomplex enough that we need to test the nested
-            # empty directories case as well.
-            rand_dir = joinpath(path, Random.randstring(8), "inner")
-            mkpath(rand_dir)
+                # Empty directories do nothing to effect the hash, so we create one with a
+                # random name to prove that it does not get hashed into the rest.  Also, it
+                # turns out that life is cxomplex enough that we need to test the nested
+                # empty directories case as well.
+                rand_dir = joinpath(path, Random.randstring(8), "inner")
+                mkpath(rand_dir)
 
-            # Symlinks are not followed, even if they point to directories
-            symlink("foo3", joinpath(path, "foo3_link"))
-            symlink("../bar", joinpath(path, "bar", "infinite_link"))
-        end, "86a1ce580587d5851fdfa841aeb3c8d55663f6f9"),
+                # Symlinks are not followed, even if they point to directories
+                symlink("foo3", joinpath(path, "foo3_link"))
+                symlink("../bar", joinpath(path, "bar", "infinite_link"))
+            end, "86a1ce580587d5851fdfa841aeb3c8d55663f6f9",
+        ),
     ]
 
     # Enable the following code snippet to figure out the correct gitsha's:
@@ -145,7 +153,7 @@ end
                 @test !iszero(filemode(joinpath(artifact_dir, dir_link)) & 0o222)
                 # Make sure we can delete the artifact directory without having
                 # to manually change permissions
-                rm(artifact_dir; recursive=true)
+                rm(artifact_dir; recursive = true)
             end
         end
     end
@@ -166,10 +174,10 @@ end
     # First, let's test our ability to find Artifacts.toml files;
     ATS = joinpath(@__DIR__, "test_packages", "ArtifactTOMLSearch")
     test_modules = [
-        joinpath(ATS, "pkg.jl") =>  joinpath(ATS, "Artifacts.toml"),
-        joinpath(ATS, "sub_module", "pkg.jl") =>  joinpath(ATS, "Artifacts.toml"),
-        joinpath(ATS, "sub_package", "pkg.jl") =>  joinpath(ATS, "sub_package", "Artifacts.toml"),
-        joinpath(ATS, "julia_artifacts_test", "pkg.jl") =>  joinpath(ATS, "julia_artifacts_test", "JuliaArtifacts.toml"),
+        joinpath(ATS, "pkg.jl") => joinpath(ATS, "Artifacts.toml"),
+        joinpath(ATS, "sub_module", "pkg.jl") => joinpath(ATS, "Artifacts.toml"),
+        joinpath(ATS, "sub_package", "pkg.jl") => joinpath(ATS, "sub_package", "Artifacts.toml"),
+        joinpath(ATS, "julia_artifacts_test", "pkg.jl") => joinpath(ATS, "julia_artifacts_test", "JuliaArtifacts.toml"),
         joinpath(@__DIR__, "test_packages", "BasicSandbox", "src", "Foo.jl") => nothing,
     ]
     for (test_src, artifacts_toml) in test_modules
@@ -229,7 +237,7 @@ end
         end
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2)
         @test artifact_hash("foo_txt", artifacts_toml) == hash
-        bind_artifact!(artifacts_toml, "foo_txt", hash2; force=true)
+        bind_artifact!(artifacts_toml, "foo_txt", hash2; force = true)
         @test artifact_hash("foo_txt", artifacts_toml) == hash2
 
         # Test that we can un-bind
@@ -245,25 +253,25 @@ end
         # First, test the binding of things with various platforms and overwriting and such works properly
         linux64 = Platform("x86_64", "linux")
         win32 = Platform("i686", "windows")
-        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=linux64)
-        @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash
-        @test artifact_hash("foo_txt", artifacts_toml; platform=Platform("x86_64", "macos")) == nothing
-        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64)
-        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=win32)
-        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info=download_info, platform=linux64, force=true)
-        @test artifact_hash("foo_txt", artifacts_toml; platform=linux64) == hash2
-        @test artifact_hash("foo_txt", artifacts_toml; platform=win32) == hash
-        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=linux64) == artifact_path(hash2)
-        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=win32) == artifact_path(hash)
+        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info = download_info, platform = linux64)
+        @test artifact_hash("foo_txt", artifacts_toml; platform = linux64) == hash
+        @test artifact_hash("foo_txt", artifacts_toml; platform = Platform("x86_64", "macos")) == nothing
+        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info = download_info, platform = linux64)
+        bind_artifact!(artifacts_toml, "foo_txt", hash; download_info = download_info, platform = win32)
+        bind_artifact!(artifacts_toml, "foo_txt", hash2; download_info = download_info, platform = linux64, force = true)
+        @test artifact_hash("foo_txt", artifacts_toml; platform = linux64) == hash2
+        @test artifact_hash("foo_txt", artifacts_toml; platform = win32) == hash
+        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform = linux64) == artifact_path(hash2)
+        @test ensure_artifact_installed("foo_txt", artifacts_toml; platform = win32) == artifact_path(hash)
 
         # Default HostPlatform() adds a compare_strategy key that doesn't get picked up from
         # the Artifacts.toml
         testhost = Platform("x86_64", "linux", Dict("libstdcxx_version" => "1.2.3"))
         BinaryPlatforms.set_compare_strategy!(testhost, "libstdcxx_version", BinaryPlatforms.compare_version_cap)
-        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=testhost)
+        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash; download_info = download_info, platform = testhost)
 
         # Next, check that we can get the download_info properly:
-        meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
+        meta = artifact_meta("foo_txt", artifacts_toml; platform = win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
         @test !haskey(meta["download"][1], "size")
         @test meta["download"][2]["sha256"] == "a"^64
@@ -298,20 +306,24 @@ end
     @test_logs (:error, r"malformed, must be array or dict!") artifact_meta("broken_artifact", joinpath(badifact_dir, "not_a_table.toml"))
 
     # Next, test incorrect download errors
-    for ignore_hash in (false, true); withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do; mktempdir() do dir
-        with_artifacts_directory(dir) do
-            @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
-            if !ignore_hash
-                @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-            else
-                @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any  begin
-                    path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
-                    @test endswith(path, "0000000000000000000000000000000000000000")
-                    @test isdir(path)
+    for ignore_hash in (false, true)
+        withenv("JULIA_PKG_IGNORE_HASHES" => ignore_hash ? "1" : nothing) do;
+            mktempdir() do dir
+                with_artifacts_directory(dir) do
+                    @test artifact_meta("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml")) != nothing
+                    if !ignore_hash
+                        @test_throws ErrorException ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                    else
+                        @test_logs (:error, r"Tree Hash Mismatch!") match_mode = :any  begin
+                            path = ensure_artifact_installed("broken_artifact", joinpath(badifact_dir, "incorrect_gitsha.toml"))
+                            @test endswith(path, "0000000000000000000000000000000000000000")
+                            @test isdir(path)
+                        end
                     end
                 end
             end
-    end end end
+        end
+    end
 
     mktempdir() do dir
         with_artifacts_directory(dir) do
@@ -348,20 +360,24 @@ end
         with_pkg_env(project_path) do
             path = git_init_package(project_path, joinpath(@__DIR__, "test_packages", "ArtifactInstallation"))
             add_this_pkg()
-            Pkg.add(Pkg.Types.PackageSpec(
-                name="ArtifactInstallation",
-                uuid=Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"),
-                path=path,
-            ))
+            Pkg.add(
+                Pkg.Types.PackageSpec(
+                    name = "ArtifactInstallation",
+                    uuid = Base.UUID("02111abe-2050-1119-117e-b30112b5bdc4"),
+                    path = path,
+                )
+            )
 
             # Run test harness
             Pkg.test("ArtifactInstallation")
 
             # Also manually do it
-            Core.eval(Module(:__anon__), quote
-                using ArtifactInstallation
-                do_test()
-            end)
+            Core.eval(
+                Module(:__anon__), quote
+                    using ArtifactInstallation
+                    do_test()
+                end
+            )
         end
     end
 
@@ -370,7 +386,7 @@ end
         copy_test_package(project_path, "ArtifactInstallation")
         Pkg.activate(joinpath(project_path, "ArtifactInstallation"))
         add_this_pkg()
-        Pkg.instantiate(; verbose=true)
+        Pkg.instantiate(; verbose = true)
 
         # Manual test that artifact is installed by instantiate()
         artifacts_toml = joinpath(project_path, "ArtifactInstallation", "Artifacts.toml")
@@ -386,21 +402,21 @@ end
         # Try to install all artifacts for the given platform, knowing full well that
         # HelloWorldC will fail to match any artifact to this bogus platform
         bogus_platform = Platform("bogus", "linux")
-        artifacts = select_downloadable_artifacts(artifacts_toml; platform=bogus_platform)
+        artifacts = select_downloadable_artifacts(artifacts_toml; platform = bogus_platform)
         for name in keys(artifacts)
-            ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=bogus_platform)
+            ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform = bogus_platform)
         end
 
         # Test that HelloWorldC doesn't even show up
-        hwc_hash = artifact_hash("HelloWorldC", artifacts_toml; platform=bogus_platform)
+        hwc_hash = artifact_hash("HelloWorldC", artifacts_toml; platform = bogus_platform)
         @test hwc_hash === nothing
 
         # Test that socrates shows up, but is not installed, because it's lazy
-        socrates_hash = artifact_hash("socrates", artifacts_toml; platform=bogus_platform)
+        socrates_hash = artifact_hash("socrates", artifacts_toml; platform = bogus_platform)
         @test !artifact_exists(socrates_hash)
 
         # Test that collapse_the_symlink is installed
-        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform=bogus_platform)
+        cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml; platform = bogus_platform)
         @test artifact_exists(cts_hash)
     end
 
@@ -472,22 +488,24 @@ end
             artifacts_toml = joinpath(ap_path, "Artifacts.toml")
             p = HostPlatform()
             p["flooblecrank"] = flooblecrank_status
-            flooblecrank_hash = artifact_hash("gooblebox", artifacts_toml; platform=p)
+            flooblecrank_hash = artifact_hash("gooblebox", artifacts_toml; platform = p)
             @test flooblecrank_hash == right_hash
             @test artifact_exists(flooblecrank_hash)
 
             # Test that if we load the package, it knows how to find its own artifact,
             # because it feeds the right `Platform` object through to `@artifact_str()`
-            cmd = addenv(`$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
-                         "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
-                         "FLOOBLECRANK" => flooblecrank_status)
+            cmd = addenv(
+                `$(Base.julia_cmd()) --color=yes --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
+                "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
+                "FLOOBLECRANK" => flooblecrank_status
+            )
             using_output = chomp(String(read(cmd)))
             @test success(cmd)
             @test artifact_path(right_hash) == using_output
 
             tmpdir = mktempdir()
             mkpath("$tmpdir/foo/$(flooblecrank_status)")
-            rm("$tmpdir/foo/$(flooblecrank_status)"; recursive=true, force=true)
+            rm("$tmpdir/foo/$(flooblecrank_status)"; recursive = true, force = true)
             cp(project_path, "$tmpdir/foo/$(flooblecrank_status)")
             cp(Base.DEPOT_PATH[1], "$tmpdir/foo/$(flooblecrank_status)/depot")
         end
@@ -512,7 +530,7 @@ end
 
         p = HostPlatform()
         p["flooblecrank"] = "engaged"
-        add_this_pkg(; platform=p)
+        add_this_pkg(; platform = p)
         @test isdir(artifact_path(engaged_hash))
         @test !isdir(artifact_path(disengaged_hash))
     end
@@ -538,7 +556,7 @@ end
 
         p = HostPlatform()
         p["flooblecrank"] = "engaged"
-        Pkg.API.instantiate(; platform=p)
+        Pkg.API.instantiate(; platform = p)
 
         @test isdir(artifact_path(engaged_hash))
         @test isdir(artifact_path(disengaged_hash))
@@ -602,7 +620,7 @@ end
         # This should reap the `die_hash` immediately, as it has already been moved to
         # the orphaned list.
         sleep(0.2)
-        Pkg.gc(;collect_delay=Millisecond(100))
+        Pkg.gc(; collect_delay = Millisecond(100))
         @test artifact_exists(live_hash)
         @test !artifact_exists(die_hash)
 
@@ -617,7 +635,7 @@ end
         # Next, unbind the live_hash, then run with collect_delay=0, and ensure that
         # things are cleaned up immediately.
         unbind_artifact!(artifacts_toml, "live")
-        Pkg.gc(;collect_delay=Second(0))
+        Pkg.gc(; collect_delay = Second(0))
         @test !artifact_exists(live_hash)
         @test !artifact_exists(die_hash)
     end
@@ -693,7 +711,7 @@ end
         end
 
         # Force Pkg to reload what it knows about artifact overrides
-        @inferred Union{Nothing,Dict{Symbol,Any}} Pkg.Artifacts.load_overrides(;force=true)
+        @inferred Union{Nothing, Dict{Symbol, Any}} Pkg.Artifacts.load_overrides(; force = true)
 
         # Verify that the hash-based override worked
         @test artifact_path(baz_hash) == artifact_path(bar_hash)
@@ -703,17 +721,21 @@ end
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
             copy_test_package(depot_container, "ArtifactOverrideLoading")
-            Pkg.develop(Pkg.Types.PackageSpec(
-                name="ArtifactOverrideLoading",
-                uuid=aol_uuid,
-                path=joinpath(depot_container, "ArtifactOverrideLoading"),
-            ))
+            Pkg.develop(
+                Pkg.Types.PackageSpec(
+                    name = "ArtifactOverrideLoading",
+                    uuid = aol_uuid,
+                    path = joinpath(depot_container, "ArtifactOverrideLoading"),
+                )
+            )
 
-            (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
-                # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
-                using ArtifactOverrideLoading
-                arty_path, barty_path
-            end)
+            (arty_path, barty_path) = Core.eval(
+                Module(:__anon__), quote
+                    # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
+                    using ArtifactOverrideLoading
+                    arty_path, barty_path
+                end
+            )
 
             @test arty_path == artifact_path(bar_hash)
             @test barty_path == barty_override_path
@@ -736,7 +758,7 @@ end
         end
 
         # Force Pkg to reload what it knows about artifact overrides
-        Pkg.Artifacts.load_overrides(;force=true)
+        Pkg.Artifacts.load_overrides(; force = true)
 
         # Force Julia to re-load ArtifactOverrideLoading from scratch
         pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
@@ -751,10 +773,12 @@ end
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
             # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
-            (arty_path, barty_path) = Core.eval(Module(:__anon__), quote
-                using ArtifactOverrideLoading
-                arty_path, barty_path
-            end)
+            (arty_path, barty_path) = Core.eval(
+                Module(:__anon__), quote
+                    using ArtifactOverrideLoading
+                    arty_path, barty_path
+                end
+            )
 
             @test arty_path == barty_override_path
             @test barty_path == barty_override_path
@@ -765,7 +789,7 @@ end
             open(joinpath(depot1, "artifacts", "Overrides.toml"), "w") do io
                 TOML.print(io, overrides)
             end
-            @test_logs (:error, msg) match_mode=:any Pkg.Artifacts.load_overrides(;force=true)
+            @test_logs (:error, msg) match_mode = :any Pkg.Artifacts.load_overrides(; force = true)
         end
 
         # Mapping to a non-absolute path or SHA1 hash
@@ -790,7 +814,7 @@ end
         empty!(DEPOT_PATH)
         append!(DEPOT_PATH, old_depot_path)
         Base.append_bundled_depot_path!(DEPOT_PATH)
-        Pkg.Artifacts.load_overrides(;force=true)
+        Pkg.Artifacts.load_overrides(; force = true)
     end
 end
 
@@ -809,7 +833,7 @@ end
 @testset "installing artifacts when symlinks are copied" begin
     # copy symlinks to simulate the typical Microsoft Windows user experience where
     # developer mode is not enabled (no admin rights)
-    withenv("BINARYPROVIDER_COPYDEREF"=>"true", "JULIA_PKG_IGNORE_HASHES"=>"true") do
+    withenv("BINARYPROVIDER_COPYDEREF" => "true", "JULIA_PKG_IGNORE_HASHES" => "true") do
         temp_pkg_dir() do tmpdir
             artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
             cp(joinpath(@__DIR__, "test_packages", "ArtifactInstallation", "Artifacts.toml"), artifacts_toml)
@@ -819,12 +843,12 @@ end
                 local collapse_url = meta["download"][1]["url"]
                 local collapse_hash = meta["download"][1]["sha256"]
                 # Because "BINARYPROVIDER_COPYDEREF"=>"true", this will copy symlinks.
-                download_verify_unpack(collapse_url, collapse_hash, dir; verbose=true, ignore_existence=true)
+                download_verify_unpack(collapse_url, collapse_hash, dir; verbose = true, ignore_existence = true)
             end
             cts_hash = artifact_hash("collapse_the_symlink", artifacts_toml)
             @test !artifact_exists(cts_hash)
             @test artifact_exists(cts_real_hash)
-            @test_logs (:error, r"Tree Hash Mismatch!") match_mode=:any Pkg.instantiate()
+            @test_logs (:error, r"Tree Hash Mismatch!") match_mode = :any Pkg.instantiate()
             @test artifact_exists(cts_hash)
             # Make sure existing artifacts don't get deleted.
             @test artifact_exists(cts_real_hash)

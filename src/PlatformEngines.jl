@@ -20,7 +20,7 @@ function exe7z()
         return p7zip_jll.p7zip()
     end
 
-    lock(EXE7Z_LOCK) do
+    return lock(EXE7Z_LOCK) do
         if !isassigned(EXE7Z)
             EXE7Z[] = find7z()
         end
@@ -44,9 +44,9 @@ is_secure_url(url::AbstractString) =
     occursin(r"^(https://|\w+://(127\.0\.0\.1|localhost)(:\d+)?($|/))"i, url)
 
 function get_server_dir(
-    url :: AbstractString,
-    server :: Union{AbstractString, Nothing} = pkg_server(),
-)
+        url::AbstractString,
+        server::Union{AbstractString, Nothing} = pkg_server(),
+    )
     server === nothing && return
     url == server || startswith(url, "$server/") || return
     m = match(r"^\w+://([^\\/]+)(?:$|/)", server)
@@ -60,7 +60,7 @@ function get_server_dir(
     return joinpath(depots1(), "servers", dir)
 end
 
-const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex},Any}[]
+const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex}, Any}[]
 
 function handle_auth_error(url, err; verbose::Bool = false)
     handled, should_retry = false, false
@@ -111,23 +111,23 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     server_dir = get_server_dir(url)
     server_dir === nothing && return
     auth_file = joinpath(server_dir, "auth.toml")
-    isfile(auth_file) || return handle_auth_error(url, "no-auth-file"; verbose=verbose)
+    isfile(auth_file) || return handle_auth_error(url, "no-auth-file"; verbose = verbose)
     # TODO: check for insecure auth file permissions
     if !is_secure_url(url)
-        @warn "refusing to send auth info over insecure connection" url=url
-        return handle_auth_error(url, "insecure-connection"; verbose=verbose)
+        @warn "refusing to send auth info over insecure connection" url = url
+        return handle_auth_error(url, "insecure-connection"; verbose = verbose)
     end
     # parse the auth file
     auth_info = try
         TOML.parsefile(auth_file)
     catch err
-        @error "malformed auth file" file=auth_file err=err
-        return handle_auth_error(url, "malformed-file"; verbose=verbose)
+        @error "malformed auth file" file = auth_file err = err
+        return handle_auth_error(url, "malformed-file"; verbose = verbose)
     end
     # check for an auth token
     if !haskey(auth_info, "access_token")
-        @warn "auth file without access_token field" file=auth_file
-        return handle_auth_error(url, "no-access-token"; verbose=verbose)
+        @warn "auth file without access_token field" file = auth_file
+        return handle_auth_error(url, "no-access-token"; verbose = verbose)
     end
     auth_token = auth_info["access_token"]::String
     auth_header = "Authorization" => "Bearer $auth_token"
@@ -141,44 +141,46 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     end
     # if token is good until ten minutes from now, use it
     time_now = time()
-    if expires_at ≥ time_now + 10*60 # ten minutes
+    if expires_at ≥ time_now + 10 * 60 # ten minutes
         return auth_header
     end
     if !haskey(auth_info, "refresh_url") || !haskey(auth_info, "refresh_token")
-        if expires_at ≤ time_now
-            @warn "expired auth without refresh keys" file=auth_file
+        if expires_at ≤ time_now
+            @warn "expired auth without refresh keys" file = auth_file
         end
         # try it anyway since we can't refresh
-        return something(handle_auth_error(url, "no-refresh-key"; verbose=verbose), auth_header)
+        return something(handle_auth_error(url, "no-refresh-key"; verbose = verbose), auth_header)
     end
     refresh_url = auth_info["refresh_url"]::String
     if !is_secure_url(refresh_url)
-        @warn "ignoring insecure auth refresh URL" url=refresh_url
-        return something(handle_auth_error(url, "insecure-refresh-url"; verbose=verbose), auth_header)
+        @warn "ignoring insecure auth refresh URL" url = refresh_url
+        return something(handle_auth_error(url, "insecure-refresh-url"; verbose = verbose), auth_header)
     end
-    verbose && @info "Refreshing expired auth token..." file=auth_file
+    verbose && @info "Refreshing expired auth token..." file = auth_file
     tmp = tempname()
     refresh_token = auth_info["refresh_token"]::String
     refresh_auth = "Authorization" => "Bearer $refresh_token"
-    try download(refresh_url, tmp, auth_header=refresh_auth, verbose=verbose)
+    try
+        download(refresh_url, tmp, auth_header = refresh_auth, verbose = verbose)
     catch err
-        @warn "token refresh failure" file=auth_file url=refresh_url err=err
-        rm(tmp, force=true)
-        return handle_auth_error(url, "token-refresh-failed"; verbose=verbose)
+        @warn "token refresh failure" file = auth_file url = refresh_url err = err
+        rm(tmp, force = true)
+        return handle_auth_error(url, "token-refresh-failed"; verbose = verbose)
     end
-    auth_info = try TOML.parsefile(tmp)
+    auth_info = try
+        TOML.parsefile(tmp)
     catch err
-        @warn "discarding malformed auth file" url=refresh_url err=err
-        rm(tmp, force=true)
-        return something(handle_auth_error(url, "malformed-file"; verbose=verbose), auth_header)
+        @warn "discarding malformed auth file" url = refresh_url err = err
+        rm(tmp, force = true)
+        return something(handle_auth_error(url, "malformed-file"; verbose = verbose), auth_header)
     end
     if !haskey(auth_info, "access_token")
         if haskey(auth_info, "refresh_token")
             auth_info["refresh_token"] = "*"^64
         end
-        @warn "discarding auth file without access token" auth=auth_info
-        rm(tmp, force=true)
-        return something(handle_auth_error(url, "no-access-token"; verbose=verbose), auth_header)
+        @warn "discarding auth file without access token" auth = auth_info
+        rm(tmp, force = true)
+        return something(handle_auth_error(url, "no-access-token"; verbose = verbose), auth_header)
     end
     if haskey(auth_info, "expires_in")
         expires_in = auth_info["expires_in"]
@@ -188,7 +190,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
             auth_info["expires_at"] = expires_at
         end
     end
-    atomic_toml_write(auth_file, auth_info, sorted=true)
+    atomic_toml_write(auth_file, auth_info, sorted = true)
     access_token = auth_info["access_token"]::String
     return "Authorization" => "Bearer $access_token"
 end
@@ -211,7 +213,7 @@ const CI_VARIABLES = [
 ]
 
 function get_metadata_headers(url::AbstractString)
-    headers = Pair{String,String}[]
+    headers = Pair{String, String}[]
     server = pkg_server()
     server_dir = get_server_dir(url, server)
     server_dir === nothing && return headers
@@ -235,7 +237,7 @@ function get_metadata_headers(url::AbstractString)
         m === nothing && continue
         val = strip(val)
         isempty(val) && continue
-        words = split(m.captures[1], '_', keepempty=false)
+        words = split(m.captures[1], '_', keepempty = false)
         isempty(words) && continue
         hdr = "Julia-" * join(map(titlecase, words), '-')
         any(hdr == k for (k, v) in headers) && continue
@@ -245,16 +247,16 @@ function get_metadata_headers(url::AbstractString)
 end
 
 function download(
-    url::AbstractString,
-    dest::AbstractString;
-    verbose::Bool = false,
-    headers::Vector{Pair{String,String}} = Pair{String,String}[],
-    auth_header::Union{Pair{String,String}, Nothing} = nothing,
-    io::IO=stderr_f(),
-    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
-)
+        url::AbstractString,
+        dest::AbstractString;
+        verbose::Bool = false,
+        headers::Vector{Pair{String, String}} = Pair{String, String}[],
+        auth_header::Union{Pair{String, String}, Nothing} = nothing,
+        io::IO = stderr_f(),
+        progress::Union{Nothing, Function} = nothing, # (total, now) -> nothing
+    )
     if auth_header === nothing
-        auth_header = get_auth_header(url, verbose=verbose)
+        auth_header = get_auth_header(url, verbose = verbose)
     end
     if auth_header !== nothing
         push!(headers, auth_header)
@@ -267,9 +269,9 @@ function download(
     progress = if !isnothing(progress)
         progress
     elseif do_fancy
-        bar = MiniProgressBar(header="Downloading", color=Base.info_color())
+        bar = MiniProgressBar(header = "Downloading", color = Base.info_color())
         start_progress(io, bar)
-        let bar=bar
+        let bar = bar
             (total, now) -> begin
                 bar.max = total
                 bar.current = now
@@ -283,7 +285,7 @@ function download(
     else
         nothing
     end
-    try
+    return try
         Downloads.download(url, dest; headers, progress)
     finally
         do_fancy && end_progress(io, bar)
@@ -318,14 +320,14 @@ set to `false`) the downloading process will be completely silent.  If
 printed in addition to messages regarding downloading.
 """
 function download_verify(
-    url::AbstractString,
-    hash::Union{AbstractString, Nothing},
-    dest::AbstractString;
-    verbose::Bool = false,
-    force::Bool = false,
-    quiet_download::Bool = false,
-    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
-)
+        url::AbstractString,
+        hash::Union{AbstractString, Nothing},
+        dest::AbstractString;
+        verbose::Bool = false,
+        force::Bool = false,
+        quiet_download::Bool = false,
+        progress::Union{Nothing, Function} = nothing, # (total, now) -> nothing
+    )
     # Whether the file existed in the first place
     file_existed = false
 
@@ -337,7 +339,7 @@ function download_verify(
 
         # verify download, if it passes, return happy.  If it fails, (and
         # `force` is `true`, re-download!)
-        if hash !== nothing && verify(dest, hash; verbose=verbose)
+        if hash !== nothing && verify(dest, hash; verbose = verbose)
             return true
         elseif !force
             error("Verification failed, not overwriting $(dest)")
@@ -351,7 +353,7 @@ function download_verify(
     attempts = 3
     for i in 1:attempts
         try
-            download(url, dest; verbose=verbose || !quiet_download, progress)
+            download(url, dest; verbose = verbose || !quiet_download, progress)
             break
         catch err
             @debug "download and verify failed on attempt $i/$attempts" url dest err
@@ -372,10 +374,10 @@ function download_verify(
             if verbose
                 @info("Continued download didn't work, restarting from scratch")
             end
-            Base.rm(dest; force=true)
+            Base.rm(dest; force = true)
 
             # Download and verify from scratch
-            download(url, dest; verbose=verbose || !quiet_download)
+            download(url, dest; verbose = verbose || !quiet_download)
             if hash !== nothing && !verify(dest, hash; verbose, details)
                 @goto verification_failed
             end
@@ -397,16 +399,16 @@ end
 # TODO: can probably delete this, only affects tests
 function copy_symlinks()
     var = get(ENV, "BINARYPROVIDER_COPYDEREF", "")
-    lowercase(var) in ("true", "t", "yes", "y", "1") ? true :
-    lowercase(var) in ("false", "f", "no", "n", "0") ? false : nothing
+    return lowercase(var) in ("true", "t", "yes", "y", "1") ? true :
+        lowercase(var) in ("false", "f", "no", "n", "0") ? false : nothing
 end
 
 function unpack(
-    tarball_path::AbstractString,
-    dest::AbstractString;
-    verbose::Bool = false,
-)
-    Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
+        tarball_path::AbstractString,
+        dest::AbstractString;
+        verbose::Bool = false,
+    )
+    return Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
 end
 
 """
@@ -414,10 +416,10 @@ end
 
 Compress `src_dir` into a tarball located at `tarball_path`.
 """
-function package(src_dir::AbstractString, tarball_path::AbstractString; io=stderr_f())
-    rm(tarball_path, force=true)
+function package(src_dir::AbstractString, tarball_path::AbstractString; io = stderr_f())
+    rm(tarball_path, force = true)
     cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
-    open(pipeline(cmd, stdout=devnull, stderr=io), write=true) do io
+    return open(pipeline(cmd, stdout = devnull, stderr = io), write = true) do io
         Tar.create(src_dir, io)
     end
 end
@@ -459,17 +461,17 @@ Returns `true` if a tarball was actually unpacked, `false` if nothing was
 changed in the destination prefix.
 """
 function download_verify_unpack(
-    url::AbstractString,
-    hash::Union{AbstractString, Nothing},
-    dest::AbstractString;
-    tarball_path = nothing,
-    ignore_existence::Bool = false,
-    force::Bool = false,
-    verbose::Bool = false,
-    quiet_download::Bool = false,
-    io::IO=stderr_f(),
-    progress::Union{Nothing,Function} = nothing, # (total, now) -> nothing
-)
+        url::AbstractString,
+        hash::Union{AbstractString, Nothing},
+        dest::AbstractString;
+        tarball_path = nothing,
+        ignore_existence::Bool = false,
+        force::Bool = false,
+        verbose::Bool = false,
+        quiet_download::Bool = false,
+        io::IO = stderr_f(),
+        progress::Union{Nothing, Function} = nothing, # (total, now) -> nothing
+    )
     # First, determine whether we should keep this tarball around
     remove_tarball = false
     if tarball_path === nothing
@@ -490,7 +492,7 @@ function download_verify_unpack(
                 return nothing
             end
 
-            return url[dot_idx+1:end]
+            return url[(dot_idx + 1):end]
         end
 
         # If extension of url contains a recognized extension, use it, otherwise use ".gz"
@@ -518,7 +520,7 @@ function download_verify_unpack(
         if verbose
             @info("Removing dest directory $(dest) as source tarball changed")
         end
-        Base.rm(dest; recursive=true, force=true)
+        Base.rm(dest; recursive = true, force = true)
     end
 
     # If the destination path already exists, don't bother to unpack
@@ -535,7 +537,7 @@ function download_verify_unpack(
         if verbose
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
-        isnothing(progress) || progress(10000, 10000; status="unpacking")
+        isnothing(progress) || progress(10000, 10000; status = "unpacking")
         open(`$(exe7z()) x $tarball_path -so`) do io
             Tar.extract(io, dest, copy_symlinks = copy_symlinks())
         end
@@ -543,7 +545,7 @@ function download_verify_unpack(
         if remove_tarball
             Base.rm(tarball_path)
             # Remove cached tarball hash, if it exists.
-            Base.rm(string(tarball_path, ".sha256"); force=true)
+            Base.rm(string(tarball_path, ".sha256"); force = true)
         end
     end
 
@@ -574,9 +576,11 @@ successfully.
 
 If `details` is provided, any pertinent detail will be pushed to it rather than logged.
 """
-function verify(path::AbstractString, hash::AbstractString; verbose::Bool = false,
-                report_cache_status::Bool = false, hash_path::AbstractString="$(path).sha256",
-                details::Union{Vector{String},Nothing} = nothing)
+function verify(
+        path::AbstractString, hash::AbstractString; verbose::Bool = false,
+        report_cache_status::Bool = false, hash_path::AbstractString = "$(path).sha256",
+        details::Union{Vector{String}, Nothing} = nothing
+    )
 
     # Check hash string format
     if !occursin(r"^[0-9a-f]{64}$"i, hash)
@@ -643,7 +647,7 @@ function verify(path::AbstractString, hash::AbstractString; verbose::Bool = fals
     end
 
     if calc_hash != hash
-        msg  = "Hash Mismatch!\n"
+        msg = "Hash Mismatch!\n"
         msg *= "  Expected sha256:   $hash\n"
         msg *= "  Calculated sha256: $calc_hash"
         if isnothing(details)
@@ -688,7 +692,7 @@ function verify_archive_tree_hash(tar_gz::AbstractString, expected_hash::Base.SH
     calc_hash = try
         Base.SHA1(open(Tar.tree_hash, `$(exe7z()) x $tar_gz -so`))
     catch err
-        @warn "unable to decompress and read archive" exception=err
+        @warn "unable to decompress and read archive" exception = err
         return false
     end
     if calc_hash != expected_hash
