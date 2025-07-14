@@ -183,8 +183,10 @@ end
 function discover_repo(path::AbstractString)
     dir = abspath(path)
     stop_dir = homedir()
+    depot = Pkg.depots1()
 
     while true
+        dir == depot && return nothing
         gitdir = joinpath(dir, ".git")
         if isdir(gitdir) || isfile(gitdir)
             return dir
