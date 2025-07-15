@@ -1048,6 +1048,14 @@ end
         @test api == Pkg.add
         @test args == [Pkg.PackageSpec(;name="Example", version="0.5.0")]
         @test isempty(opts)
+        # Add multiple packages with version specifier
+        api, args, opts = first(Pkg.pkg"add Example@0.5.5 Test")
+        @test api == Pkg.add
+        @test length(args) == 2
+        @test args[1].name == "Example"
+        @test args[1].version == "0.5.5"
+        @test args[2].name == "Test"
+        @test isempty(opts)
         # Add as a weakdep.
         api, args, opts = first(Pkg.pkg"add --weak Example")
         @test api == Pkg.add
