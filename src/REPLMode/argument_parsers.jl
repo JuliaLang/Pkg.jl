@@ -366,14 +366,16 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev = false)::Vec
         parsed_rev = false
         while !isempty(args)
             modifier = popfirst!(args)
-            if modifier isa Subdir
+            if modifier isa PackageIdentifier
+                pushfirst!(args, modifier)
+                return
+            elseif modifier isa Subdir
                 if parsed_subdir
                     pkgerror("Multiple subdir specifiers `$args` found.")
                 end
                 pkg.subdir = modifier.dir
-                (isempty(args) || args[1] isa PackageIdentifier) && return
-                modifier = popfirst!(args)
                 parsed_subdir = true
+                (isempty(args) || args[1] isa PackageIdentifier) && return
             elseif modifier isa VersionToken
                 if parsed_version
                     pkgerror("Multiple version specifiers `$args` found.")
