@@ -244,6 +244,7 @@ function develop(ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool=true,
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
+    Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
 
     for pkg in pkgs
         if Types.collides_with_project(ctx.env, pkg)
