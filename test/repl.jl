@@ -590,13 +590,6 @@ end
     @test typeof(pkg_spec) == Pkg.Types.PackageSpec
 end
 
-@testset "parse git url (issue #1935) " begin
-    urls = ["https://github.com/abc/ABC.jl.git", "https://abc.github.io/ABC.jl"]
-    for url in urls
-        @test Pkg.REPLMode.package_lex([Pkg.REPLMode.QString((url), false)]) == [url]
-    end
-end
-
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
         sleep(1.1)

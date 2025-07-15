@@ -6,7 +6,7 @@ module REPLMode
 
 using Markdown, UUIDs, Dates
 
-import ..casesensitive_isdir, ..OFFLINE_MODE, ..linewrap, ..pathrepr
+import ..OFFLINE_MODE, ..linewrap, ..pathrepr
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve, ..Apps
 import ..stdout_f, ..stderr_f
 

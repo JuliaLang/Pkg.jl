@@ -14,7 +14,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io
+import ...Pkg: usable_io, discover_repo
 
 #########
 # Utils #
@@ -350,7 +350,7 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
 end
 
 is_tracking_path(pkg) = pkg.path !== nothing
-is_tracking_repo(pkg) = pkg.repo.source !== nothing
+is_tracking_repo(pkg) = (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)
 is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
@@ -533,7 +533,7 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
         # We only fixup a JLL if the old major/minor/patch matches the new major/minor/patch
         if old_v !== nothing && Base.thispatch(old_v) == Base.thispatch(vers_fix[uuid])
             new_v = vers_fix[uuid]
-            if old_v != new_v
+            if old_v != new_v && haskey(compat_map[uuid], old_v)
                 compat_map[uuid][old_v] = compat_map[uuid][new_v]
                 # Note that we don't delete!(compat_map[uuid], old_v) because we want to keep the compat info around
                 # in case there's JLL version confusion between the sysimage pkgorigins version and manifest
@@ -568,6 +568,10 @@ function resolve_versions!(env::EnvCache, registries::Vector{Registry.RegistryIn
                 deps_fixed
             else
                 d = Dict{String, UUID}()
+                if !haskey(compat_map[pkg.uuid], pkg.version)
+                    available_versions = sort!(collect(keys(compat_map[pkg.uuid])))
+                    pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
+                end
                 for (uuid, _) in compat_map[pkg.uuid][pkg.version]
                     d[names[uuid]]  = uuid
                 end
@@ -2326,7 +2330,9 @@ function test(ctx::Context, pkgs::Vector{PackageSpec};
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
-                Pkg.precompile(; io=ctx.io, configs = flags => cacheflags)
+                # Don't warn about already loaded packages, since we are going to run tests in a new
+                # subprocess anyway.
+                Pkg.precompile(; io=ctx.io, warn_loaded = false, configs = flags => cacheflags)
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
@@ -2901,10 +2907,11 @@ function status(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pk
     old_env = nothing
     if git_diff
         project_dir = dirname(env.project_file)
-        if !ispath(joinpath(project_dir, ".git"))
+        git_repo_dir = discover_repo(project_dir)
+        if git_repo_dir == nothing
             @warn "diff option only available for environments in git repositories, ignoring."
         else
-            old_env = git_head_env(env, project_dir)
+            old_env = git_head_env(env, git_repo_dir)
             if old_env === nothing
                 @warn "could not read project from HEAD, displaying absolute status instead."
             end

@@ -66,7 +66,6 @@ set_readonly(::Nothing) = nothing
 
 # try to call realpath on as much as possible
 function safe_realpath(path)
-    isempty(path) && return path
     if ispath(path)
         try
             return realpath(path)
@@ -75,6 +74,8 @@ function safe_realpath(path)
         end
     end
     a, b = splitdir(path)
+    # path cannot be reduced at the root or drive, avoid stack overflow
+    isempty(b) && return path
     return joinpath(safe_realpath(a), b)
 end
 
@@ -93,13 +94,26 @@ function isfile_nothrow(path::String)
     end
 end
 
-function casesensitive_isdir(dir::String)
-    dir = abspath(dir)
-    lastdir = splitpath(dir)[end]
-    isdir_nothrow(dir) && lastdir in readdir(joinpath(dir, ".."))
-end
 
 ## ordering of UUIDs ##
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
     Base.isless(a::UUID, b::UUID) = a.value < b.value
+end
+
+function discover_repo(path::AbstractString)
+    dir = abspath(path)
+    stop_dir = homedir()
+    depot = Pkg.depots1()
+
+    while true
+        dir == depot && return nothing
+        gitdir = joinpath(dir, ".git")
+        if isdir(gitdir) || isfile(gitdir)
+            return dir
+        end
+        dir == stop_dir && return nothing
+        parent = dirname(dir)
+        parent == dir && return nothing
+        dir = parent
+    end
 end

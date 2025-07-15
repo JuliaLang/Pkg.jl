@@ -1,4 +1,5 @@
 import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
+using UUIDs
 
 struct PackageIdentifier
     val::String
@@ -21,74 +22,335 @@ const PackageToken = Union{PackageIdentifier,
                            Rev,
                            Subdir}
 
-packagetoken(word::String)::PackageToken =
-    first(word) == '@' ? VersionToken(word[2:end]) :
-    first(word) == '#' ? Rev(word[2:end]) :
-    first(word) == ':' ? Subdir(word[2:end]) :
-    PackageIdentifier(word)
+# Check if a string is a valid UUID
+function is_valid_uuid(str::String)
+    try
+        UUID(str)
+        return true
+    catch
+        return false
+    end
+end
 
-###############
-# PackageSpec #
-###############
-"""
-Parser for PackageSpec objects.
-"""
-function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
-    words′ = package_lex(args)
-    words = String[]
-    for word in words′
-        if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", word)) !== nothing
-            push!(words, "https://github.com/$(m.captures[1])/$(m.captures[2])")
-            push!(words, "#$(m.captures[3])")
-        else
-            push!(words, word)
+# Simple URL detection
+function looks_like_url(str::String)
+    return startswith(str, "http://") || startswith(str, "https://") ||
+           startswith(str, "git@") || startswith(str, "ssh://") ||
+           contains(str, ".git")
+end
+
+# Simple path detection
+function looks_like_path(str::String)
+    return contains(str, '/') || contains(str, '\\') || str == "." || str == ".." ||
+           (length(str) >= 2 && isletter(str[1]) && str[2] == ':')  # Windows drive letters
+end
+
+# Check if a string looks like a complete URL
+function looks_like_complete_url(str::String)
+    return (startswith(str, "http://") || startswith(str, "https://") ||
+            startswith(str, "git@") || startswith(str, "ssh://")) &&
+           (contains(str, '.') || contains(str, '/'))
+end
+
+# Check if a colon at given position is part of a Windows drive letter
+function is_windows_drive_colon(input::String, colon_pos::Int)
+    # Windows drive letters are single letters followed by colon at beginning
+    # Examples: "C:", "D:", etc.
+    if colon_pos == 2 && length(input) >= 2
+        first_char = input[1]
+        return isletter(first_char) && input[2] == ':'
+    end
+    return false
+end
+
+# Extract subdir specifier from the end of input (rightmost : that's not a Windows drive letter)
+function extract_subdir(input::String)
+    colon_pos = findlast(':', input)
+    if colon_pos === nothing
+        return input, nothing
+    end
+
+    # Skip Windows drive letters (e.g., C:, D:)
+    if is_windows_drive_colon(input, colon_pos)
+        return input, nothing
+    end
+
+    subdir_part = input[nextind(input, colon_pos):end]
+    remaining = input[1:prevind(input, colon_pos)]
+    return remaining, subdir_part
+end
+
+# Extract revision specifier from input (first # that separates base from revision)
+function extract_revision(input::String)
+    hash_pos = findfirst('#', input)
+    if hash_pos === nothing
+        return input, nothing
+    end
+
+    rev_part = input[nextind(input, hash_pos):end]
+    remaining = input[1:prevind(input, hash_pos)]
+    return remaining, rev_part
+end
+
+# Extract version specifier from the end of input (rightmost @)
+function extract_version(input::String)
+    at_pos = findlast('@', input)
+    if at_pos === nothing
+        return input, nothing
+    end
+
+    version_part = input[nextind(input, at_pos):end]
+    remaining = input[1:prevind(input, at_pos)]
+    return remaining, version_part
+end
+
+# Handle GitHub tree/commit URLs by converting them to standard URL + rev format
+function preprocess_github_tree_commit_url(input::String)
+    m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", input)
+    if m !== nothing
+        base_url = "https://github.com/$(m.captures[1])/$(m.captures[2])"
+        rev = m.captures[3]
+        return [PackageIdentifier(base_url), Rev(rev)]
+    end
+    return nothing
+end
+
+# Check if a colon in a URL string is part of URL structure (not a subdir separator)
+function is_url_structure_colon(input::String, colon_pos::Int)
+    after_colon = input[nextind(input, colon_pos):end]
+
+    # Check for git@host:path syntax
+    if startswith(input, "git@")
+        at_pos = findfirst('@', input)
+        if at_pos !== nothing
+            between_at_colon = input[nextind(input, at_pos):prevind(input, colon_pos)]
+            if !contains(between_at_colon, '/')
+                return true
+            end
         end
     end
-    args = PackageToken[packagetoken(pkgword) for pkgword in words]
 
-    return parse_package_args(args; add_or_dev=add_or_dev)
-end
-
-    # Match a git repository URL. This includes uses of `@` and `:` but
-    # requires that it has `.git` at the end.
-let url = raw"((git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git$)(/)?",
-
-    # Match a `NAME=UUID` package specifier.
-    name_uuid = raw"[^@\#\s:]+\s*=\s*[^@\#\s:]+",
-
-    # Match a `#BRANCH` branch or tag specifier.
-    branch = raw"\#\s*[^@^:\s]+",
-
-    # Match an `@VERSION` version specifier.
-    version = raw"@\s*[^@\#\s]*",
-
-    # Match a `:SUBDIR` subdir specifier.
-    subdir = raw":[^@\#\s]+",
-
-    # Match any other way to specify a package. This includes package
-    # names, local paths, and URLs that don't match the `url` part. In
-    # order not to clash with the branch, version, and subdir
-    # specifiers, these cannot include `@` or `#`, and `:` is only
-    # allowed if followed by `/` or `\`. For URLs matching this part
-    # of the regex, that means that `@` (e.g. user names) and `:`
-    # (e.g. port) cannot be used but it doesn't have to end with
-    # `.git`.
-    other = raw"([^@\#\s:] | :(/|\\))+"
-
-    # Combine all of the above.
-    global const package_id_re = Regex(
-        "$url | $name_uuid | $branch | $version | $subdir | $other", "x")
-end
-
-function package_lex(qwords::Vector{QString})::Vector{String}
-    words = String[]
-    for qword in qwords
-        qword.isquoted ?
-            push!(words, qword.raw) :
-            append!(words, map(m->m.match, eachmatch(package_id_re, qword.raw)))
+    # Check for protocol:// syntax
+    if colon_pos <= lastindex(input) - 2
+        next_pos = nextind(input, colon_pos)
+        if next_pos <= lastindex(input) - 1 &&
+           input[colon_pos:nextind(input, nextind(input, colon_pos))] == "://"
+            return true
+        end
     end
-    return words
+
+    # Check for user:password@ syntax (: followed by text then @)
+    if contains(after_colon, '@')
+        at_in_after = findfirst('@', after_colon)
+        if at_in_after !== nothing
+            text_before_at = after_colon[1:prevind(after_colon, at_in_after)]
+            if !contains(text_before_at, '/')
+                return true
+            end
+        end
+    end
+
+    # Check for port numbers (: followed by digits then /)
+    if occursin(r"^\d+(/|$)", after_colon)
+        return true
+    end
+
+    return false
 end
+
+# Extract subdir from URL, being careful about URL structure
+function extract_url_subdir(input::String)
+    colon_pos = findlast(':', input)
+    if colon_pos === nothing
+        return input, nothing
+    end
+
+    # Check if this colon is part of URL structure
+    if is_url_structure_colon(input, colon_pos)
+        return input, nothing
+    end
+
+    after_colon = input[nextind(input, colon_pos):end]
+    before_colon = input[1:prevind(input, colon_pos)]
+
+    # Only treat as subdir if it looks like one and the part before looks like a URL
+    if (contains(after_colon, '/') || (!contains(after_colon, '@') && !contains(after_colon, '#'))) &&
+       (contains(before_colon, "://") || contains(before_colon, ".git") || contains(before_colon, '@'))
+        return before_colon, after_colon
+    end
+
+    return input, nothing
+end
+
+# Extract revision from URL, only after a complete URL
+function extract_url_revision(input::String)
+    hash_pos = findfirst('#', input)
+    if hash_pos === nothing
+        return input, nothing
+    end
+
+    before_hash = input[1:prevind(input, hash_pos)]
+    after_hash = input[nextind(input, hash_pos):end]
+
+    if looks_like_complete_url(before_hash)
+        return before_hash, after_hash
+    end
+
+    return input, nothing
+end
+
+# Parse URLs with specifiers
+# URLs can only have revisions (#) and subdirs (:), NOT versions (@)
+function parse_url_with_specifiers(input::String)
+    tokens = PackageToken[]
+    remaining = input
+
+    # Extract subdir if present (rightmost : that looks like a subdir)
+    remaining, subdir_part = extract_url_subdir(remaining)
+
+    # Extract revision (first # that comes after a complete URL)
+    remaining, rev_part = extract_url_revision(remaining)
+
+    # What's left is the base URL
+    push!(tokens, PackageIdentifier(remaining))
+
+    # Add the specifiers in the correct order
+    if rev_part !== nothing
+        push!(tokens, Rev(rev_part))
+    end
+    if subdir_part !== nothing
+        push!(tokens, Subdir(subdir_part))
+    end
+
+    return tokens
+end
+
+function parse_path_with_specifiers(input::String)
+    tokens = PackageToken[]
+    remaining = input
+
+    # Extract subdir if present (rightmost :)
+    remaining, subdir_part = extract_subdir(remaining)
+
+    # Extract revision if present (rightmost #)
+    remaining, rev_part = extract_revision(remaining)
+
+    # What's left is the base path
+    push!(tokens, PackageIdentifier(remaining))
+
+    # Add specifiers in correct order
+    if rev_part !== nothing
+        push!(tokens, Rev(rev_part))
+    end
+    if subdir_part !== nothing
+        push!(tokens, Subdir(subdir_part))
+    end
+
+    return tokens
+end
+
+# Parse package names with specifiers
+function parse_name_with_specifiers(input::String)
+    tokens = PackageToken[]
+    remaining = input
+
+    # Extract subdir if present (rightmost :)
+    remaining, subdir_part = extract_subdir(remaining)
+
+    # Extract version if present (rightmost @)
+    remaining, version_part = extract_version(remaining)
+
+    # Extract revision if present (rightmost #)
+    remaining, rev_part = extract_revision(remaining)
+
+    # What's left is the base name
+    push!(tokens, PackageIdentifier(remaining))
+
+    # Add specifiers in correct order
+    if rev_part !== nothing
+        push!(tokens, Rev(rev_part))
+    end
+    if version_part !== nothing
+        push!(tokens, VersionToken(version_part))
+    end
+    if subdir_part !== nothing
+        push!(tokens, Subdir(subdir_part))
+    end
+
+    return tokens
+end
+
+# Parse a single package specification
+function parse_package_spec_new(input::String)
+    # Handle quoted strings
+    if (startswith(input, '"') && endswith(input, '"')) ||
+       (startswith(input, '\'') && endswith(input, '\''))
+        input = input[2:end-1]
+    end
+
+    # Handle GitHub tree/commit URLs first (special case)
+    github_result = preprocess_github_tree_commit_url(input)
+    if github_result !== nothing
+        return github_result
+    end
+
+    # Handle name=uuid format
+    if contains(input, '=')
+        parts = split(input, '=', limit=2)
+        if length(parts) == 2
+            name = String(strip(parts[1]))
+            uuid_str = String(strip(parts[2]))
+            if is_valid_uuid(uuid_str)
+                return [PackageIdentifier("$name=$uuid_str")]
+            end
+        end
+    end
+
+    # Check what type of input this is and parse accordingly
+    if looks_like_url(input)
+        return parse_url_with_specifiers(input)
+    elseif looks_like_path(input)
+        return parse_path_with_specifiers(input)
+    else
+        return parse_name_with_specifiers(input)
+    end
+end
+
+function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
+    tokens = PackageToken[]
+
+    i = 1
+    while i <= length(args)
+        arg = args[i]
+        input = arg.isquoted ? arg.raw : arg.raw
+
+        # Check if this argument is a standalone modifier (like #dev, @v1.0, :subdir)
+        if !arg.isquoted && (startswith(input, '#') || startswith(input, '@') || startswith(input, ':'))
+            # This is a standalone modifier - it should be treated as a token
+            if startswith(input, '#')
+                push!(tokens, Rev(input[2:end]))
+            elseif startswith(input, '@')
+                push!(tokens, VersionToken(input[2:end]))
+            elseif startswith(input, ':')
+                push!(tokens, Subdir(input[2:end]))
+            end
+        else
+            # Parse this argument normally
+            if arg.isquoted
+                # For quoted arguments, treat as literal without specifier extraction
+                arg_tokens = [PackageIdentifier(input)]
+            else
+                arg_tokens = parse_package_spec_new(input)
+            end
+            append!(tokens, arg_tokens)
+        end
+
+        i += 1
+    end
+
+    return parse_package_args(tokens; add_or_dev=add_or_dev)
+end
+
 
 function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
     # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
@@ -99,14 +361,16 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
         parsed_rev = false
         while !isempty(args)
             modifier = popfirst!(args)
-            if modifier isa Subdir
+            if modifier isa PackageIdentifier
+                pushfirst!(args, modifier)
+                return
+            elseif modifier isa Subdir
                 if parsed_subdir
                     pkgerror("Multiple subdir specifiers `$args` found.")
                 end
                 pkg.subdir = modifier.dir
-                (isempty(args) || args[1] isa PackageIdentifier) && return
-                modifier = popfirst!(args)
                 parsed_subdir = true
+                (isempty(args) || args[1] isa PackageIdentifier) && return
             elseif modifier isa VersionToken
                 if parsed_version
                     pkgerror("Multiple version specifiers `$args` found.")
@@ -155,17 +419,13 @@ end
 function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop=false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
+        if occursin(name_re, word) && isdir(expanduser(word))
+            @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+        end
         if isurl(word)
             return PackageSpec(; url=word)
         elseif any(occursin.(['\\','/'], word)) || word == "." || word == ".."
-            if casesensitive_isdir(expanduser(word))
-                return PackageSpec(; path=normpath(expanduser(word)))
-            else
-                pkgerror("`$word` appears to be a local path, but directory does not exist")
-            end
-        end
-        if occursin(name_re, word) && casesensitive_isdir(expanduser(word))
-            @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+            return PackageSpec(; path=normpath(expanduser(word)))
         end
     end
     if occursin(uuid_re, word)
@@ -195,7 +455,7 @@ end
 function parse_registry(word::AbstractString; add=false)::RegistrySpec
     word = expanduser(word)
     registry = RegistrySpec()
-    if add && isdir_nothrow(word) # TODO: Should be casesensitive_isdir
+    if add && isdir_nothrow(word)
         if isdir(joinpath(word, ".git")) # add path as url and clone it from there
             registry.url = abspath(word)
         else # put the path
