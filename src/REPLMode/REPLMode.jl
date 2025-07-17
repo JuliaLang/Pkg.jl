@@ -228,7 +228,7 @@ function lex(cmd::String)::Vector{QString}
     return filter(x -> !isempty(x.raw), qstrings)
 end
 
-const removed_leading_bracket = Atomic{Bool}(false) # only save user's error once per session
+const removed_leading_bracket = Threads.Atomic{Bool}(false) # only save user's error once per session
 
 function tokenize(cmd::AbstractString; rm_leading_bracket::Bool = true)
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ") # for multiline commands
