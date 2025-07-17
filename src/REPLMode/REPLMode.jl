@@ -228,14 +228,10 @@ function lex(cmd::String)::Vector{QString}
     return filter(x -> !isempty(x.raw), qstrings)
 end
 
-const removed_leading_bracket = Threads.Atomic{Bool}(false) # only save user's error once per session
-
 function tokenize(cmd::AbstractString; rm_leading_bracket::Bool = true)
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ") # for multiline commands
-    if rm_leading_bracket && !removed_leading_bracket[] && startswith(cmd, ']')
-        @warn "Removing leading `]`, which should only be used once to switch to pkg> mode"
+    if rm_leading_bracket && startswith(cmd, ']')
         cmd = string(lstrip(cmd, ']'))
-        removed_leading_bracket[] = true
     end
     qstrings = lex(cmd)
     statements = foldl(qstrings; init = [QString[]]) do collection, next
