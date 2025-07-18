@@ -228,10 +228,9 @@ function lex(cmd::String)::Vector{QString}
     return filter(x -> !isempty(x.raw), qstrings)
 end
 
-function tokenize(cmd::AbstractString)
+function tokenize(cmd::AbstractString; rm_leading_bracket::Bool = true)
     cmd = replace(replace(cmd, "\r\n" => "; "), "\n" => "; ") # for multiline commands
-    if startswith(cmd, ']')
-        @warn "Removing leading `]`, which should only be used once to switch to pkg> mode"
+    if rm_leading_bracket && startswith(cmd, ']')
         cmd = string(lstrip(cmd, ']'))
     end
     qstrings = lex(cmd)

@@ -249,7 +249,7 @@ end
 function _completions(input, final, offset, index; hint::Bool)
     statement, word_count, partial = nothing, nothing, nothing
     try
-        words = tokenize(input)[end]
+        words = tokenize(input; rm_leading_bracket = false)[end]
         word_count = length(words)
         statement, partial = core_parse(words)
         if final

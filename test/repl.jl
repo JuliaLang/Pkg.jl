@@ -26,13 +26,13 @@ using ..Utils
 end
 
 @testset "accidental" begin
-    @test_logs (:warn, r"Removing leading.*") pkg"]?"
-    @test_logs (:warn, r"Removing leading.*") pkg"] ?"
-    @test_logs (:warn, r"Removing leading.*") pkg"]st"
-    @test_logs (:warn, r"Removing leading.*") pkg"] st"
-    @test_logs (:warn, r"Removing leading.*") pkg"]st -m"
-    @test_logs (:warn, r"Removing leading.*") pkg"] st -m"
-    @test_logs (:warn, r"Removing leading.*") pkg"]"  # noop
+    pkg"]?"
+    pkg"] ?"
+    pkg"]st"
+    pkg"] st"
+    pkg"]st -m"
+    pkg"] st -m"
+    pkg"]"  # noop
 end
 
 temp_pkg_dir() do project_path
