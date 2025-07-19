@@ -19,4 +19,4 @@ repos:
     rev: v1.13.0
     hooks:
       - id: explicit-imports
-        entry: '/usr/bin/env/julia --project=. -e "using ExplicitImports: main; exit(main(ARGS))" --print --checklist exclude_all_qualified_accesses_are_public'
+        entry: '/usr/bin/env julia --project=. -e "println.(readdir()); using ExplicitImports: main; exit(main(ARGS))" --print --checklist exclude_all_qualified_accesses_are_public'
