@@ -16,7 +16,8 @@ repos:
         additional_dependencies:
           - 'Runic@1.4' # Keep version in sync with .github/workflows/Check.yml
   - repo: https://github.com/JuliaTesting/ExplicitImports.jl
-    rev: v1.13.0
+    rev: 1fcbe989a493e9795b5fcdb56a534f30264cf182
     hooks:
       - id: explicit-imports
-        entry: '/usr/bin/env julia --project=. -e "println.(readdir()); using ExplicitImports: main; exit(main(ARGS))" --print --checklist exclude_all_qualified_accesses_are_public'
+        language_version: '1.12'
+        args: ['--checklist', 'no_implicit_imports,all_qualified_accesses_via_owners,no_self_qualified_accesses']
