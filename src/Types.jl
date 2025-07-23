@@ -922,7 +922,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if pkg.repo.rev === nothing
                 pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
             end
-            rev_or_hash = pkg.tree_hash === nothing ? pkg.repo.rev : pkg.tree_hash
+            # Prioritize rev over tree_hash when both are specified
+            rev_or_hash = pkg.repo.rev === nothing ? pkg.tree_hash : pkg.repo.rev
             obj_branch = get_object_or_branch(repo, rev_or_hash)
             fetched = false
             if obj_branch === nothing
@@ -960,7 +961,23 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
                 end
             end
-            pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
+
+            # Store the original tree_hash if it was specified before we overwrite it
+            original_tree_hash = pkg.tree_hash
+            computed_tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
+
+            # If both rev and tree_hash were originally specified, validate they're consistent
+            if pkg.repo.rev !== nothing && original_tree_hash !== nothing
+                if computed_tree_hash != original_tree_hash
+                    pkgerror(
+                        "PackageSpec specified both rev ($(pkg.repo.rev)) and tree_hash ($(original_tree_hash)), " *
+                            "but rev resolves to different tree_hash ($(computed_tree_hash)). " *
+                            "These values are inconsistent."
+                    )
+                end
+            end
+
+            pkg.tree_hash = computed_tree_hash
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
             if has_uuid(pkg)
