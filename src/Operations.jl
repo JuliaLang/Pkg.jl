@@ -1857,7 +1857,7 @@ end
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}, new_git = Set{UUID}();
         allow_autoprecomp::Bool = true, preserve::PreserveLevel = default_preserve(), platform::AbstractPlatform = HostPlatform(),
-        target::Symbol = :deps
+        target::Symbol = :deps, skip_artifacts::Bool = false
     )
     assert_can_add(ctx, pkgs)
     # load manifest data
@@ -1890,7 +1890,9 @@ function add(
 
         # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
         # and ensure they are all downloaded and unpacked as well:
-        download_artifacts(ctx, platform = platform, julia_version = ctx.julia_version)
+        if !skip_artifacts
+            download_artifacts(ctx, platform = platform, julia_version = ctx.julia_version)
+        end
 
         # if env is a package add compat entries
         if ctx.env.project.name !== nothing && ctx.env.project.uuid !== nothing

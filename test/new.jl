@@ -1486,6 +1486,30 @@ end
     end
 end
 
+@testset "PackageSpec rev vs tree_hash priority (BinaryBuilder/LLVM_full_jll example)" begin
+    # Test that when both rev and tree_hash are specified in a PackageSpec,
+    # rev should be prioritized over tree_hash and result in version 16.0.6+4
+    mktempdir() do tmp_dir
+        Pkg.activate(tmp_dir)
+
+        # Create PackageSpec with both tree_hash and rev as specified in the original issue
+        pspec = Pkg.PackageSpec(
+            name = "LLVM_full_jll",
+            uuid = Base.UUID("a3ccf953-465e-511d-b87f-60a6490c289d"),
+            tree_hash = Pkg.Types.SHA1("fa1774e98924a3738549385c09dabdc40e742056"),
+            url = "https://github.com/JuliaBinaryWrappers/LLVM_full_jll.jl.git",
+            rev = "a4a3d305afb273189e5ef92ae088c9c4916d4d78"
+        )
+
+        # Add the package
+        Pkg.add(pspec; skip_artifacts = true, allow_autoprecomp = false)
+
+        # Check that the version added is 16.0.6+4 (from rev, not tree_hash)
+        version = Pkg.dependencies()[Base.UUID("a3ccf953-465e-511d-b87f-60a6490c289d")].version
+        @test version == v"16.0.6+4"
+    end
+end
+
 #
 # # Develop
 #
