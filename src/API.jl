@@ -299,7 +299,8 @@ end
 
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel = Operations.default_preserve(),
-        platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true, kwargs...
+        platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true,
+        skip_artifacts::Bool = false, kwargs...
     )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
@@ -351,7 +352,7 @@ function add(
         update_source_if_set(ctx.env, pkg)
     end
 
-    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target)
+    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target, skip_artifacts)
     return
 end
 
