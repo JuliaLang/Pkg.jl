@@ -41,7 +41,11 @@ end
 
     # Test that explicitly set version is preserved
     ps_versioned = PackageSpec(name = "Example", version = v"1.0.0")
-    @test ps_versioned.version == Pkg.Types.VersionSpec("1.0.0")
+    @test ps_versioned.version == v"1.0.0"
+
+    # Test that explicitly set versionspec (string format) is preserved
+    ps_versioned = PackageSpec(name = "Example", version = "1.0.0")
+    @test ps_versioned.version == "1.0.0"
 end
 
 end # module
