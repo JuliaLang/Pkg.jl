@@ -592,6 +592,16 @@ function Context!(ctx::Context; kwargs...)
     for (k, v) in kwargs
         setfield!(ctx, k, v)
     end
+
+    # Highlight for logging purposes if julia_version is set to a different version than current VERSION
+    if haskey(kwargs, :julia_version) && ctx.julia_version !== nothing && ctx.julia_version != VERSION
+        Pkg.printpkgstyle(
+            ctx.io, :Context,
+            "Pkg is operating with julia_version set to `$(ctx.julia_version)`",
+            color = Base.warn_color()
+        )
+    end
+
     return ctx
 end
 
