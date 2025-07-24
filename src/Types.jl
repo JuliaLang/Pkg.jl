@@ -597,7 +597,7 @@ function Context!(ctx::Context; kwargs...)
     if haskey(kwargs, :julia_version) && ctx.julia_version !== nothing && ctx.julia_version != VERSION
         Pkg.printpkgstyle(
             ctx.io, :Context,
-            "Pkg is being asked to operate using julia_version `$(ctx.julia_version)`",
+            "Pkg is operating with julia_version set to `$(ctx.julia_version)`",
             color = Base.warn_color()
         )
     end
