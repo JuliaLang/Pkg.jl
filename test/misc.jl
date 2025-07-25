@@ -28,4 +28,24 @@ end
 
 @test eltype([PackageSpec(a) for a in []]) == PackageSpec
 
+@testset "PackageSpec version default" begin
+    # Test that PackageSpec without explicit version gets set to VersionSpec("*")
+    # This behavior is relied upon by BinaryBuilderBase.jl for dependency filtering
+    # See: https://github.com/JuliaPackaging/BinaryBuilderBase.jl/blob/master/src/Prefix.jl
+    ps = PackageSpec(name = "Example")
+    @test ps.version == Pkg.Types.VersionSpec("*")
+
+    # Test with UUID as well
+    ps_uuid = PackageSpec(name = "Example", uuid = Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a"))
+    @test ps_uuid.version == Pkg.Types.VersionSpec("*")
+
+    # Test that explicitly set version is preserved
+    ps_versioned = PackageSpec(name = "Example", version = v"1.0.0")
+    @test ps_versioned.version == v"1.0.0"
+
+    # Test that explicitly set versionspec (string format) is preserved
+    ps_versioned = PackageSpec(name = "Example", version = "1.0.0")
+    @test ps_versioned.version == "1.0.0"
+end
+
 end # module
