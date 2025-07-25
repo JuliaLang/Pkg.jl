@@ -1697,9 +1697,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     return show_update(ctx.env, ctx.registries; io = ctx.io)
 end
 
-function update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool)
-    return pkg
-end
+update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
 function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
         if pkg.version == VersionSpec()
