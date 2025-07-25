@@ -303,7 +303,7 @@ isolate(loaded_depot = true) do
             Pkg.add(; name = "GMP_jll", julia_version = v"1.7")
 
             # This is expected to fail, that version can't live with `julia_version = v"1.7"`
-            @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "GMP_jll", version = v"6.2.0+5", julia_version = v"1.7")
+            @test_throws Pkg.Types.PkgError Pkg.add(; name = "GMP_jll", version = v"6.2.0+5", julia_version = v"1.7")
 
             Pkg.activate(temp = true)
             # Stdlib add (julia_version == nothing)

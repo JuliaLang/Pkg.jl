@@ -474,7 +474,7 @@ end
         @test Pkg.Types.stdlib_version(delim_files_uuid, VERSION) != old_version
         # We expect this might fail for resolver reasons, but NOT for stdlib version validation
         Pkg.add(Pkg.PackageSpec(name = "DelimitedFiles", uuid = delim_files_uuid, version = old_version))
-        @test Pkg.dependencies("DelimitedFiles").version == old_version
+        @test Pkg.dependencies()[delim_files_uuid].version == old_version
 
         Pkg.activate(temp = true)
         # Test VersionSpec validation (like REPL "Package@version" syntax)

@@ -1667,7 +1667,7 @@ end
 function _validate_stdlib_version!(pkg::PackageSpec, julia_version::Union{VersionNumber, Nothing})
     # Only validate if we have a specific Julia version and the package is a non-upgradable stdlib
     # FIXME: HistoricalStdlibVersions should also store UPGRADABLE_STDLIBS_UUIDS per version
-    return if julia_version !== nothing && is_stdlib(pkg.uuid, julia_version) && pkg.version !== nothing && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+    return if julia_version !== nothing && pkg.uuid !== nothing && is_stdlib(pkg.uuid, julia_version) && pkg.version !== nothing && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
         current_stdlib_version = Types.stdlib_version(pkg.uuid, julia_version)
         if current_stdlib_version !== nothing
             # Check if the requested version conflicts with current stdlib version
