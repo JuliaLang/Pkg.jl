@@ -549,7 +549,7 @@ function check_stdlib_version_compat!(pkg::PackageSpec, julia_version)
         throw(
             Resolve.ResolverError(
                 """Cannot add stdlib `$(pkg.name)` with version specification `$(pkg.version)`.
-                The current Julia version $(julia_version) uses `$(pkg.name)` v$(current_stdlib_version)."""
+                The current Julia version v$(julia_version) uses `$(pkg.name)` v$(current_stdlib_version)."""
             )
         )
     end
