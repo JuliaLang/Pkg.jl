@@ -1663,7 +1663,38 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     return show_update(ctx.env, ctx.registries; io = ctx.io)
 end
 
-update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
+# Internal function to validate stdlib version compatibility
+function _validate_stdlib_version!(pkg::PackageSpec)
+    return if is_stdlib(pkg.uuid) && pkg.version !== nothing && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+        current_stdlib_version = Types.stdlib_version(pkg.uuid, VERSION)
+        if current_stdlib_version !== nothing
+            # Check if the requested version conflicts with current stdlib version
+            version_conflicts = if pkg.version isa VersionNumber
+                pkg.version != current_stdlib_version
+            elseif pkg.version isa VersionSpec
+                !(current_stdlib_version in pkg.version)
+            elseif pkg.version isa String
+                # Parse string version and check if it conflicts
+                version_spec = VersionSpec(pkg.version)
+                !(current_stdlib_version in version_spec)
+            else
+                error("Unexpected version spec type for stdlib `$(pkg.name)`: $(typeof(pkg.version))")
+            end
+
+            if version_conflicts
+                pkgerror(
+                    "Cannot add stdlib `$(pkg.name)` with version spec `$(repr(pkg.version))`. ",
+                    "The current Julia version $(VERSION) uses stdlib `$(pkg.name)` version `$(current_stdlib_version)`."
+                )
+            end
+        end
+    end
+end
+
+function update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool)
+    _validate_stdlib_version!(pkg)
+    return pkg
+end
 function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
         if pkg.version == VersionSpec()
@@ -1679,6 +1710,7 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
         return pkg # overwrite everything, nothing to copy over
     end
     if is_stdlib(pkg.uuid)
+        _validate_stdlib_version!(pkg)
         return pkg # stdlibs are not versioned like other packages
     elseif is_dep && (
             (isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
