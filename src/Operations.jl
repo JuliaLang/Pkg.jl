@@ -1675,10 +1675,6 @@ function _validate_stdlib_version!(pkg::PackageSpec, julia_version::Union{Versio
                 pkg.version != current_stdlib_version
             elseif pkg.version isa VersionSpec
                 !(current_stdlib_version in pkg.version)
-            elseif pkg.version isa String
-                # Parse string version and check if it conflicts
-                version_spec = VersionSpec(pkg.version)
-                !(current_stdlib_version in version_spec)
             else
                 error("Unexpected version spec type for stdlib `$(pkg.name)`: $(typeof(pkg.version))")
             end
