@@ -1664,9 +1664,11 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
 end
 
 # Internal function to validate stdlib version compatibility
-function _validate_stdlib_version!(pkg::PackageSpec)
-    return if is_stdlib(pkg.uuid) && pkg.version !== nothing && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
-        current_stdlib_version = Types.stdlib_version(pkg.uuid, VERSION)
+function _validate_stdlib_version!(pkg::PackageSpec, julia_version::Union{VersionNumber, Nothing})
+    # Only validate if we have a specific Julia version and the package is a non-upgradable stdlib
+    # FIXME: HistoricalStdlibVersions should also store UPGRADABLE_STDLIBS_UUIDS per version
+    return if julia_version !== nothing && is_stdlib(pkg.uuid, julia_version) && pkg.version !== nothing && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+        current_stdlib_version = Types.stdlib_version(pkg.uuid, julia_version)
         if current_stdlib_version !== nothing
             # Check if the requested version conflicts with current stdlib version
             version_conflicts = if pkg.version isa VersionNumber
@@ -1684,7 +1686,7 @@ function _validate_stdlib_version!(pkg::PackageSpec)
             if version_conflicts
                 pkgerror(
                     "Cannot add stdlib `$(pkg.name)` with version spec `$(repr(pkg.version))`. ",
-                    "The current Julia version $(VERSION) uses stdlib `$(pkg.name)` version `$(current_stdlib_version)`."
+                    "The current Julia version $(julia_version) uses stdlib `$(pkg.name)` version `$(current_stdlib_version)`."
                 )
             end
         end
@@ -1692,7 +1694,7 @@ function _validate_stdlib_version!(pkg::PackageSpec)
 end
 
 function update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool)
-    _validate_stdlib_version!(pkg)
+    _validate_stdlib_version!(pkg, ctx.julia_version)
     return pkg
 end
 function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
@@ -1710,7 +1712,7 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
         return pkg # overwrite everything, nothing to copy over
     end
     if is_stdlib(pkg.uuid)
-        _validate_stdlib_version!(pkg)
+        _validate_stdlib_version!(pkg, ctx.julia_version)
         return pkg # stdlibs are not versioned like other packages
     elseif is_dep && (
             (isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
