@@ -70,7 +70,10 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
-      - uses: julia-actions/julia-buildpkg@v1
+      # We cannot use the Pkg getting tested to install the SAT-resolver since that is
+      # needed by Pkg itself
+      - name: Install deps
+        run: julia -e 'using Pkg; Pkg.activate("."); Pkg.instantiate()'
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
@@ -100,7 +103,7 @@ jobs:
           version: 'nightly'
       - name: Generate docs
         run: |
-          julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
+          julia --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
           julia --project=docs --color=yes docs/make.jl pdf
         env:
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
