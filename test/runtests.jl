@@ -1,5 +1,14 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
+using Pkg
+using Test
+using UUIDs
+
+Pkg.add(name = "Example", version = "0.5.4")
+example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+@test Pkg.dependencies()[example_uuid].version == v"0.5.4"
+
+#=
 module PkgTestsOuter
 
 original_depot_path = copy(Base.DEPOT_PATH)
@@ -116,3 +125,4 @@ end
 Base.set_active_project(original_project)
 
 end # module
+=#

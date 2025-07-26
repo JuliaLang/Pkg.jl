@@ -8,6 +8,8 @@ using Random: randstring
 import LibGit2, Dates, TOML
 
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
+include("ResolverTranslation.jl")
+import .ResolverTranslation
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
     artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
@@ -627,9 +629,23 @@ function resolve_versions!(
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
-    graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
-    Resolve.simplify_graph!(graph)
-    vers = Resolve.resolve(graph)
+    use_new_resolver = true
+    if use_new_resolver
+        # New SAT-based resolver
+        compat_map, weak_compat = build_compat_data(env, registries, names, reqs, fixed, julia_version, installed_only)
+        # The new resolver doesn't special case Julia so needs some information about it
+        compat_map[JULIA_UUID] = Dict(julia_version => Dict())
+        reqs[JULIA_UUID] = VersionSpec(julia_version)
+        @info "Resolving with SAT-based resolver"
+        vers = ResolverTranslation.resolve_with_new_solver(
+            compat_map, weak_compat, names, reqs, fixed
+        )
+    else
+        # Use original maxsum resolver
+        graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
+        Resolve.simplify_graph!(graph)
+        vers = Resolve.resolve(graph)
+    end
 
     # Fixup jlls that got their build numbers stripped
     vers_fix = copy(vers)
@@ -661,6 +677,16 @@ function resolve_versions!(
             push!(pkgs, PackageSpec(; name = name, uuid = uuid, version = ver))
         end
     end
+
+    # Ensure all packages have VersionNumber, not VersionSpec
+    for pkg in pkgs
+        if !(pkg.version isa VersionNumber) && haskey(vers, pkg.uuid)
+            pkg.version = vers[pkg.uuid]
+        elseif !(pkg.version isa VersionNumber)
+            @assert false "Package $(pkg.name) [$(pkg.uuid)] still has VersionSpec: $(pkg.version)"
+        end
+    end
+
     final_deps_map = Dict{UUID, Dict{String, UUID}}()
     for pkg in pkgs
         load_tree_hash!(registries, pkg, julia_version)
@@ -678,7 +704,9 @@ function resolve_versions!(
                     pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
                 end
                 for (uuid, _) in compat_map[pkg.uuid][pkg.version]
-                    d[names[uuid]] = uuid
+                    if uuid !== JULIA_UUID
+                        d[names[uuid]] = uuid
+                    end
                 end
                 d
             end
@@ -696,7 +724,7 @@ end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
-function deps_graph(
+function build_compat_data(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
         reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
         installed_only::Bool
@@ -755,6 +783,7 @@ function deps_graph(
             else
                 for reg in registries
                     pkg = get(reg, uuid, nothing)
+                    uuid == JULIA_UUID && continue
                     pkg === nothing && continue
                     info = Registry.registry_info(pkg)
 
@@ -812,6 +841,15 @@ function deps_graph(
         end
     end
 
+    return all_compat, weak_compat
+end
+
+function deps_graph(
+        env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
+        reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
+        installed_only::Bool
+    )
+    all_compat, weak_compat = build_compat_data(env, registries, uuid_to_name, reqs, fixed, julia_version, installed_only)
     return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
         all_compat
 end
