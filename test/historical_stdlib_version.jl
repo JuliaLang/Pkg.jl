@@ -171,7 +171,7 @@ end
         versions, deps = Pkg.Operations._resolve(
             ctx.io, ctx.env, ctx.registries, [
                 Pkg.Types.PackageSpec(name = "MPFR_jll", uuid = Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),
-            ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version
+            ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version, ctx.resolver
         )
         gmp = find_by_name(versions, "GMP_jll")
         @test gmp !== nothing
@@ -180,7 +180,7 @@ end
         versions, deps = Pkg.Operations._resolve(
             ctx.io, ctx.env, ctx.registries, [
                 Pkg.Types.PackageSpec(name = "MPFR_jll", uuid = Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3")),
-            ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version
+            ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version, ctx.resolver
         )
         gmp = find_by_name(versions, "GMP_jll")
         @test gmp !== nothing
@@ -195,7 +195,7 @@ end
                 Pkg.Types.PackageSpec(name = "GMP_jll", uuid = Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d"), version = v"6.2.0"),
                 # This version of MPFR only works on Julia v1.5
                 Pkg.Types.PackageSpec(name = "MPFR_jll", uuid = Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3"), version = v"4.0.2"),
-            ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version
+            ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version, ctx.resolver
         )
         gmp = find_by_name(versions, "GMP_jll")
         @test gmp !== nothing

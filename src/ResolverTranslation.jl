@@ -90,45 +90,16 @@ end
 
 function translate_from_new_resolver(
         pkgs::Vector{UUID},
-        vers::Matrix{Union{VersionNumber, Nothing}}
+        vers::Matrix{Union{VersionNumber, Nothing}},
+        required_packages::Vector{UUID},
+        uuid_to_name::Dict{UUID, String}
     )::Dict{UUID, VersionNumber}
-    result = Dict{UUID, VersionNumber}()
-
-    # Take first solution (first column) as specified
-    if size(vers, 2) > 0
-        for (i, pkg_uuid) in enumerate(pkgs)
-            version = vers[i, 1]  # First solution
-            if version !== nothing
-                result[pkg_uuid] = version
-            end
-        end
-    end
-
-    return result
-end
-
-function resolve_with_new_solver(
-        all_compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
-        weak_compat::Dict{UUID, Dict{VersionNumber, Set{UUID}}},
-        uuid_to_name::Dict{UUID, String},
-        reqs::Resolve.Requires,
-        fixed::Dict{UUID, Resolve.Fixed}
-    )::Dict{UUID, VersionNumber}
-    # Translate to new resolver format
-    pkg_data = translate_to_new_resolver(all_compat, weak_compat, fixed, reqs)
-    # Convert PkgData to PkgInfo format that the resolver expects
-    required_packages = collect(keys(reqs))
-    pkg_info = Resolver.pkg_info(pkg_data, required_packages)
-
-    # Call new resolver
-    pkgs, vers_matrix = Resolver.resolve(pkg_info, required_packages)
-
     # Filter out packages with nothing versions (not installed in solution)
     solution_dict = Dict{UUID, VersionNumber}()
     unsatisfied_requirements = UUID[]
 
     for (i, pkg_uuid) in enumerate(pkgs)
-        version = vers_matrix[i, 1]  # First solution
+        version = vers[i, 1]  # First solution
         if version !== nothing
             solution_dict[pkg_uuid] = version
         elseif pkg_uuid in required_packages
@@ -147,6 +118,26 @@ function resolve_with_new_solver(
     end
 
     return solution_dict
+end
+
+function resolve_with_new_solver(
+        all_compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
+        weak_compat::Dict{UUID, Dict{VersionNumber, Set{UUID}}},
+        uuid_to_name::Dict{UUID, String},
+        reqs::Resolve.Requires,
+        fixed::Dict{UUID, Resolve.Fixed}
+    )::Dict{UUID, VersionNumber}
+    # Translate to new resolver format
+    pkg_data = translate_to_new_resolver(all_compat, weak_compat, fixed, reqs)
+    # Convert PkgData to PkgInfo format that the resolver expects
+    required_packages = collect(keys(reqs))
+    pkg_info = Resolver.pkg_info(pkg_data, required_packages)
+
+    # Call new resolver
+    pkgs, vers_matrix = Resolver.resolve(pkg_info, required_packages)
+
+    # Translate back from new resolver format
+    return translate_from_new_resolver(pkgs, vers_matrix, required_packages, uuid_to_name)
 end
 
 end # module
