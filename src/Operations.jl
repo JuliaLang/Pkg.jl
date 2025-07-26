@@ -8,6 +8,8 @@ using Random: randstring
 import LibGit2, Dates, TOML
 
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
+include("ResolverTranslation.jl")
+import .ResolverTranslation
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
     artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
@@ -562,12 +564,12 @@ end
 # all versioned packages should have a `tree_hash`
 function resolve_versions!(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
-        installed_only::Bool
+        installed_only::Bool, resolver::Symbol
     )
     installed_only = installed_only || OFFLINE_MODE[]
     # compatibility
     if julia_version !== nothing
-        # only set the manifest julia_version if ctx.julia_version is not nothing
+        # only set the manifest julia_version if julia_version is not nothing
         env.manifest.julia_version = dropbuild(VERSION)
         v = intersect(julia_version, get_compat_workspace(env, "julia"))
         if isempty(v)
@@ -627,9 +629,21 @@ function resolve_versions!(
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
-    graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
-    Resolve.simplify_graph!(graph)
-    vers = Resolve.resolve(graph)
+    if resolver == :sat
+        # SAT-based resolver
+        compat_map, weak_compat = build_compat_data(env, registries, names, reqs, fixed, julia_version, installed_only)
+        # The SAT resolver doesn't special case Julia so needs some information about it
+        compat_map[JULIA_UUID] = Dict(julia_version => Dict())
+        reqs[JULIA_UUID] = VersionSpec(julia_version)
+        vers = ResolverTranslation.resolve_with_new_solver(
+            compat_map, weak_compat, names, reqs, fixed
+        )
+    else
+        # Use maxsum resolver
+        graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
+        Resolve.simplify_graph!(graph)
+        vers = Resolve.resolve(graph)
+    end
 
     # Fixup jlls that got their build numbers stripped
     vers_fix = copy(vers)
@@ -661,6 +675,16 @@ function resolve_versions!(
             push!(pkgs, PackageSpec(; name = name, uuid = uuid, version = ver))
         end
     end
+
+    # Ensure all packages have VersionNumber, not VersionSpec
+    for pkg in pkgs
+        if !(pkg.version isa VersionNumber) && haskey(vers, pkg.uuid)
+            pkg.version = vers[pkg.uuid]
+        elseif !(pkg.version isa VersionNumber)
+            @assert false "Package $(pkg.name) [$(pkg.uuid)] still has VersionSpec: $(pkg.version)"
+        end
+    end
+
     final_deps_map = Dict{UUID, Dict{String, UUID}}()
     for pkg in pkgs
         load_tree_hash!(registries, pkg, julia_version)
@@ -678,7 +702,9 @@ function resolve_versions!(
                     pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
                 end
                 for (uuid, _) in compat_map[pkg.uuid][pkg.version]
-                    d[names[uuid]] = uuid
+                    if uuid !== JULIA_UUID
+                        d[names[uuid]] = uuid
+                    end
                 end
                 d
             end
@@ -696,7 +722,7 @@ end
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
-function deps_graph(
+function build_compat_data(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
         reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
         installed_only::Bool
@@ -755,6 +781,7 @@ function deps_graph(
             else
                 for reg in registries
                     pkg = get(reg, uuid, nothing)
+                    uuid == JULIA_UUID && continue
                     pkg === nothing && continue
                     info = Registry.registry_info(pkg)
 
@@ -812,6 +839,15 @@ function deps_graph(
         end
     end
 
+    return all_compat, weak_compat
+end
+
+function deps_graph(
+        env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
+        reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
+        installed_only::Bool
+    )
+    all_compat, weak_compat = build_compat_data(env, registries, uuid_to_name, reqs, fixed, julia_version, installed_only)
     return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
         all_compat
 end
@@ -1815,39 +1851,39 @@ end
 
 function tiered_resolve(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
-        try_all_installed::Bool
+        try_all_installed::Bool, resolver::Symbol
     )
     if try_all_installed
         try # do not modify existing subgraph and only add installed versions of the new packages
             @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
-            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version)
+            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version, resolver)
         catch err
             err isa Resolve.ResolverError || rethrow()
         end
     end
     try # do not modify existing subgraph
         @debug "tiered_resolve: trying PRESERVE_ALL"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version, resolver)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
         @debug "tiered_resolve: trying PRESERVE_DIRECT"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version, resolver)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try
         @debug "tiered_resolve: trying PRESERVE_SEMVER"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version, resolver)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     @debug "tiered_resolve: trying PRESERVE_NONE"
-    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
+    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version, resolver)
 end
 
-function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version, resolver::Symbol)
     if preserve == PRESERVE_ALL || preserve == PRESERVE_ALL_INSTALLED
         pkgs = load_all_deps(env, pkgs; preserve)
     else
@@ -1855,23 +1891,32 @@ function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryIns
     end
     check_registered(registries, pkgs)
 
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED, resolver)
     return pkgs, deps_map
 end
 
 function _resolve(
         io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
-        pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version
+        pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version, resolver::Symbol
     )
     usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
-    printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
+
+    resolver_name = if resolver == :sat
+        "SAT"
+    elseif resolver == :maxsum
+        "maxsum"
+    else
+        pkgerror("Invalid resolver: $resolver. Valid options are :sat or :maxsum")
+    end
+
+    printpkgstyle(io, :Resolving, "package versions$(usingstrategy) with $resolver_name resolver...")
     return try
         if preserve == PRESERVE_TIERED_INSTALLED
-            tiered_resolve(env, registries, pkgs, julia_version, true)
+            tiered_resolve(env, registries, pkgs, julia_version, true, resolver)
         elseif preserve == PRESERVE_TIERED
-            tiered_resolve(env, registries, pkgs, julia_version, false)
+            tiered_resolve(env, registries, pkgs, julia_version, false, resolver)
         else
-            targeted_resolve(env, registries, pkgs, preserve, julia_version)
+            targeted_resolve(env, registries, pkgs, preserve, julia_version, resolver)
         end
     catch err
 
@@ -1917,7 +1962,7 @@ function add(
 
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
-        man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+        man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version, ctx.resolver)
         update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version)
         new_apply = download_source(ctx)
         fixups_from_projectfile!(ctx)
@@ -1966,7 +2011,7 @@ function develop(
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     # resolve & apply package versions
-    pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+    pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version, ctx.resolver)
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
@@ -2084,10 +2129,10 @@ function load_manifest_deps_up(
     return pkgs
 end
 
-function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version, resolver::Symbol)
     pkgs = load_manifest_deps_up(env, pkgs; preserve = preserve)
     check_registered(registries, pkgs)
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED, resolver)
     return pkgs, deps_map
 end
 
@@ -2113,11 +2158,11 @@ function up(
         up_load_manifest_info!(pkg, entry)
     end
     if preserve !== nothing
-        pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+        pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version, ctx.resolver)
     else
         pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
         check_registered(ctx.registries, pkgs)
-        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
+        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false, ctx.resolver)
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new_apply = download_source(ctx)
@@ -2191,7 +2236,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs = load_direct_deps(ctx.env, pkgs)
 
     # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
-    pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
+    pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version, ctx.resolver)
 
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
     new = download_source(ctx)
@@ -2241,7 +2286,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
         check_registered(ctx.registries, pkgs)
 
         # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
-        pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
+        pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version, ctx.resolver)
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
         new = download_source(ctx)
