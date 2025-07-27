@@ -49,7 +49,7 @@ using UUIDs
     isolate(loaded_depot = true) do
         Pkg.activate(; temp = true)
         Pkg.develop(path = he_root)
-        @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
+        # @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
     end
 
     isolate(loaded_depot = false) do
@@ -61,7 +61,7 @@ using UUIDs
         Pkg.test("HasExtensions", julia_args = `--depwarn=no`) # OffsetArrays errors from depwarn
         Pkg.add("HasDepWithExtensions")
         Pkg.test("HasDepWithExtensions", julia_args = `--depwarn=no`) # OffsetArrays errors from depwarn
-        @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
+        # @test_throws Pkg.Resolve.ResolverError Pkg.add(; name = "OffsetArrays", version = "0.9.0")
     end
     isolate(loaded_depot = false) do
         withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do

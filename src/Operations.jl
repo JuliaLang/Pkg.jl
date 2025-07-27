@@ -637,10 +637,11 @@ function resolve_versions!(
     local vers
     if resolver == :sat
         # SAT-based resolver
-        try
-            vers = ResolverTranslation.resolve_with_new_solver(
-                compat_map, weak_compat, names, reqs, fixed
-            )
+        #try
+        vers = ResolverTranslation.resolve_with_new_solver(
+            compat_map, weak_compat, names, reqs, fixed
+        )
+        #=
         catch e
             if e isa ResolverTranslation.SATResolverError
                 @warn "SAT resolver failed ($(e.msg)), falling back to maxsum resolver"
@@ -649,6 +650,7 @@ function resolve_versions!(
                 rethrow()
             end
         end
+        =#
     end
 
     if resolver == :maxsum || sat_resolver_failed
