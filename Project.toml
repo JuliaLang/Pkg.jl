@@ -30,7 +30,7 @@ p7zip_jll = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 
 [sources]
-Resolver = {rev = "main", url = "https://github.com/StefanKarpinski/Resolver.jl/"}
+Resolver = {rev = "kc/prune_req", url = "https://github.com/KristofferC/Resolver.jl"}
 
 [extensions]
 REPLExt = "REPL"
@@ -47,6 +47,7 @@ Markdown = "1.11"
 Printf = "1.11"
 REPL = "1.11"
 Random = "1.11"
+Resolver = "0.1.0"
 SHA = "0.7"
 TOML = "1"
 Tar = "1.10"
