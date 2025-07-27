@@ -4,10 +4,15 @@ using Pkg
 using Test
 using UUIDs
 
-Pkg.add(name = "Example", version = "0.5.4")
 example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+
+Pkg.add(name = "Example", version = "0.5.4")
 @test Pkg.dependencies()[example_uuid].version == v"0.5.4"
 
+Pkg.rm("Example")
+
+Pkg.add(name = "Example", version = "0.5.4"; resolver = :maxsum)
+@test Pkg.dependencies()[example_uuid].version == v"0.5.4"
 #=
 module PkgTestsOuter
 

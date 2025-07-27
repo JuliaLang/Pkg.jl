@@ -630,15 +630,12 @@ function resolve_versions!(
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
 
-    # Build compatibility data
+    # Build compatibility data (includes Julia compatibility info for both resolvers)
     compat_map, weak_compat = build_compat_data(env, registries, names, reqs, fixed, julia_version, installed_only)
 
     sat_resolver_failed = false
     if resolver == :sat
         # SAT-based resolver
-        # The SAT resolver doesn't special case Julia so needs some information about it
-        compat_map[JULIA_UUID] = Dict(julia_version => Dict())
-        reqs[JULIA_UUID] = VersionSpec(julia_version)
         try
             vers = ResolverTranslation.resolve_with_new_solver(
                 compat_map, weak_compat, names, reqs, fixed
@@ -646,9 +643,6 @@ function resolve_versions!(
         catch e
             if e isa ResolverTranslation.SATResolverError
                 @warn "SAT resolver failed ($(e.msg)), falling back to maxsum resolver"
-                # Remove Julia-specific additions for maxsum resolver
-                delete!(compat_map, JULIA_UUID)
-                delete!(reqs, JULIA_UUID)
                 sat_resolver_failed = true
             else
                 rethrow()
@@ -856,6 +850,12 @@ function build_compat_data(
             uuid_to_name[uuid] = entry.name
         end
     end
+
+    # Add Julia compatibility info for both resolvers
+    uuid_to_name[JULIA_UUID] = "julia"
+    fixed[JULIA_UUID] = Resolve.Fixed(julia_version)
+    all_compat[JULIA_UUID] = Dict(julia_version => Dict())
+    reqs[JULIA_UUID] = VersionSpec(julia_version)
 
     return all_compat, weak_compat
 end
