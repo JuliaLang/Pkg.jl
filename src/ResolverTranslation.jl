@@ -21,7 +21,7 @@ function translate_to_new_resolver(
     # Check that all required packages are present in all_compat
     missing_packages = setdiff(keys(reqs), keys(all_compat))
     if !isempty(missing_packages)
-        throw(SATResolverError("Required packages missing from compatibility data: $(missing_packages)"))
+        error("internal error: required packages missing from compatibility data: $(missing_packages)")
     end
 
     pkg_data_entries = []
