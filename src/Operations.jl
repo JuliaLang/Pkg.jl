@@ -1874,26 +1874,26 @@ function tiered_resolve(
             @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
             return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version, resolver)
         catch err
-            err isa Resolve.ResolverError || rethrow()
+            err isa Resolve.ResolverError || err isa ResolverTranslation.SATResolverError || rethrow()
         end
     end
     try # do not modify existing subgraph
         @debug "tiered_resolve: trying PRESERVE_ALL"
         return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version, resolver)
     catch err
-        err isa Resolve.ResolverError || rethrow()
+        err isa Resolve.ResolverError || err isa ResolverTranslation.SATResolverError || rethrow()
     end
     try # do not modify existing direct deps
         @debug "tiered_resolve: trying PRESERVE_DIRECT"
         return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version, resolver)
     catch err
-        err isa Resolve.ResolverError || rethrow()
+        err isa Resolve.ResolverError || err isa ResolverTranslation.SATResolverError || rethrow()
     end
     try
         @debug "tiered_resolve: trying PRESERVE_SEMVER"
         return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version, resolver)
     catch err
-        err isa Resolve.ResolverError || rethrow()
+        err isa Resolve.ResolverError || err isa ResolverTranslation.SATResolverError || rethrow()
     end
     @debug "tiered_resolve: trying PRESERVE_NONE"
     return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version, resolver)
