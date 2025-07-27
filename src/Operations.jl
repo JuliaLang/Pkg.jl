@@ -629,18 +629,36 @@ function resolve_versions!(
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
+
+    # Build compatibility data
+    compat_map, weak_compat = build_compat_data(env, registries, names, reqs, fixed, julia_version, installed_only)
+
+    sat_resolver_failed = false
     if resolver == :sat
         # SAT-based resolver
-        compat_map, weak_compat = build_compat_data(env, registries, names, reqs, fixed, julia_version, installed_only)
         # The SAT resolver doesn't special case Julia so needs some information about it
         compat_map[JULIA_UUID] = Dict(julia_version => Dict())
         reqs[JULIA_UUID] = VersionSpec(julia_version)
-        vers = ResolverTranslation.resolve_with_new_solver(
-            compat_map, weak_compat, names, reqs, fixed
-        )
-    else
-        # Use maxsum resolver
-        graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
+        try
+            vers = ResolverTranslation.resolve_with_new_solver(
+                compat_map, weak_compat, names, reqs, fixed
+            )
+        catch e
+            if e isa ResolverTranslation.SATResolverError
+                @warn "SAT resolver failed ($(e.msg)), falling back to maxsum resolver"
+                # Remove Julia-specific additions for maxsum resolver
+                delete!(compat_map, JULIA_UUID)
+                delete!(reqs, JULIA_UUID)
+                sat_resolver_failed = true
+            else
+                rethrow()
+            end
+        end
+    end
+
+    if resolver == :maxsum || sat_resolver_failed
+        # Maxsum resolver
+        graph = Resolve.Graph(compat_map, weak_compat, names, reqs, fixed, false, julia_version)
         Resolve.simplify_graph!(graph)
         vers = Resolve.resolve(graph)
     end
@@ -842,15 +860,6 @@ function build_compat_data(
     return all_compat, weak_compat
 end
 
-function deps_graph(
-        env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
-        reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
-        installed_only::Bool
-    )
-    all_compat, weak_compat = build_compat_data(env, registries, uuid_to_name, reqs, fixed, julia_version, installed_only)
-    return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
-        all_compat
-end
 
 ########################
 # Package installation #

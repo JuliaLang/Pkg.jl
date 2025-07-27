@@ -8,12 +8,22 @@ using Pkg.Versions: VersionSpec
 
 import Resolver
 
+struct SATResolverError <: Exception
+    msg::String
+end
+
 function translate_to_new_resolver(
         all_compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
         weak_compat::Dict{UUID, Dict{VersionNumber, Set{UUID}}},
         fixed::Dict{UUID, Resolve.Fixed},
         reqs::Resolve.Requires
     )
+    # Check that all required packages are present in all_compat
+    missing_packages = setdiff(keys(reqs), keys(all_compat))
+    if !isempty(missing_packages)
+        throw(SATResolverError("Required packages missing from compatibility data: $(missing_packages)"))
+    end
+
     pkg_data_entries = []
 
     for (pkg_uuid, version_compat) in all_compat
@@ -111,9 +121,11 @@ function translate_from_new_resolver(
     # Check if any required packages couldn't be satisfied
     if !isempty(unsatisfied_requirements)
         unsatisfied_names = [get(uuid_to_name, uuid, string(uuid)) for uuid in unsatisfied_requirements]
-        error(
-            "New resolver could not satisfy requirements for packages: $(join(unsatisfied_names, ", ")). " *
-                "This may indicate dependency conflicts or unsatisfiable constraints."
+        throw(
+            SATResolverError(
+                "SAT resolver could not satisfy requirements for packages: $(join(unsatisfied_names, ", ")). " *
+                    "This may indicate dependency conflicts or unsatisfiable constraints."
+            )
         )
     end
 
