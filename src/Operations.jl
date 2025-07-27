@@ -635,7 +635,7 @@ function resolve_versions!(
 
     sat_resolver_failed = false
     local vers
-    if resolver == :sat
+    if resolver == :sat && julia_version !== nothing
         # SAT-based resolver
         #try
         vers = ResolverTranslation.resolve_with_new_solver(
@@ -653,7 +653,7 @@ function resolve_versions!(
         =#
     end
 
-    if resolver == :maxsum || sat_resolver_failed
+    if resolver == :maxsum || sat_resolver_failed || julia_version === nothing
         # Maxsum resolver
         graph = Resolve.Graph(compat_map, weak_compat, names, reqs, fixed, false, julia_version)
         Resolve.simplify_graph!(graph)
@@ -854,11 +854,15 @@ function build_compat_data(
         end
     end
 
-    # Add Julia compatibility info for both resolvers
     uuid_to_name[JULIA_UUID] = "julia"
-    fixed[JULIA_UUID] = Resolve.Fixed(julia_version)
-    all_compat[JULIA_UUID] = Dict(julia_version => Dict())
-    reqs[JULIA_UUID] = VersionSpec(julia_version)
+    # Tell the resolver about julia itself
+    if julia_version !== nothing
+        fixed[JULIA_UUID] = Resolve.Fixed(julia_version)
+        all_compat[JULIA_UUID] = Dict(julia_version => Dict())
+        reqs[JULIA_UUID] = VersionSpec(julia_version)
+    else
+        all_compat[JULIA_UUID] = Dict()
+    end
 
     return all_compat, weak_compat
 end
