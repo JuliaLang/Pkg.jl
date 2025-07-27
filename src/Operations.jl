@@ -634,6 +634,7 @@ function resolve_versions!(
     compat_map, weak_compat = build_compat_data(env, registries, names, reqs, fixed, julia_version, installed_only)
 
     sat_resolver_failed = false
+    local vers
     if resolver == :sat
         # SAT-based resolver
         try
