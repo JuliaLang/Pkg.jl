@@ -56,6 +56,11 @@ jobs:
             julia-arch: 'x64'
             julia-version: 'nightly'
             pkg-server: "pkg.julialang.org"
+          - os: ubuntu-latest
+            julia-arch: 'x64'
+            julia-version: 'nightly'
+            pkg-server: "pkg.julialang.org"
+            resolver: "maxsum"
     steps:
       - name: Set git to use LF and fix TEMP on windows
         if: matrix.os == 'windows-latest'
@@ -80,6 +85,7 @@ jobs:
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
+          JULIA_PKG_RESOLVER: ${{ matrix.resolver || 'sat' }}
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
