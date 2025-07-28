@@ -86,6 +86,7 @@ jobs:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
           JULIA_PKG_RESOLVER: ${{ matrix.resolver || 'sat' }}
+          JULIA_PKG_RESOLVER_ALLOW_FALLBACK: false
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:

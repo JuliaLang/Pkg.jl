@@ -133,8 +133,7 @@ function translate_from_new_resolver(
         unsatisfied_names = [get(uuid_to_name, uuid, string(uuid)) for uuid in unsatisfied_requirements]
         throw(
             SATResolverError(
-                "SAT resolver could not satisfy requirements for packages: $(join(unsatisfied_names, ", ")). " *
-                    "This may indicate dependency conflicts or unsatisfiable constraints."
+                "SAT resolver could not satisfy requirements for packages: $(join(unsatisfied_names, ", "))."
             )
         )
     end

@@ -637,20 +637,19 @@ function resolve_versions!(
     local vers
     if resolver == :sat && julia_version !== nothing
         # SAT-based resolver
-        #try
-        vers = ResolverTranslation.resolve_with_new_solver(
-            compat_map, weak_compat, names, reqs, fixed
-        )
-        #=
+        try
+            vers = ResolverTranslation.resolve_with_new_solver(
+                compat_map, weak_compat, names, reqs, fixed
+            )
         catch e
-            if e isa ResolverTranslation.SATResolverError
-                @warn "SAT resolver failed ($(e.msg)), falling back to maxsum resolver"
+            allow_fallback = get(ENV, "JULIA_PKG_RESOLVER_ALLOW_FALLBACK", "true") == "true"
+            if e isa ResolverTranslation.SATResolverError && allow_fallback
+                @info "SAT resolver failed ($(e.msg)), falling back to maxsum resolver"
                 sat_resolver_failed = true
             else
                 rethrow()
             end
         end
-        =#
     end
 
     if resolver == :maxsum || sat_resolver_failed || julia_version === nothing
@@ -1869,35 +1868,37 @@ end
 
 function tiered_resolve(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
-        try_all_installed::Bool, resolver::Symbol
+        try_all_installed::Bool, resolver::Symbol, io::IO
     )
+    resolver_name = resolver == :sat ? "SAT" : "maxsum"
+
     if try_all_installed
         try # do not modify existing subgraph and only add installed versions of the new packages
-            @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
+            printpkgstyle(io, :Resolving, "package versions with $resolver_name resolver (tiered: PRESERVE_ALL_INSTALLED)...")
             return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version, resolver)
         catch err
             err isa ResolverError || rethrow()
         end
     end
     try # do not modify existing subgraph
-        @debug "tiered_resolve: trying PRESERVE_ALL"
+        printpkgstyle(io, :Resolving, "package versions with $resolver_name resolver (tiered: PRESERVE_ALL)...")
         return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version, resolver)
     catch err
         err isa ResolverError || rethrow()
     end
     try # do not modify existing direct deps
-        @debug "tiered_resolve: trying PRESERVE_DIRECT"
+        printpkgstyle(io, :Resolving, "package versions with $resolver_name resolver (tiered: PRESERVE_DIRECT)...")
         return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version, resolver)
     catch err
         err isa ResolverError || rethrow()
     end
     try
-        @debug "tiered_resolve: trying PRESERVE_SEMVER"
+        printpkgstyle(io, :Resolving, "package versions with $resolver_name resolver (tiered: PRESERVE_SEMVER)...")
         return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version, resolver)
     catch err
         err isa ResolverError || rethrow()
     end
-    @debug "tiered_resolve: trying PRESERVE_NONE"
+    printpkgstyle(io, :Resolving, "package versions with $resolver_name resolver (tiered: PRESERVE_NONE)...")
     return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version, resolver)
 end
 
@@ -1917,7 +1918,8 @@ function _resolve(
         io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
         pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version, resolver::Symbol
     )
-    usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
+    # Don't show strategy for tiered resolve since we'll show individual tiers
+    usingstrategy = preserve != PRESERVE_TIERED && preserve != PRESERVE_TIERED_INSTALLED ? " using $preserve" : ""
 
     resolver_name = if resolver == :sat
         "SAT"
@@ -1927,13 +1929,13 @@ function _resolve(
         pkgerror("Invalid resolver: $resolver. Valid options are :sat or :maxsum")
     end
 
-    printpkgstyle(io, :Resolving, "package versions$(usingstrategy) with $resolver_name resolver...")
     return try
         if preserve == PRESERVE_TIERED_INSTALLED
-            tiered_resolve(env, registries, pkgs, julia_version, true, resolver)
+            tiered_resolve(env, registries, pkgs, julia_version, true, resolver, io)
         elseif preserve == PRESERVE_TIERED
-            tiered_resolve(env, registries, pkgs, julia_version, false, resolver)
+            tiered_resolve(env, registries, pkgs, julia_version, false, resolver, io)
         else
+            printpkgstyle(io, :Resolving, "package versions$(usingstrategy) with $resolver_name resolver...")
             targeted_resolve(env, registries, pkgs, preserve, julia_version, resolver)
         end
     catch err
