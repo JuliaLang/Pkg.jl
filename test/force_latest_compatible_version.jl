@@ -6,7 +6,7 @@ import ..Pkg # ensure we are using the correct Pkg
 import ..Utils
 using Test
 
-get_exception_message(ex::Pkg.Resolve.ResolverError) = ex.msg
+get_exception_message(ex::Pkg.MaxSumResolverError) = ex.msg
 
 function get_exception_and_message(f::Function)
     ex = try
@@ -18,7 +18,7 @@ function get_exception_and_message(f::Function)
     return ex, msg
 end
 
-const exception_type_1 = Pkg.Resolve.ResolverError
+const exception_type_1 = Pkg.MaxSumResolverError
 const message_1 = "Unsatisfiable requirements detected for package"
 const message_2 = "Dependency does not have a [compat] entry"
 

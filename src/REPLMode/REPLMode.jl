@@ -7,7 +7,7 @@ module REPLMode
 using Markdown, UUIDs, Dates
 
 import ..OFFLINE_MODE, ..linewrap, ..pathrepr, ..IN_REPL_MODE
-using ..Types, ..Operations, ..API, ..Registry, ..Resolve, ..Apps
+using ..Types, ..Operations, ..API, ..Registry, ..Apps
 import ..stdout_f, ..stderr_f
 
 

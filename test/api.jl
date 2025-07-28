@@ -4,7 +4,7 @@ module APITests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, Test, REPL
-import Pkg.Types.PkgError, Pkg.Resolve.ResolverError
+import Pkg.Types.PkgError, Pkg.MaxSumResolverError
 using Pkg: stdout_f, stderr_f
 using UUIDs
 
@@ -409,12 +409,12 @@ end
             rm(test_dir, force = true, recursive = true)
             copy_test_package(tempdir, "AllowReresolveTest")
             Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
-            # @test_throws Pkg.Resolve.ResolverError Pkg.build(; allow_reresolve = false)
+            # @test_throws Pkg.MaxSumResolverError Pkg.build(; allow_reresolve = false)
 
             rm(test_dir, force = true, recursive = true)
             copy_test_package(tempdir, "AllowReresolveTest")
             Pkg.activate(joinpath(tempdir, "AllowReresolveTest"))
-            # @test_throws Pkg.Resolve.ResolverError Pkg.test(; allow_reresolve = false)
+            # @test_throws Pkg.MaxSumResolverError Pkg.test(; allow_reresolve = false)
         end
     end
 end
@@ -438,7 +438,7 @@ end
             @testset "resolve error shows yanked packages warning" begin
                 # Try to add a package that will cause resolve conflicts with yanked package
                 iob = IOBuffer()
-                # @test_throws Pkg.Resolve.ResolverError Pkg.add("Example"; preserve = Pkg.PRESERVE_ALL, io = iob)
+                # @test_throws Pkg.MaxSumResolverError Pkg.add("Example"; preserve = Pkg.PRESERVE_ALL, io = iob)
                 error_output = String(take!(iob))
 
                 @test occursin("The following package versions were yanked from their registry and are not resolvable:", error_output)

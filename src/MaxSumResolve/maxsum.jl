@@ -356,7 +356,7 @@ function try_simplify_graph_soft!(graph, sources)
     try
         simplify_graph_soft!(graph, sources, log_events = false)
     catch err
-        err isa ResolverError || rethrow()
+        err isa MaxSumResolverError || rethrow()
         return false
     end
     return true

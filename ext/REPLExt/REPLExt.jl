@@ -11,7 +11,7 @@ import .REPL: LineEdit, REPLCompletions, TerminalMenus
 
 import Pkg
 import .Pkg: linewrap, pathrepr, can_fancyprint, printpkgstyle, PKGMODE_PROJECT
-using .Pkg: Types, Operations, API, Registry, Resolve, REPLMode, safe_realpath
+using .Pkg: Types, Operations, API, Registry, REPLMode, safe_realpath, ResolverError
 
 using .REPLMode: Statement, CommandSpec, Command, prepare_cmd, tokenize, core_parse, SPECS, api_options, parse_option, api_options, is_opt, wrap_option
 
@@ -105,7 +105,7 @@ function do_cmds(repl::REPL.AbstractREPL, commands::Union{String, Vector{Command
         end
         return REPLMode.do_cmds(commands, repl.t.out_stream)
     catch err
-        if err isa PkgError || err isa Resolve.ResolverError
+        if err isa PkgError || err isa ResolverError
             Base.display_error(repl.t.err_stream, ErrorException(sprint(showerror, err)), Ptr{Nothing}[])
         else
             Base.display_error(repl.t.err_stream, err, Base.catch_backtrace())

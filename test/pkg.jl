@@ -1018,7 +1018,7 @@ end
     end
 end
 
-import Pkg.Resolve.range_compressed_versionspec
+import Pkg.MaxSumResolve.range_compressed_versionspec
 @testset "range_compressed_versionspec" begin
     pool = [v"1.0.0", v"1.1.0", v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0", v"3.1.0"]
     @test (

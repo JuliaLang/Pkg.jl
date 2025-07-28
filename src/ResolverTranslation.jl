@@ -3,20 +3,21 @@
 module ResolverTranslation
 
 using UUIDs
-using ..Resolve
-using Pkg.Versions: VersionSpec
+using ..MaxSumResolve
+import ...ResolverError
+using ...Versions: VersionSpec
 
 import Resolver
 
-struct SATResolverError <: Exception
+struct SATResolverError <: ResolverError
     msg::String
 end
 
 function translate_to_new_resolver(
         all_compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
         weak_compat::Dict{UUID, Dict{VersionNumber, Set{UUID}}},
-        fixed::Dict{UUID, Resolve.Fixed},
-        reqs::Resolve.Requires
+        fixed::Dict{UUID, MaxSumResolve.Fixed},
+        reqs::MaxSumResolve.Requires
     )
     # Check that all required packages are present in all_compat
     missing_packages = setdiff(keys(reqs), keys(all_compat))
@@ -145,8 +146,8 @@ function resolve_with_new_solver(
         all_compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
         weak_compat::Dict{UUID, Dict{VersionNumber, Set{UUID}}},
         uuid_to_name::Dict{UUID, String},
-        reqs::Resolve.Requires,
-        fixed::Dict{UUID, Resolve.Fixed}
+        reqs::MaxSumResolve.Requires,
+        fixed::Dict{UUID, MaxSumResolve.Fixed}
     )::Dict{UUID, VersionNumber}
     # Translate to new resolver format
     pkg_data = translate_to_new_resolver(all_compat, weak_compat, fixed, reqs)
