@@ -18,7 +18,7 @@ For example, `Pkg.add("Example"; io=devnull)` will discard any output produced b
 
 Pkg supports two dependency resolvers that can be selected using the `JULIA_PKG_RESOLVER` environment variable or the `resolver` keyword argument:
 
-- `"sat"` or `:sat` (default): Uses a SAT-based resolver that provides more robust dependency resolution and better error messages for unsatisfiable constraints.
+- `"sat"` or `:sat` (default): Uses a SAT-based resolver.
 - `"maxsum"` or `:maxsum`: Uses the traditional MaxSum resolver from earlier Pkg versions.
 
 **Environment variable examples:**
