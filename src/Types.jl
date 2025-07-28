@@ -461,7 +461,7 @@ function resolver_type_from_env()
     elseif val == "maxsum"
         return :maxsum
     else
-        error("Environment variable `PKG_RESOLVER` expects 'sat' or 'maxsum', instead found $(val)")
+        error("Environment variable `JULIA_PKG_RESOLVER` expects 'sat' or 'maxsum', instead found $(val)")
     end
 end
 # ENV variables to set some of these defaults?

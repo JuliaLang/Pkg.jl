@@ -3607,7 +3607,8 @@ end
         try
             Pkg.add(Pkg.PackageSpec(uuid = exuuid, version = v"0.5.3"))
         catch e
-            # @test e isa MaxSumResolverError
+            @test e isa ResolverError
+            # TODO: Update to work with both resolver errors:
             # `\S*` in regex below will allow for ANSI color escape codes in the logs
             # @test occursin(r"possible versions are: \S*0\.5\.1\S* or uninstalled", e.msg)
         end
