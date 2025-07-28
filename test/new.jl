@@ -3,7 +3,7 @@ module NewTests
 using Test, UUIDs, Dates, TOML
 import ..Pkg, LibGit2
 using Pkg.Types: PkgError
-using Pkg.MaxSumResolve: MaxSumResolverError
+using Pkg: ResolverError
 import Pkg.Artifacts: artifact_meta, artifact_path
 import Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using ..Utils
@@ -921,7 +921,7 @@ end
             Pkg.add(name = "Example", version = "0.3.0")
             @test Pkg.dependencies()[exuuid].version == v"0.3.0"
             @test Pkg.dependencies()[pngjll_uuid].version == v"1.6.37+4"
-            @test_throws Pkg.ResolverError Pkg.add(Pkg.PackageSpec(; name = "JSON", version = "0.18.0"); preserve = Pkg.PRESERVE_ALL_INSTALLED) # no installed version
+            @test_throws ResolverError Pkg.add(Pkg.PackageSpec(; name = "JSON", version = "0.18.0"); preserve = Pkg.PRESERVE_ALL_INSTALLED) # no installed version
         end
         # - `all` should succeed in the same way as `tiered`.
         isolate(loaded_depot = false) do

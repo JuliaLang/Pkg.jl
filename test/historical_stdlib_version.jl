@@ -1,6 +1,7 @@
 module HistoricalStdlibVersionsTests
 using ..Pkg
 using Pkg.Types: is_stdlib
+using Pkg: ResolverError
 using Pkg.Artifacts: artifact_meta, artifact_path
 using Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using Test
@@ -303,7 +304,7 @@ isolate(loaded_depot = true) do
             Pkg.add(; name = "GMP_jll", julia_version = v"1.7")
 
             # This is expected to fail, that version can't live with `julia_version = v"1.7"`
-            @test_throws Pkg.MaxSumResolverError Pkg.add(; name = "GMP_jll", version = v"6.2.0+5", julia_version = v"1.7")
+            @test_throws ResolverError Pkg.add(; name = "GMP_jll", version = v"6.2.0+5", julia_version = v"1.7")
 
             Pkg.activate(temp = true)
             # Stdlib add (julia_version == nothing)
