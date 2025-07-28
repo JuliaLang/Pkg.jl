@@ -977,7 +977,7 @@ function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = Packag
     end
 end
 
-# include("precompile.jl")
+include("precompile.jl")
 
 # Reset globals that might have been mutated during precompilation.
 DEFAULT_IO[] = nothing
