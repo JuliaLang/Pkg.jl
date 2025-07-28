@@ -6,7 +6,7 @@ import ..Pkg # ensure we are using the correct Pkg
 import ..Utils
 using Test
 
-get_exception_message(ex::Pkg.MaxSumResolverError) = ex.msg
+get_exception_message(ex::Pkg.ResolverError) = ex.msg
 
 function get_exception_and_message(f::Function)
     ex = try
@@ -18,8 +18,15 @@ function get_exception_and_message(f::Function)
     return ex, msg
 end
 
-const exception_type_1 = Pkg.MaxSumResolverError
-const message_1 = "Unsatisfiable requirements detected for package"
+function is_resolver_error_message(msg::String)
+    # Check for MaxSum resolver error message
+    maxsum_pattern = "Unsatisfiable requirements detected for package"
+    # Check for SAT resolver error message
+    sat_pattern = "SAT resolver could not satisfy requirements"
+    return occursin(maxsum_pattern, msg) || occursin(sat_pattern, msg)
+end
+
+const exception_type_1 = Pkg.ResolverError
 const message_2 = "Dependency does not have a [compat] entry"
 
 const test_package_parent_dir = joinpath(
@@ -111,7 +118,7 @@ const test_package_parent_dir = joinpath(
                             end
                             ex, msg = get_exception_and_message(f)
                             @test ex isa exception_type_1
-                            @test occursin(message_1, msg)
+                            @test is_resolver_error_message(msg)
                         end
                     end
 
@@ -158,7 +165,7 @@ const test_package_parent_dir = joinpath(
                             end
                             ex, msg = get_exception_and_message(f)
                             @test ex isa exception_type_1
-                            @test occursin(message_1, msg)
+                            @test is_resolver_error_message(msg)
                         end
                     end
 
@@ -186,7 +193,7 @@ const test_package_parent_dir = joinpath(
                                 end
                                 ex, msg = get_exception_and_message(f)
                                 @test ex isa exception_type_1
-                                @test occursin(message_1, msg)
+                                @test is_resolver_error_message(msg)
                             end
                         end
                     end
@@ -219,7 +226,7 @@ const test_package_parent_dir = joinpath(
                                 end
                                 ex, msg = get_exception_and_message(f)
                                 @test ex isa exception_type_1
-                                @test occursin(message_1, msg)
+                                @test is_resolver_error_message(msg)
                             end
                         end
 
@@ -241,7 +248,7 @@ const test_package_parent_dir = joinpath(
                                     end
                                     ex, msg = get_exception_and_message(f)
                                     @test ex isa exception_type_1
-                                    @test occursin(message_1, msg)
+                                    @test is_resolver_error_message(msg)
                                 end
                             end
                         end

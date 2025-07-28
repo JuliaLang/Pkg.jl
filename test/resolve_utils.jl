@@ -18,7 +18,7 @@ const VERBOSE = false
 const uuid_package = UUID("cfb74b52-ec16-5bb7-a574-95d9e393895e")
 pkguuid(p::String) = uuid5(uuid_package, p)
 function storeuuid(p::String, uuid_to_name::Dict{UUID, String})
-    uuid = p == "julia" ? MaxSumResolveuuid_julia : pkguuid(p)
+    uuid = p == "julia" ? MaxSumResolv.euuid_julia : pkguuid(p)
     if haskey(uuid_to_name, uuid)
         @assert uuid_to_name[uuid] == p
     else

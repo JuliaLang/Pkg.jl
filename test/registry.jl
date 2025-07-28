@@ -352,7 +352,7 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             Pkg.update() # should not update Example
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
-            # @test_throws Pkg.MaxSumResolverError Pkg.add(PackageSpec(name = "Example", version = v"0.5.1"))
+            @test_throws Pkg.ResolverError Pkg.add(PackageSpec(name = "Example", version = v"0.5.1"))
             Pkg.rm("Example")
             Pkg.add("JSON") # depends on Example
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
