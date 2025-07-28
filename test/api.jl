@@ -4,7 +4,8 @@ module APITests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Pkg, Test, REPL
-using Pkg.Types: PkgError, ResolverError
+using Pkg.Types: PkgError
+using Pkg: ResolverError
 using Pkg: stdout_f, stderr_f
 using UUIDs
 

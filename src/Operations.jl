@@ -686,6 +686,8 @@ function resolve_versions!(
             # Fixed packages are not returned by resolve (they already have their version set)
             pkg.version = vers[pkg.uuid]
         else
+            # Skip Julia itself - it should not be in the package list
+            uuid == JULIA_UUID && continue
             name = is_stdlib(uuid) ? stdlib_infos()[uuid].name : registered_name(registries, uuid)
             push!(pkgs, PackageSpec(; name = name, uuid = uuid, version = ver))
         end
