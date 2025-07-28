@@ -30,12 +30,21 @@ function translate_to_new_resolver(
         # Extract all versions for this package
         all_versions = sort!(collect(keys(version_compat)), rev = true)
 
-        # Filter versions based on requirements
+        # Filter versions based on requirements and fixed package constraints
         if haskey(reqs, pkg_uuid)
             req_spec = reqs[pkg_uuid]
             versions = filter(v -> v in req_spec, all_versions)
         else
             versions = all_versions
+        end
+
+        # Apply constraints from ALL fixed packages (including weak deps)
+        for (_, fixed_entry) in fixed
+            if haskey(fixed_entry.requires, pkg_uuid)
+                fixed_constraint = fixed_entry.requires[pkg_uuid]
+                versions = filter(v -> v in fixed_constraint, versions)
+                # Continue to apply constraints from other fixed packages (intersection)
+            end
         end
 
         # Build regular dependencies (non-weak)
