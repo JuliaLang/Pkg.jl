@@ -14,6 +14,25 @@ You can specify these options by setting keyword arguments.
 Use the `io::IOBuffer` keyword argument to redirect Pkg output.
 For example, `Pkg.add("Example"; io=devnull)` will discard any output produced by the `add` call.
 
+### Dependency Resolver Selection
+
+Pkg supports two dependency resolvers that can be selected using the `JULIA_PKG_RESOLVER` environment variable or the `resolver` keyword argument:
+
+- `"sat"` or `:sat` (default): Uses a SAT-based resolver that provides more robust dependency resolution and better error messages for unsatisfiable constraints.
+- `"maxsum"` or `:maxsum`: Uses the traditional MaxSum resolver from earlier Pkg versions.
+
+**Environment variable examples:**
+```bash
+export JULIA_PKG_RESOLVER=maxsum
+julia -e 'using Pkg; Pkg.add("Example")'
+```
+
+**Keyword argument examples:**
+```julia
+Pkg.add("Example"; resolver=:sat)     # Use SAT resolver
+Pkg.add("Example"; resolver=:maxsum)  # Use MaxSum resolver
+```
+
 ## Package API Reference
 
 In the Pkg REPL mode, packages (with associated version, UUID, URL etc) are parsed from strings,

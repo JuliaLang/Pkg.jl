@@ -371,6 +371,9 @@ Sometimes, you can find yourself in a situation in which two packages you'd like
 have incompatible requirements.
 In such cases you'll get an "Unsatisfiable requirements" error:
 
+!!! note "Dependency Resolver"
+    Pkg uses a SAT-based dependency resolver by default, which provides more robust conflict resolution and clearer error messages. You can switch to the legacy MaxSum resolver by setting the environment variable `JULIA_PKG_RESOLVER=maxsum` if needed or by passing the `resolver=:maxsum` to functions.
+
 ```@setup conflict
 using Pkg
 include(joinpath(pkgdir(Pkg), "test", "resolve_utils.jl"))

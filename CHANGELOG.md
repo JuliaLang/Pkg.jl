@@ -1,6 +1,10 @@
 Pkg v1.13 Release Notes
 =======================
 
+- Added SAT-based dependency resolver alongside the existing MaxSum resolver. The resolver can be selected
+  using the `JULIA_PKG_RESOLVER` environment variable with values `"sat"` (default) or `"maxsum"`, or via the
+  `resolver` keyword argument (e.g., `Pkg.add("Example"; resolver=:maxsum)`). The SAT resolver provides more
+  robust dependency resolution and better error messages for unsatisfiable constraints.
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve
