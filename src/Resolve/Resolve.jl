@@ -5,9 +5,9 @@ module Resolve
 using ..Versions
 import ..stdout_f, ..stderr_f
 
-using Printf
-using Random
-using UUIDs
+using Printf: @sprintf
+using Random: Random, shuffle!
+using UUIDs: UUID
 
 export resolve, sanity_check, Graph, pkgID
 

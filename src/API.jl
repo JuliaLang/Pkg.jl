@@ -2,26 +2,25 @@
 
 module API
 
-using UUIDs
-using Printf
-import Random
-using Dates
+import FileWatching
 import LibGit2
 import Logging
-import FileWatching
+import Printf
+import Random
+using Dates: Dates, DateTime, Day, Period, now
+using UUIDs: UUIDs, UUID
 
-import Base: StaleCacheKey
-
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped
-import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
-using ..Types, ..TOML
-using ..Types: VersionTypes
 using Base.BinaryPlatforms
+
+import ..Operations, ..GitTools, ..Pkg, ..Registry
+import ..TOML
+import ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
 import ..stderr_f, ..stdout_f
+import ..Resolve: ResolverError, ResolverTimeoutError
+using ..Types
 using ..Artifacts: artifact_paths
 using ..MiniProgressBars
-import ..Resolve: ResolverError, ResolverTimeoutError
 
 include("generate.jl")
 
@@ -583,7 +582,7 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
     env = ctx.env
 
     # Only look at user-depot unless force=true
-    gc_depots = force ? depots() : [depots1()]
+    gc_depots = force ? Base.DEPOT_PATH : [depots1()]
 
     # First, we load in our `manifest_usage.toml` files which will tell us when our
     # "index files" (`Manifest.toml`, `Artifacts.toml`) were last used.  We will combine
@@ -1435,10 +1434,10 @@ function activate(path::AbstractString; shared::Bool = false, temp::Bool = false
             end
         end
     else
-        # initialize `fullpath` in case of empty `Pkg.depots()`
+        # initialize `fullpath` in case of empty `Pkg.Base.DEPOT_PATH`
         fullpath = ""
         # loop over all depots to check if the shared environment already exists
-        for depot in Pkg.depots()
+        for depot in Pkg.Base.DEPOT_PATH
             fullpath = joinpath(Pkg.envdir(depot), path)
             isdir(fullpath) && break
         end
