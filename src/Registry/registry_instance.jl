@@ -308,7 +308,7 @@ end
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
 
 @noinline function _ensure_registry_loaded_slow!(r::RegistryInstance)
-    return lock(r.load_lock) do
+    return @lock r.load_lock begin
         # Double-check pattern: if another thread loaded while we were waiting for the lock
         isdefined(r, :pkgs) && return r
 
