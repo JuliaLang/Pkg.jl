@@ -343,7 +343,7 @@ end
 # Property accessors that trigger lazy loading
 @inline function Base.getproperty(r::RegistryInstance, f::Symbol)
     if f === :name || f === :uuid || f === :repo || f === :description || f === :pkgs || f === :name_to_uuids
-        isdefined(r, :pkgs) || _ensure_registry_loaded_slow!(r)
+        _ensure_registry_loaded_slow!(r) # Takes a lock to ensure thread safety
     end
     return getfield(r, f)
 end
