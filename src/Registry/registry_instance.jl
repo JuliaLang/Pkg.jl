@@ -277,6 +277,7 @@ mutable struct RegistryInstance
     path::String
     tree_info::Union{Base.SHA1, Nothing}
     compressed_file::Union{String, Nothing}
+    const load_lock::ReentrantLock # Lock for thread-safe lazy loading
 
     # Lazily loaded fields
     name::String
@@ -290,7 +291,7 @@ mutable struct RegistryInstance
 
     # Inner constructor for lazy loading - leaves fields undefined
     function RegistryInstance(path::String, tree_info::Union{Base.SHA1, Nothing}, compressed_file::Union{String, Nothing})
-        return new(path, tree_info, compressed_file)
+        return new(path, tree_info, compressed_file, ReentrantLock())
     end
 
     # Full constructor for when all fields are known
@@ -300,40 +301,43 @@ mutable struct RegistryInstance
             pkgs::Dict{UUID, PkgEntry}, in_memory_registry::Union{Nothing, Dict{String, String}},
             name_to_uuids::Dict{String, Vector{UUID}}
         )
-        return new(path, tree_info, compressed_file, name, uuid, repo, description, pkgs, in_memory_registry, name_to_uuids)
+        return new(path, tree_info, compressed_file, ReentrantLock(), name, uuid, repo, description, pkgs, in_memory_registry, name_to_uuids)
     end
 end
 
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
 
 @noinline function _ensure_registry_loaded_slow!(r::RegistryInstance)
-    isdefined(r, :pkgs) && return r
+    return lock(r.load_lock) do
+        # Double-check pattern: if another thread loaded while we were waiting for the lock
+        isdefined(r, :pkgs) && return r
 
-    if getfield(r, :compressed_file) !== nothing
-        r.in_memory_registry = uncompress_registry(joinpath(dirname(getfield(r, :path)), getfield(r, :compressed_file)))
-    else
-        r.in_memory_registry = nothing
+        if getfield(r, :compressed_file) !== nothing
+            r.in_memory_registry = uncompress_registry(joinpath(dirname(getfield(r, :path)), getfield(r, :compressed_file)))
+        else
+            r.in_memory_registry = nothing
+        end
+
+        d = parsefile(r.in_memory_registry, getfield(r, :path), "Registry.toml")
+        r.name = d["name"]::String
+        r.uuid = UUID(d["uuid"]::String)
+        r.repo = get(d, "repo", nothing)::Union{String, Nothing}
+        r.description = get(d, "description", nothing)::Union{String, Nothing}
+
+        r.pkgs = Dict{UUID, PkgEntry}()
+        for (uuid, info) in d["packages"]::Dict{String, Any}
+            uuid = UUID(uuid::String)
+            info::Dict{String, Any}
+            name = info["name"]::String
+            pkgpath = info["path"]::String
+            pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid, r.in_memory_registry)
+            r.pkgs[uuid] = pkg
+        end
+
+        r.name_to_uuids = Dict{String, Vector{UUID}}()
+
+        return r
     end
-
-    d = parsefile(r.in_memory_registry, getfield(r, :path), "Registry.toml")
-    r.name = d["name"]::String
-    r.uuid = UUID(d["uuid"]::String)
-    r.repo = get(d, "repo", nothing)::Union{String, Nothing}
-    r.description = get(d, "description", nothing)::Union{String, Nothing}
-
-    r.pkgs = Dict{UUID, PkgEntry}()
-    for (uuid, info) in d["packages"]::Dict{String, Any}
-        uuid = UUID(uuid::String)
-        info::Dict{String, Any}
-        name = info["name"]::String
-        pkgpath = info["path"]::String
-        pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid, r.in_memory_registry)
-        r.pkgs[uuid] = pkg
-    end
-
-    r.name_to_uuids = Dict{String, Vector{UUID}}()
-
-    return r
 end
 
 # Property accessors that trigger lazy loading
