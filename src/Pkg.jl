@@ -896,11 +896,6 @@ using Pkg, Test
 const is_manifest_current = API.is_manifest_current
 
 function __init__()
-    if !isassigned(Base.PKG_PRECOMPILE_HOOK)
-        # allows Base to use Pkg.precompile during loading
-        # disable via `Base.PKG_PRECOMPILE_HOOK[] = Returns(nothing)`
-        Base.PKG_PRECOMPILE_HOOK[] = precompile
-    end
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     _auto_gc_enabled[] = Base.get_bool_env("JULIA_PKG_GC_AUTO", true)
     return nothing
