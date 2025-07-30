@@ -175,83 +175,89 @@ mutable struct PkgEntry
     const uuid::UUID
 
     const in_memory_registry::Union{Dict{String, String}, Nothing}
+    # Lock for thread-safe lazy loading
+    const info_lock::ReentrantLock
     # Version.toml / (Compat.toml / Deps.toml):
     info::PkgInfo # lazily initialized
 
-    PkgEntry(path, registry_path, name, uuid, in_memory_registry) = new(path, registry_path, name, uuid, in_memory_registry #= undef =#)
+    PkgEntry(path, registry_path, name, uuid, in_memory_registry) = new(path, registry_path, name, uuid, in_memory_registry, ReentrantLock() #= undef =#)
 end
 
 registry_info(pkg::PkgEntry) = init_package_info!(pkg)
 
 function init_package_info!(pkg::PkgEntry)
-    # Already uncompressed the info for this package, return early
-    isdefined(pkg, :info) && return pkg.info
-    path = pkg.registry_path
+    # Thread-safe lazy loading with double-check pattern
+    return @lock pkg.info_lock begin
+        # Double-check: if another thread loaded while we were waiting for the lock
+        isdefined(pkg, :info) && return pkg.info
 
-    d_p = parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
-    name = d_p["name"]::String
-    name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
-    repo = get(d_p, "repo", nothing)::Union{Nothing, String}
-    subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
+        path = pkg.registry_path
 
-    # Versions.toml
-    d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
-        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
-    version_info = Dict{VersionNumber, VersionInfo}(
-        VersionNumber(k) =>
-            VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v
-    )
+        d_p = parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
+        name = d_p["name"]::String
+        name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
+        repo = get(d_p, "repo", nothing)::Union{Nothing, String}
+        subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
 
-    # Compat.toml
-    compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
-        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) : Dict{String, Any}()
-    compat = Dict{VersionRange, Dict{String, VersionSpec}}()
-    for (v, data) in compat_data_toml
-        data = data::Dict{String, Any}
-        vr = VersionRange(v)
-        d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
-        compat[vr] = d
+        # Versions.toml
+        d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
+            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
+        version_info = Dict{VersionNumber, VersionInfo}(
+            VersionNumber(k) =>
+                VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v
+        )
+
+        # Compat.toml
+        compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
+            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) : Dict{String, Any}()
+        compat = Dict{VersionRange, Dict{String, VersionSpec}}()
+        for (v, data) in compat_data_toml
+            data = data::Dict{String, Any}
+            vr = VersionRange(v)
+            d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
+            compat[vr] = d
+        end
+
+        # Deps.toml
+        deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) ?
+            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) : Dict{String, Any}()
+        deps = Dict{VersionRange, Dict{String, UUID}}()
+        for (v, data) in deps_data_toml
+            data = data::Dict{String, Any}
+            vr = VersionRange(v)
+            d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
+            deps[vr] = d
+        end
+        # All packages depend on julia
+        deps[VersionRange()] = Dict("julia" => JULIA_UUID)
+
+        # WeakCompat.toml
+        weak_compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) ?
+            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) : Dict{String, Any}()
+        weak_compat = Dict{VersionRange, Dict{String, VersionSpec}}()
+        for (v, data) in weak_compat_data_toml
+            data = data::Dict{String, Any}
+            vr = VersionRange(v)
+            d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
+            weak_compat[vr] = d
+        end
+
+        # WeakDeps.toml
+        weak_deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) ?
+            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) : Dict{String, Any}()
+        weak_deps = Dict{VersionRange, Dict{String, UUID}}()
+        for (v, data) in weak_deps_data_toml
+            data = data::Dict{String, Any}
+            vr = VersionRange(v)
+            d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
+            weak_deps[vr] = d
+        end
+
+        @assert !isdefined(pkg, :info)
+        pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps)
+
+        return pkg.info
     end
-
-    # Deps.toml
-    deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) ?
-        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) : Dict{String, Any}()
-    deps = Dict{VersionRange, Dict{String, UUID}}()
-    for (v, data) in deps_data_toml
-        data = data::Dict{String, Any}
-        vr = VersionRange(v)
-        d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
-        deps[vr] = d
-    end
-    # All packages depend on julia
-    deps[VersionRange()] = Dict("julia" => JULIA_UUID)
-
-    # WeakCompat.toml
-    weak_compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) ?
-        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) : Dict{String, Any}()
-    weak_compat = Dict{VersionRange, Dict{String, VersionSpec}}()
-    for (v, data) in weak_compat_data_toml
-        data = data::Dict{String, Any}
-        vr = VersionRange(v)
-        d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
-        weak_compat[vr] = d
-    end
-
-    # WeakDeps.toml
-    weak_deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) ?
-        parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) : Dict{String, Any}()
-    weak_deps = Dict{VersionRange, Dict{String, UUID}}()
-    for (v, data) in weak_deps_data_toml
-        data = data::Dict{String, Any}
-        vr = VersionRange(v)
-        d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
-        weak_deps[vr] = d
-    end
-
-    @assert !isdefined(pkg, :info)
-    pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps)
-
-    return pkg.info
 end
 
 
@@ -277,6 +283,7 @@ mutable struct RegistryInstance
     path::String
     tree_info::Union{Base.SHA1, Nothing}
     compressed_file::Union{String, Nothing}
+    const load_lock::ReentrantLock # Lock for thread-safe lazy loading
 
     # Lazily loaded fields
     name::String
@@ -290,7 +297,7 @@ mutable struct RegistryInstance
 
     # Inner constructor for lazy loading - leaves fields undefined
     function RegistryInstance(path::String, tree_info::Union{Base.SHA1, Nothing}, compressed_file::Union{String, Nothing})
-        return new(path, tree_info, compressed_file)
+        return new(path, tree_info, compressed_file, ReentrantLock())
     end
 
     # Full constructor for when all fields are known
@@ -300,46 +307,49 @@ mutable struct RegistryInstance
             pkgs::Dict{UUID, PkgEntry}, in_memory_registry::Union{Nothing, Dict{String, String}},
             name_to_uuids::Dict{String, Vector{UUID}}
         )
-        return new(path, tree_info, compressed_file, name, uuid, repo, description, pkgs, in_memory_registry, name_to_uuids)
+        return new(path, tree_info, compressed_file, ReentrantLock(), name, uuid, repo, description, pkgs, in_memory_registry, name_to_uuids)
     end
 end
 
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
 
 @noinline function _ensure_registry_loaded_slow!(r::RegistryInstance)
-    isdefined(r, :pkgs) && return r
+    return @lock r.load_lock begin
+        # Double-check pattern: if another thread loaded while we were waiting for the lock
+        isdefined(r, :pkgs) && return r
 
-    if getfield(r, :compressed_file) !== nothing
-        r.in_memory_registry = uncompress_registry(joinpath(dirname(getfield(r, :path)), getfield(r, :compressed_file)))
-    else
-        r.in_memory_registry = nothing
+        if getfield(r, :compressed_file) !== nothing
+            r.in_memory_registry = uncompress_registry(joinpath(dirname(getfield(r, :path)), getfield(r, :compressed_file)))
+        else
+            r.in_memory_registry = nothing
+        end
+
+        d = parsefile(r.in_memory_registry, getfield(r, :path), "Registry.toml")
+        r.name = d["name"]::String
+        r.uuid = UUID(d["uuid"]::String)
+        r.repo = get(d, "repo", nothing)::Union{String, Nothing}
+        r.description = get(d, "description", nothing)::Union{String, Nothing}
+
+        r.pkgs = Dict{UUID, PkgEntry}()
+        for (uuid, info) in d["packages"]::Dict{String, Any}
+            uuid = UUID(uuid::String)
+            info::Dict{String, Any}
+            name = info["name"]::String
+            pkgpath = info["path"]::String
+            pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid, r.in_memory_registry)
+            r.pkgs[uuid] = pkg
+        end
+
+        r.name_to_uuids = Dict{String, Vector{UUID}}()
+
+        return r
     end
-
-    d = parsefile(r.in_memory_registry, getfield(r, :path), "Registry.toml")
-    r.name = d["name"]::String
-    r.uuid = UUID(d["uuid"]::String)
-    r.repo = get(d, "repo", nothing)::Union{String, Nothing}
-    r.description = get(d, "description", nothing)::Union{String, Nothing}
-
-    r.pkgs = Dict{UUID, PkgEntry}()
-    for (uuid, info) in d["packages"]::Dict{String, Any}
-        uuid = UUID(uuid::String)
-        info::Dict{String, Any}
-        name = info["name"]::String
-        pkgpath = info["path"]::String
-        pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid, r.in_memory_registry)
-        r.pkgs[uuid] = pkg
-    end
-
-    r.name_to_uuids = Dict{String, Vector{UUID}}()
-
-    return r
 end
 
 # Property accessors that trigger lazy loading
 @inline function Base.getproperty(r::RegistryInstance, f::Symbol)
     if f === :name || f === :uuid || f === :repo || f === :description || f === :pkgs || f === :name_to_uuids
-        isdefined(r, :pkgs) || _ensure_registry_loaded_slow!(r)
+        _ensure_registry_loaded_slow!(r) # Takes a lock to ensure thread safety
     end
     return getfield(r, f)
 end
