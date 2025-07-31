@@ -88,6 +88,6 @@ function _compat(ctx::Context; io = nothing)
         ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), stdin.handle, false)
     end
     new_entry = strip(resp)
-    compat(ctx, dep, string(new_entry))
+    API._compat(ctx, dep, string(new_entry))
     return
 end
