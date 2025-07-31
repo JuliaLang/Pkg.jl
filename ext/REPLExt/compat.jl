@@ -1,7 +1,9 @@
 # TODO: Overload
-function _compat(ctx::Context; io = nothing)
+function _compat(ctx::Context; io = nothing, input_io = stdin)
     io = something(io, ctx.io)
-    can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
+    if input_io isa Base.TTY # testing uses IOBuffer
+        can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
+    end
     printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
     longest_dep_len = max(5, length.(collect(keys(ctx.env.project.deps)))...)
     opt_strs = String[]
@@ -16,7 +18,7 @@ function _compat(ctx::Context; io = nothing)
     end
     menu = TerminalMenus.RadioMenu(opt_strs, pagesize = length(opt_strs))
     choice = try
-        TerminalMenus.request("  Select an entry to edit:", menu)
+        TerminalMenus.request(TerminalMenus.default_terminal(in = input_io, out = io), "  Select an entry to edit:", menu)
     catch err
         if err isa InterruptException # if ^C is entered
             println(io)
@@ -35,10 +37,12 @@ function _compat(ctx::Context; io = nothing)
         start_pos = length(prompt) + 2
         move_start = "\e[$(start_pos)G"
         clear_to_end = "\e[0J"
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), stdin.handle, true)
+        if input_io isa Base.TTY
+            ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), input_io.handle, true)
+        end
         while true
             print(io, move_start, clear_to_end, buffer, "\e[$(start_pos + cursor)G")
-            inp = TerminalMenus._readkey(stdin)
+            inp = TerminalMenus._readkey(input_io)
             if inp == '\r' # Carriage return
                 println(io)
                 break
@@ -85,7 +89,9 @@ function _compat(ctx::Context; io = nothing)
         end
         buffer
     finally
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), stdin.handle, false)
+        if input_io isa Base.TTY
+            ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), input_io.handle, false)
+        end
     end
     new_entry = strip(resp)
     API._compat(ctx, dep, string(new_entry))
