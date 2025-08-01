@@ -2,6 +2,7 @@
 
 module Operations
 
+using Base: CacheFlags
 using FileWatching: FileWatching
 using UUIDs
 using Random: randstring
@@ -2597,7 +2598,7 @@ function test(
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
+                cacheflags = eval(Meta.parse(read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String)))
                 # Don't warn about already loaded packages, since we are going to run tests in a new
                 # subprocess anyway.
                 Pkg.precompile(; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
@@ -2642,7 +2643,7 @@ function test(
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
+                cacheflags = eval(Meta.parse(read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String)))
                 Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
             end
 
