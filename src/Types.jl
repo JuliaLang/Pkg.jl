@@ -453,6 +453,17 @@ function num_concurrent_downloads()
     end
     return num
 end
+
+function resolver_type_from_env()
+    val = lowercase(get(ENV, "JULIA_PKG_RESOLVER", "sat"))
+    if val == "sat"
+        return :sat
+    elseif val == "maxsum"
+        return :maxsum
+    else
+        error("Environment variable `JULIA_PKG_RESOLVER` expects 'sat' or 'maxsum', instead found $(val)")
+    end
+end
 # ENV variables to set some of these defaults?
 Base.@kwdef mutable struct Context
     env::EnvCache = EnvCache()
@@ -460,6 +471,7 @@ Base.@kwdef mutable struct Context
     use_git_for_all_downloads::Bool = false
     use_only_tarballs_for_downloads::Bool = false
     num_concurrent_downloads::Int = num_concurrent_downloads()
+    resolver::Symbol = resolver_type_from_env()
 
     # Registris
     registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries()

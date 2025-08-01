@@ -7,8 +7,8 @@ using Test
 using Pkg.Types
 using Pkg.Types: VersionBound
 using UUIDs
-using Pkg.Resolve
-import Pkg.Resolve: VersionWeight, add_reqs!, simplify_graph!, ResolverError, ResolverTimeoutError, Fixed, Requires
+using Pkg.MaxSumResolve
+import Pkg.MaxSumResolve: VersionWeight, add_reqs!, simplify_graph!, MaxSumResolverError, MaxSumResolverTimeoutError, Fixed, Requires
 
 include("utils.jl")
 using .Utils
@@ -141,7 +141,7 @@ end
         ["A", "1"],
         ["C", "2-*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
 
     VERBOSE && @info("SCHEME 4")
@@ -165,7 +165,7 @@ end
     reqs_data = Any[
         ["A", "*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
 
     VERBOSE && @info("SCHEME 5")
@@ -196,7 +196,7 @@ end
     reqs_data = Any[
         ["A", "2-*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
 
     VERBOSE && @info("SCHEME 6")
@@ -219,13 +219,13 @@ end
     reqs_data = Any[
         ["A", "*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
     # require B (impossible)
     reqs_data = Any[
         ["B", "*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
 
     VERBOSE && @info("SCHEME 7")
@@ -264,7 +264,7 @@ end
     reqs_data = Any[
         ["C", "1"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
 
     VERBOSE && @info("SCHEME 8")
@@ -290,19 +290,19 @@ end
     reqs_data = Any[
         ["A", "*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
     # require B (impossible)
     reqs_data = Any[
         ["B", "*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
     # require C (impossible)
     reqs_data = Any[
         ["C", "*"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 
     VERBOSE && @info("SCHEME 9")
     ## DEPENDENCY SCHEME 9: SIX PACKAGES, DAG
@@ -494,7 +494,7 @@ end
         ["A", "2-*"],
         ["B", "1"],
     ]
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data, want_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data, want_data)
 
 
     VERBOSE && @info("SCHEME 13")
@@ -742,11 +742,11 @@ end
 
     @test sanity_tst(ResolveData4.deps_data, ResolveData4.problematic_data)
     withenv("JULIA_PKG_RESOLVE_MAX_TIME" => 10) do
-        @test_throws ResolverError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data)
+        @test_throws MaxSumResolverError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data)
     end
     withenv("JULIA_PKG_RESOLVE_MAX_TIME" => 1.0e-5) do
         # this test may fail if graph preprocessing or the greedy solver get better
-        @test_throws ResolverTimeoutError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data; validate_versions = false)
+        @test_throws MaxSumResolverTimeoutError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data; validate_versions = false)
     end
 
 end
@@ -764,7 +764,7 @@ end
     deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q = 20, d = 4, sat = false)
 
     @test sanity_tst(deps_data, problematic_data)
-    @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+    @test_throws MaxSumResolverError resolve_tst(deps_data, reqs_data)
 end
 
 @testset "Stdlib resolve smoketest" begin

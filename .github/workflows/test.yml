@@ -56,6 +56,11 @@ jobs:
             julia-arch: 'x64'
             julia-version: 'nightly'
             pkg-server: "pkg.julialang.org"
+          - os: ubuntu-latest
+            julia-arch: 'x64'
+            julia-version: 'nightly'
+            pkg-server: "pkg.julialang.org"
+            resolver: "maxsum"
     steps:
       - name: Set git to use LF and fix TEMP on windows
         if: matrix.os == 'windows-latest'
@@ -70,12 +75,18 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
+      # We cannot use the Pkg getting tested to install the SAT-resolver since that is
+      # needed by Pkg itself
+      - name: Install deps
+        run: julia -e 'using Pkg; Pkg.activate("."); Pkg.instantiate()'
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
+          JULIA_PKG_RESOLVER: ${{ matrix.resolver || 'sat' }}
+          JULIA_PKG_RESOLVER_ALLOW_FALLBACK: false
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
@@ -99,7 +110,7 @@ jobs:
           version: 'nightly'
       - name: Generate docs
         run: |
-          julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
+          julia --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
           julia --project=docs --color=yes docs/make.jl pdf
         env:
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}

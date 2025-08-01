@@ -6,8 +6,8 @@ using Test
 using UUIDs
 import ..Pkg # ensure we are using the correct Pkg
 using Pkg.Types
-using Pkg.Resolve
-using Pkg.Resolve: add_reqs!, simplify_graph!, Fixed, Requires
+using Pkg.MaxSumResolve
+using Pkg.MaxSumResolve: add_reqs!, simplify_graph!, Fixed, Requires, uuid_julia
 
 export sanity_tst, resolve_tst, VERBOSE
 
@@ -18,7 +18,7 @@ const VERBOSE = false
 const uuid_package = UUID("cfb74b52-ec16-5bb7-a574-95d9e393895e")
 pkguuid(p::String) = uuid5(uuid_package, p)
 function storeuuid(p::String, uuid_to_name::Dict{UUID, String})
-    uuid = p == "julia" ? Resolve.uuid_julia : pkguuid(p)
+    uuid = p == "julia" ? MaxSumResolv.euuid_julia : pkguuid(p)
     if haskey(uuid_to_name, uuid)
         @assert uuid_to_name[uuid] == p
     else
@@ -82,6 +82,12 @@ function graph_from_data(deps_data)
             end
         end
     end
+
+    # Add Julia compatibility info
+    uuid_to_name[uuid_julia] = "julia"
+    fixed[uuid_julia] = Fixed(VERSION)
+    all_compat[uuid_julia] = Dict(VERSION => Dict())
+
     return Graph(all_compat, all_compat_w, uuid_to_name, Requires(), fixed, VERBOSE)
 end
 function reqs_from_data(reqs_data, graph::Graph)

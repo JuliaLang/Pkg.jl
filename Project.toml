@@ -19,6 +19,7 @@ Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Resolver = "ecd60e94-5748-11e9-04dc-1fe0f95e4121"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Tar = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
@@ -27,6 +28,9 @@ p7zip_jll = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 
 [weakdeps]
 REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
+
+[sources]
+Resolver = {rev = "kc/prune_req", url = "https://github.com/KristofferC/Resolver.jl"}
 
 [extensions]
 REPLExt = "REPL"
@@ -41,8 +45,9 @@ Libdl = "1.11"
 Logging = "1.11"
 Markdown = "1.11"
 Printf = "1.11"
-Random = "1.11"
 REPL = "1.11"
+Random = "1.11"
+Resolver = "0.1.0"
 SHA = "0.7"
 TOML = "1"
 Tar = "1.10"

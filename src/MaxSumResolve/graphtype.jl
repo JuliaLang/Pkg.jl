@@ -244,14 +244,6 @@ mutable struct Graph
             julia_version::Union{VersionNumber, Nothing} = VERSION
         )
 
-        # Tell the resolver about julia itself
-        uuid_to_name[uuid_julia] = "julia"
-        if julia_version !== nothing
-            fixed[uuid_julia] = Fixed(julia_version)
-            compat[uuid_julia] = Dict(julia_version => Dict{VersionNumber, Dict{UUID, VersionSpec}}())
-        else
-            compat[uuid_julia] = Dict{VersionNumber, Dict{UUID, VersionSpec}}()
-        end
 
         data = GraphData(compat, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
@@ -1049,7 +1041,7 @@ function check_constraints(graph::Graph)
             err_msg = "Resolve failed to satisfy requirements for package $(logstr(id(p0))):\n"
         end
         err_msg *= sprint(showlog, rlog, pkgs[p0])
-        throw(ResolverError(chomp(err_msg)))
+        throw(MaxSumResolverError(chomp(err_msg)))
     end
     return true
 end
@@ -1124,7 +1116,7 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
                         err_msg *= "Resolve failed to satisfy requirements for package $(logstr(id(p1))):\n"
                     end
                     err_msg *= sprint(showlog, rlog, pkgs[p1])
-                    throw(ResolverError(chomp(err_msg)))
+                    throw(MaxSumResolverError(chomp(err_msg)))
                 end
             end
         end
@@ -1228,7 +1220,7 @@ function validate_versions!(graph::Graph, sources::Set{Int} = Set{Int}(); skim::
             try
                 propagate_constraints!(graph, Set{Int}([p0]), log_events = false)
             catch err
-                err isa ResolverError || rethrow()
+                err isa MaxSumResolverError || rethrow()
                 disable = true
             end
             pop_snapshot!(graph)

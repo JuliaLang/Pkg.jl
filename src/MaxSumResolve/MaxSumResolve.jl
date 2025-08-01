@@ -1,8 +1,9 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-module Resolve
+module MaxSumResolve
 
 using ..Versions
+import ..ResolverError
 import ..stdout_f, ..stderr_f
 
 using Printf
@@ -33,19 +34,19 @@ Base.show(io::IO, f::Fixed) = isempty(f.requires) ?
     print(io, "Fixed(", repr(f.version), ",", f.requires, ", weak=", f.weak, ")")
 
 
-struct ResolverError <: Exception
+struct MaxSumResolverError <: ResolverError
     msg::AbstractString
     ex::Union{Exception, Nothing}
 end
-ResolverError(msg::AbstractString) = ResolverError(msg, nothing)
+MaxSumResolverError(msg::AbstractString) = MaxSumResolverError(msg, nothing)
 
-struct ResolverTimeoutError <: Exception
+struct MaxSumResolverTimeoutError <: ResolverError
     msg::AbstractString
     ex::Union{Exception, Nothing}
 end
-ResolverTimeoutError(msg::AbstractString) = ResolverTimeoutError(msg, nothing)
+MaxSumResolverTimeoutError(msg::AbstractString) = MaxSumResolverTimeoutError(msg, nothing)
 
-function Base.showerror(io::IO, pkgerr::ResolverError)
+function Base.showerror(io::IO, pkgerr::MaxSumResolverError)
     print(io, pkgerr.msg)
     return if pkgerr.ex !== nothing
         pkgex = pkgerr.ex
@@ -115,7 +116,7 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int}, Nothing}, previo
         @assert maxsum_result == :timedout
         log_event_global!(graph, "maxsum solver timed out")
         throw(
-            ResolverTimeoutError(
+            MaxSumResolverTimeoutError(
                 """
                 The resolution process timed out. This is likely due to unsatisfiable requirements.
                 You can increase the maximum resolution time via the environment variable JULIA_PKG_RESOLVE_MAX_TIME
@@ -235,7 +236,7 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
         try
             simplify_graph_soft!(graph, Set{Int}([p0]), log_events = false)
         catch err
-            isa(err, ResolverError) || rethrow()
+            isa(err, MaxSumResolverError) || rethrow()
             @goto done
         end
 
@@ -334,7 +335,7 @@ function greedysolver(graph::Graph)
     try
         simplify_graph_soft!(graph, req_inds, log_events = false)
     catch err
-        err isa ResolverError || rethrow()
+        err isa MaxSumResolverError || rethrow()
         pop_snapshot!(graph)
         return (false, Int[])
     end
