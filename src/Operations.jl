@@ -4,7 +4,6 @@ module Operations
 
 using FileWatching: FileWatching
 using UUIDs
-using Serialization: deserialize
 using Random: randstring
 import LibGit2, Dates, TOML
 
@@ -2598,7 +2597,7 @@ function test(
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = deserialize(IOBuffer(read(`$(Base.julia_cmd()) $(flags) --eval 'using Serialization; serialize(stdout, Base.CacheFlags())'`)))
+                cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
                 # Don't warn about already loaded packages, since we are going to run tests in a new
                 # subprocess anyway.
                 Pkg.precompile(; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
@@ -2643,7 +2642,7 @@ function test(
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = deserialize(IOBuffer(read(`$(Base.julia_cmd()) $(flags) --eval 'using Serialization; serialize(stdout, Base.CacheFlags())'`)))
+                cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
                 Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
             end
 
