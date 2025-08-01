@@ -2,7 +2,7 @@ module MiniProgressBars
 
 export MiniProgressBar, start_progress, end_progress, show_progress, print_progress_bottom
 
-using Printf
+using Printf: @sprintf
 
 # Until Base.format_bytes supports sigdigits
 function pkg_format_bytes(bytes; binary = true, sigdigits::Integer = 3)

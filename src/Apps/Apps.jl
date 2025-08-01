@@ -1,14 +1,15 @@
 module Apps
 
-using Pkg
-using Pkg: atomic_toml_write
-using Pkg.Versions
-using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
+import ..Pkg
+using ..Pkg: atomic_toml_write
+using ..Pkg.Versions
+using ..Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest,
     pkgerror, projectfile_path, manifestfile_path
-using Pkg.Operations: print_single, source_path, update_package_add
-using Pkg.API: handle_package_input!
-using TOML, UUIDs
-import Pkg.Registry
+using ..Pkg.Operations: print_single, source_path, update_package_add
+using ..Pkg.API: handle_package_input!
+import TOML
+using UUIDs: UUID
+import ..Registry
 
 app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
 app_manifest_file() = joinpath(app_env_folder(), "AppManifest.toml")

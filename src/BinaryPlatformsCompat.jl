@@ -87,16 +87,16 @@ module BinaryPlatformsCompat
     end
 
     # Next, things we don't need to coerce
-    for f in (:libgfortran_version, :libstdcxx_version, :platform_name, :wordsize, :platform_dlext, :tags, :triplet)
-        @eval begin
-            $(f)(p::PlatformUnion) = $(f)(p.p)
-        end
-    end
+    libgfortran_version(p::PlatformUnion) = libgfortran_version(p.p)
+    libstdcxx_version(p::PlatformUnion) = libstdcxx_version(p.p)
+    platform_name(p::PlatformUnion) = platform_name(p.p)
+    wordsize(p::PlatformUnion) = wordsize(p.p)
+    platform_dlext(p::PlatformUnion) = platform_dlext(p.p)
+    tags(p::PlatformUnion) = tags(p.p)
+    triplet(p::PlatformUnion) = triplet(p.p)
 
     # Finally, add equality testing between these wrapper types and other AbstractPlatforms
-    @eval begin
-        Base.:(==)(a::PlatformUnion, b::AbstractPlatform) = b == a.p
-    end
+    Base.:(==)(a::PlatformUnion, b::AbstractPlatform) = b == a.p
 
     # Add one-off functions
     MacOS(; kwargs...) = MacOS(:x86_64; kwargs...)

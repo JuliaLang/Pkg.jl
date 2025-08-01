@@ -2,7 +2,7 @@ module ArtifactTests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Random, Pkg.Artifacts, Base.BinaryPlatforms, Pkg.PlatformEngines
-import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed, extract_all_hashes
+using Pkg.Artifacts: extract_all_hashes, with_artifacts_directory
 using TOML, Dates
 import Base: SHA1
 
