@@ -3670,7 +3670,7 @@ end
 
                     Pkg.activate(temp = true)
                     # Install Example.jl in the initial depot
-                    Pkg.add("Example"; version = "0.5.3")
+                    Pkg.add(name = "Example", version = "0.5.3")
 
                     # Make the depot read-only
                     run(`chmod -R -w $readonly_depot`)
@@ -3683,7 +3683,7 @@ end
                     Pkg.activate(temp = true)
                     # This should not fail with permission denied on pidfile creation
                     # The fix ensures pidfiles are created in writable locations
-                    @test_nowarn Pkg.add("Example"; version = "0.5.3")
+                    @test_nowarn Pkg.add(name = "Example", version = "0.5.3")
                 finally
                     # Restore depot path and make readonly depot writable again for cleanup
                     empty!(DEPOT_PATH)
