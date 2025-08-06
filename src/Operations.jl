@@ -524,7 +524,7 @@ function get_compat_workspace(env, name)
     return compat
 end
 
-function check_stdlib_version_compat!(pkg::PackageSpec, julia_version)
+function check_stdlib_version_compat!(pkg::PackageSpec, julia_version, env::Union{EnvCache,Nothing}=nothing)
     julia_version === nothing && return
     pkg.version === nothing && return
     @assert pkg.uuid !== nothing
@@ -546,10 +546,60 @@ function check_stdlib_version_compat!(pkg::PackageSpec, julia_version)
     end
 
     return if version_conflicts
+        upgradable_note = pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS ?
+            "\n\nNote: `$(pkg.name)` is an upgradable stdlib and can be manually upgraded if needed." : ""
+
+        # Try to provide dependency source information if we have env context
+        dependency_context = ""
+        if env !== nothing && haskey(env.manifest.deps, pkg.uuid)
+            dependent_packages = String[]
+            for (dep_uuid, dep_entry) in env.manifest.deps
+                if haskey(dep_entry.deps, pkg.uuid)
+                    dep_name = get(Dict{UUID, String}(uuid => info.name for (uuid, info) in stdlib_infos()), dep_uuid, "unknown")
+                    if dep_name == "unknown"
+                        # Try to find name from manifest
+                        if haskey(env.manifest.deps, dep_uuid)
+                            dep_name = env.manifest.deps[dep_uuid].name
+                        end
+                    end
+                    push!(dependent_packages, dep_name)
+                end
+            end
+
+            manifest_path = env.manifest_file
+            manifest_info = "\n\nManifest file: $(manifest_path)"
+
+            if !isempty(dependent_packages)
+                dependency_context = "\n\nThis version constraint appears to be required by: $(join(dependent_packages, ", "))$manifest_info"
+            else
+                # Check if it's fixed in the manifest
+                manifest_entry = env.manifest.deps[pkg.uuid]
+                if manifest_entry.version !== nothing
+                    dependency_context = "\n\nThis version (v$(manifest_entry.version)) is fixed in the manifest.$manifest_info"
+                else
+                    dependency_context = manifest_info
+                end
+            end
+        end
+
         throw(
             Resolve.ResolverError(
                 """Cannot add stdlib `$(pkg.name)` with version specification `$(pkg.version)`.
-                The current Julia version v$(julia_version) uses `$(pkg.name)` v$(current_stdlib_version)."""
+                The current Julia version v$(julia_version) uses `$(pkg.name)` v$(current_stdlib_version).$dependency_context
+
+                This error occurs when a package dependency requests a stdlib version that conflicts
+                with Julia's built-in version. Common causes:
+
+                • A dependency was written for an older Julia version
+                • The project's compatibility constraints are too restrictive
+                • A package has outdated version requirements
+
+                To resolve this issue, try:
+                1. Update all packages: Pkg.update()
+                2. Check for packages that need Julia compatibility updates
+                3. Remove version constraints that might be causing conflicts
+                4. Consider upgrading Julia if using a very old version
+                5. For detailed debugging, run with: JULIA_DEBUG=Pkg$upgradable_note"""
             )
         )
     end
@@ -565,6 +615,9 @@ function resolve_versions!(
         installed_only::Bool
     )
     installed_only = installed_only || OFFLINE_MODE[]
+
+    # Log package resolution context for debugging
+    @debug "Package resolution started" num_packages=length(pkgs) julia_version=julia_version
     # compatibility
     if julia_version !== nothing
         # only set the manifest julia_version if ctx.julia_version is not nothing
@@ -601,17 +654,37 @@ function resolve_versions!(
 
     # check compat
     for pkg in pkgs
+
         compat = get_compat_workspace(env, pkg.name)
-        v = intersect(pkg.version, compat)
-        if isempty(v)
-            throw(
-                Resolve.ResolverError(
-                    "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+
+        # Protect stdlib packages from being downgraded by compatibility constraints
+        if pkg.uuid !== nothing && is_stdlib(pkg.uuid, julia_version) && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+            current_stdlib_version = Types.stdlib_version(pkg.uuid, julia_version)
+            if current_stdlib_version !== nothing
+                # Force stdlib packages to use Julia's version, ignoring manifest/compat constraints
+                @debug "Stdlib protection applied" package=pkg.name forced_to=current_stdlib_version was=pkg.version
+                pkg.version = current_stdlib_version
+                v = current_stdlib_version
+            else
+                v = intersect(pkg.version, compat)
+            end
+        else
+            v = intersect(pkg.version, compat)
+            if isempty(v)
+                throw(
+                    Resolve.ResolverError(
+                        "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+                    )
                 )
-            )
+            end
         end
 
-        check_stdlib_version_compat!(pkg, julia_version)
+
+
+        # Skip stdlib compatibility check for protected packages since we forced their version
+        if !(pkg.uuid !== nothing && is_stdlib(pkg.uuid, julia_version) && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS) && pkg.version == Types.stdlib_version(pkg.uuid, julia_version))
+            check_stdlib_version_compat!(pkg, julia_version, env)
+        end
 
         # Work around not clobbering 0.x.y+ for checked out old type of packages
         if !(pkg.version isa VersionNumber)
