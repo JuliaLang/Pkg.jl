@@ -524,37 +524,6 @@ function get_compat_workspace(env, name)
     return compat
 end
 
-function check_stdlib_version_compat!(pkg::PackageSpec, julia_version)
-    julia_version === nothing && return
-    pkg.version === nothing && return
-    @assert pkg.uuid !== nothing
-
-    if !(is_stdlib(pkg.uuid, julia_version) && !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS))
-        return
-    end
-
-    current_stdlib_version = Types.stdlib_version(pkg.uuid, julia_version)
-    current_stdlib_version === nothing && return
-
-    # Check if the requested version conflicts with current stdlib version
-    version_conflicts = if pkg.version isa VersionNumber
-        pkg.version != current_stdlib_version
-    elseif pkg.version isa VersionSpec
-        !(current_stdlib_version in pkg.version)
-    else
-        error("Unexpected version spec type for stdlib `$(pkg.name)`: $(typeof(pkg.version))")
-    end
-
-    return if version_conflicts
-        throw(
-            Resolve.ResolverError(
-                """Cannot add stdlib `$(pkg.name)` with version specification `$(pkg.version)`.
-                The current Julia version v$(julia_version) uses `$(pkg.name)` v$(current_stdlib_version)."""
-            )
-        )
-    end
-end
-
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
@@ -610,9 +579,6 @@ function resolve_versions!(
                 )
             )
         end
-
-        check_stdlib_version_compat!(pkg, julia_version)
-
         # Work around not clobbering 0.x.y+ for checked out old type of packages
         if !(pkg.version isa VersionNumber)
             pkg.version = v
