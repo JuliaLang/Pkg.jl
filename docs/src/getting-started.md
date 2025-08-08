@@ -25,7 +25,7 @@ Upon entering the Pkg REPL, you should see the following prompt:
 (@v1.10) pkg>
 ```
 
-To add a package, use `add`:
+To add a package to the currently active environment (in this case `v1.1`, but more on environments later), use `add`:
 
 ```julia-repl
 (@v1.10) pkg> add Example
@@ -107,7 +107,12 @@ Different environments can have totally different packages and versions installe
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
 
 Let's set up a new environment so we may experiment.
-To set the active environment, use `activate`:
+To set the active environment, use `activate` and then the name of the environment, or the path to it
+if it's not in your current working directory.
+If the environment you want to activate doesn't exist yet, it will be created in your current working directory.
+If you want to change the working directory first, you can `cd` there after pressing `;` to get into shell mode.
+If you're not sure what the current working directory is you can run `pwd()` in the REPL.
+In our case, we are currently in the directory `/tmp/`, so the environment will be created there.
 
 ```julia-repl
 (@v1.10) pkg> activate tutorial
@@ -124,6 +129,11 @@ active environment:
 ```julia-repl
 (tutorial) pkg>
 ```
+
+One thing to keep in mind is that the name `tutorial` is not exclusive to our environment.
+If we cd to a different folder like `/different/` and run `activate tutorial`, we might expect our old environment
+to be activated, but instead a new environment named tutorial will be created in `/different/`.
+To activate our original environment from anywhere, we can always run `activate /tmp/tutorial`.
 
 We can ask for information about the active environment by using `status`:
 
