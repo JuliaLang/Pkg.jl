@@ -1176,8 +1176,19 @@ function download_source(ctx::Context, pkgs; readonly = true)
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
-        mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
-        FileWatching.mkpidlock(() -> ispath(path), path * ".pid", stale_age = pidfile_stale_age) && continue
+        if ispath(path) && iswritable(path)
+            pidfile = path * ".pid"
+        else
+            # If the path is not writable, we cannot create a pidfile there so use one in the first depot.
+            # (pidlocking probably isn't needed as in this case the package source logically is alredy installed
+            # in the readonly depot, but keep the pidfile logic for consistency)
+            dir = joinpath(depots1(), "packages", pkg.name)
+            mkpath(dir)
+            iswritable(dir) || pkgerror("The primary depot is not writable")
+            pidfile = joinpath(dir, basename(path) * ".pid")
+        end
+
+        FileWatching.mkpidlock(() -> ispath(path), pidfile, stale_age = pidfile_stale_age) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
         push!(pkgs_to_install, (; pkg, urls, path))
     end

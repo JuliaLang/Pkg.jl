@@ -3657,6 +3657,44 @@ end
     end
 end
 
+@testset "Issue #4345: pidfile in writable location when depot is readonly" begin
+    isolate(loaded_depot = false) do
+        mktempdir() do readonly_depot
+            mktempdir() do writable_depot
+                # Set up initial depot with a package
+                old_depot_path = copy(DEPOT_PATH)
+                try
+                    empty!(DEPOT_PATH)
+                    push!(DEPOT_PATH, readonly_depot)
+                    Base.append_bundled_depot_path!(DEPOT_PATH)
+
+                    Pkg.activate(temp = true)
+                    # Install Example.jl in the initial depot
+                    Pkg.add(name = "Example", version = "0.5.3")
+
+                    # Make the depot read-only
+                    run(`chmod -R -w $readonly_depot`)
+
+                    # Add writable depot to front of DEPOT_PATH
+                    pushfirst!(DEPOT_PATH, writable_depot)
+
+                    # Create a new temporary environment and try to add a package
+                    # that depends on something in the readonly depot
+                    Pkg.activate(temp = true)
+                    # This should not fail with permission denied on pidfile creation
+                    # The fix ensures pidfiles are created in writable locations
+                    @test_nowarn Pkg.add(name = "Example", version = "0.5.3")
+                finally
+                    # Restore depot path and make readonly depot writable again for cleanup
+                    empty!(DEPOT_PATH)
+                    append!(DEPOT_PATH, old_depot_path)
+                    run(`chmod -R +w $readonly_depot`)
+                end
+            end
+        end
+    end
+end
+
 if :version in fieldnames(Base.PkgOrigin)
     @testset "sysimage functionality" begin
         old_sysimage_modules = copy(Base._sysimage_modules)
