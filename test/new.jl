@@ -985,7 +985,7 @@ end
                 touch(joinpath(tempdir, "src", "Foo.jl"))
                 ctx = Pkg.Types.Context()
                 ctx.env.project.name = "Foo"
-                ctx.env.project.uuid = UUIDs.UUID(0)
+                ctx.env.project.uuid = UUID(0)
                 Pkg.Types.write_project(ctx.env)
                 Pkg.add(name = "Example", version = "0.3.0")
                 @test Pkg.dependencies()[exuuid].version == v"0.3.0"
@@ -2056,11 +2056,11 @@ end
     isolate(loaded_depot = true) do
         Pkg.add(name = "Example", version = "0.3.0")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
-        Pkg.update(; level = Pkg.UPLEVEL_FIXED)
+        Pkg.update(; level = Pkg.Types.UPLEVEL_FIXED)
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
-        Pkg.update(; level = Pkg.UPLEVEL_PATCH)
+        Pkg.update(; level = Pkg.Types.UPLEVEL_PATCH)
         @test Pkg.dependencies()[exuuid].version == v"0.3.3"
-        Pkg.update(; level = Pkg.UPLEVEL_MINOR)
+        Pkg.update(; level = Pkg.Types.UPLEVEL_MINOR)
         @test Pkg.dependencies()[exuuid].version.minor != 3
     end
     # `update` should prune manifest
@@ -2158,11 +2158,11 @@ end
                 new_commit = string(LibGit2.commit(repo, "bump version"; author = TEST_SIG, committer = TEST_SIG))
             end
             # update with UPLEVEL != UPLEVEL_MAJOR should not update packages tracking repos
-            Pkg.update(; level = Pkg.UPLEVEL_MINOR)
+            Pkg.update(; level = Pkg.Types.UPLEVEL_MINOR)
             @test simple_package_node == Pkg.dependencies()[simple_package_uuid]
-            Pkg.update(; level = Pkg.UPLEVEL_PATCH)
+            Pkg.update(; level = Pkg.Types.UPLEVEL_PATCH)
             @test simple_package_node == Pkg.dependencies()[simple_package_uuid]
-            Pkg.update(; level = Pkg.UPLEVEL_FIXED)
+            Pkg.update(; level = Pkg.Types.UPLEVEL_FIXED)
             @test simple_package_node == Pkg.dependencies()[simple_package_uuid]
             # Update should not modify pinned packages which are tracking repos
             Pkg.pin("SimplePackage")
@@ -2598,8 +2598,8 @@ end
     # rm nonexistent packages warns but does not error
     isolate(loaded_depot = true) do
         Pkg.add("Example")
-        @test_logs (:warn, r"not in project, ignoring") Pkg.rm(name = "FooBar", uuid = UUIDs.UUID(0))
-        @test_logs (:warn, r"not in manifest, ignoring") Pkg.rm(name = "FooBar", uuid = UUIDs.UUID(0); mode = Pkg.PKGMODE_MANIFEST)
+        @test_logs (:warn, r"not in project, ignoring") Pkg.rm(name = "FooBar", uuid = UUID(0))
+        @test_logs (:warn, r"not in manifest, ignoring") Pkg.rm(name = "FooBar", uuid = UUID(0); mode = Pkg.PKGMODE_MANIFEST)
     end
 end
 

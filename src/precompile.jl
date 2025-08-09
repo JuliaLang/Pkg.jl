@@ -1,6 +1,12 @@
-using LibGit2: LibGit2
-using Tar: Tar
-using Downloads
+module PrecompileHelper
+
+import Downloads
+import LibGit2
+import Tar
+import TOML
+import Dates
+using ..Pkg: Pkg, API, Types, Versions, REPLMode, Registry
+using ..Pkg: unstableio, DEFAULT_IO, stdout_f, stderr_f
 
 # used by REPLExt too
 function _run_precompilation_script_setup()
@@ -243,3 +249,5 @@ let
         end
     end
 end
+
+end # module PrecompileHelper
