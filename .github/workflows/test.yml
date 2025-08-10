@@ -73,6 +73,7 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: true
+          depwarn: error
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
