@@ -16,7 +16,7 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
         push!(opt_strs, Operations.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
         push!(opt_pkgs, dep)
     end
-    menu = TerminalMenus.RadioMenu(opt_strs; pagesize = length(opt_strs))
+    menu = TerminalMenus.RadioMenu(opt_strs; pagesize = length(opt_strs), charset = :ascii)
     choice = try
         TerminalMenus.request(TerminalMenus.default_terminal(in = input_io, out = io), "  Select an entry to edit:", menu)
     catch err
