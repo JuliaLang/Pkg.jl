@@ -2935,7 +2935,11 @@ function print_status(
     end
     no_changes = all(p -> p[2] == p[3], xs)
     if no_changes
-        printpkgstyle(io, Symbol("No packages added to or removed from"), "$(pathrepr(manifest ? env.manifest_file : env.project_file))", ignore_indent)
+        if manifest
+            printpkgstyle(io, :Manifest, "No packages added to or removed from $(pathrepr(env.manifest_file))", ignore_indent; color = Base.info_color())
+        else
+            printpkgstyle(io, :Project, "No packages added to or removed from $(pathrepr(env.project_file))", ignore_indent; color = Base.info_color())
+        end
     else
         xs = !filter ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
         if isempty(xs)
