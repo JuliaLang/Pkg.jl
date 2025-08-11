@@ -2,20 +2,23 @@
 
 module Operations
 
-using FileWatching: FileWatching
-using UUIDs
+import Dates
+import FileWatching
+import LibGit2
+import TOML
 using Random: randstring
-import LibGit2, Dates, TOML
+using UUIDs: UUID
 
-using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
-import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
-import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
-    artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
 using Base.BinaryPlatforms
+
 import ...Pkg
-import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
+import ...Pkg: Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
 import ...Pkg: usable_io, discover_repo
+import ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
+import ..Artifacts: ensure_artifact_installed, artifact_names,
+    artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
+using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
 
 #########
 # Utils #
@@ -61,7 +64,7 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
     slug_default = Base.version_slug(uuid, sha1)
     # 4 used to be the default so look there first
     for slug in (slug_default, Base.version_slug(uuid, sha1, 4))
-        for depot in depots()
+        for depot in Base.DEPOT_PATH
             path = abspath(depot, "packages", name, slug)
             ispath(path) && return path
         end
@@ -222,9 +225,9 @@ end
 function is_instantiated(env::EnvCache, workspace::Bool = false; platform = HostPlatform())::Bool
     # Load everything
     if workspace
-        pkgs = Operations.load_all_deps(env)
+        pkgs = load_all_deps(env)
     else
-        pkgs = Operations.load_all_deps_loadable(env)
+        pkgs = load_all_deps_loadable(env)
     end
     # If the top-level project is a package, ensure it is instantiated as well
     if env.pkg !== nothing
@@ -913,8 +916,8 @@ function install_git(
         GitTools.checkout_tree_to_path(repo, tree, version_path)
         return
     finally
-        repo !== nothing && LibGit2.close(repo)
-        tree !== nothing && LibGit2.close(tree)
+        repo !== nothing && close(repo)
+        tree !== nothing && close(tree)
     end
 end
 
@@ -2715,8 +2718,8 @@ function stat_rep(x::PackageSpec; name = true)
         rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
     end
     subdir_str = x.repo.subdir === nothing ? "" : ":$(x.repo.subdir)"
-    repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
-    path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
+    repo = is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
+    path = is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
     pinned = x.pinned ? "⚲" : ""
     return join(filter(!isempty, [name, version, repo, path, pinned]), " ")
 end
@@ -3004,7 +3007,7 @@ function print_status(
 
         pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.manifest_file, new)
 
-        new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
+        new_ver_avail = !latest_version && !is_tracking_repo(new) && !is_tracking_path(new)
         pkg_upgradable = new_ver_avail && cinfo !== nothing && isempty(cinfo[1])
         pkg_heldback = new_ver_avail && cinfo !== nothing && !isempty(cinfo[1])
 

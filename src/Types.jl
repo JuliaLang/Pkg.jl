@@ -2,21 +2,19 @@
 
 module Types
 
-using UUIDs
-using Random
-using Dates
-import LibGit2
-import Base.string
-
-using TOML
-import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write
-import Base.BinaryPlatforms: Platform
-using ..Pkg.Versions
 import FileWatching
+import LibGit2
+import TOML
+using Dates: Dates, now
+using SHA: SHA, sha1
+using UUIDs: UUID
 
 import Base: SHA1
-using SHA
+import Base.string
+
+import ..Pkg, ..Registry
+import ..Pkg: GitTools, depots1, logdir, set_readonly, safe_realpath, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write
+using ..Pkg.Versions
 
 export UUID, SHA1, VersionRange, VersionSpec,
     PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
@@ -789,7 +787,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     cloned = false
     package_path = pkg.repo.subdir === nothing ? repo_path : joinpath(repo_path, pkg.repo.subdir)
     if !has_name(pkg)
-        LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, pkg.repo.source))
+        close(GitTools.ensure_clone(ctx.io, repo_path, pkg.repo.source))
         cloned = true
         resolve_projectfile!(pkg, package_path)
     end
@@ -812,7 +810,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     else
         mkpath(dirname(dev_path))
         if !cloned
-            LibGit2.close(GitTools.ensure_clone(ctx.io, dev_path, pkg.repo.source))
+            close(GitTools.ensure_clone(ctx.io, dev_path, pkg.repo.source))
         else
             mv(repo_path, dev_path)
         end
@@ -1070,10 +1068,10 @@ end
 
 function project_resolve!(env::EnvCache, pkgs::AbstractVector{PackageSpec})
     for pkg in pkgs
-        if has_uuid(pkg) && !has_name(pkg) && Types.is_project_uuid(env, pkg.uuid)
+        if has_uuid(pkg) && !has_name(pkg) && is_project_uuid(env, pkg.uuid)
             pkg.name = env.pkg.name
         end
-        if has_name(pkg) && !has_uuid(pkg) && Types.is_project_name(env, pkg.name)
+        if has_name(pkg) && !has_uuid(pkg) && is_project_name(env, pkg.name)
             pkg.uuid = env.pkg.uuid
         end
     end

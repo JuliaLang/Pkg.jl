@@ -4,10 +4,15 @@
 
 module PlatformEngines
 
-using SHA, Downloads, Tar
+import Downloads
+import Tar
+import p7zip_jll
+using SHA: SHA, sha256
+
+using Base.BinaryPlatforms
+
 import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f, atomic_toml_write
 using ..MiniProgressBars
-using Base.BinaryPlatforms, p7zip_jll
 
 export verify, unpack, package, download_verify_unpack
 

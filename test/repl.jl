@@ -38,7 +38,7 @@ end
 temp_pkg_dir() do project_path
     with_pkg_env(project_path; change_dir = true) do;
         pkg"generate HelloWorld"
-        LibGit2.close((LibGit2.init(".")))
+        close((LibGit2.init(".")))
         cd("HelloWorld")
 
         @test_throws PkgError pkg"dev Example#blergh"
