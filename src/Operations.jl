@@ -2598,7 +2598,7 @@ function test(
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = eval(Meta.parse(read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String)))
+                cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
                 # Don't warn about already loaded packages, since we are going to run tests in a new
                 # subprocess anyway.
                 Pkg.precompile(; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
@@ -2643,7 +2643,7 @@ function test(
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = eval(Meta.parse(read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String)))
+                cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
                 Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
             end
 
