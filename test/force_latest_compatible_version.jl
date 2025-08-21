@@ -327,6 +327,23 @@ const test_package_parent_dir = joinpath(
             end
         end
     end
+
+    @testset "UnregisteredDep: package with unregistered dependencies" begin
+        mktempdir() do tmp_dir
+            test_package = joinpath(tmp_dir, "UnregisteredDep")
+            cp(joinpath(test_package_parent_dir, "UnregisteredDep"), test_package; force = true)
+            Utils.isolate(loaded_depot = true) do
+                Pkg.activate(test_package)
+                # Note: we can't actually instantiate this package since it has unregistered deps
+                # But we can test that force_latest_compatible_version handles it gracefully
+
+                # Test that it throws and shows warning for unregistered dependency
+                @test_logs (:warn, r"Skipping force_latest_compatible_version for unregistered dependency") begin
+                    Pkg.test(; force_latest_compatible_version = true)
+                end
+            end
+        end
+    end
 end
 
 end # module

@@ -3313,6 +3313,15 @@ function apply_force_latest_compatible_version!(
         uuid,
         old_compat_spec,
     )
+    if latest_compatible_version === nothing
+        if name != target_name
+            @warn(
+                "Skipping force_latest_compatible_version for unregistered dependency",
+                name, uuid, target_name,
+            )
+        end
+        return nothing
+    end
     earliest_backwards_compatible_version = get_earliest_backwards_compatible_version(latest_compatible_version)
     if allow_earlier_backwards_compatible_versions
         version_for_intersect = only_major_minor_patch(earliest_backwards_compatible_version)
@@ -3342,6 +3351,9 @@ function get_latest_compatible_version(
     )
     all_registered_versions = get_all_registered_versions(ctx, uuid)
     compatible_versions = filter(in(compat_spec), all_registered_versions)
+    if isempty(compatible_versions)
+        return nothing  # No registered versions found
+    end
     latest_compatible_version = maximum(compatible_versions)
     return latest_compatible_version
 end
