@@ -14,7 +14,10 @@ function get_path_repo(project::Project, name::String)
     rev = get(source, "rev", nothing)::Union{String, Nothing}
     subdir = get(source, "subdir", nothing)::Union{String, Nothing}
     if path !== nothing && url !== nothing
-        pkgerror("`path` and `url` are conflicting specifications")
+        # When both path and url are specified, path takes precedence (for dev operations)
+        # Clear the URL and rev to avoid conflicts
+        url = nothing
+        rev = nothing
     end
     repo = GitRepo(url, rev, subdir)
     return path, repo
