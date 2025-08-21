@@ -339,7 +339,7 @@ const test_package_parent_dir = joinpath(
 
                 # Test that it throws and shows warning for unregistered dependency
                 @test_logs (:warn, r"Skipping force_latest_compatible_version for unregistered dependency") begin
-                    @test_throws Pkg.Types.PkgError r"expected package `SomeUnregisteredPackage [deadbeef]` to be registered" Pkg.test(; force_latest_compatible_version = true)
+                    @test_throws Pkg.Types.PkgError "expected package `SomeUnregisteredPackage [deadbeef]` to be registered" Pkg.test(; force_latest_compatible_version = true)
                 end
             end
         end
