@@ -58,7 +58,7 @@ Status `~/.julia/environments/v1.10/Manifest.toml`
   [4ec0a83e] Unicode
 ```
 
-Since julia 1.11 standard libraries (e.g. ` Dates`) have a version.
+Before 1.11 standard libraries (e.g. ` Dates`) did not have dedicated version numbers.
 
 To specify that you want a particular version (or set of versions) of a package, use the `compat` command. For example,
 to require any patch release of the v0.21 series of JSON after v0.21.4, call `compat JSON 0.21.4`:
