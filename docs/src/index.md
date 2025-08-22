@@ -8,13 +8,13 @@ installations, developing packages, working with package registries and more.
 import Markdown
 # For Pkg, we need to determine the appropriate Julia version for the PDF
 # Since Pkg docs are versioned by Julia version, we'll use a similar approach to Julia docs
-if VERSION.prerelease == ()
-    julia_patch = "$(VERSION.major).$(VERSION.minor).$(VERSION.patch)"
-elseif VERSION.prerelease[1] == "dev"
-    julia_patch = "dev"
+julia_patch = if VERSION.prerelease == ()
+    "v$(VERSION.major).$(VERSION.minor).$(VERSION.patch)"
+elseif VERSION.prerelease[1] == "DEV"
+    "dev"
 end
 file = "Pkg.jl.pdf"
-url = "https://raw.githubusercontent.com/JuliaLang/Pkg.jl/gh-pages-pdf/v$(julia_patch)/$(file)"
+url = "https://raw.githubusercontent.com/JuliaLang/Pkg.jl/gh-pages-pdf/$(julia_patch)/$(file)"
 Markdown.parse("""
 !!! note
     The documentation is also available in PDF format: [$file]($url).
