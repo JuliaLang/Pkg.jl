@@ -10,22 +10,23 @@ The most frequently used is `add` and its usage is described first.
 In the Pkg REPL, packages can be added with the `add` command followed by the name of the package, for example:
 
 ```julia-repl
-(@v1.10) pkg> add JSON
-  Installing known registries into `~/`
+(@v1.13) pkg> add JSON
    Resolving package versions...
-   Installed Parsers ─ v2.4.0
-   Installed JSON ──── v0.21.3
-    Updating `~/.julia/environments/v1.10/Project.toml`
-  [682c06a0] + JSON v0.21.3
-    Updating `~/.julia/environments/v1.10/Manifest.toml`
-  [682c06a0] + JSON v0.21.3
-  [69de0a69] + Parsers v2.4.0
-  [ade2ca70] + Dates
-  [a63ad114] + Mmap
-  [de0858da] + Printf
-  [4ec0a83e] + Unicode
-Precompiling environment...
-  2 dependencies successfully precompiled in 2 seconds
+    Updating `~/.julia/environments/v1.13/Project.toml`
+  [682c06a0] + JSON v0.21.4
+    Updating `~/.julia/environments/v1.13/Manifest.toml`
+  [682c06a0] + JSON v0.21.4
+  [69de0a69] + Parsers v2.8.3
+  [aea7be01] + PrecompileTools v1.3.2
+  [21216c6a] + Preferences v1.5.0
+  [ade2ca70] + Dates v1.11.0
+  [a63ad114] + Mmap v1.11.0
+  [de0858da] + Printf v1.11.0
+  [9a3f8284] + Random v1.11.0
+  [ea8e919c] + SHA v0.7.0
+  [fa267f1f] + TOML v1.0.3
+  [cf7118a7] + UUIDs v1.11.0
+  [4ec0a83e] + Unicode v1.11.0
 ```
 
 Here we added the package `JSON` to the current environment (which is the default `@v1.10` environment).
@@ -40,22 +41,28 @@ It is possible to add multiple packages in one command as `pkg> add A B C`.
 The status output contains the packages you have added yourself, in this case, `JSON`:
 
 ```julia-repl
-(@v1.10) pkg> st
-    Status `~/.julia/environments/v1.10/Project.toml`
-  [682c06a0] JSON v0.21.3
+(@v1.13) pkg> st
+Status `~/.julia/environments/v1.13/Project.toml`
+  [682c06a0] JSON v0.21.4
 ```
 
 The manifest status shows all the packages in the environment, including recursive dependencies:
 
 ```julia-repl
-(@v1.10) pkg> st -m
-Status `~/.julia/environments/v1.10/Manifest.toml`
-  [682c06a0] JSON v0.21.3
-  [69de0a69] Parsers v2.4.0
-  [ade2ca70] Dates
-  [a63ad114] Mmap
-  [de0858da] Printf
-  [4ec0a83e] Unicode
+(@v1.13) pkg> st -m
+Status `~/.julia/environments/v1.13/Manifest.toml`
+  [682c06a0] JSON v0.21.4
+  [69de0a69] Parsers v2.8.3
+  [aea7be01] PrecompileTools v1.3.2
+  [21216c6a] Preferences v1.5.0
+  [ade2ca70] Dates v1.11.0
+  [a63ad114] Mmap v1.11.0
+  [de0858da] Printf v1.11.0
+  [9a3f8284] Random v1.11.0
+  [ea8e919c] SHA v0.7.0
+  [fa267f1f] TOML v1.0.3
+  [cf7118a7] UUIDs v1.11.0
+  [4ec0a83e] Unicode v1.11.0
 ```
 
 Before 1.11 standard libraries (e.g. ` Dates`) did not have dedicated version numbers.
