@@ -842,25 +842,21 @@ end
     # This reproduces the issue where pressing right arrow after typing "add minimap2" would crash
     temp_pkg_dir() do project_path
         with_pkg_env(project_path) do
-            # Create a minimal Pkg REPL mode prompt
-            using REPL
-            import REPL.LineEdit
-
             # Create a fake terminal and prompt state
             term = REPL.Terminals.TTYTerminal("xterm", stdin, stdout, stderr)
-            prompt = LineEdit.Prompt("pkg> ")
+            prompt = REPL.LineEdit.Prompt("pkg> ")
             prompt.complete = REPLExt.PkgCompletionProvider()
 
-            s = LineEdit.MIState(term, prompt, nothing, [prompt])
-            LineEdit.mode(s, prompt)
-            ps = LineEdit.state(s, prompt)
+            s = REPL.LineEdit.MIState(term, prompt, nothing, [prompt])
+            REPL.LineEdit.mode(s, prompt)
+            ps = REPL.LineEdit.state(s, prompt)
 
             # Set up the input buffer with the problematic text
             write(ps.input_buffer, "add minimap2")
             seek(ps.input_buffer, sizeof("add minimap2"))
 
             # This should not throw an error (it used to throw FieldError)
-            @test_nowarn LineEdit.edit_move_right(s)
+            @test_nowarn REPL.LineEdit.edit_move_right(s)
         end
     end
 end
