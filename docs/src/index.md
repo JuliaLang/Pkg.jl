@@ -4,6 +4,20 @@ Welcome to the documentation for Pkg, [Julia](https://julialang.org)'s package m
 The documentation covers many things, for example managing package
 installations, developing packages, working with package registries and more.
 
+```@eval
+import Markdown
+# For Pkg, we need to determine the appropriate Julia version for the PDF
+# Since Pkg docs are versioned by Julia version, we'll use a similar approach to Julia docs
+julia_version = "$(VERSION.major).$(VERSION.minor)"
+julia_patch = "$(VERSION.major).$(VERSION.minor).$(VERSION.patch)"
+file = "Pkg.jl.pdf"
+url = "https://raw.githubusercontent.com/JuliaLang/Pkg.jl/gh-pages-pdf/v$(julia_patch)/$(file)"
+Markdown.parse("""
+!!! note
+    The documentation is also available in PDF format: [$file]($url).
+""")
+```
+
 Throughout the manual the REPL interface to Pkg, the Pkg REPL mode, is used in the examples.
 There is also a functional API, which is preferred when not working
 interactively. This API is documented in the [API Reference](@ref) section.
