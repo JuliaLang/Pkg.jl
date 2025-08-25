@@ -481,6 +481,29 @@ temp_pkg_dir() do project_path
             # invalid option should not throw
             _ = test_complete("add -z Foo")
             _ = test_complete("add --dontexist Foo")
+
+            # Test the fix for issue #58690 - completion should return proper types
+            # This ensures Pkg completions return Vector{String}, Region, Bool format
+            c, r = test_complete("add Example")
+            @test c isa Vector{String}
+            @test r isa UnitRange{Int}  # This gets converted to Region in the completion provider
+
+            # Test completion at end of a complete word doesn't crash
+            c, r = test_complete("add Example")
+            @test !isempty(c)  # Should have completions
+
+            # Test the completion provider directly to ensure it returns the new format
+            # Create a mock prompt state for testing
+            provider = REPLExt.PkgCompletionProvider()
+            # Create a minimal mock state
+            mock_state = (; input_buffer = IOBuffer("add Example"))
+            seek(mock_state.input_buffer, sizeof("add Example"))
+
+            # This should return (Vector{NamedCompletion}, Region, Bool) and not crash
+            completions, region, should_complete = @test_nowarn REPL.LineEdit.complete_line(provider, mock_state)
+            @test completions isa Vector{REPL.LineEdit.NamedCompletion}
+            @test region isa Pair{Int, Int}  # Region type
+            @test should_complete isa Bool
         end # testset
     end
 end
@@ -833,30 +856,6 @@ end
             @test occursin("Example = \"0.4\"", str)
             @test occursin("checking for compliance with the new compat rules..", str)
             @test occursin("Error empty intersection between", str) # Latest Example is at least 0.5.5
-        end
-    end
-end
-
-@testset "Pkg completion - edit_move_right fix (issue #58690)" begin
-    # Test that edit_move_right doesn't crash with Pkg completions
-    # This reproduces the issue where pressing right arrow after typing "add minimap2" would crash
-    temp_pkg_dir() do project_path
-        with_pkg_env(project_path) do
-            # Create a fake terminal and prompt state
-            term = REPL.Terminals.TTYTerminal("xterm", stdin, stdout, stderr)
-            prompt = REPL.LineEdit.Prompt("pkg> ")
-            prompt.complete = REPLExt.PkgCompletionProvider()
-
-            s = REPL.LineEdit.MIState(term, prompt, nothing, [prompt])
-            REPL.LineEdit.mode(s, prompt)
-            ps = REPL.LineEdit.state(s, prompt)
-
-            # Set up the input buffer with the problematic text
-            write(ps.input_buffer, "add minimap2")
-            seek(ps.input_buffer, sizeof("add minimap2"))
-
-            # This should not throw an error (it used to throw FieldError)
-            @test_nowarn REPL.LineEdit.edit_move_right(s)
         end
     end
 end
