@@ -508,7 +508,7 @@ temp_pkg_dir() do project_path
             @eval REPL.LineEdit.input_string(state::NamedTuple) = String(state.input_buffer.data[1:state.input_buffer.size])
 
             # This calls the modified LineEdit.complete_line method
-            completions, region, should_complete = REPL.LineEdit.complete_line(provider, mock_state)
+            completions, region, should_complete = @invokelatest REPL.LineEdit.complete_line(provider, mock_state)
             @test completions isa Vector{REPL.LineEdit.NamedCompletion}
             @test region isa Pair{Int, Int}  # This is the key fix - Region not String
             @test should_complete isa Bool
@@ -519,7 +519,7 @@ temp_pkg_dir() do project_path
                     write(buf, ""); seek(buf, 0); buf
                 end,
             )
-            completions_empty, region_empty, should_complete_empty = REPL.LineEdit.complete_line(provider, mock_state_empty)
+            completions_empty, region_empty, should_complete_empty = @invokelatest REPL.LineEdit.complete_line(provider, mock_state_empty)
             @test region_empty isa Pair{Int, Int}
         end # testset
     end
