@@ -504,8 +504,8 @@ temp_pkg_dir() do project_path
             )
 
             # Define the required interface methods for our mock
-            REPL.beforecursor(state::NamedTuple) = String(state.input_buffer.data[1:(state.input_buffer.ptr - 1)])
-            REPL.LineEdit.input_string(state::NamedTuple) = String(state.input_buffer.data[1:state.input_buffer.size])
+            @eval REPL.beforecursor(state::NamedTuple) = String(state.input_buffer.data[1:(state.input_buffer.ptr - 1)])
+            @eval REPL.LineEdit.input_string(state::NamedTuple) = String(state.input_buffer.data[1:state.input_buffer.size])
 
             # This calls the modified LineEdit.complete_line method
             completions, region, should_complete = REPL.LineEdit.complete_line(provider, mock_state)
