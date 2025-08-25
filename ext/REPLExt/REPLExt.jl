@@ -27,7 +27,19 @@ function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool = false)
     partial = REPL.beforecursor(s.input_buffer)
     full = LineEdit.input_string(s)
     ret, range, should_complete = completions(full, lastindex(partial); hint)
-    return ret, partial[range], should_complete
+    # Convert to new completion interface format
+    named_completions = map(LineEdit.NamedCompletion, ret)
+    # Convert UnitRange to Region (Pair{Int,Int}) to match new completion interface
+    # range represents character positions in full string, convert to 0-based byte positions
+    if isempty(range)
+        region = 0 => 0
+    else
+        # Convert 1-based character positions to 0-based byte positions
+        start_pos = thisind(full, first(range)) - 1
+        end_pos = thisind(full, last(range))
+        region = start_pos => end_pos
+    end
+    return named_completions, region, should_complete
 end
 
 prev_project_file = nothing
