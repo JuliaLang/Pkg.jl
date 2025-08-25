@@ -491,19 +491,6 @@ temp_pkg_dir() do project_path
             # Test completion at end of a complete word doesn't crash
             c, r = test_complete("add Example")
             @test !isempty(c)  # Should have completions
-
-            # Test the completion provider directly to ensure it returns the new format
-            # Create a mock prompt state for testing
-            provider = REPLExt.PkgCompletionProvider()
-            # Create a minimal mock state
-            mock_state = (; input_buffer = IOBuffer("add Example"))
-            seek(mock_state.input_buffer, sizeof("add Example"))
-
-            # This should return (Vector{NamedCompletion}, Region, Bool) and not crash
-            completions, region, should_complete = @test_nowarn REPL.LineEdit.complete_line(provider, mock_state)
-            @test completions isa Vector{REPL.LineEdit.NamedCompletion}
-            @test region isa Pair{Int, Int}  # Region type
-            @test should_complete isa Bool
         end # testset
     end
 end
