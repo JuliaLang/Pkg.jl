@@ -481,6 +481,46 @@ temp_pkg_dir() do project_path
             # invalid option should not throw
             _ = test_complete("add -z Foo")
             _ = test_complete("add --dontexist Foo")
+
+            # Test the fix for issue #58690 - completion should return proper types
+            # This ensures Pkg completions return Vector{String}, Region, Bool format
+            c, r = test_complete("add Example")
+            @test c isa Vector{String}
+            @test r isa UnitRange{Int}  # This gets converted to Region in the completion provider
+
+            # Test completion at end of a complete word doesn't crash
+            c, r = test_complete("add Example")
+            @test !isempty(c)  # Should have completions
+
+            # Test the completion provider LineEdit interface directly (for coverage of the fix)
+            # This is the actual code path that was failing in issue #58690
+            provider = REPLExt.PkgCompletionProvider()
+
+            # Create a mock state that has the required interface
+            mock_state = (
+                input_buffer = let buf = IOBuffer()
+                    write(buf, "add Example"); seek(buf, sizeof("add Example")); buf
+                end,
+            )
+
+            # Define the required interface methods for our mock
+            @eval REPL.beforecursor(state::NamedTuple) = String(state.input_buffer.data[1:(state.input_buffer.ptr - 1)])
+            @eval REPL.LineEdit.input_string(state::NamedTuple) = String(state.input_buffer.data[1:state.input_buffer.size])
+
+            # This calls the modified LineEdit.complete_line method
+            completions, region, should_complete = @invokelatest REPL.LineEdit.complete_line(provider, mock_state)
+            @test completions isa Vector{REPL.LineEdit.NamedCompletion}
+            @test region isa Pair{Int, Int}  # This is the key fix - Region not String
+            @test should_complete isa Bool
+
+            # Test the empty range edge case for coverage
+            mock_state_empty = (
+                input_buffer = let buf = IOBuffer()
+                    write(buf, ""); seek(buf, 0); buf
+                end,
+            )
+            completions_empty, region_empty, should_complete_empty = @invokelatest REPL.LineEdit.complete_line(provider, mock_state_empty)
+            @test region_empty isa Pair{Int, Int}
         end # testset
     end
 end
