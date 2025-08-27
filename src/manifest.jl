@@ -218,6 +218,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     entry.repo.rev = read_field("repo-rev", nothing, info, identity)
                     entry.repo.subdir = read_field("repo-subdir", nothing, info, identity)
                     entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
+                    entry.upstream_version = read_field("upstream_version", nothing, info, identity)
                     entry.uuid = uuid
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
@@ -321,6 +322,7 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "version", entry.version)
         entry!(new_entry, "git-tree-sha1", entry.tree_hash)
         entry!(new_entry, "pinned", entry.pinned; default = false)
+        entry!(new_entry, "upstream_version", entry.upstream_version)
         path = entry.path
         if path !== nothing && Sys.iswindows() && !isabspath(path)
             path = join(splitpath(path), "/")

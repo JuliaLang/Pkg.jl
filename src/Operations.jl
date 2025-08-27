@@ -161,6 +161,7 @@ function load_project_deps(
                     pinned = entry.pinned,
                     tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
                     version = load_version(entry.version, isfixed(entry), preserve),
+                    upstream_version = entry.upstream_version,
                 )
         )
     end
@@ -183,6 +184,7 @@ function load_manifest_deps(
                 repo = entry.repo,
                 tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
                 version = load_version(entry.version, isfixed(entry), preserve),
+                upstream_version = entry.upstream_version,
             )
         )
     end
@@ -2004,6 +2006,7 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     if pkg.path === nothing
         pkg.path = entry.path
     end
+    pkg.upstream_version = entry.upstream_version
     return pkg.pinned = entry.pinned
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
@@ -2719,7 +2722,12 @@ function stat_rep(x::PackageSpec; name = true)
     repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
     path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
     pinned = x.pinned ? "⚲" : ""
-    return join(filter(!isempty, [name, version, repo, path, pinned]), " ")
+
+    # Check for upstream version
+    upstream_str = x.upstream_version !== nothing ? " (upstream version: $(x.upstream_version))" : ""
+
+    base_str = join(filter(!isempty, [name, version, repo, path, pinned]), " ")
+    return base_str * upstream_str
 end
 
 print_single(io::IO, pkg::PackageSpec) = print(io, stat_rep(pkg))
@@ -3177,7 +3185,11 @@ function status(
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
-        printpkgstyle(io, :Project, string(env.pkg.name, " v", env.pkg.version), true; color = Base.info_color())
+        header_text = string(env.pkg.name, " v", env.pkg.version)
+        if env.project.upstream_version !== nothing
+            header_text *= " (upstream version: $(env.project.upstream_version))"
+        end
+        printpkgstyle(io, :Project, header_text, true; color = Base.info_color())
     end
     # load old env
     old_env = nothing

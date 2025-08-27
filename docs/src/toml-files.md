@@ -102,6 +102,24 @@ Note that Pkg.jl deviates from the SemVer specification when it comes to version
 the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 
+### The `upstream_version` field
+
+`upstream_version` is an optional string field that can be used to track the version of the upstream software that a package wraps or is based on. This is particularly useful for wrapper packages (like JLLs) where the package version might differ from the upstream software version. For example:
+
+```toml
+version = "1.2.3"
+upstream_version = "4.5.6-beta2"
+```
+
+When present, the upstream version is displayed in `Pkg.status` output in the project header as:
+
+```text
+Project MyPackage v1.2.3 (upstream version: 4.5.6-beta2)
+```
+
+Unlike the `version` field, `upstream_version` is stored as a plain string and is not required to be parseable as a Julia `VersionNumber`. This allows for upstream version schemes that don't follow semantic versioning.
+
+
 ### The `readonly` field
 
 The `readonly` field is a boolean that, when set to `true`, marks the environment as read-only. This prevents any modifications to the environment, including adding, removing, or updating packages. For example:
@@ -241,6 +259,8 @@ dependency section includes a combination of the following entries:
 * `deps`: a vector listing the dependencies of the dependency, for example
   `deps = ["Example", "JSON"]`.
 * `version`: a version number, for example `version = "1.2.6"`.
+* `upstream_version`: an optional string field tracking the upstream software version,
+  for example `upstream_version = "4.5.6-beta2"`.
 * `path`: a file path to the source code, for example `path = /home/user/Example`.
 * `repo-url`: a URL to the repository where the source code was found,
   for example `repo-url = "https://github.com/JuliaLang/Example.jl.git"`.

@@ -1,6 +1,10 @@
 Pkg v1.13 Release Notes
 =======================
 
+- Added support for an optional `upstream_version` field in Project.toml and Manifest.toml files to track the version
+  of upstream software that a package wraps or is based on. This is particularly useful for wrapper packages like JLLs
+  where the package version might differ from the upstream software version. The upstream version is displayed in
+  `Pkg.status` output alongside the package version when present.
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve

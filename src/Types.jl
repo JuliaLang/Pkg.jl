@@ -96,6 +96,7 @@ mutable struct PackageSpec
     repo::GitRepo # private
     path::Union{Nothing, String}
     pinned::Bool
+    upstream_version::Union{Nothing, String}
     # used for input only
     url::Union{Nothing, String}
     rev::Union{Nothing, String}
@@ -110,12 +111,13 @@ function PackageSpec(;
         repo::GitRepo = GitRepo(),
         path::Union{Nothing, AbstractString} = nothing,
         pinned::Bool = false,
+        upstream_version::Union{Nothing, AbstractString} = nothing,
         url = nothing,
         rev = nothing,
         subdir = nothing
     )
     uuid = uuid === nothing ? nothing : UUID(uuid)
-    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
+    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, upstream_version, url, rev, subdir)
 end
 PackageSpec(name::AbstractString) = PackageSpec(; name = name)::PackageSpec
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(; name = name, uuid = uuid)::PackageSpec
@@ -256,6 +258,7 @@ Base.@kwdef mutable struct Project
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
     version::Union{VersionTypes, Nothing} = nothing
+    upstream_version::Union{String, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
     entryfile::Union{String, Nothing} = nothing
     # Sections
@@ -291,6 +294,7 @@ Base.@kwdef mutable struct PackageEntry
     exts::Dict{String, Union{Vector{String}, String}} = Dict{String, String}()
     uuid::Union{Nothing, UUID} = nothing
     apps::Dict{String, AppInfo} = Dict{String, AppInfo}() # used by AppManifest.toml
+    upstream_version::Union{String, Nothing} = nothing
     other::Union{Dict, Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -304,9 +308,10 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.weakdeps == t2.weakdeps &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid &&
+    t1.upstream_version == t2.upstream_version &&
     t1.apps == t2.apps
 # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init = h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.upstream_version], init = h)  # omits `other`
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing, VersionNumber} = nothing # only set to VERSION when resolving
