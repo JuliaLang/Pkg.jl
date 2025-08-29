@@ -2235,12 +2235,30 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
     end
 end
 
-function gen_test_code(source_path::String; test_args::Cmd)
+function gen_test_code(source_path::String; test_args::Cmd, testsets::Union{Nothing, AbstractVector} = nothing)
     test_file = testfile(source_path)
+
+    # Generate testset filtering setup if testsets are specified
+    testset_setup = if testsets !== nothing && !isempty(testsets)
+        """
+        # Set up testset filtering
+        using Test
+        testsets_discovered = Test.discover_testsets($(repr(test_file)))
+        testset_filter = Test.create_testset_filter(testsets_discovered, $(repr(collect(testsets))))
+        Test.TESTSET_FILTER[] = testset_filter
+        println("Testset filtering active: \$(length(testset_filter.enabled_testset_ids)) testsets enabled from patterns \$(testset_filter.enabled_patterns)")
+        println("Enabled testsets:")
+        Test.show_tree(testsets_discovered, enabled_only=true)
+        """
+    else
+        ""
+    end
+
     return """
     $(Base.load_path_setup_code(false))
     cd($(repr(dirname(test_file))))
     append!(empty!(ARGS), $(repr(test_args.exec)))
+    $testset_setup
     include($(repr(test_file)))
     """
 end
@@ -2523,6 +2541,7 @@ function test(
         ctx::Context, pkgs::Vector{PackageSpec};
         coverage = false, julia_args::Cmd = ``, test_args::Cmd = ``,
         test_fn = nothing,
+        testsets::Union{Nothing, AbstractVector} = nothing,
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
         allow_reresolve::Bool = true
@@ -2583,7 +2602,7 @@ function test(
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            code = gen_test_code(source_path; test_args)
+            code = gen_test_code(source_path; test_args, testsets)
             cmd = `$(Base.julia_cmd()) $(flags) --eval $code`
 
             path_sep = Sys.iswindows() ? ';' : ':'
@@ -2626,7 +2645,7 @@ function test(
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            code = gen_test_code(source_path; test_args)
+            code = gen_test_code(source_path; test_args, testsets)
             cmd = `$(Base.julia_cmd()) --threads=$(get_threads_spec()) $(flags) --eval $code`
             p, interrupted = subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
             if success(p)
