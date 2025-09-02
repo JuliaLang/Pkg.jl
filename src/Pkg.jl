@@ -103,6 +103,7 @@ include("Resolve/Resolve.jl")
 include("Types.jl")
 include("BinaryPlatformsCompat.jl")
 include("Artifacts.jl")
+const Artifacts = PkgArtifacts
 include("Operations.jl")
 include("API.jl")
 include("Apps/Apps.jl")
