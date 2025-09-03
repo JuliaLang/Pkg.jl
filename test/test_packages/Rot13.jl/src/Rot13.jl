@@ -15,5 +15,6 @@ function (@main)(ARGS)
 end
 
 include("CLI.jl")
+include("FlagsDemo.jl")
 
 end # module Rot13
