@@ -5,3 +5,4 @@ version = "0.1.0"
 [apps]
 juliarot13 = {}
 juliarot13cli = { submodule = "CLI" }
+juliarot13flags = { submodule = "FlagsDemo", julia_flags = ["--threads=2", "--optimize=3"] }

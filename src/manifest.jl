@@ -87,10 +87,19 @@ function read_apps(apps::Dict)
     appinfos = Dict{String, AppInfo}()
     for (appname, app) in apps
         submodule = get(app, "submodule", nothing)
-        appinfo = AppInfo(appname::String,
-                app["julia_command"]::String,
-                submodule,
-                app)
+        julia_flags_raw = get(app, "julia_flags", nothing)
+        julia_flags = if julia_flags_raw === nothing
+            String[]
+        else
+            String[flag::String for flag in julia_flags_raw]
+        end
+        appinfo = AppInfo(
+            appname::String,
+            app["julia_command"]::String,
+            submodule,
+            julia_flags,
+            app
+        )
         appinfos[appinfo.name] = appinfo
     end
     return appinfos
@@ -337,6 +346,9 @@ function destructure(manifest::Manifest)::Dict
                 app_dict = Dict{String,Any}("julia_command" => julia_command)
                 if appinfo.submodule !== nothing
                     app_dict["submodule"] = appinfo.submodule
+                end
+                if !isempty(appinfo.julia_flags)
+                    app_dict["julia_flags"] = appinfo.julia_flags
                 end
                 new_entry["apps"][appname] = app_dict
             end
