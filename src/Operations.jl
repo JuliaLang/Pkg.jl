@@ -843,7 +843,7 @@ function install_archive(
         end
         # Assert that the tarball unpacked to the tree sha we wanted
         computed_hash = GitTools.tree_hash(unpacked)
-        if SHA1(GitTools.tree_hash(unpacked)) != hash
+        if SHA1(computed_hash) != hash
             @warn "tarball content of url $url does not match git-tree-sha1, expected $hash, got $computed_hash"
             url_success = false
         end
