@@ -505,6 +505,13 @@ function shell_shim(julia_escaped::String, module_spec_escaped::String, env, jul
     export JULIA_LOAD_PATH=$load_path_escaped
     export JULIA_DEPOT_PATH=$depot_path_escaped
 
+    # Allow overriding Julia executable via environment variable
+    if [ -n "\${JULIA_APPS_JULIA_CMD:-}" ]; then
+        julia_cmd="\$JULIA_APPS_JULIA_CMD"
+    else
+        julia_cmd=$julia_escaped
+    fi
+
     # If a `--` appears, args before it go to Julia, after it to the app.
     # If no `--` appears, all original args go to the app (no Julia args).
     found_separator=false
@@ -522,10 +529,10 @@ function shell_shim(julia_escaped::String, module_spec_escaped::String, env, jul
             esac
         done
         # Here: "\$@" are the app args after the separator
-        exec $julia_escaped --startup-file=no$julia_flags_part \$julia_args -m $module_spec_escaped "\$@"
+        exec "\$julia_cmd" --startup-file=no$julia_flags_part \$julia_args -m $module_spec_escaped "\$@"
     else
         # No separator: all original args go straight to the app
-        exec $julia_escaped --startup-file=no$julia_flags_part -m $module_spec_escaped "\$@"
+        exec "\$julia_cmd" --startup-file=no$julia_flags_part -m $module_spec_escaped "\$@"
     fi
     """
 end
@@ -550,6 +557,13 @@ function windows_shim(
     rem --- Environment (no delayed expansion here to keep '!' literal) ---
     set "JULIA_LOAD_PATH=$env"
     set "JULIA_DEPOT_PATH=$depot_path"
+
+    rem --- Allow overriding Julia executable via environment variable ---
+    if defined JULIA_APPS_JULIA_CMD (
+        set "julia_cmd=%JULIA_APPS_JULIA_CMD%"
+    ) else (
+        set "julia_cmd=$julia_escaped"
+    )
 
     rem --- Now enable delayed expansion for string building below ---
     setlocal EnableDelayedExpansion
@@ -591,12 +605,12 @@ function windows_shim(
     :__done
     rem If no --, pass all original args to the app; otherwise use split vars
     if defined found_sep (
-        "$julia_escaped" ^
+        "%julia_cmd%" ^
             --startup-file=no$flags_part !julia_args! ^
             -m $module_spec_escaped ^
             !app_args!
     ) else (
-        "$julia_escaped" ^
+        "%julia_cmd%" ^
             --startup-file=no$flags_part ^
             -m $module_spec_escaped ^
             %*

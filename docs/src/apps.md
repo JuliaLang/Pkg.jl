@@ -141,6 +141,20 @@ The final Julia command will combine:
 3. Runtime flags specified before `--`
 4. App arguments specified after `--`
 
+### Overriding the Julia Executable
+
+By default, apps run with the same Julia executable that was used to install them. You can override this globally using the `JULIA_APPS_JULIA_CMD` environment variable:
+
+```bash
+# Use a different Julia version for all apps
+export JULIA_APPS_JULIA_CMD=/path/to/different/julia
+myapp input.txt
+
+# On Windows
+set JULIA_APPS_JULIA_CMD=C:\path\to\different\julia.exe
+myapp input.txt
+```
+
 ## Installing Julia apps
 
 The installation of Julia apps is similar to [installing Julia libraries](@ref Managing-Packages) but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add` (`develop` is also available).

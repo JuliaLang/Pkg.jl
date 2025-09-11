@@ -36,6 +36,27 @@ using Test
             @test contains(runtime_output, "Thread count: 4")  # overridden by runtime
             @test contains(runtime_output, "App arguments: runtime_arg")
 
+            # Test JULIA_APPS_JULIA_CMD environment variable override
+            mktempdir() do tmpdir
+                # Create a mock Julia executable that outputs an identifiable string
+                mock_julia_path = joinpath(tmpdir, Sys.iswindows() ? "mock-julia.bat" : "mock-julia")
+                mock_script = if Sys.iswindows()
+                    "@echo off\necho MOCK_JULIA_EXECUTED\n"
+                else
+                    "#!/bin/sh\necho MOCK_JULIA_EXECUTED\n"
+                end
+                write(mock_julia_path, mock_script)
+                if !Sys.iswindows()
+                    chmod(mock_julia_path, 0o755)
+                end
+
+                # Test that JULIA_APPS_JULIA_CMD overrides the Julia executable
+                withenv("JULIA_APPS_JULIA_CMD" => mock_julia_path) do
+                    mock_output = read(`$exename test`, String)
+                    @test contains(mock_output, "MOCK_JULIA_EXECUTED")
+                end
+            end
+
             Pkg.Apps.rm("Rot13")
             @test Sys.which(exename) == nothing
             @test Sys.which(cliexename) == nothing
