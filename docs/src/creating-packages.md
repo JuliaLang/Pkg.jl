@@ -611,7 +611,9 @@ may fit your package better.
 7. Avoid naming a package closely to an existing package
      * `Websocket` is too close to `WebSockets` and can be confusing to users. Rather use a new name such as `SimpleWebsockets`.
 
-8. Avoid using a distinctive name that is already in use in a well known, unrelated project.
+8. Package name should start with upper case.
+
+9. Avoid using a distinctive name that is already in use in a well known, unrelated project.
      * Don't use the names `Tkinter.jl`, `TkinterGUI.jl`, etc. for a package that is unrelated
        to the popular `tkinter` python package, even if it provides bindings to Tcl/Tk.
        A package name of `Tkinter.jl` would only be appropriate if the package used Python's
@@ -623,7 +625,7 @@ may fit your package better.
        library, even without explicit affiliation with the creators of the OpenSSL (provided
        there's no copyright or trademark infringement etc.)
 
-9. Packages should follow the [Stylistic Conventions](https://docs.julialang.org/en/v1/manual/variables/#Stylistic-Conventions).
+10. Packages should follow the [Stylistic Conventions](https://docs.julialang.org/en/v1/manual/variables/#Stylistic-Conventions).
      * The package name should begin with a capital letter and word separation is shown with upper camel case
      * Packages that provide the functionality of a project from another language should use the Julia convention
      * Packages that [provide pre-built libraries and executables](https://docs.binarybuilder.org/stable/jll/) can keep their original name, but should get `_jll`as a suffix. For example `pandoc_jll` wraps pandoc. However, note that the generation and release of most JLL packages is handled by the [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil) system.
