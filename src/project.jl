@@ -83,7 +83,15 @@ function read_project_apps(raw::Dict{String,Any}, project::Project)
             Expected value for app `$name` to be a dictionary.
         """)
         submodule = get(info, "submodule", nothing)
-        appinfos[name] = AppInfo(name, nothing, submodule, other)
+        julia_flags_raw = get(info, "julia_flags", nothing)
+        julia_flags = if julia_flags_raw === nothing
+            String[]
+        elseif julia_flags_raw isa Vector
+            String[flag::String for flag in julia_flags_raw]
+        else
+            pkgerror("Expected `julia_flags` for app `$name` to be an array of strings")
+        end
+        appinfos[name] = AppInfo(name, nothing, submodule, julia_flags, other)
     end
     return appinfos
 end

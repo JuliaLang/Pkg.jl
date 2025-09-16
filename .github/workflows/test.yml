@@ -102,3 +102,9 @@ jobs:
           julia --project=docs --color=yes docs/make.jl pdf
         env:
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pkg-docs
+          path: docs/build/

@@ -42,7 +42,7 @@ end # module
 [apps]
 reverse = {}
 ```
-The empty table `{}` is to allow for giving metadata about the app but it is currently unused.
+The empty table `{}` is to allow for giving metadata about the app.
 
 After installing this app one could run:
 
@@ -94,6 +94,66 @@ cli-app = { submodule = "CLI" }
 This will create two executables:
 - `main-app` that runs `julia -m MyMultiApp`
 - `cli-app` that runs `julia -m MyMultiApp.CLI`
+
+## Configuring Julia Flags
+
+Apps can specify default Julia command-line flags that will be passed to the Julia process when the app is run. This is useful for configuring performance settings, threading, or other Julia options specific to your application.
+
+### Default Julia Flags
+
+You can specify default Julia flags in the `Project.toml` file using the `julia_flags` field:
+
+```toml
+# Project.toml
+
+[apps]
+myapp = { julia_flags = ["--threads=4", "--optimize=2"] }
+performance-app = { julia_flags = ["--threads=auto", "--startup-file=yes", "--depwarn=no"] }
+debug-app = { submodule = "Debug", julia_flags = ["--check-bounds=yes", "--optimize=0"] }
+```
+
+With this configuration:
+- `myapp` will run with 4 threads and optimization level 2
+- `performance-app` will run with automatic thread detection, startup file enabled, and deprecation warnings disabled
+- `debug-app` will run with bounds checking enabled and no optimization
+
+### Runtime Julia Flags
+
+You can override or add to the default Julia flags at runtime using the `--` separator. Everything before `--` will be passed as flags to Julia, and everything after `--` will be passed as arguments to your app:
+
+```bash
+# Uses default flags from Project.toml
+myapp input.txt output.txt
+
+# Override thread count, keep other defaults
+myapp --threads=8 -- input.txt output.txt
+
+# Add additional flags
+myapp --threads=2 --optimize=3 --check-bounds=yes -- input.txt output.txt
+
+# Only Julia flags, no app arguments
+myapp --threads=1 --
+```
+
+The final Julia command will combine:
+1. Fixed flags (like `--startup-file=no` and `-m ModuleName`)
+2. Default flags from `julia_flags` in Project.toml
+3. Runtime flags specified before `--`
+4. App arguments specified after `--`
+
+### Overriding the Julia Executable
+
+By default, apps run with the same Julia executable that was used to install them. You can override this globally using the `JULIA_APPS_JULIA_CMD` environment variable:
+
+```bash
+# Use a different Julia version for all apps
+export JULIA_APPS_JULIA_CMD=/path/to/different/julia
+myapp input.txt
+
+# On Windows
+set JULIA_APPS_JULIA_CMD=C:\path\to\different\julia.exe
+myapp input.txt
+```
 
 ## Installing Julia apps
 
