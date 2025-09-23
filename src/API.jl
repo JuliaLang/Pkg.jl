@@ -1046,16 +1046,29 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         end
     end
 
-    # Delete any files that could not be rm-ed and were specially moved to the delayed delete directory.
+    # Delete anything that could not be rm-ed and was specially recorded in the delayed delete list.
     # Do this silently because it's out of scope for Pkg.gc() but it's helpful to use this opportunity to do it
-    if isdefined(Base.Filesystem, :delayed_delete_dir)
-        if isdir(Base.Filesystem.delayed_delete_dir())
-            for p in readdir(Base.Filesystem.delayed_delete_dir(), join = true)
+    if isdefined(Base.Filesystem, :delayed_delete_list)
+        delayed_delete_list_path = Base.Filesystem.delayed_delete_list()
+        if isfile(delayed_delete_list_path)
+            lines = readlines(delayed_delete_list_path)
+            faileddeletes = Int[]
+            for (i, p) in enumerate(lines)
                 try
                     Base.Filesystem.prepare_for_deletion(p)
-                    Base.rm(p; recursive = true, force = true, allow_delayed_delete = false)
+                    Base.rm(p; recursive = true, force = true)
                 catch e
                     @debug "Failed to delete $p" exception = e
+                    push!(faileddeletes, i)
+                end
+            end
+            if isempty(faileddeletes)
+                Base.rm(delayed_delete_list_path)
+            else # write back the non-deleted paths to retry next time
+                open(delayed_delete_list_path, "w") do io
+                    for i in faileddeletes
+                        println(io, lines[i])
+                    end
                 end
             end
         end
