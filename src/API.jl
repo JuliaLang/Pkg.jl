@@ -1052,7 +1052,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         delayed_delete_ref_path = Base.Filesystem.delayed_delete_ref()
         if isdir(delayed_delete_ref_path)
             delayed_delete_dirs = Set{String}()
-            for f in readdir(delayed_delete_ref_path; join=true)
+            for f in readdir(delayed_delete_ref_path; join = true)
                 try
                     p = readline(f)
                     push!(delayed_delete_dirs, dirname(p))
