@@ -187,21 +187,16 @@ temp_pkg_dir() do project_path
         @test !isinstalled(TEST_PKG)
         pkgdir = joinpath(Pkg.depots1(), "packages")
 
-        # Test to ensure that with a long enough collect_delay, nothing gets reaped
-        Pkg.gc(; collect_delay = Day(1000))
-        @test !isempty(readdir(pkgdir))
-
-        # Setting collect_delay to zero causes it to be reaped immediately, however
-        Pkg.gc(; collect_delay = Second(0))
+        # Test that unused packages are reaped
+        Pkg.gc()
         @test isempty(readdir(pkgdir))
 
         clonedir = joinpath(Pkg.depots1(), "clones")
         Pkg.add(Pkg.PackageSpec(name = TEST_PKG.name, rev = "master"))
         @test !isempty(readdir(clonedir))
         Pkg.rm(TEST_PKG.name)
-        Pkg.gc(; collect_delay = Day(1000))
-        @test !isempty(readdir(clonedir))
-        Pkg.gc(; collect_delay = Second(0))
+        # Test that unused repos are also reaped
+        Pkg.gc()
         @test isempty(readdir(clonedir))
     end
 
