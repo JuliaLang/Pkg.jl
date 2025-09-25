@@ -1358,9 +1358,9 @@ function instantiate(
     end
 
     # Install all packages
-    new_apply = Operations.download_source(ctx)
+    new_apply = Operations.download_source(ctx, pkgs)
     # Install all artifacts
-    Operations.download_artifacts(ctx; platform, verbose)
+    Operations.download_artifacts(ctx, pkgs; platform, verbose)
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose = verbose)
 
