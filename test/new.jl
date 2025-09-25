@@ -3816,26 +3816,49 @@ end
 # Test the readonly functionality
 @testset "Readonly Environment Tests" begin
     mktempdir() do dir
-        project_file = joinpath(dir, "Project.toml")
-
-        # Test that normal environment works
         cd(dir) do
             # Activate the environment
             Pkg.activate(".")
 
-            # This should work fine
-            Pkg.add("Test")  # Add Test package
+            # Test readonly API - should be false initially
+            @test Pkg.readonly() == false
 
-            # Now make it readonly
-            project_data = Dict("readonly" => true)
-            open(project_file, "w") do io
-                TOML.print(io, project_data)
-            end
+            # Add a package (should work fine)
+            Pkg.add("Test")
 
-            # Now these should fail
+            # Enable readonly mode using new API
+            previous_state = Pkg.readonly(true)
+            @test previous_state == false
+            @test Pkg.readonly() == true
+
+            # Test that status shows readonly indicator
+            io = IOBuffer()
+            Pkg.status(io = io)
+            status_output = String(take!(io))
+            @test occursin("(readonly)", status_output)
+
+            # These operations should fail with early readonly check
             @test_throws Pkg.Types.PkgError Pkg.add("Dates")
             @test_throws Pkg.Types.PkgError Pkg.rm("Test")
             @test_throws Pkg.Types.PkgError Pkg.update()
+            @test_throws Pkg.Types.PkgError Pkg.pin("Test")
+            @test_throws Pkg.Types.PkgError Pkg.free("Test")
+            @test_throws Pkg.Types.PkgError Pkg.develop("Example")
+
+            # Disable readonly mode
+            previous_state = Pkg.readonly(false)
+            @test previous_state == true
+            @test Pkg.readonly() == false
+
+            # Test that status no longer shows readonly indicator
+            io = IOBuffer()
+            Pkg.status(io = io)
+            status_output = String(take!(io))
+            @test !occursin("(readonly)", status_output)
+
+            # Operations should work again
+            @test_nowarn Pkg.add("Random")
+            @test_nowarn Pkg.rm("Random")
         end
     end
 end

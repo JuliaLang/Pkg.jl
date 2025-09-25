@@ -23,7 +23,7 @@ export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_I
 export Registry, RegistrySpec
 
 public activate, add, build, compat, develop, free, gc, generate, instantiate,
-    pin, precompile, redo, rm, resolve, status, test, undo, update, why
+    pin, precompile, readonly, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
 function depots1(depot_list::Union{String, Vector{String}} = depots())
@@ -895,6 +895,28 @@ using Pkg, Test
 ```
 """
 const is_manifest_current = API.is_manifest_current
+
+"""
+    readonly([state::Bool], [ctx::Context])
+
+Get or set the readonly state of the current environment.
+
+# Examples
+```julia-repl
+julia> Pkg.readonly()  # check current readonly state
+false
+
+julia> Pkg.readonly(true)  # enable readonly mode
+false  # returns previous state
+
+julia> Pkg.readonly()
+true
+
+julia> Pkg.readonly(false)  # disable readonly mode
+true
+```
+"""
+const readonly = API.readonly
 
 function __init__()
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)

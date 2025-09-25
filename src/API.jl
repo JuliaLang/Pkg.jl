@@ -149,6 +149,10 @@ function require_not_empty(pkgs, f::Symbol)
     return isempty(pkgs) && pkgerror("$f requires at least one package")
 end
 
+function check_readonly(ctx::Context)
+    return ctx.env.project.readonly && pkgerror("Cannot modify a readonly environment. The project at $(ctx.env.project_file) is marked as readonly.")
+end
+
 # Provide some convenience calls
 for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :precompile)
     @eval begin
@@ -252,6 +256,7 @@ function develop(
     )
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
+    check_readonly(ctx)
 
     for pkg in pkgs
         check_package_name(pkg.name, "develop")
@@ -303,6 +308,7 @@ function add(
     )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
+    check_readonly(ctx)
 
     for pkg in pkgs
         check_package_name(pkg.name, "add")
@@ -357,6 +363,7 @@ end
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, mode)
@@ -412,6 +419,7 @@ function up(
         kwargs...
     )
     Context!(ctx; kwargs...)
+    check_readonly(ctx)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
         return
@@ -445,6 +453,7 @@ end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
@@ -485,6 +494,7 @@ end
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
@@ -1774,6 +1784,32 @@ function auto_gc(on::Bool)
     _auto_gc_enabled[] = on
 
     return pstate
+end
+
+"""
+    readonly()
+
+Return whether the current environment is readonly.
+"""
+function readonly(ctx::Context = Context())
+    return ctx.env.project.readonly
+end
+
+"""
+    readonly(on::Bool)
+
+Enable or disable readonly mode for the current environment.
+Return the previous state.
+"""
+function readonly(on::Bool, ctx::Context = Context())
+    previous_state = ctx.env.project.readonly
+    ctx.env.project.readonly = on
+    Types.write_env(ctx.env; skip_readonly_check = true)
+
+    mode_str = on ? "enabled" : "disabled"
+    printpkgstyle(ctx.io, :Updated, "Readonly mode $mode_str for project at $(ctx.env.project_file)")
+
+    return previous_state
 end
 
 end # module
