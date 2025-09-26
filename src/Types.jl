@@ -1276,7 +1276,8 @@ function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry, Noth
 end
 function write_env(
         env::EnvCache; update_undo = true,
-        skip_writing_project::Bool = false
+        skip_writing_project::Bool = false,
+        skip_readonly_check::Bool = false
     )
     # Verify that the generated manifest is consistent with `sources`
     for (pkg, uuid) in env.project.deps
@@ -1307,12 +1308,12 @@ function write_env(
     end
 
     # Check if the environment is readonly before attempting to write
-    if env.project.readonly
+    if env.project.readonly && !skip_readonly_check
         pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
     end
 
     if (env.project != env.original_project) && (!skip_writing_project)
-        write_project(env)
+        write_project(env, skip_readonly_check)
     end
     if env.manifest != env.original_manifest
         write_manifest(env)

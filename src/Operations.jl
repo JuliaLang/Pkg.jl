@@ -2952,7 +2952,8 @@ function print_status(
             return nothing
         end
         # main print
-        printpkgstyle(io, header, pathrepr(manifest ? env.manifest_file : env.project_file), ignore_indent)
+        readonly_suffix = env.project.readonly ? " (readonly)" : ""
+        printpkgstyle(io, header, pathrepr(manifest ? env.manifest_file : env.project_file) * readonly_suffix, ignore_indent)
         if workspace && !manifest
             for (path, _) in env.workspace
                 relative_path = Types.relative_project_path(env.project_file, path)
@@ -3178,7 +3179,8 @@ function status(
     io == Base.devnull && return
     # if a package, print header
     if header === nothing && env.pkg !== nothing
-        printpkgstyle(io, :Project, string(env.pkg.name, " v", env.pkg.version), true; color = Base.info_color())
+        readonly_status = env.project.readonly ? " (readonly)" : ""
+        printpkgstyle(io, :Project, string(env.pkg.name, " v", env.pkg.version, readonly_status), true; color = Base.info_color())
     end
     # load old env
     old_env = nothing

@@ -304,8 +304,8 @@ const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "vers
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
-function write_project(env::EnvCache)
-    if env.project.readonly
+function write_project(env::EnvCache, skip_readonly_check::Bool = false)
+    if env.project.readonly && !skip_readonly_check
         pkgerror("Cannot write to readonly project file at $(env.project_file)")
     end
     return write_project(env.project, env.project_file)

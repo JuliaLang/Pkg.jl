@@ -113,6 +113,21 @@ readonly = true
 When an environment is marked as readonly, Pkg will throw an error if any operation that would modify the environment is attempted.
 If the `readonly` field is not present or set to `false` (the default), the environment can be modified normally.
 
+You can also programmatically check and modify the readonly state using the [`Pkg.readonly`](@ref) function:
+
+```julia
+# Check if current environment is readonly
+is_readonly = Pkg.readonly()
+
+# Enable readonly mode
+previous_state = Pkg.readonly(true)
+
+# Disable readonly mode
+Pkg.readonly(false)
+```
+
+When readonly mode is enabled, the status display will show `(readonly)` next to the project name to indicate the environment is protected from modifications.
+
 
 ### The `[deps]` section
 
