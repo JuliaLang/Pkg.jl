@@ -563,14 +563,12 @@ const UsageDict = Dict{String, DateTime}
 const UsageByDepotDict = Dict{String, UsageDict}
 
 """
-    gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
+    gc(ctx::Context=Context(); verbose=false, force=false, kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
-finding artifacts and packages that are thereafter not used by any other projects,
-marking them as "orphaned".  This method will only remove orphaned objects (package
-versions, artifacts, and scratch spaces) that have been continually un-used for a period
-of `collect_delay`; which defaults to seven days.
+finding artifacts and packages that are thereafter not used by any other projects.
+Unused packages, artifacts, repos, and scratch spaces are immediately deleted.
 
 Garbage collection is only applied to the "user depot", e.g. the first entry in the
 depot path. If you want to run `gc` on all depots set `force=true` (this might require
@@ -578,8 +576,11 @@ admin privileges depending on the setup).
 
 Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = false, force = false, kwargs...)
+function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = nothing, verbose = false, force = false, kwargs...)
     Context!(ctx; kwargs...)
+    if collect_delay !== nothing
+        @warn "The `collect_delay` parameter is no longer used. Packages are now deleted immediately when they become unreachable."
+    end
     env = ctx.env
 
     # Only look at user-depot unless force=true
@@ -848,33 +849,6 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
         return Set(marked_paths)
     end
 
-    gc_time = now()
-    function merge_orphanages!(new_orphanage, paths, deletion_list, old_orphanage = UsageDict())
-        for path in paths
-            free_time = something(
-                get(old_orphanage, path, nothing),
-                gc_time,
-            )
-
-            # No matter what, store the free time in the new orphanage. This allows
-            # something terrible to go wrong while trying to delete the artifact/
-            # package and it will still try to be deleted next time.  The only time
-            # something is removed from an orphanage is when it didn't exist before
-            # we even started the `gc` run.
-            new_orphanage[path] = free_time
-
-            # If this path was orphaned long enough ago, add it to the deletion list.
-            # Otherwise, we continue to propagate its orphaning date but don't delete
-            # it.  It will get cleaned up at some future `gc`, or it will be used
-            # again during a future `gc` in which case it will not persist within the
-            # orphanage list.
-            if gc_time - free_time >= collect_delay
-                push!(deletion_list, path)
-            end
-        end
-        return
-    end
-
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
     # printpkgstyle(ctx.io, :Active, "manifests:")
@@ -883,64 +857,28 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
         verbose = verbose, file_str = "manifest files"
     )
 
-    # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
-    packages_to_delete = String[]
-    for depot in gc_depots
-        depot_orphaned_packages = String[]
-        packagedir = abspath(depot, "packages")
-        if isdir(packagedir)
-            for name in readdir(packagedir)
-                !isdir(joinpath(packagedir, name)) && continue
 
-                for slug in readdir(joinpath(packagedir, name))
-                    pkg_dir = joinpath(packagedir, name, slug)
-                    !isdir(pkg_dir) && continue
-
-                    if !(pkg_dir in packages_to_keep)
-                        push!(depot_orphaned_packages, pkg_dir)
-                    end
-                end
-            end
-        end
-        merge_orphanages!(UsageDict(), depot_orphaned_packages, packages_to_delete)
-    end
-
-
-    # Next, do the same for artifacts.  Note that we MUST do this after calculating
-    # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
-    # `Artifacts.toml` files that will be deleted by the future culling operation.
+    # Next, do the same for artifacts.
     # printpkgstyle(ctx.io, :Active, "artifacts:")
-    artifacts_to_keep = let packages_to_delete = packages_to_delete
-        mark(
-            x -> process_artifacts_toml(x, packages_to_delete),
-            all_artifact_tomls, ctx; verbose = verbose, file_str = "artifact files"
-        )
-    end
+    artifacts_to_keep = mark(
+        x -> process_artifacts_toml(x, String[]),
+        all_artifact_tomls, ctx; verbose = verbose, file_str = "artifact files"
+    )
     repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print = false)
     # printpkgstyle(ctx.io, :Active, "scratchspaces:")
-    spaces_to_keep = let packages_to_delete = packages_to_delete
-        mark(
-            x -> process_scratchspace(x, packages_to_delete),
-            all_scratch_dirs, ctx; verbose = verbose, file_str = "scratchspaces"
-        )
-    end
+    spaces_to_keep = mark(
+        x -> process_scratchspace(x, String[]),
+        all_scratch_dirs, ctx; verbose = verbose, file_str = "scratchspaces"
+    )
 
-    # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
-    # are implicitly defined in that we walk all packages/artifacts installed, then if
-    # they were not marked in the above steps, we reap them.
+    # Collect all unreachable paths (packages, artifacts and repos that are not reachable)
+    # and immediately delete them.
     packages_to_delete = String[]
     artifacts_to_delete = String[]
     repos_to_delete = String[]
     spaces_to_delete = String[]
 
     for depot in gc_depots
-        # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
-        # tracking file immediately, only pushing onto the overall `*_to_delete` lists if
-        # the package has been orphaned for at least a period of `collect_delay`
-        depot_orphaned_packages = String[]
-        depot_orphaned_artifacts = String[]
-        depot_orphaned_repos = String[]
-        depot_orphaned_scratchspaces = String[]
 
         packagedir = abspath(depot, "packages")
         if isdir(packagedir)
@@ -952,7 +890,7 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                     !isdir(pkg_dir) && continue
 
                     if !(pkg_dir in packages_to_keep)
-                        push!(depot_orphaned_packages, pkg_dir)
+                        push!(packages_to_delete, pkg_dir)
                     end
                 end
             end
@@ -964,7 +902,7 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                 repo_dir = joinpath(reposdir, repo)
                 !isdir(repo_dir) && continue
                 if !(repo_dir in repos_to_keep)
-                    push!(depot_orphaned_repos, repo_dir)
+                    push!(repos_to_delete, repo_dir)
                 end
             end
         end
@@ -976,7 +914,7 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                 !isdir(artifact_path) && continue
 
                 if !(artifact_path in artifacts_to_keep)
-                    push!(depot_orphaned_artifacts, artifact_path)
+                    push!(artifacts_to_delete, artifact_path)
                 end
             end
         end
@@ -990,13 +928,13 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                     space_dir_or_file = joinpath(uuid_dir, space)
                     if isdir(space_dir_or_file)
                         if !(space_dir_or_file in spaces_to_keep)
-                            push!(depot_orphaned_scratchspaces, space_dir_or_file)
+                            push!(spaces_to_delete, space_dir_or_file)
                         end
                     elseif uuid == Operations.PkgUUID && isfile(space_dir_or_file)
                         # special cleanup for the precompile cache files that Pkg saves
                         if any(prefix -> startswith(basename(space_dir_or_file), prefix), ("suspend_cache_", "pending_cache_"))
                             if mtime(space_dir_or_file) < (time() - (24 * 60 * 60))
-                                push!(depot_orphaned_scratchspaces, space_dir_or_file)
+                                push!(spaces_to_delete, space_dir_or_file)
                             end
                         end
                     end
@@ -1004,25 +942,6 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
             end
         end
 
-        # Read in this depot's `orphaned.toml` file:
-        orphanage_file = joinpath(logdir(depot), "orphaned.toml")
-        new_orphanage = UsageDict()
-        old_orphanage = try
-            TOML.parse(String(read(orphanage_file)))
-        catch
-            UsageDict()
-        end
-
-        # Update the package and artifact lists of things to delete, and
-        # create the `new_orphanage` list for this depot.
-        merge_orphanages!(new_orphanage, depot_orphaned_packages, packages_to_delete, old_orphanage)
-        merge_orphanages!(new_orphanage, depot_orphaned_artifacts, artifacts_to_delete, old_orphanage)
-        merge_orphanages!(new_orphanage, depot_orphaned_repos, repos_to_delete, old_orphanage)
-        merge_orphanages!(new_orphanage, depot_orphaned_scratchspaces, spaces_to_delete, old_orphanage)
-
-        # Write out the `new_orphanage` for this depot
-        mkpath(dirname(orphanage_file))
-        atomic_toml_write(orphanage_file, new_orphanage, sorted = true)
     end
 
     function recursive_dir_size(path)
