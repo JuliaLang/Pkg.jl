@@ -222,6 +222,7 @@ function Project(raw::Dict; file = nothing)
     end
     project.uuid = read_project_uuid(get(raw, "uuid", nothing))
     project.version = read_project_version(get(raw, "version", nothing))
+    project.upstream_version = get(raw, "upstream_version", nothing)::Union{String, Nothing}
     project.deps = read_project_deps(get(raw, "deps", nothing), "deps")
     project.weakdeps = read_project_deps(get(raw, "weakdeps", nothing), "weakdeps")
     project.exts = get(Dict{String, String}, raw, "extensions")
@@ -280,6 +281,7 @@ function destructure(project::Project)::Dict
     entry!("name", project.name)
     entry!("uuid", project.uuid)
     entry!("version", project.version)
+    entry!("upstream_version", project.upstream_version)
     entry!("workspace", project.workspace)
     entry!("manifest", project.manifest)
     entry!("entryfile", project.entryfile)
@@ -300,7 +302,7 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "readonly", "workspace", "deps", "weakdeps", "sources", "extensions", "compat"]
+const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "upstream_version", "readonly", "workspace", "deps", "weakdeps", "sources", "extensions", "compat"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
