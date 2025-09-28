@@ -414,7 +414,7 @@ temp_pkg_dir() do project_path
         # Precompile Pkg given we're in a different depot
         # and make sure the General registry is installed
         Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add()"`)
-        flag_start_dir = tempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
+        flag_start_dir = mktempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
         flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
         for i in 1:Sys.CPU_THREADS
             iob = IOBuffer()
@@ -425,7 +425,7 @@ temp_pkg_dir() do project_path
                 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
                 Pkg.activate(temp = true);
                 Pkg.add(\"Random\", io = devnull);
-                touch(tempname(raw\"$flag_start_dir\")) # file marker that first part has finished
+                touch(tempname(raw\"$flag_start_dir\")*raw\"$i\") # file marker that first part has finished
                 while length(readdir(raw\"$flag_start_dir\")) < $(Sys.CPU_THREADS)
                     # sync all processes to start at the same time
                     sleep(0.1)
