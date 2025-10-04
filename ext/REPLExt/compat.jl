@@ -58,7 +58,7 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
             elseif inp == TerminalMenus.END_KEY
                 cursor = length(buffer)
             elseif inp == TerminalMenus.DEL_KEY
-                if cursor == 0
+                if cursor == 0 && !isempty(buffer)
                     buffer = buffer[2:end]
                 elseif cursor < length(buffer)
                     buffer = buffer[1:cursor] * buffer[(cursor + 2):end]
@@ -66,16 +66,18 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
             elseif inp isa TerminalMenus.Key
                 # ignore all other escaped (multi-byte) keys
             elseif inp == '\x7f' # backspace
-                if cursor == 1
-                    buffer = buffer[2:end]
-                elseif cursor == length(buffer)
-                    buffer = buffer[1:(end - 1)]
-                elseif cursor > 0
-                    buffer = buffer[1:(cursor - 1)] * buffer[(cursor + 1):end]
+                if cursor > 0
+                    if cursor == 1
+                        buffer = buffer[2:end]
+                    elseif cursor == length(buffer)
+                        buffer = buffer[1:(end - 1)]
+                    else
+                        buffer = buffer[1:(cursor - 1)] * buffer[(cursor + 1):end]
+                    end
+                    cursor -= 1
                 else
                     continue
                 end
-                cursor -= 1
             else
                 if cursor == 0
                     buffer = inp * buffer

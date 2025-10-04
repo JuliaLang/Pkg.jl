@@ -873,6 +873,22 @@ end
             @test occursin("Example = \"0.4\"", str)
             @test occursin("checking for compliance with the new compat rules..", str)
             @test occursin("Error empty intersection between", str) # Latest Example is at least 0.5.5
+
+            # Test for issue #3828: Backspace on empty buffer should not cause BoundsError
+            test_ctx = Pkg.Types.Context()
+            test_ctx.io = IOBuffer()
+
+            input_io = Base.BufferStream()
+            write(input_io, "\r") # Select julia (first entry)
+            # Now editing julia compat entry which starts empty
+            write(input_io, "\x7f") # Backspace on empty buffer
+            write(input_io, "\x7f") # Another backspace
+            write(input_io, " ") # Space should not cause error
+            write(input_io, "\r") # Confirm empty input
+            close(input_io)
+
+            # Should not throw BoundsError
+            Pkg.API._compat(test_ctx; input_io)
         end
     end
 end
