@@ -363,14 +363,14 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project(pkg::Union{PackageSpec, Nothing}, path::String)
+function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, julia_version)
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
     project_file = projectfile_path(path; strict = true)
     project = project_file === nothing ? Project() : read_project(project_file)
     julia_compat = get_compat(project, "julia")
-    if !isnothing(julia_compat) && !(VERSION in julia_compat)
-        pkgerror("julia version requirement from Project.toml's compat section not satisfied for package at `$path`")
+    if !isnothing(julia_compat) && !(julia_version in julia_compat)
+        pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
     end
     for (name, uuid) in project.deps
         path, repo = get_path_repo(project, name)
@@ -434,12 +434,12 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     return developed
 end
 
-function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String})
+function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version = VERSION)
     deps_map = Dict{UUID, Vector{PackageSpec}}()
     weak_map = Dict{UUID, Set{UUID}}()
 
     uuid = Types.project_uuid(env)
-    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file))
+    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file), julia_version)
     deps_map[uuid] = deps
     weak_map[uuid] = weakdeps
     names[uuid] = env.pkg === nothing ? "project" : env.pkg.name
@@ -447,7 +447,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     for (path, project) in env.workspace
         uuid = Types.project_uuid(project, path)
         pkg = project.name === nothing ? nothing : PackageSpec(name = project.name, uuid = uuid)
-        deps, weakdeps = collect_project(pkg, path)
+        deps, weakdeps = collect_project(pkg, path, julia_version)
         deps_map[Types.project_uuid(env)] = deps
         weak_map[Types.project_uuid(env)] = weakdeps
         names[uuid] = project.name === nothing ? "project" : project.name
@@ -485,7 +485,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             end
             pkgerror(error_msg)
         end
-        deps, weakdeps = collect_project(pkg, path)
+        deps, weakdeps = collect_project(pkg, path, julia_version)
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
     end
@@ -562,7 +562,7 @@ function resolve_versions!(
         end
     end
     # this also sets pkg.version for fixed packages
-    fixed = collect_fixed!(env, filter(!is_tracking_registry, pkgs), names)
+    fixed = collect_fixed!(env, filter(!is_tracking_registry, pkgs), names, julia_version)
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
     # at this point, fixed packages have a version and `deps`
