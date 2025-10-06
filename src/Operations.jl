@@ -369,7 +369,7 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, julia_v
     project_file = projectfile_path(path; strict = true)
     project = project_file === nothing ? Project() : read_project(project_file)
     julia_compat = get_compat(project, "julia")
-    if !isnothing(julia_compat) && !(julia_version in julia_compat)
+    if !isnothing(julia_compat) && !isnothing(julia_version) && !(julia_version in julia_compat)
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
     end
     for (name, uuid) in project.deps
