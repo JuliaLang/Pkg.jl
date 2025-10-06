@@ -538,7 +538,7 @@ function resolve_versions!(
     # compatibility
     if julia_version !== nothing
         # only set the manifest julia_version if ctx.julia_version is not nothing
-        env.manifest.julia_version = dropbuild(VERSION)
+        env.manifest.julia_version = dropbuild(julia_version)
         v = intersect(julia_version, get_compat_workspace(env, "julia"))
         if isempty(v)
             @warn "julia version requirement for project not satisfied" _module = nothing _file = nothing
