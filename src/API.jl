@@ -1464,7 +1464,7 @@ function activate(f::Function, new_project::AbstractString)
     end
 end
 
-function compat(ctx::Context, pkg::String, compat_str::Union{Nothing, String}; io = nothing, kwargs...)
+function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing, String}; io = nothing, kwargs...)
     io = something(io, ctx.io)
     pkg = pkg == "Julia" ? "julia" : pkg
     isnothing(compat_str) || (compat_str = string(strip(compat_str, '"')))
@@ -1503,9 +1503,10 @@ function compat(ctx::Context, pkg::String, compat_str::Union{Nothing, String}; i
         pkgerror("No package named $pkg in current Project")
     end
 end
-compat(pkg::String; kwargs...) = compat(pkg, nothing; kwargs...)
-compat(pkg::String, compat_str::Union{Nothing, String}; kwargs...) = compat(Context(), pkg, compat_str; kwargs...)
-compat(; kwargs...) = compat(Context(); kwargs...)
+compat(ctx::Context; kwargs...) = _compat(ctx; kwargs...)
+compat(pkg::String; kwargs...) = _compat(pkg, nothing; kwargs...)
+compat(pkg::String, compat_str::Union{Nothing, String}; kwargs...) = _compat(Context(), pkg, compat_str; kwargs...)
+compat(; kwargs...) = _compat(Context(); kwargs...)
 
 #######
 # why #
