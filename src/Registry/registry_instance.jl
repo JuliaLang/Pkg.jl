@@ -62,6 +62,8 @@ struct PkgInfo
 
     # WeakDeps.toml
     weak_deps::Dict{VersionRange, Dict{String, UUID}}
+
+    info_lock::ReentrantLock
 end
 
 isyanked(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].yanked
@@ -155,7 +157,7 @@ function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version
 end
 
 function compat_info(pkg::PkgInfo)
-    initialize_uncompressed!(pkg)
+    @lock pkg.info_lock initialize_uncompressed!(pkg)
     return Dict(v => info.uncompressed_compat for (v, info) in pkg.version_info)
 end
 
@@ -163,7 +165,7 @@ function weak_compat_info(pkg::PkgInfo)
     if isempty(pkg.weak_deps)
         return nothing
     end
-    initialize_weak_uncompressed!(pkg)
+    @lock pkg.info_lock initialize_weak_uncompressed!(pkg)
     return Dict(v => info.weak_uncompressed_compat for (v, info) in pkg.version_info)
 end
 
@@ -254,7 +256,7 @@ function init_package_info!(pkg::PkgEntry)
         end
 
         @assert !isdefined(pkg, :info)
-        pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps)
+        pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps, pkg.info_lock)
 
         return pkg.info
     end
