@@ -20,6 +20,7 @@ A Julia app is structured similar to a standard Julia library with the following
 
 A very simple example of an app that prints the reversed input arguments would be:
 
+Create new package `pkg> generate MyReverseApp` with the following code:
 ```julia
 # src/MyReverseApp.jl
 module MyReverseApp
@@ -43,6 +44,8 @@ end # module
 reverse = {}
 ```
 The empty table `{}` is to allow for giving metadata about the app.
+
+Install app from developed package with `pkg> app dev .` or `pkg> app dev MyReverseApp` if your package is at `JULIA_DEPOT_PATH`
 
 After installing this app one could run:
 
