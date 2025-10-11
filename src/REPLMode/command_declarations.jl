@@ -113,11 +113,12 @@ compound_declarations = [
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
                 PSA[:name => "weak", :short_name => "w", :api => :target => :weakdeps],
                 PSA[:name => "extra", :short_name => "e", :api => :target => :extras],
+                PSA[:name => "dry-run", :api => :dry_run => true],
             ],
             :completions => :complete_add_dev,
             :description => "add packages to project",
             :help => md"""
-                    add [--preserve=<opt>] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...
+                    add [--preserve=<opt>] [-w|--weak] [-e|--extra] [--dry-run] pkg[=uuid] [@version] [#rev] ...
 
                 Add package `pkg` to the current project file. If `pkg` could refer to
                 multiple different packages, specifying `uuid` allows you to disambiguate.
@@ -133,6 +134,9 @@ compound_declarations = [
                 The project will then track that git repository just like it would track a remote repository online.
                 If the package is not located at the top of the git repository, a subdirectory can be specified with
                 `path:subdir/path`.
+
+                The `--dry-run` option will preview the changes without actually applying them.
+                Changes will be displayed and then automatically reverted.
 
                 `Pkg` resolves the set of packages in your environment using a tiered approach.
                 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
@@ -188,12 +192,13 @@ compound_declarations = [
                 PSA[:name => "local", :api => :shared => false],
                 PSA[:name => "shared", :api => :shared => true],
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+                PSA[:name => "dry-run", :api => :dry_run => true],
             ],
             :completions => :complete_add_dev,
             :description => "clone the full package repo locally for development",
             :help => md"""
-                    [dev|develop] [--preserve=<opt>] [--shared|--local] pkg[=uuid] ...
-                    [dev|develop] [--preserve=<opt>] path
+                    [dev|develop] [--preserve=<opt>] [--shared|--local] [--dry-run] pkg[=uuid] ...
+                    [dev|develop] [--preserve=<opt>] [--dry-run] path
 
                 Make a package available for development. If `pkg` is an existing local path, that path will be recorded in
                 the manifest and used. Otherwise, a full git clone of `pkg` is made. The location of the clone is
@@ -202,6 +207,9 @@ compound_declarations = [
 
                 When `--local` is given, the clone is placed in a `dev` folder in the current project. This
                 is not supported for paths, only registered packages.
+
+                The `--dry-run` option will preview the changes without actually applying them.
+                Changes will be displayed and then automatically reverted.
 
                 This operation is undone by `free`.
 
@@ -309,12 +317,18 @@ compound_declarations = [
         PSA[
             :name => "resolve",
             :api => API.resolve,
+            :option_spec => [
+                PSA[:name => "dry-run", :api => :dry_run => true],
+            ],
             :description => "resolves to update the manifest from changes in dependencies of developed packages",
             :help => md"""
-                    resolve
+                    resolve [--dry-run]
 
                 Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
                 packages have changed causing the current Manifest to be out of sync.
+
+                The `--dry-run` option will preview the changes without actually applying them.
+                Changes will be reverted after being displayed.
                 """,
         ],
         PSA[
@@ -362,6 +376,7 @@ compound_declarations = [
                 PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
                 PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+                PSA[:name => "dry-run", :api => :dry_run => true],
             ],
             :completions => :complete_installed_packages,
             :description => "update packages in manifest",
@@ -371,6 +386,7 @@ compound_declarations = [
 
                     opts: --major | --minor | --patch | --fixed
                           --preserve=<all/direct/none>
+                          --dry-run
 
                 Update `pkg` within the constraints of the indicated version
                 specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
@@ -380,6 +396,9 @@ compound_declarations = [
                 the following packages to be upgraded only within the current major, minor,
                 patch version; if the `--fixed` upgrade level is given, then the following
                 packages will not be upgraded at all.
+
+                The `--dry-run` option will preview the changes without actually applying them.
+                Changes will be reverted after being displayed.
 
                 After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
                 """,
