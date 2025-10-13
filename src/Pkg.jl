@@ -755,6 +755,7 @@ Print out the status of the project/manifest.
 Packages marked with `⌃` have new versions available. Whether a new version can be installed, e.g. via [`Pkg.update`](@ref),
 depends on the other packages in the environment. To see that, and what holds a package back, set the
 keyword argument `outdated=true`.
+Packages marked with `○` are not precompiled yet.
 Packages marked with `[yanked]` are yanked versions that should be updated or replaced as they may contain bugs or security vulnerabilities.
 
 Setting `outdated=true` will only show packages that are not on the latest version,

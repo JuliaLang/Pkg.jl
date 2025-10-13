@@ -543,6 +543,7 @@ compound_declarations = [
                 their latest version and resolves an update (without changing anything) to tell
                 them apart. There `⌃` marks the packages that `pkg> up` upgrades and `⌅` those
                 that it leaves at their version, followed by the packages holding them back.
+                Packages marked with `○` are not precompiled yet and can be precompiled via `pkg> precompile`.
                 Packages marked with `[yanked]` have been yanked from the registry and should be
                 updated or removed. Packages marked with `[deprecated]` are no longer maintained.
 

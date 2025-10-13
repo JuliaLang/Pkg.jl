@@ -4582,6 +4582,7 @@ struct PackageStatusData
     downloaded::Bool
     upgradable::Bool
     heldback::Bool
+    precompiled::Bool
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
     changed::Bool
     extinfo::Union{Nothing, Vector{ExtInfo}}
@@ -4610,6 +4611,7 @@ end
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.error_color()), "→", context = io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color = :green), "⌃", context = io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.warn_color()), "⌅", context = io)
+    not_precompiled_indicator = sprint((io, args) -> printstyled(io, args...; color = :light_black), "○", context = io)
     filter = !isempty(uuids) || !isempty(names)
     # filter and return early if possible
     if isempty(xs) && !diff
@@ -4670,6 +4672,7 @@ end
 
     all_packages_downloaded = true
     no_packages_upgradable = true
+    all_packages_precompiled = true
     lpadding = 2
 
     package_statuses = PackageStatusData[]
@@ -4745,14 +4748,22 @@ end
             pkg_heldback = new_ver_avail && cinfo !== nothing && !pkg_upgradable && cinfo[1] != ["removed"]
         end
 
-        if !pkg_downloaded && (pkg_upgradable || pkg_heldback)
+        # Check precompilation status
+        pkg_precompiled = false
+        if pkg_downloaded && !isnothing(new)
+            pkgid = Base.PkgId(uuid, new.name)
+            pkg_precompiled = Base.isprecompiled(pkgid)
+        end
+
+        if (!pkg_downloaded || (pkg_downloaded && !pkg_precompiled)) && (pkg_upgradable || pkg_heldback)
             # allow space in the gutter for two icons on a single line
             lpadding = 3
         end
         all_packages_downloaded &= (!changed || pkg_downloaded)
         no_packages_upgradable &= (!changed || !pkg_upgradable)
+        all_packages_precompiled &= (!changed || pkg_precompiled)
 
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, ext_info, deprecation_info))
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, pkg_precompiled, cinfo, changed, ext_info, deprecation_info))
     end
 
     for pkg in package_statuses
@@ -4761,6 +4772,8 @@ end
 
         if !pkg.downloaded
             print_padding(not_installed_indicator)
+        elseif pkg.downloaded && !pkg.precompiled
+            print_padding(not_precompiled_indicator)
         elseif lpadding > 2
             print_padding(" ")
         end
@@ -4867,6 +4880,9 @@ end
 
     if !no_changes && !all_packages_downloaded
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color = Base.info_color(), ignore_indent)
+    end
+    if !no_changes && !all_packages_precompiled
+        printpkgstyle(io, :Info, "Packages marked with $not_precompiled_indicator are not precompiled.", color = Base.info_color(), ignore_indent)
     end
     if outdated && updated_env !== nothing
         any_upgradable = any(pkg -> pkg.upgradable, package_statuses)
