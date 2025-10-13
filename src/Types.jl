@@ -555,7 +555,7 @@ function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_curre
     end
     # Serving different patches is safe-ish, but different majors or minors is most likely not.
     if last_version !== nothing && (last_version.major != julia_version.major || last_version.minor != julia_version.minor)
-        pkgerror("Selected stdlib version $(last_version) does not match the major & minor version of requested version $(julia_version)")
+        pkgerror("Could not find a julia version in STDLIBS_BY_VERSION that matches the major & minor version of requested julia_version v$(julia_version)")
     end
 
     return last_stdlibs
