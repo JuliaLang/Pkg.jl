@@ -3,6 +3,8 @@ Pkg v1.13 Release Notes
 
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
+- `Pkg.status` now displays a `○` indicator for packages that are not yet precompiled, helping users identify which
+  packages will require precompilation on first load. ([#xxxx])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve
   package versions, similar to the existing option for `Pkg.test`. ([#3329])
 - Packages are now automatically added to `[sources]` when they are added by url or devved. ([#4225])
