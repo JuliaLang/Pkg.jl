@@ -1046,17 +1046,32 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         end
     end
 
-    # Delete any files that could not be rm-ed and were specially moved to the delayed delete directory.
-    # Do this silently because it's out of scope for Pkg.gc() but it's helpful to use this opportunity to do it
-    if isdefined(Base.Filesystem, :delayed_delete_dir)
-        if isdir(Base.Filesystem.delayed_delete_dir())
-            for p in readdir(Base.Filesystem.delayed_delete_dir(), join = true)
+    # Delete anything that could not be rm-ed and was specially recorded in the delayed delete reference folder.
+    # Do this silently because it's out of scope for Pkg.gc() but it's helpful to use this opportunity to do it.
+    if isdefined(Base.Filesystem, :delayed_delete_ref)
+        delayed_delete_ref_path = Base.Filesystem.delayed_delete_ref()
+        if isdir(delayed_delete_ref_path)
+            delayed_delete_dirs = Set{String}()
+            for f in readdir(delayed_delete_ref_path; join = true)
                 try
+                    p = readline(f)
+                    push!(delayed_delete_dirs, dirname(p))
                     Base.Filesystem.prepare_for_deletion(p)
                     Base.rm(p; recursive = true, force = true, allow_delayed_delete = false)
+                    Base.rm(f)
                 catch e
                     @debug "Failed to delete $p" exception = e
                 end
+            end
+            for dir in delayed_delete_dirs
+                if basename(dir) == "julia_delayed_deletes" && isempty(readdir(dir))
+                    Base.Filesystem.prepare_for_deletion(dir)
+                    Base.rm(dir; recursive = true)
+                end
+            end
+            if isempty(readdir(delayed_delete_ref_path))
+                Base.Filesystem.prepare_for_deletion(delayed_delete_ref_path)
+                Base.rm(delayed_delete_ref_path; recursive = true)
             end
         end
     end
