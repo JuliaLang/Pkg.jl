@@ -207,7 +207,7 @@ Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
 Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master") # From url to remote gitrepo
 Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local gitrepo
-Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)") # With subdir
+Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl") # With subdir
 ```
 
 After the installation of new packages the project will be precompiled. See more at [Environment Precompilation](@ref).
