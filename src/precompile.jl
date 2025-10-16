@@ -214,31 +214,12 @@ let
         return nothing
     end
 
-    # Copied from REPL (originally PrecompileTools.jl)
-    function check_edges(node)
-        parentmi = node.mi_info.mi
-        for child in node.children
-            childmi = child.mi_info.mi
-            if !(isdefined(childmi, :backedges) && parentmi ∈ childmi.backedges)
-                Base.precompile(childmi.specTypes)
-            end
-            check_edges(child)
-        end
-    end
-
     if Base.generating_output() && Base.JLOptions().use_pkgimages != 0
-        Core.Compiler.Timings.reset_timings()
-        Core.Compiler.__set_measure_typeinf(true)
+        ccall(:jl_tag_newly_inferred_enable, Cvoid, ())
         try
             pkg_precompile()
         finally
-            Core.Compiler.__set_measure_typeinf(false)
-            Core.Compiler.Timings.close_current_timer()
-        end
-        roots = Core.Compiler.Timings._timings[1].children
-        for child in roots
-            Base.precompile(child.mi_info.mi.specTypes)
-            check_edges(child)
+            ccall(:jl_tag_newly_inferred_disable, Cvoid, ())
         end
     end
 end
