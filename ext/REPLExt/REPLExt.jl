@@ -28,6 +28,8 @@ include("compat.jl")
 # REPL mode creation #
 ######################
 
+const BRACKET_INSERT_SUPPORTED = hasfield(REPL.Options, :auto_insert_closing_bracket)
+
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
 function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool = false)
@@ -181,10 +183,11 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
         end
     end
 
-    b = Dict{Any, Any}[
-        skeymap, repl_keymap, mk, prefix_keymap, LineEdit.history_keymap,
-        LineEdit.default_keymap, LineEdit.escape_defaults,
-    ]
+    b = Dict{Any, Any}[skeymap, repl_keymap]
+    if BRACKET_INSERT_SUPPORTED && repl.options.auto_insert_closing_bracket
+        push!(b, LineEdit.bracket_insert_keymap)
+    end
+    push!(b, mk, prefix_keymap, LineEdit.history_keymap, LineEdit.default_keymap, LineEdit.escape_defaults)
     pkg_mode.keymap_dict = LineEdit.keymap(b)
     return pkg_mode
 end
@@ -195,14 +198,18 @@ function repl_init(repl::REPL.LineEditREPL)
     push!(repl.interface.modes, pkg_mode)
     keymap = Dict{Any, Any}(
         ']' => function (s, args...)
-            return if isempty(s) || position(LineEdit.buffer(s)) == 0
+            if isempty(s) || position(LineEdit.buffer(s)) == 0
                 buf = copy(LineEdit.buffer(s))
-                LineEdit.transition(s, pkg_mode) do
+                return LineEdit.transition(s, pkg_mode) do
                     LineEdit.state(s, pkg_mode).input_buffer = buf
                 end
             else
-                LineEdit.edit_insert(s, ']')
-                LineEdit.check_show_hint(s)
+                if BRACKET_INSERT_SUPPORTED && repl.options.auto_insert_closing_bracket
+                    return LineEdit.bracket_insert_keymap[']'](s, args...)
+                else
+                    LineEdit.edit_insert(s, ']')
+                    return LineEdit.check_show_hint(s)
+                end
             end
         end
     )
