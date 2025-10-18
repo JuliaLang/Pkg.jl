@@ -11,7 +11,7 @@ function _shared_envs()
     return possible
 end
 
-function complete_activate(options, partial, i1, i2; hint::Bool)
+function complete_activate(options, partial, i1, i2; hint::Bool, arguments = [])
     shared = get(options, :shared, false)
     if shared
         return _shared_envs()
@@ -54,6 +54,21 @@ end
 
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
+
+# Helper function to extract already-specified package names from arguments
+# Used for deduplicating completion suggestions (issue #4098)
+function extract_specified_names(arguments)
+    specified_names = Set{String}()
+    # Exclude the last argument, which is the one currently being completed
+    for i in 1:(length(arguments) - 1)
+        arg = arguments[i]
+        arg_str = arg isa String ? arg : arg.raw
+        # Extract package name (before any @, #, =, or : specifiers)
+        pkg_name = first(split(arg_str, ['@', '#', '=', ':']))
+        push!(specified_names, pkg_name)
+    end
+    return specified_names
+end
 function complete_remote_package!(comps, partial; hint::Bool)
     isempty(partial) && return true # true means returned early
     found_match = !isempty(comps)
@@ -95,7 +110,7 @@ function complete_remote_package!(comps, partial; hint::Bool)
     return false # false means performed full search
 end
 
-function complete_help(options, partial; hint::Bool)
+function complete_help(options, partial; hint::Bool, arguments = [])
     names = String[]
     for cmds in values(SPECS)
         append!(names, [spec.canonical_name for spec in values(cmds)])
@@ -103,7 +118,7 @@ function complete_help(options, partial; hint::Bool)
     return sort!(unique!(append!(names, collect(keys(SPECS)))))
 end
 
-function complete_installed_packages(options, partial; hint::Bool)
+function complete_installed_packages(options, partial; hint::Bool, arguments = [])
     env = try
         EnvCache()
     catch err
@@ -111,22 +126,30 @@ function complete_installed_packages(options, partial; hint::Bool)
         return String[]
     end
     mode = get(options, :mode, PKGMODE_PROJECT)
-    return mode == PKGMODE_PROJECT ?
+    packages = mode == PKGMODE_PROJECT ?
         collect(keys(env.project.deps)) :
         unique!([entry.name for (uuid, entry) in env.manifest])
+
+    # Filter out already-specified packages
+    specified_names = extract_specified_names(arguments)
+    return filter(pkg -> !(pkg in specified_names), packages)
 end
 
-function complete_all_installed_packages(options, partial; hint::Bool)
+function complete_all_installed_packages(options, partial; hint::Bool, arguments = [])
     env = try
         EnvCache()
     catch err
         err isa PkgError || rethrow()
         return String[]
     end
-    return unique!([entry.name for (uuid, entry) in env.manifest])
+    packages = unique!([entry.name for (uuid, entry) in env.manifest])
+
+    # Filter out already-specified packages
+    specified_names = extract_specified_names(arguments)
+    return filter(pkg -> !(pkg in specified_names), packages)
 end
 
-function complete_installed_packages_and_compat(options, partial; hint::Bool)
+function complete_installed_packages_and_compat(options, partial; hint::Bool, arguments = [])
     env = try
         EnvCache()
     catch err
@@ -139,17 +162,21 @@ function complete_installed_packages_and_compat(options, partial; hint::Bool)
     end
 end
 
-function complete_fixed_packages(options, partial; hint::Bool)
+function complete_fixed_packages(options, partial; hint::Bool, arguments = [])
     env = try
         EnvCache()
     catch err
         err isa PkgError || rethrow()
         return String[]
     end
-    return unique!([entry.name for (uuid, entry) in env.manifest.deps if Operations.isfixed(entry)])
+    packages = unique!([entry.name for (uuid, entry) in env.manifest.deps if Operations.isfixed(entry)])
+
+    # Filter out already-specified packages
+    specified_names = extract_specified_names(arguments)
+    return filter(pkg -> !(pkg in specified_names), packages)
 end
 
-function complete_add_dev(options, partial, i1, i2; hint::Bool)
+function complete_add_dev(options, partial, i1, i2; hint::Bool, arguments = [])
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
         return comps, idx, !isempty(comps)
@@ -159,12 +186,17 @@ function complete_add_dev(options, partial, i1, i2; hint::Bool)
     if !returned_early
         append!(comps, filter!(startswith(partial), [info.name for info in values(Types.stdlib_infos())]))
     end
+
+    # Filter out already-specified packages
+    specified_names = extract_specified_names(arguments)
+    filter!(pkg -> !(pkg in specified_names), comps)
+
     return comps, idx, !isempty(comps)
 end
 
 # TODO: Move
 import Pkg: Operations, Types, Apps
-function complete_installed_apps(options, partial; hint)
+function complete_installed_apps(options, partial; hint, arguments = [])
     manifest = try
         Types.read_manifest(joinpath(Apps.app_env_folder(), "AppManifest.toml"))
     catch err
@@ -176,7 +208,11 @@ function complete_installed_apps(options, partial; hint)
         append!(apps, keys(entry.apps))
         push!(apps, entry.name)
     end
-    return unique!(apps)
+    apps = unique!(apps)
+
+    # Filter out already-specified packages
+    specified_names = extract_specified_names(arguments, partial)
+    return filter(app -> !(app in specified_names), apps)
 end
 
 ########################
@@ -215,7 +251,7 @@ complete_opt(opt_specs) =
 )
 
 function complete_argument(
-        spec::CommandSpec, options::Vector{String},
+        spec::CommandSpec, options::Vector{String}, arguments::Vector,
         partial::AbstractString, offset::Int,
         index::Int; hint::Bool
     )
@@ -228,10 +264,15 @@ function complete_argument(
             @error "REPLMode indicates a completion function called :$(spec.completions) that cannot be found in REPLExt"
             rethrow()
         end
-        spec.completions = function (opts, partial, offset, index; hint::Bool)
-            return applicable(completions, opts, partial, offset, index) ?
-                completions(opts, partial, offset, index; hint) :
-                completions(opts, partial; hint)
+        spec.completions = function (opts, partial, offset, index; hint::Bool, arguments = [])
+            # Wrapper that normalizes completion function calls.
+            if applicable(completions, opts, partial, offset, index)
+                # Function takes 4 positional args: (opts, partial, offset, index; hint, arguments)
+                return completions(opts, partial, offset, index; hint, arguments)
+            else
+                # Function takes 2 positional args: (opts, partial; hint, arguments)
+                return completions(opts, partial; hint, arguments)
+            end
         end
     end
     spec.completions === nothing && return String[]
@@ -243,7 +284,7 @@ function complete_argument(
         e isa PkgError && return String[]
         rethrow()
     end
-    return spec.completions(opts, partial, offset, index; hint)
+    return spec.completions(opts, partial, offset, index; hint, arguments)
 end
 
 function _completions(input, final, offset, index; hint::Bool)
@@ -269,11 +310,11 @@ function _completions(input, final, offset, index; hint::Bool)
         command_is_focused() && return String[], 0:-1, false
 
         if final # complete arg by default
-            x = complete_argument(statement.spec, statement.options, partial, offset, index; hint)
+            x = complete_argument(statement.spec, statement.options, statement.arguments, partial, offset, index; hint)
         else # complete arg or opt depending on last token
             x = is_opt(partial) ?
                 complete_opt(statement.spec.option_specs) :
-                complete_argument(statement.spec, statement.options, partial, offset, index; hint)
+                complete_argument(statement.spec, statement.options, statement.arguments, partial, offset, index; hint)
         end
     end
 
