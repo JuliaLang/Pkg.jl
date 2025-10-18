@@ -152,6 +152,9 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     hp.mode_mapping[:pkg] = pkg_mode
     pkg_mode.hist = hp
 
+    skeymap = if !isdefined(REPL, :History)
+        last(LineEdit.setup_search_keymap(hp)) # TODO: Remove
+    end
     prefix_prompt, prefix_keymap = LineEdit.setup_prefix_keymap(hp, pkg_mode)
 
     pkg_mode.on_done = (s, buf, ok) -> Base.@invokelatest(on_done(s, buf, ok, repl))
@@ -182,7 +185,11 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
         end
     end
 
-    b = Dict{Any, Any}[repl_keymap]
+    b = Dict{Any, Any}[]
+    if !isdefined(REPL, :History)
+        push!(b, skeymap)
+    end
+    push!(b, repl_keymap)
     if BRACKET_INSERT_SUPPORTED && repl.options.auto_insert_closing_bracket
         push!(b, LineEdit.bracket_insert_keymap)
     end
