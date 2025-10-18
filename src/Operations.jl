@@ -148,7 +148,7 @@ function load_project_deps(
 
     for (name::String, uuid::UUID) in project.deps
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
-        path, repo = get_path_repo(project, name)
+        path, repo = get_path_repo(project, project_file, manifest_file, name)
         entry = manifest_info(manifest, uuid)
         push!(
             pkgs_direct, entry === nothing ?
@@ -197,7 +197,7 @@ function load_all_deps(
     pkgs = load_manifest_deps(env.manifest, pkgs; preserve = preserve)
     # Sources takes presedence over the manifest...
     for pkg in pkgs
-        path, repo = get_path_repo(env.project, pkg.name)
+        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
             pkg.path = path
         end
@@ -363,7 +363,7 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, julia_version)
+function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, manifest_file::String, julia_version)
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
     project_file = projectfile_path(path; strict = true)
@@ -373,9 +373,9 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, julia_v
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
     end
     for (name, uuid) in project.deps
-        path, repo = get_path_repo(project, name)
+        dep_path, repo = get_path_repo(project, project_file, manifest_file, name)
         vspec = get_compat(project, name)
-        push!(deps, PackageSpec(name = name, uuid = uuid, version = vspec, path = path, repo = repo))
+        push!(deps, PackageSpec(name = name, uuid = uuid, version = vspec, path = dep_path, repo = repo))
     end
     for (name, uuid) in project.weakdeps
         vspec = get_compat(project, name)
@@ -439,7 +439,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     weak_map = Dict{UUID, Set{UUID}}()
 
     uuid = Types.project_uuid(env)
-    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file), julia_version)
+    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file), env.manifest_file, julia_version)
     deps_map[uuid] = deps
     weak_map[uuid] = weakdeps
     names[uuid] = env.pkg === nothing ? "project" : env.pkg.name
@@ -447,7 +447,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     for (path, project) in env.workspace
         uuid = Types.project_uuid(project, path)
         pkg = project.name === nothing ? nothing : PackageSpec(name = project.name, uuid = uuid)
-        deps, weakdeps = collect_project(pkg, path, julia_version)
+        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version)
         deps_map[Types.project_uuid(env)] = deps
         weak_map[Types.project_uuid(env)] = weakdeps
         names[uuid] = project.name === nothing ? "project" : project.name
@@ -485,7 +485,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             end
             pkgerror(error_msg)
         end
-        deps, weakdeps = collect_project(pkg, path, julia_version)
+        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version)
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
     end
@@ -2081,7 +2081,7 @@ function up(
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
     for pkg in pkgs
-        source_path, source_repo = get_path_repo(ctx.env.project, pkg.name)
+        source_path, source_repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         new = up_load_versions!(ctx, pkg, entry, source_path, source_repo, level)
         new && push!(new_git, pkg.uuid) #TODO put download + push! in utility function
@@ -2333,7 +2333,8 @@ end
 function abspath!(env::EnvCache, project::Project)
     for (key, entry) in project.sources
         if haskey(entry, "path")
-            entry["path"] = project_rel_path(env, entry["path"])
+            # Paths in project sources are project-relative, so join with project_file dir, not manifest_file dir
+            entry["path"] = normpath(joinpath(dirname(env.project_file), entry["path"]))
         end
     end
     return project

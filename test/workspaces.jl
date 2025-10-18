@@ -26,8 +26,8 @@ temp_pkg_dir() do project_path
                 Pkg.develop(path = "PrivatePackage")
                 d = TOML.parsefile("Project.toml")
                 d["workspace"] = Dict("projects" => ["test", "docs", "benchmarks", "PrivatePackage"])
-                abs_path = abspath("PrivatePackage") # TODO: Make relative after #3842 is fixed
-                d["sources"] = Dict("PrivatePackage" => Dict("path" => abs_path))
+                # Path can now be relative - #3842 is fixed
+                d["sources"] = Dict("PrivatePackage" => Dict("path" => "PrivatePackage"))
                 Pkg.Types.write_project(d, "Project.toml")
                 write(
                     "src/MonorepoSub.jl", """
@@ -105,8 +105,11 @@ temp_pkg_dir() do project_path
                 Pkg.generate("TestSpecificPackage")
                 Pkg.develop(path = "TestSpecificPackage")
                 d = TOML.parsefile("test/Project.toml")
-                abs_pkg = abspath("TestSpecificPackage") # TODO: Make relative after #3842 is fixed
-                d["sources"] = Dict("TestSpecificPackage" => Dict("path" => abs_pkg))
+                # Path can now be relative - #3842 is fixed
+                # TestSpecificPackage is at MonorepoSub/TestSpecificPackage
+                # test/Project.toml is at MonorepoSub/test/Project.toml
+                # So the relative path from test/ to TestSpecificPackage is ../TestSpecificPackage
+                d["sources"] = Dict("TestSpecificPackage" => Dict("path" => "../TestSpecificPackage"))
                 Pkg.Types.write_project(d, "test/Project.toml")
 
                 @test !isfile("test/Manifest.toml")
