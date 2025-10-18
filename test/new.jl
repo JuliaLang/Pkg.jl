@@ -2801,6 +2801,24 @@ end
             end
         end
     end
+    # Test generate . (issue #2821)
+    isolate(loaded_depot = true) do
+        cd_tempdir() do dir
+            mkdir("MyNewPkg")
+            cd("MyNewPkg") do
+                Pkg.generate(".")
+                @test isfile("Project.toml")
+                @test isfile("src/MyNewPkg.jl")
+                @test Pkg.Types.read_project("Project.toml").name == "MyNewPkg"
+            end
+
+            mkdir("NonEmpty")
+            write("NonEmpty/existing.txt", "content")
+            cd("NonEmpty") do
+                @test_throws Pkg.Types.PkgError Pkg.generate(".")
+            end
+        end
+    end
 end
 
 #
