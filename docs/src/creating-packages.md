@@ -275,13 +275,68 @@ test-specific dependencies, are available, see below.
 
 ### Test-specific dependencies
 
-There are two ways of adding test-specific dependencies (dependencies that are not dependencies of the package but will still be available to
-load when the package is tested).
+Test-specific dependencies are dependencies that are not dependencies of the package itself but are available when the package is tested.
 
-#### `target` based test specific dependencies
+#### Recommended approach: Using workspaces with `test/Project.toml`
 
-Using this method of adding test-specific dependencies, the packages are added under an `[extras]` section and to a test target,
-e.g. to add `Markdown` and `Test` as test dependencies, add the following to the `Project.toml` file:
+!!! compat
+    Workspaces require Julia 1.12+. For older Julia versions, see the legacy approaches below.
+
+The recommended way to add test-specific dependencies is to use workspaces. This is done by:
+
+1. Adding a `[workspace]` section to your package's `Project.toml`:
+
+```toml
+[workspace]
+projects = ["test"]
+```
+
+2. Creating a `test/Project.toml` file with your test dependencies:
+
+```julia-repl
+(HelloWorld) pkg> activate ./test
+[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
+
+(HelloWorld/test) pkg> add Test
+ Resolving package versions...
+  Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + Test
+```
+
+When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single `Manifest.toml` next to the base `Project.toml`. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
+
+You can now use `Test` in the test script:
+
+```julia-repl
+julia> write("test/runtests.jl",
+             """
+             using Test
+             @test 1 == 1
+             """);
+
+(HelloWorld/test) pkg> activate .
+
+(HelloWorld) pkg> test
+   Testing HelloWorld
+ Resolving package versions...
+   Testing HelloWorld tests passed
+```
+
+Workspaces can also be used for other purposes, such as documentation or benchmarks, by adding additional projects to the workspace:
+
+```toml
+[workspace]
+projects = ["test", "docs", "benchmarks"]
+```
+
+See the section on [Workspaces](@ref) in the `Project.toml` documentation for more details.
+
+#### Legacy approach: `target` based test specific dependencies
+
+!!! warning
+    This approach is legacy and maintained for compatibility. New packages should use workspaces instead.
+
+Using this method, test-specific dependencies are added under an `[extras]` section and to a test target:
 
 ```toml
 [extras]
@@ -292,61 +347,19 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Markdown", "Test"]
 ```
 
-Note that the only supported targets are `test` and `build`, the latter of which (not recommended) can be used
-for any `deps/build.jl` scripts.
+Note that the only supported targets are `test` and `build`, the latter of which (not recommended) can be used for any `deps/build.jl` scripts.
 
-#### Alternative approach: `test/Project.toml` file test specific dependencies
+#### Legacy approach: `test/Project.toml` without workspace
 
-!!! note
-    The exact interaction between `Project.toml`, `test/Project.toml` and their corresponding
-    `Manifest.toml`s are not fully worked out and may be subject to change in future versions.
-    The older method of adding test-specific dependencies, described in the previous section,
-    will therefore be supported throughout all Julia 1.X releases.
+!!! warning
+    This approach is legacy and maintained for compatibility. New packages should use workspaces instead.
 
-In Julia 1.2 and later test dependencies can be declared in `test/Project.toml`. When running
-tests, Pkg will automatically merge this and the package Projects to create the test environment.
+In Julia 1.2 and later, test dependencies can be declared in `test/Project.toml` without using a workspace. When running tests, Pkg will automatically merge the package and test projects to create the test environment.
 
 !!! note
-    If no `test/Project.toml` exists Pkg will use the `target` based test specific dependencies.
+    If no `test/Project.toml` exists, Pkg will use the `target` based test specific dependencies.
 
-To add a test-specific dependency, i.e. a dependency that is available only when testing,
-it is thus enough to add this dependency to the `test/Project.toml` project. This can be
-done from the Pkg REPL by activating this environment, and then use `add` as one normally
-does. Let's add the `Test` standard library as a test dependency:
-
-```julia-repl
-(HelloWorld) pkg> activate ./test
-[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
-
-(test) pkg> add Test
- Resolving package versions...
-  Updating `~/HelloWorld/test/Project.toml`
-  [8dfed614] + Test
-  Updating `~/HelloWorld/test/Manifest.toml`
-  [...]
-```
-
-We can now use `Test` in the test script and we can see that it gets installed when testing:
-
-```julia-repl
-julia> write("test/runtests.jl",
-             """
-             using Test
-             @test 1 == 1
-             """);
-
-(test) pkg> activate .
-
-(HelloWorld) pkg> test
-   Testing HelloWorld
- Resolving package versions...
-  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Project.toml`
-  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]
-  [8dfed614] + Test
-  Updating `/var/folders/64/76tk_g152sg6c6t0b4nkn1vw0000gn/T/tmpPzUPPw/Manifest.toml`
-  [d8327f2a] + HelloWorld v0.1.0 [`~/.julia/dev/Pkg/HelloWorld`]
-   Testing HelloWorld tests passed```
-```
+This approach works similarly to the workspace approach, but without the workspace declaration in the main `Project.toml`.
 
 ## Compatibility on dependencies
 
@@ -450,9 +463,7 @@ Extensions can have arbitrary names (here `ContourExt`), following the format of
 In `Pkg` output, extension names are always shown together with their parent package name.
 
 !!! compat
-    Often you will put the extension dependencies into the `test` target so they are loaded when running e.g. `Pkg.test()`. On earlier Julia versions
-    this requires you to also put the package in the `[extras]` section. This is unfortunate but the project verifier on older Julia versions will
-    complain if this is not done.
+    Often you will want to load extension dependencies when testing your package. The recommended approach is to use workspaces and add the extension dependencies to your `test/Project.toml` (see [Test-specific dependencies](@ref adding-tests-to-packages)). For older Julia versions that don't support workspaces, you can put the extension dependencies into the `test` target, which requires you to also put the package in the `[extras]` section. The project verifier on older Julia versions will complain if this is not done.
 
 !!! note
     If you use a manifest generated by a Julia version that does not know about extensions with a Julia version that does
@@ -557,10 +568,12 @@ This is done by making the following changes (using the example above):
 
 In the case where one wants to use an extension (without worrying about the
 feature of the extension being available on older Julia versions) while still
-supporting older Julia versions the packages under `[weakdeps]` should be
+supporting older Julia versions without workspace support, the packages under `[weakdeps]` should be
 duplicated into `[extras]`. This is an unfortunate duplication, but without
 doing this the project verifier under older Julia versions will throw an error
 if it finds packages under `[compat]` that is not listed in `[extras]`.
+
+For Julia 1.13+, using workspaces is recommended and this duplication is not necessary.
 
 ## Package naming guidelines
 
