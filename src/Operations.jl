@@ -522,6 +522,30 @@ function get_compat_workspace(env, name)
     for (_, project) in env.workspace
         compat = intersect(compat, get_compat(project, name))
     end
+
+    # Check if this is a non-upgradable stdlib
+    uuid = get(env.project.deps, name, nothing)
+    if uuid !== nothing && is_stdlib(uuid) && !(uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+        # Get the current stdlib version
+        stdlib_ver = stdlib_version(uuid, VERSION)
+        if stdlib_ver !== nothing && !isempty(compat)
+            # Check if the compat entry is compatible with the current stdlib version
+            if !(stdlib_ver in compat)
+                compat_str = get_compat_str(env.project, name)
+                if compat_str !== nothing
+                    # Construct a suggested compat that includes both the specified version and current version
+                    suggested_compat = string(compat_str, ", ", stdlib_ver)
+                    project_file = env.project_file
+                    @warn """Ignoring incompatible compat entry `$(repr(compat_str))` in $(repr(project_file)) for $name.
+                    $name is a non-upgradable standard library with version $stdlib_ver in the current Julia version.
+                    Fix by setting compat to `"$(repr(suggested_compat))"` to extend support to version $stdlib_ver."""
+                end
+                # Return unrestricted version spec for non-upgradable stdlibs
+                return VersionSpec("*")
+            end
+        end
+    end
+
     return compat
 end
 
