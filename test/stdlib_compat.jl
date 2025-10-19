@@ -23,21 +23,17 @@ using Pkg.Types
             libcurl_uuid = Base.UUID("b27032c2-a3e7-50c8-80cd-2d36dbcbfd21")
             libcurl_version = Pkg.Types.stdlib_version(libcurl_uuid, VERSION)
 
-            if libcurl_version !== nothing && libcurl_version.major != 0 || libcurl_version.minor != 6
-                # The compat entry is incompatible with current version
-                # This should trigger a warning but not error
-                ctx = Pkg.Types.Context()
+            # The compat entry is incompatible with current version
+            # This should trigger a warning but not error
+            ctx = Pkg.Types.Context()
 
-                # Test that get_compat_workspace ignores the incompatible compat
-                compat = Pkg.Operations.get_compat_workspace(ctx.env, "LibCURL")
+            # Test that get_compat_workspace ignores the incompatible compat
+            compat = Pkg.Operations.get_compat_workspace(ctx.env, "LibCURL")
 
-                # Should return unrestricted spec for non-upgradable stdlib with incompatible compat
-                @test compat == Pkg.Types.VersionSpec("*")
+            # Should return unrestricted spec for non-upgradable stdlib with incompatible compat
+            @test compat == Pkg.Types.VersionSpec("*")
 
-                println("Test passed: Non-upgradable stdlib with incompatible compat is handled correctly")
-            else
-                @test_skip "LibCURL version in current Julia matches the compat entry, skipping incompatibility test"
-            end
+            @test_logs (:warn, r"Ignoring incompatible compat entry") Pkg.resolve()
         end
     end
 end
