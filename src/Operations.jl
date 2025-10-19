@@ -342,6 +342,31 @@ end
 #######################################
 get_compat(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].val : Types.VersionSpec()
 get_compat_str(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].str : nothing
+
+# Get compat for a dependency, checking if it's a non-upgradable stdlib and warning if incompatible
+function get_compat_with_stdlib_check(project::Project, project_file::String, name::String, uuid::UUID, julia_version)
+    compat = get_compat(project, name)
+
+    # Check if this is a non-upgradable stdlib
+    if is_stdlib(uuid) && !(uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+        stdlib_ver = stdlib_version(uuid, julia_version)
+        if stdlib_ver !== nothing && !isempty(compat)
+            if !(stdlib_ver in compat)
+                compat_str = get_compat_str(project, name)
+                if compat_str !== nothing
+                    suggested_compat = string(compat_str, ", ", stdlib_ver)
+                    @warn """Ignoring incompatible compat entry `$(repr(compat_str))` in $(repr(project_file)) for $name.
+                    $name is a non-upgradable standard library with version $stdlib_ver in the current Julia version.
+                    Fix by setting compat to `$(repr(suggested_compat))` to extend support to version $stdlib_ver."""
+                end
+                return VersionSpec("*")
+            end
+        end
+    end
+
+    return compat
+end
+
 function set_compat(proj::Project, name::String, compat::String)
     semverspec = Types.semver_spec(compat, throw = false)
     isnothing(semverspec) && return false
@@ -374,11 +399,11 @@ function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, manifes
     end
     for (name, uuid) in project.deps
         dep_path, repo = get_path_repo(project, project_file, manifest_file, name)
-        vspec = get_compat(project, name)
+        vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
         push!(deps, PackageSpec(name = name, uuid = uuid, version = vspec, path = dep_path, repo = repo))
     end
     for (name, uuid) in project.weakdeps
-        vspec = get_compat(project, name)
+        vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
         push!(deps, PackageSpec(name, uuid, vspec))
         push!(weakdeps, uuid)
     end
@@ -534,11 +559,11 @@ function get_compat_workspace(env, name)
                 compat_str = get_compat_str(env.project, name)
                 if compat_str !== nothing
                     # Construct a suggested compat that includes both the specified version and current version
-                    suggested_compat = string(compat_str, ", ", stdlib_ver)
+                    suggested_compat = string(compat_str, ", ", stdlib_ver.major == 0 ? stdlib_ver.major * "." * stdlib_ver.minor : stdlib_ver.major)
                     project_file = env.project_file
                     @warn """Ignoring incompatible compat entry `$(repr(compat_str))` in $(repr(project_file)) for $name.
                     $name is a non-upgradable standard library with version $stdlib_ver in the current Julia version.
-                    Fix by setting compat to `"$(repr(suggested_compat))"` to extend support to version $stdlib_ver."""
+                    Fix by setting compat to `$(repr(suggested_compat))` to extend support to version $stdlib_ver."""
                 end
                 # Return unrestricted version spec for non-upgradable stdlibs
                 return VersionSpec("*")
