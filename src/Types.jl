@@ -434,6 +434,22 @@ function EnvCache(env::Union{Nothing,String}=nothing)
     return env′
 end
 
+# Convert a path from project-relative to manifest-relative
+# If path is absolute, returns it as-is
+function project_path_to_manifest_path(project_file::String, manifest_file::String, path::String)
+    isabspath(path) && return path
+    abs_path = Pkg.safe_realpath(joinpath(dirname(project_file), path))
+    return relpath(abs_path, Pkg.safe_realpath(dirname(manifest_file)))
+end
+
+# Convert a path from manifest-relative to project-relative
+# If path is absolute, returns it as-is
+function manifest_path_to_project_path(project_file::String, manifest_file::String, path::String)
+    isabspath(path) && return path
+    abs_path = Pkg.safe_realpath(joinpath(dirname(manifest_file), path))
+    return relpath(abs_path, Pkg.safe_realpath(dirname(project_file)))
+end
+
 include("project.jl")
 include("manifest.jl")
 
@@ -1249,7 +1265,7 @@ function write_env(env::EnvCache; update_undo=true,
                    skip_writing_project::Bool=false)
     # Verify that the generated manifest is consistent with `sources`
     for (pkg, uuid) in env.project.deps
-        path, repo = get_path_repo(env.project, pkg)
+        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
             @assert normpath(entry.path) == normpath(path)
@@ -1260,6 +1276,19 @@ function write_env(env::EnvCache; update_undo=true,
             end
             if entry.repo.subdir !== nothing
                 @assert entry.repo.subdir == repo.subdir
+            end
+        end
+        if entry !== nothing
+            if entry.path !== nothing
+                # Convert path from manifest-relative to project-relative before writing
+                project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
+                env.project.sources[pkg] = Dict("path" => project_relative_path)
+            elseif entry.repo != GitRepo()
+                d = Dict{String, String}()
+                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
+                entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+                entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+                env.project.sources[pkg] = d
             end
         end
     end
