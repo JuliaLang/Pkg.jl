@@ -41,8 +41,6 @@ function setup_test_registries(dir = pwd())
         )
         write(
             joinpath(regpath, "Example", "Deps.toml"), """
-            ["0.5"]
-            julia = "0.6-1.0"
             """
         )
         write(
@@ -340,6 +338,77 @@ end
             DEPOT_PATH[1:2] .= DEPOT_PATH[2:-1:1]
             Pkg.add("Example") # should not trigger a clone of default registries
             @test length(Pkg.Registry.reachable_registries()) == 1
+        end
+    end
+
+    @testset "deprecated package" begin
+        temp_pkg_dir() do depot
+            # Set up test registries with an extra deprecated package
+            regdir = mktempdir()
+            setup_test_registries(regdir)
+
+            # Add a deprecated package to the first registry
+            regpath = joinpath(regdir, "RegistryFoo1")
+            mkpath(joinpath(regpath, "DeprecatedExample"))
+
+            # Add the deprecated package to Registry.toml
+            registry_toml = read(joinpath(regpath, "Registry.toml"), String)
+            registry_toml = replace(
+                registry_toml,
+                "[packages]" =>
+                    "[packages]\n11111111-1111-1111-1111-111111111111 = { name = \"DeprecatedExample\", path = \"DeprecatedExample\" }"
+            )
+            write(joinpath(regpath, "Registry.toml"), registry_toml)
+
+            # Create deprecated package with [deprecated] table
+            write(
+                joinpath(regpath, "DeprecatedExample", "Package.toml"), """
+                name = "DeprecatedExample"
+                uuid = "11111111-1111-1111-1111-111111111111"
+                repo = "https://github.com/test/DeprecatedExample.jl.git"
+
+                [deprecated]
+                reason = "This package is no longer maintained"
+                alternative = "Example"
+                """
+            )
+
+            write(
+                joinpath(regpath, "DeprecatedExample", "Versions.toml"), """
+                ["1.0.0"]
+                git-tree-sha1 = "1234567890abcdef1234567890abcdef12345678"
+                """
+            )
+
+            git_init_and_commit(regpath)
+
+            # Add the test registry
+            Pkg.Registry.add(url = regpath)
+
+            # Test that the package is marked as deprecated
+            registries = Pkg.Registry.reachable_registries()
+            reg_idx = findfirst(r -> r.name == "RegistryFoo", registries)
+            @test reg_idx !== nothing
+
+            reg = registries[reg_idx]
+            pkg_uuid = UUID("11111111-1111-1111-1111-111111111111")
+            @test haskey(reg, pkg_uuid)
+
+            pkg_entry = reg[pkg_uuid]
+            pkg_info = Pkg.Registry.registry_info(pkg_entry)
+
+            # Test that deprecated info is loaded correctly
+            @test Pkg.Registry.isdeprecated(pkg_info)
+            @test pkg_info.deprecated !== nothing
+            @test pkg_info.deprecated["reason"] == "This package is no longer maintained"
+            @test pkg_info.deprecated["alternative"] == "Example"
+
+            # Test that non-deprecated package is not marked as deprecated
+            example1_uuid = UUID("c5f1542f-b8aa-45da-ab42-05303d706c66")
+            example1_entry = reg[example1_uuid]
+            example1_info = Pkg.Registry.registry_info(example1_entry)
+            @test !Pkg.Registry.isdeprecated(example1_info)
+            @test example1_info.deprecated === nothing
         end
     end
 

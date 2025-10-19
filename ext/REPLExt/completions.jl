@@ -79,6 +79,7 @@ function complete_remote_package!(comps, partial; hint::Bool)
             name in cmp && continue
             if startswith(regpkg.name, partial)
                 pkg = Registry.registry_info(regpkg)
+                Registry.isdeprecated(pkg) && continue
                 compat_info = Registry.compat_info(pkg)
                 # Filter versions
                 for (v, uncompressed_compat) in compat_info

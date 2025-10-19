@@ -50,6 +50,18 @@ function is_pkgversion_yanked(entry::PackageEntry, registries::Vector{Registry.R
     return is_pkgversion_yanked(entry.uuid, entry.version, registries)
 end
 
+function is_pkg_deprecated(pkg::Union{PackageSpec, PackageEntry}, registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries())
+    pkg.uuid === nothing && return false
+    for reg in registries
+        reg_pkg = get(reg, pkg.uuid, nothing)
+        if reg_pkg !== nothing
+            info = Registry.registry_info(reg_pkg)
+            Registry.isdeprecated(info) && return true
+        end
+    end
+    return false
+end
+
 function default_preserve()
     return if Base.get_bool_env("JULIA_PKG_PRESERVE_TIERED_INSTALLED", false)
         PRESERVE_TIERED_INSTALLED
@@ -3052,6 +3064,11 @@ function print_status(
         pkg_spec = something(pkg.new, pkg.old)
         if is_pkgversion_yanked(pkg_spec, registries)
             printstyled(io, " [yanked]"; color = :yellow)
+        end
+
+        # show if package is deprecated
+        if is_pkg_deprecated(pkg_spec, registries)
+            printstyled(io, " [deprecated]"; color = :yellow)
         end
 
         if outdated && !diff && pkg.compat_data !== nothing
