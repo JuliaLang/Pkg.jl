@@ -2957,6 +2957,17 @@ end
         @test any(l -> occursin(r"\[7876af07\] Example\s*v0\.3\.0", l), statuslines)
         @test any(l -> occursin(r"\[2a0f44e3\] Base64", l), statuslines)
         @test any(l -> occursin(r"\[d6f4376e\] Markdown", l), statuslines)
+        # Test that manifest status with filter shows package and its dependencies (issue #1989)
+        Pkg.add(name = "JSON", version = "0.21.0")  # JSON has dependencies
+        Pkg.status("JSON"; io = io, mode = Pkg.PKGMODE_MANIFEST)
+        statuslines = readlines(io)
+        @test occursin(r"Status `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[682c06a0\] JSON\s*v0\.21\.0", l), statuslines)
+        # JSON's dependencies (Parsers, Dates, Mmap, Unicode) should also be shown
+        @test any(l -> occursin(r"Parsers", l), statuslines)
+        # But Example and Markdown (not dependencies of JSON) should not be shown
+        @test !any(l -> occursin(r"\[7876af07\] Example", l), statuslines)
+        @test !any(l -> occursin(r"\[d6f4376e\] Markdown", l), statuslines)
     end
     # Diff API
     isolate(loaded_depot = true) do

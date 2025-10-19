@@ -2944,7 +2944,27 @@ function print_status(
             printpkgstyle(io, :Project, "No packages added to or removed from $(pathrepr(env.project_file))", ignore_indent; color = Base.info_color())
         end
     else
-        xs = !filter ? xs : eltype(xs)[(id, old, new) for (id, old, new) in xs if (id in uuids || something(new, old).name in names)]
+        if filter
+            # Find packages matching the filter
+            matching_ids = Set{UUID}()
+            for (id, old, new) in xs
+                if (id in uuids || something(new, old).name in names)
+                    push!(matching_ids, id)
+                end
+            end
+            # In manifest mode, also include all dependencies of matching packages
+            if manifest && !isempty(matching_ids)
+                deps_to_add = Set{UUID}()
+                for id in matching_ids
+                    entry = get(env.manifest, id, nothing)
+                    if entry !== nothing
+                        union!(deps_to_add, values(entry.deps))
+                    end
+                end
+                union!(matching_ids, deps_to_add)
+            end
+            xs = eltype(xs)[(id, old, new) for (id, old, new) in xs if id in matching_ids]
+        end
         if isempty(xs)
             printpkgstyle(
                 io, Symbol("No Matches"),
