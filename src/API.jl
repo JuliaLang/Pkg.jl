@@ -225,7 +225,7 @@ function update_source_if_set(env, pkg)
         if pkg.subdir !== nothing
             source["subdir"] = pkg.subdir
         end
-        path, repo = get_path_repo(project, pkg.name)
+        path, repo = get_path_repo(project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
             pkg.path = path
         end
@@ -397,13 +397,13 @@ end
 function append_all_pkgs!(pkgs, ctx, mode)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
-            path, repo = get_path_repo(ctx.env.project, name)
+            path, repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, name)
             push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         for (uuid, entry) in ctx.env.manifest
-            path, repo = get_path_repo(ctx.env.project, entry.name)
+            path, repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, entry.name)
             push!(pkgs, PackageSpec(name = entry.name, uuid = uuid, path = path, repo = repo))
         end
     end
