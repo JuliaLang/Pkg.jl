@@ -10,7 +10,7 @@ import Base.string
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, create_cachedir_tag
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
@@ -944,7 +944,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing, String}), repo_source::Union{Nothing, String}; isbare = true)) do repo
             repo_source_typed = repo_source::Union{Nothing, String}
             GitTools.check_valid_HEAD(repo)
-
+            create_cachedir_tag(dirname(add_repo_cache_path(repo_source)))
             # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
             if pkg.repo.rev === nothing
                 pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
@@ -1009,6 +1009,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             # Otherwise, move the temporary path into its correct place and set read only
             mkpath(version_path)
             mv(temp_path, version_path; force = true)
+            create_cachedir_tag(dirname(dirname(version_path)))
             set_readonly(version_path)
             return true
         end

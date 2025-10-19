@@ -46,6 +46,9 @@ Pkg._auto_gc_enabled[] = false
         reg = regs[1]
         @test reg.name == "General"
         @test reg.uuid == general_uuid
+        # - Check that CACHEDIR.TAG files exist in cache directories
+        @test isfile(joinpath(LOADED_DEPOT, "registries", "CACHEDIR.TAG"))
+        @test isfile(joinpath(LOADED_DEPOT, "packages", "CACHEDIR.TAG"))
         # - The package should be installed correctly.
         source053, source053_time = nothing, nothing
         Pkg.dependencies(exuuid) do pkg
@@ -90,6 +93,7 @@ Pkg._auto_gc_enabled[] = false
         end
         # Now check packages which track repos instead of registered versions
         Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "v0.5.3")
+        @test isfile(joinpath(LOADED_DEPOT, "clones", "CACHEDIR.TAG"))
         Pkg.dependencies(exuuid) do pkg
             @test !pkg.is_tracking_registry
             @test isdir(pkg.source)
@@ -2728,6 +2732,7 @@ end
                 "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log"
             )
             @test isfile(log_file_add)
+            @test isfile(joinpath(DEPOT_PATH[1], "scratchspaces", "CACHEDIR.TAG"))
             @test occursin("oops", read(log_file_add, String))
         end
     end

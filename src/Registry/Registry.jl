@@ -2,7 +2,7 @@ module Registry
 
 import ..Pkg
 using ..Pkg: depots, depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
-    GitTools, atomic_toml_write
+    GitTools, atomic_toml_write, create_cachedir_tag
 using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
 using UUIDs, LibGit2, TOML, Dates
 import FileWatching
@@ -209,6 +209,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
     registry_update_log = get_registry_update_log()
     regdir = joinpath(target_depot, "registries")
     isdir(regdir) || mkpath(regdir)
+    create_cachedir_tag(regdir)
     # only allow one julia process to download and install registries at a time
     FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
         # once we're pidlocked check if another process has installed any of the registries
@@ -421,6 +422,7 @@ end
 function save_registry_update_log(d::Dict)
     pkg_scratch_space = joinpath(DEPOT_PATH[1], "scratchspaces", "44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
     mkpath(pkg_scratch_space)
+    create_cachedir_tag(joinpath(DEPOT_PATH[1], "scratchspaces"))
     pkg_reg_updated_file = joinpath(pkg_scratch_space, "registry_updates.toml")
     return atomic_toml_write(pkg_reg_updated_file, d)
 end
@@ -455,6 +457,7 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
         depot_regs = isempty(regs) ? reachable_registries(; depots = depot) : regs
         regdir = joinpath(depot, "registries")
         isdir(regdir) || mkpath(regdir)
+        create_cachedir_tag(regdir)
         # only allow one julia process to update registries in this depot at a time
         FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
             errors = Tuple{String, String}[]

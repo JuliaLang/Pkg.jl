@@ -16,7 +16,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io, discover_repo
+import ...Pkg: usable_io, discover_repo, create_cachedir_tag
 
 #########
 # Utils #
@@ -805,6 +805,7 @@ function install_archive(
     # files are on a different fs. So use a temp dir in the same depot dir as some systems might
     # be serving different parts of the depot on different filesystems via links i.e. pkgeval does this.
     depot_temp = mkpath(joinpath(dirname(dirname(version_path)), "temp")) # .julia/packages/temp
+    create_cachedir_tag(dirname(dirname(version_path)))
 
     tmp_objects = String[]
     url_success = false
@@ -886,6 +887,7 @@ function install_git(
     try
         clones_dir = joinpath(depots1(), "clones")
         ispath(clones_dir) || mkpath(clones_dir)
+        create_cachedir_tag(clones_dir)
         repo_path = joinpath(clones_dir, string(uuid))
         first_url = first(urls)
         repo = GitTools.ensure_clone(
@@ -912,6 +914,7 @@ function install_git(
         tree isa LibGit2.GitTree ||
             error("$name: git object $(string(hash)) should be a tree, not $(typeof(tree))")
         mkpath(version_path)
+        create_cachedir_tag(dirname(dirname(version_path)))
         GitTools.checkout_tree_to_path(repo, tree, version_path)
         return
     finally
@@ -1541,6 +1544,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_r
                 key = string(entry.tree_hash)
                 scratch = joinpath(pkg_scratchpath(), key)
                 mkpath(scratch)
+                create_cachedir_tag(joinpath(depots1(), "scratchspaces"))
                 log_file = joinpath(scratch, "build.log")
                 # Associate the logfile with the package being built
                 dict = Dict{String, Any}(
