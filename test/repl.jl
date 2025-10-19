@@ -395,6 +395,12 @@ temp_pkg_dir() do project_path
             @test "Example" in c
             pkg"free Example"
 
+            # Test for issue #59829 - completion with only trailing space should work
+            # When typing "rm <TAB>" with Example installed, should complete to "rm Example"
+            c, r = test_complete("rm ")
+            @test "Example" in c
+            @test apply_completion("rm ") == "rm Example"
+
             # help mode
             @test apply_completion("?ad") == "?add"
             @test apply_completion("?act") == "?activate"
