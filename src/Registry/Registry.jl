@@ -471,6 +471,11 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
                 let reg = reg, errors = errors
                     regpath = pathrepr(reg.path)
                     let regpath = regpath
+                        if !iswritable(dirname(reg.path))
+                            @warn "Skipping update of registry at $regpath (read-only file system)"
+                            continue
+                        end
+
                         if reg.tree_info !== nothing
                             printpkgstyle(io, :Updating, "registry at " * regpath)
                             old_hash = reg.tree_info
