@@ -343,28 +343,29 @@ end
 get_compat(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].val : Types.VersionSpec()
 get_compat_str(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].str : nothing
 
+# Helper to check if compat is compatible with a non-upgradable stdlib, warn if not, and return appropriate VersionSpec
+function check_stdlib_compat(name::String, uuid::UUID, compat::VersionSpec, project::Project, project_file::String, julia_version)
+    is_stdlib(uuid) && !(uuid in Types.UPGRADABLE_STDLIBS_UUIDS) || return compat
+
+    stdlib_ver = stdlib_version(uuid, julia_version)
+    stdlib_ver === nothing && return compat
+    isempty(compat) && return compat
+    stdlib_ver in compat && return compat
+
+    compat_str = get_compat_str(project, name)
+    if compat_str !== nothing
+        suggested_compat = string(compat_str, ", ", stdlib_ver.major == 0 ? string(stdlib_ver.major, ".", stdlib_ver.minor) : string(stdlib_ver.major))
+        @warn """Ignoring incompatible compat entry `$(repr(compat_str))` in $(repr(project_file)) for $name.
+        $name is a non-upgradable standard library with version $stdlib_ver in the current Julia version.
+        Fix by setting compat to `$(repr(suggested_compat))` to extend support to version $stdlib_ver."""
+    end
+    return VersionSpec("*")
+end
+
 # Get compat for a dependency, checking if it's a non-upgradable stdlib and warning if incompatible
 function get_compat_with_stdlib_check(project::Project, project_file::String, name::String, uuid::UUID, julia_version)
     compat = get_compat(project, name)
-
-    # Check if this is a non-upgradable stdlib
-    if is_stdlib(uuid) && !(uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
-        stdlib_ver = stdlib_version(uuid, julia_version)
-        if stdlib_ver !== nothing && !isempty(compat)
-            if !(stdlib_ver in compat)
-                compat_str = get_compat_str(project, name)
-                if compat_str !== nothing
-                    suggested_compat = string(compat_str, ", ", stdlib_ver)
-                    @warn """Ignoring incompatible compat entry `$(repr(compat_str))` in $(repr(project_file)) for $name.
-                    $name is a non-upgradable standard library with version $stdlib_ver in the current Julia version.
-                    Fix by setting compat to `$(repr(suggested_compat))` to extend support to version $stdlib_ver."""
-                end
-                return VersionSpec("*")
-            end
-        end
-    end
-
-    return compat
+    return check_stdlib_compat(name, uuid, compat, project, project_file, julia_version)
 end
 
 function set_compat(proj::Project, name::String, compat::String)
@@ -548,27 +549,9 @@ function get_compat_workspace(env, name)
         compat = intersect(compat, get_compat(project, name))
     end
 
-    # Check if this is a non-upgradable stdlib
     uuid = get(env.project.deps, name, nothing)
-    if uuid !== nothing && is_stdlib(uuid) && !(uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
-        # Get the current stdlib version
-        stdlib_ver = stdlib_version(uuid, VERSION)
-        if stdlib_ver !== nothing && !isempty(compat)
-            # Check if the compat entry is compatible with the current stdlib version
-            if !(stdlib_ver in compat)
-                compat_str = get_compat_str(env.project, name)
-                if compat_str !== nothing
-                    # Construct a suggested compat that includes both the specified version and current version
-                    suggested_compat = string(compat_str, ", ", stdlib_ver.major == 0 ? stdlib_ver.major * "." * stdlib_ver.minor : stdlib_ver.major)
-                    project_file = env.project_file
-                    @warn """Ignoring incompatible compat entry `$(repr(compat_str))` in $(repr(project_file)) for $name.
-                    $name is a non-upgradable standard library with version $stdlib_ver in the current Julia version.
-                    Fix by setting compat to `$(repr(suggested_compat))` to extend support to version $stdlib_ver."""
-                end
-                # Return unrestricted version spec for non-upgradable stdlibs
-                return VersionSpec("*")
-            end
-        end
+    if uuid !== nothing
+        compat = check_stdlib_compat(name, uuid, compat, env.project, env.project_file, VERSION)
     end
 
     return compat
