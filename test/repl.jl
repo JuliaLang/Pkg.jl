@@ -403,6 +403,24 @@ temp_pkg_dir() do project_path
             @test "Example" in c
             pkg"free Example"
 
+            # Test deduplication of already-specified packages (issue #4098)
+            # After typing "rm Example ", typing "E" should not suggest Example again
+            c, r = test_complete("rm Example E")
+            @test !("Example" in c) # Example already specified, should not suggest again
+
+            # Test with package@version syntax - should still deduplicate
+            c, r = test_complete("rm Example@0.5 Exam")
+            @test !("Example" in c) # Example already specified with version
+
+            # Test with multiple packages already specified
+            c, r = test_complete("rm Example PackageWithDependency E")
+            @test !("Example" in c) # Both already specified
+            @test !("PackageWithDependency" in c)
+
+            # Test deduplication works for add as well
+            c, r = test_complete("add Example E")
+            @test !("Example" in c) # Example already specified for add command
+
             # help mode
             @test apply_completion("?ad") == "?add"
             @test apply_completion("?act") == "?activate"
