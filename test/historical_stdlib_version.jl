@@ -31,9 +31,12 @@ using .Utils
     @test is_stdlib(pkg_uuid)
     @test is_stdlib(pkg_uuid, v"1.0")
     @test is_stdlib(pkg_uuid, v"1.6")
-    @test is_stdlib(pkg_uuid, v"999.999.999")
     @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
+
+    # We can't serve information for unknown major.minor versions (patches can not match)
+    @test_throws Pkg.Types.PkgError is_stdlib(pkg_uuid, v"999.999.999")
+    @test is_stdlib(pkg_uuid, v"1.10.999")
 
     # MbedTLS_jll stopped being a stdlib in 1.12
     @test !is_stdlib(mbedtls_jll_uuid)
