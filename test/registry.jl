@@ -450,4 +450,48 @@ if Pkg.Registry.registry_use_pkg_server()
     end
 end
 
+@testset "gc runs git gc on registries" begin
+    # Only run this test if git is available
+    if Sys.which("git") !== nothing
+        temp_pkg_dir() do depot
+            # Set up a test registry that is a git repository
+            regdir = mktempdir()
+            regpath = joinpath(regdir, "TestReg")
+            mkpath(joinpath(regpath, "TestPkg"))
+            write(
+                joinpath(regpath, "Registry.toml"), """
+                name = "TestReg"
+                uuid = "$(uuid4())"
+                repo = "https://github.com/test/test.git"
+                """
+            )
+            write(
+                joinpath(regpath, "TestPkg", "Package.toml"), """
+                name = "TestPkg"
+                uuid = "$(uuid4())"
+                repo = "https://github.com/test/TestPkg.git"
+                """
+            )
+            git_init_and_commit(regpath)
+
+            # Install the registry
+            target_reg_path = joinpath(depot, "registries", "TestReg")
+            mkpath(dirname(target_reg_path))
+            cp(regpath, target_reg_path)
+
+            # Verify the registry is a git repository
+            @test isdir(joinpath(target_reg_path, ".git"))
+
+            # Run Pkg.gc() - it should run git gc on the registry without errors
+            # We can't easily verify that git gc was run, but we can verify
+            # that Pkg.gc() completes without errors
+            @test_nowarn Pkg.gc(verbose = false)
+
+            # The registry should still exist after gc
+            @test isdir(target_reg_path)
+            @test isdir(joinpath(target_reg_path, ".git"))
+        end
+    end
+end
+
 end # module
