@@ -443,7 +443,7 @@ if Pkg.Registry.registry_use_pkg_server()
                     end
                     Pkg.update()
                     Pkg.Registry.rm(name = "General")
-                    @test isempty(readdir(joinpath(DEPOT_PATH[1], "registries")))
+                    @test isempty(filter(x -> x != "CACHEDIR.TAG", readdir(joinpath(DEPOT_PATH[1], "registries"))))
                 end
             end
         end
