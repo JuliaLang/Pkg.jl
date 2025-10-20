@@ -740,6 +740,7 @@ function read_package(path::String)
 end
 
 const refspecs = ["+refs/heads/*:refs/remotes/cache/heads/*"]
+const refspecs_fallback = ["+refs/*:refs/remotes/cache/*"]
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
@@ -974,6 +975,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
                 end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
+                # If still not found, try with broader refspec as fallback
+                if obj_branch === nothing
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs_fallback)
+                    obj_branch = get_object_or_branch(repo, rev_or_hash)
+                end
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(rev_or_hash) in repository")
                 end
