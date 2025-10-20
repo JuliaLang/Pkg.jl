@@ -1099,6 +1099,34 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         printpkgstyle(ctx.io, :Deleted, "no artifacts, repos, packages or scratchspaces")
     end
 
+    # Run git gc on registries if git is available
+    if Sys.which("git") !== nothing
+        for depot in gc_depots
+            reg_dir = joinpath(depot, "registries")
+            isdir(reg_dir) || continue
+
+            for reg_name in readdir(reg_dir)
+                reg_path = joinpath(reg_dir, reg_name)
+                isdir(reg_path) || continue
+                git_dir = joinpath(reg_path, ".git")
+                isdir(git_dir) || continue
+
+                try
+                    if verbose
+                        printpkgstyle(ctx.io, :GC, "running git gc on registry $(reg_name)")
+                    end
+                    # Run git gc quietly, don't error if it fails
+                    run(`git -C $reg_path gc --quiet`)
+                catch e
+                    # Silently ignore errors from git gc
+                    if verbose
+                        @warn "git gc failed for registry $(reg_name)" exception = e
+                    end
+                end
+            end
+        end
+    end
+
     return
 end
 
