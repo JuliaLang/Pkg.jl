@@ -154,7 +154,7 @@ Each entry in the `[sources]` section supports the following keys:
 - **`url`**: The URL of the Git repository. Cannot be used with `path`.
 - **`rev`**: The Git revision (branch name, tag, or commit hash) to use. Only valid with `url`.
 - **`subdir`**: A subdirectory within the repository containing the package.
-- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`.
+- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`. This will `dev` the package.
 
 This might in practice look something like:
 
