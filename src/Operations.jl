@@ -355,9 +355,9 @@ function check_stdlib_compat(name::String, uuid::UUID, compat::VersionSpec, proj
     compat_str = get_compat_str(project, name)
     if compat_str !== nothing
         suggested_compat = string(compat_str, ", ", stdlib_ver.major == 0 ? string(stdlib_ver.major, ".", stdlib_ver.minor) : string(stdlib_ver.major))
-        @warn """Ignoring incompatible compat entry `$(repr(compat_str))` in $(repr(project_file)) for $name.
+        @warn """Ignoring incompatible compat entry `$name = $(repr(compat_str))` in $(repr(project_file)).
         $name is a non-upgradable standard library with version $stdlib_ver in the current Julia version.
-        Fix by setting compat to `$(repr(suggested_compat))` to extend support to version $stdlib_ver."""
+        Fix by setting compat to $(repr(suggested_compat)) to mark support of the current version $stdlib_ver.""" maxlog = 1
     end
     return VersionSpec("*")
 end
