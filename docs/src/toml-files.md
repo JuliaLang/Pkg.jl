@@ -167,10 +167,55 @@ SomeDependency = {path = "deps/SomeDependency.jl"}
 
 Note that this information is only used when this environment is active, i.e. it is not used if this project is a package that is being used as a dependency.
 
+### The `[weakdeps]` section
+
+Weak dependencies are optional dependencies that will not automatically install when the package is installed,
+but for which you can still specify compatibility constraints. Weak dependencies are typically used in conjunction
+with package extensions (see [`[extensions]`](@ref extensions-section) below), which allow conditional loading of code
+when the weak dependency is available in the environment.
+
+Example:
+```toml
+[weakdeps]
+SomePackage = "b3785f31-9d33-4cdf-bc73-f646780f1739"
+
+[compat]
+SomePackage = "1.2"
+```
+
+For more details on using weak dependencies and extensions, see the
+[Weak dependencies](@ref Weak-dependencies) section in the Creating Packages guide.
+
+!!! compat
+    Weak dependencies require Julia 1.9+.
+
+### [The `[extensions]` section](@id extensions-section)
+
+Extensions allow packages to provide optional functionality that is only loaded when certain other packages
+(typically listed in `[weakdeps]`) are available. Each entry in the `[extensions]` section maps an extension
+name to one or more package dependencies required to load that extension.
+
+Example:
+```toml
+[weakdeps]
+Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
+
+[extensions]
+ContourExt = "Contour"
+```
+
+The extension code itself should be placed in an `ext/` directory at the package root, with the file name
+matching the extension name (e.g., `ext/ContourExt.jl`). For more details on creating and using extensions,
+see the [Conditional loading of code in packages (Extensions)](@ref Conditional-loading-of-code-in-packages-(Extensions)) section in the Creating Packages guide.
+
+!!! compat
+    Extensions require Julia 1.9+.
+
 ### The `[compat]` section
 
-Compatibility constraints for the dependencies listed under `[deps]` can be listed in the
-`[compat]` section.
+Compatibility constraints for dependencies can be listed in the `[compat]` section. This applies to
+packages listed under `[deps]`, `[weakdeps]`, and `[extras]`.
+
 Example:
 
 ```toml
@@ -208,6 +253,49 @@ This structure is particularly beneficial for developers using a monorepo approa
 
 Workspace can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
+
+### The `[extras]` section (legacy)
+
+!!! warning
+    The `[extras]` section is a legacy feature maintained for compatibility. For Julia 1.13+,
+    using [workspaces](@ref Workspaces) is the recommended approach for managing test-specific
+    and other optional dependencies.
+
+The `[extras]` section lists additional dependencies that are not regular dependencies of the package,
+but may be used in specific contexts like testing. These are typically used in conjunction with the
+`[targets]` section.
+
+Example:
+```toml
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+```
+
+For more information, see the [Test-specific dependencies](@ref adding-tests-to-packages) section.
+
+### The `[targets]` section (legacy)
+
+!!! warning
+    The `[targets]` section is a legacy feature maintained for compatibility. For Julia 1.13+,
+    using [workspaces](@ref Workspaces) is the recommended approach for managing test-specific
+    and build dependencies.
+
+The `[targets]` section specifies which packages from `[extras]` should be available in specific
+contexts. The only supported targets are `test` (for test dependencies) and `build` (for build-time
+dependencies used by `deps/build.jl` scripts).
+
+Example:
+```toml
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+
+[targets]
+test = ["Test", "Markdown"]
+```
+
+For more information, see the [Test-specific dependencies](@ref adding-tests-to-packages) section.
 
 ## `Manifest.toml`
 
