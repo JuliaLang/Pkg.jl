@@ -189,7 +189,7 @@ temp_pkg_dir() do project_path
 
         # Test that unused packages are reaped
         Pkg.gc()
-        @test isempty(readdir(pkgdir))
+        @test isempty(filter(x -> x != "CACHEDIR.TAG", readdir(pkgdir)))
 
         clonedir = joinpath(Pkg.depots1(), "clones")
         Pkg.add(Pkg.PackageSpec(name = TEST_PKG.name, rev = "master"))
@@ -197,7 +197,7 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
         # Test that unused repos are also reaped
         Pkg.gc()
-        @test isempty(readdir(clonedir))
+        @test isempty(filter(x -> x != "CACHEDIR.TAG", readdir(clonedir)))
     end
 
     @testset "package with wrong UUID" begin

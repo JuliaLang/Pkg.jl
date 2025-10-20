@@ -46,6 +46,17 @@ end
 logdir(depot = depots1()) = joinpath(depot, "logs")
 devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depot, "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
+
+function create_cachedir_tag(cache_dir::AbstractString)
+    return try
+        tag_file = joinpath(cache_dir, "CACHEDIR.TAG")
+        if !isfile(tag_file)
+            write(tag_file, "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by Julia Pkg.\n# See https://bford.info/cachedir/\n")
+        end
+    catch
+        # Ignore errors to avoid failing operations on read-only filesystems
+    end
+end
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)

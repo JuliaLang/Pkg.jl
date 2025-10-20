@@ -6,7 +6,7 @@ using Tar: can_symlink
 using FileWatching: FileWatching
 
 import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
-    ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries, ..atomic_toml_write
+    ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries, ..atomic_toml_write, ..create_cachedir_tag
 
 import Base: get, SHA1
 import Artifacts: artifact_names, ARTIFACTS_DIR_OVERRIDE, ARTIFACT_OVERRIDES, artifact_paths,
@@ -31,6 +31,7 @@ function create_artifact(f::Function)
     # Ensure the `artifacts` directory exists in our default depot
     artifacts_dir = first(artifacts_dirs())
     mkpath(artifacts_dir)
+    create_cachedir_tag(artifacts_dir)
 
     # Temporary directory where we'll do our creation business
     temp_dir = mktempdir(artifacts_dir)
@@ -346,6 +347,7 @@ function download_artifact(
         # Ensure the `artifacts` directory exists in our default depot
         artifacts_dir = first(artifacts_dirs())
         mkpath(artifacts_dir)
+        create_cachedir_tag(artifacts_dir)
         # expected artifact path
         dst = joinpath(artifacts_dir, bytes2hex(tree_hash.bytes))
 
