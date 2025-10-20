@@ -252,7 +252,7 @@ end
 
 function develop(
         ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool = true,
-        preserve::PreserveLevel = Operations.default_preserve(), platform::AbstractPlatform = HostPlatform(), kwargs...
+        preserve::PreserveLevel = Operations.default_preserve(), platform::AbstractPlatform = HostPlatform(), dry_run::Bool = false, kwargs...
     )
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
@@ -299,12 +299,16 @@ function develop(
     end
 
     Operations.develop(ctx, pkgs, new_git; preserve = preserve, platform = platform)
+    if dry_run
+        undo(ctx; silent = true)
+        printpkgstyle(ctx.io, Symbol("Dry run"), "so changes have been reverted", color = Base.info_color())
+    end
     return
 end
 
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel = Operations.default_preserve(),
-        platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true, kwargs...
+        platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true, dry_run::Bool = false, kwargs...
     )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
@@ -358,6 +362,10 @@ function add(
     end
 
     Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target)
+    if dry_run
+        undo(ctx; silent = true)
+        printpkgstyle(ctx.io, Symbol("Dry run"), "so changes have been reverted", color = Base.info_color())
+    end
     return
 end
 
@@ -416,6 +424,7 @@ function up(
         preserve::Union{Nothing, PreserveLevel} = isempty(pkgs) ? nothing : PRESERVE_ALL,
         update_registry::Bool = true,
         skip_writing_project::Bool = false,
+        dry_run::Bool = false,
         kwargs...
     )
     Context!(ctx; kwargs...)
@@ -442,12 +451,16 @@ function up(
         update_source_if_set(ctx.env, pkg)
     end
     Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
+    if dry_run
+        undo(ctx; silent = true)
+        printpkgstyle(ctx.io, Symbol("Dry run"), "so changes have been reverted", color = Base.info_color())
+    end
     return
 end
 
 resolve(; io::IO = stderr_f(), kwargs...) = resolve(Context(; io); kwargs...)
-function resolve(ctx::Context; skip_writing_project::Bool = false, kwargs...)
-    up(ctx; level = UPLEVEL_FIXED, mode = PKGMODE_MANIFEST, update_registry = false, skip_writing_project, kwargs...)
+function resolve(ctx::Context; skip_writing_project::Bool = false, dry_run::Bool = false, kwargs...)
+    up(ctx; level = UPLEVEL_FIXED, mode = PKGMODE_MANIFEST, update_registry = false, skip_writing_project, dry_run, kwargs...)
     return nothing
 end
 
@@ -1666,9 +1679,9 @@ function add_snapshot_to_undo(env = nothing)
     return resize!(state.entries, min(length(state.entries), max_undo_limit))
 end
 
-undo(ctx = Context()) = redo_undo(ctx, :undo, 1)
-redo(ctx = Context()) = redo_undo(ctx, :redo, -1)
-function redo_undo(ctx, mode::Symbol, direction::Int)
+undo(ctx = Context(); kwargs...) = redo_undo(ctx, :undo, 1; kwargs...)
+redo(ctx = Context(); kwargs...) = redo_undo(ctx, :redo, -1; kwargs...)
+function redo_undo(ctx, mode::Symbol, direction::Int; silent::Bool = false)
     @assert direction == 1 || direction == -1
     state = get(undo_entries, ctx.env.project_file, nothing)
     state === nothing && pkgerror("no undo state for current project")
@@ -1678,7 +1691,9 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
     write_env(ctx.env; update_undo = false)
-    return Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
+    if !silent
+        return Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
+    end
 end
 
 

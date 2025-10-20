@@ -162,8 +162,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, dry_run::Bool=false)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, dry_run::Bool=false)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -174,6 +174,8 @@ added automatically with a lower bound of the added version.
 
 To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
 To add as an extra dep (in the `[extras]` field) set `target=:extras`.
+
+The `dry_run` option will preview the changes without actually applying them. Changes will be displayed and then automatically reverted.
 
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
@@ -335,7 +337,7 @@ If `workspace` is true, this will consider all projects in the workspace and not
 const why = API.why
 
 """
-    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel)
+    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, dry_run::Bool=false)
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
@@ -346,6 +348,8 @@ If packages are given as positional arguments, the `preserve` argument can be us
 - `PRESERVE_ALL` (default): Only allow `pkg` to update.
 - `PRESERVE_DIRECT`: Only allow `pkg` and indirect dependencies that are not a direct dependency in the project to update.
 - `PRESERVE_NONE`: Allow `pkg` and all its indirect dependencies to update.
+
+The `dry_run` option will preview the changes without actually applying them. Changes will be displayed and then automatically reverted.
 
 After any package updates the project will be precompiled. See more at [Environment Precompilation](@ref).
 
@@ -511,8 +515,8 @@ const free = API.free
 
 
 """
-    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
-    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
+    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false, dry_run::Bool=false)
+    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false, dry_run::Bool=false)
 
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
@@ -520,6 +524,8 @@ to the location specified by the environment variable `JULIA_PKG_DEVDIR`, with
 `joinpath(DEPOT_PATH[1],"dev")` being the default.
 
 If `pkg` is given as a local path, the package at that path will be tracked.
+
+The `dry_run` option will preview the changes without actually applying them. Changes will be displayed and then automatically reverted.
 
 The preserve strategies offered by `Pkg.add` are also available via the `preserve` kwarg.
 See [`Pkg.add`](@ref) for more information.
@@ -619,10 +625,12 @@ See more and how to disable auto-precompilation at [Environment Precompilation](
 const instantiate = API.instantiate
 
 """
-    Pkg.resolve(; io::IO=stderr)
+    Pkg.resolve(; io::IO=stderr, dry_run::Bool=false)
 
 Update the current manifest with potential changes to the dependency graph
 from packages that are tracking a path.
+
+The `dry_run` option will preview the changes without actually applying them. Changes will be displayed and then automatically reverted.
 """
 const resolve = API.resolve
 

@@ -1,6 +1,9 @@
 Pkg v1.13 Release Notes
 =======================
 
+- Added `--dry-run` option to `add`, `develop`, `update`, and `resolve` commands to preview changes without applying
+  them. Use `pkg> add --dry-run Example`, `Pkg.add("Example"; dry_run=true)`, or similar for other commands. Changes
+  are displayed and then automatically reverted. ([#XXXX])
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve

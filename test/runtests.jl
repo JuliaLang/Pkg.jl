@@ -64,6 +64,7 @@ module PkgTestsInner
             "sources.jl",
             "workspaces.jl",
             "apps.jl",
+            "dry_run_test.jl",
         ]
 
         # Only test these if the test deps are available (they aren't typically via `Base.runtests`)
