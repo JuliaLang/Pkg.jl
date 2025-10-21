@@ -167,6 +167,9 @@ SomeDependency = {path = "deps/SomeDependency.jl"}
 
 Note that this information is only used when this environment is active, i.e. it is not used if this project is a package that is being used as a dependency.
 
+!!! tip "Test-specific dependencies"
+    A use case for `[sources]` with `path` is in `test/Project.toml` to reference the parent package using `path = ".."`. This allows test dependencies to be managed independently with their own manifest file. See [Test-specific dependencies](@ref) for more details on this and other approaches.
+
 ### The `[weakdeps]` section
 
 Weak dependencies are optional dependencies that will not automatically install when the package is installed,

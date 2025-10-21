@@ -331,6 +331,51 @@ projects = ["test", "docs", "benchmarks"]
 
 See the section on [Workspaces](@ref) in the `Project.toml` documentation for more details.
 
+#### Alternative approach: Using `[sources]` with path-based dependencies
+
+An alternative to workspaces is to use the `[sources]` section in `test/Project.toml` to reference the parent package. This approach creates a **separate manifest** in the `test/` directory (unlike workspaces which create a single shared manifest).
+
+To use this approach:
+
+1. Create a `test/Project.toml` file and add your test dependencies:
+
+```julia-repl
+(HelloWorld) pkg> activate ./test
+[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
+
+(HelloWorld/test) pkg> add Test
+ Resolving package versions...
+  Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + Test
+```
+
+2. Add the parent package as a dependency using `[sources]` with a relative path:
+
+```toml
+# In test/Project.toml
+[deps]
+HelloWorld = "00000000-0000-0000-0000-000000000000"  # Your package UUID
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+HelloWorld = {path = ".."}
+```
+
+This creates a separate `test/Manifest.toml` that tracks the resolved dependencies for your test environment independently from the main package manifest. You can now run tests directly:
+
+```julia-repl
+$ julia --project=test
+julia> using HelloWorld, Test
+
+julia> include("test/runtests.jl")
+```
+
+!!! note "Difference from workspaces"
+    The key difference from workspaces is that this approach uses a **separate manifest file** (`test/Manifest.toml`) for the test environment, while workspaces create a **single shared manifest** (`Manifest.toml`) that resolves all projects together. This means:
+
+    - With `[sources]` + path: Dependencies are resolved independently for each environment
+    - With workspaces: Dependencies are resolved together, ensuring compatibility across all projects in the workspace
+
 #### Legacy approach: `target` based test specific dependencies
 
 !!! warning
