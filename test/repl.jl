@@ -545,6 +545,12 @@ temp_pkg_dir() do project_path
             )
             completions_empty, region_empty, should_complete_empty = @invokelatest REPL.LineEdit.complete_line(provider, mock_state_empty)
             @test region_empty isa Pair{Int, Int}
+
+            # Test for issue #4121 - completion after semicolon should not crash
+            # When typing "a;" and hitting tab, partial can be nothing causing startswith crash
+            c, r = test_complete("a;")
+            @test c isa Vector{String}  # Should not crash, return empty or valid completions
+            @test r isa UnitRange{Int}
         end # testset
     end
 end
