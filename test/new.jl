@@ -1257,6 +1257,21 @@ end
             @test args[1].rev == "branch-name"
         end
 
+        # Test SSH URLs with IP addresses (issue #1822)
+        @testset "SSH URLs with IP addresses" begin
+            # Test that user@host:path URLs with IP addresses are parsed correctly as complete URLs
+            api, args, opts = first(Pkg.pkg"add user@10.20.30.40:PackageName.jl")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "user@10.20.30.40:PackageName.jl"
+            @test args[1].subdir === nothing
+
+            api, args, opts = first(Pkg.pkg"add git@192.168.1.100:path/to/repo.jl")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@192.168.1.100:path/to/repo.jl"
+            @test args[1].subdir === nothing
+        end
 
         # Test Git URLs with subdir specifiers
         @testset "Git URLs with subdir specifiers" begin
