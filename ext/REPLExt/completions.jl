@@ -296,6 +296,7 @@ function _completions(input, final, offset, index; hint::Bool)
         if final
             partial = "" # last token is finalized -> no partial
         end
+        partial = something(partial, "")
     catch
         return String[], 0:-1, false
     end
