@@ -51,6 +51,43 @@ temp_pkg_dir() do project_path
             end
         end
     end
+
+    @testset "path normalization in Project.toml [sources]" begin
+        mktempdir() do tmp
+            cd(tmp) do
+                # Create a minimal Project.toml with sources containing a path
+                write(
+                    "Project.toml",
+                    """
+                    name = "TestPackage"
+                    uuid = "12345678-1234-1234-1234-123456789abc"
+
+                    [deps]
+                    LocalPkg = "87654321-4321-4321-4321-cba987654321"
+
+                    [sources]
+                    LocalPkg = { path = "subdir/LocalPkg" }
+                    """
+                )
+
+                # Read the project
+                project = Pkg.Types.read_project("Project.toml")
+
+                # Verify the path is read correctly (will have native separators internally)
+                @test haskey(project.sources, "LocalPkg")
+                @test haskey(project.sources["LocalPkg"], "path")
+
+                # Write it back
+                Pkg.Types.write_project(project, "Project.toml")
+
+                # Read the written file as string and verify forward slashes are used
+                project_content = read("Project.toml", String)
+                @test occursin("path = \"subdir/LocalPkg\"", project_content)
+                # Verify backslashes are NOT in the path (would indicate Windows path wasn't normalized)
+                @test !occursin("path = \"subdir\\\\LocalPkg\"", project_content)
+            end
+        end
+    end
 end
 
 end # module
