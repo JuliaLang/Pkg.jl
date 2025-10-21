@@ -289,7 +289,21 @@ function destructure(project::Project)::Dict
     entry!("entryfile", project.entryfile)
     entry!("deps", merge(project.deps, project._deps_weak))
     entry!("weakdeps", project.weakdeps)
-    entry!("sources", project.sources)
+
+    # Normalize paths in sources to use forward slashes on Windows (matching Manifest.toml behavior)
+    normalized_sources = project.sources
+    if !isempty(project.sources)
+        normalized_sources = Dict{String, Dict{String, String}}()
+        for (name, source) in project.sources
+            normalized_source = copy(source)
+            path = get(source, "path", nothing)
+            if path !== nothing
+                normalized_source["path"] = normalize_path_for_toml(path)
+            end
+            normalized_sources[name] = normalized_source
+        end
+    end
+    entry!("sources", normalized_sources)
     entry!("extras", project.extras)
     entry!("compat", Dict(name => x.str for (name, x) in project.compat))
     entry!("targets", project.targets)
