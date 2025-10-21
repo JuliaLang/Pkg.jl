@@ -893,7 +893,7 @@ function install_archive(
     return url_success
 end
 
-const refspecs = ["+refs/*:refs/remotes/cache/*"]
+const refspecs = ["+refs/*:refs/cache/*"]
 function install_git(
         io::IO,
         uuid::UUID,

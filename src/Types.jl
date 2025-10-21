@@ -739,8 +739,8 @@ function read_package(path::String)
     return project
 end
 
-const refspecs = ["+refs/heads/*:refs/remotes/cache/heads/*"]
-const refspecs_fallback = ["+refs/*:refs/remotes/cache/*"]
+const refspecs = ["+refs/heads/*:refs/cache/heads/*"]
+const refspecs_fallback = ["+refs/*:refs/cache/*"]
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
@@ -969,7 +969,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 # For pull requests, fetch the specific PR ref
                 if startswith(rev_or_hash, "pull/") && endswith(rev_or_hash, "/head")
                     pr_number = rev_or_hash[6:(end - 5)]  # Extract number from "pull/X/head"
-                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/remotes/cache/pull/$(pr_number)/head"]
+                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs)
                 else
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
@@ -1071,7 +1071,7 @@ function get_object_or_branch(repo, rev)
     # Handle pull request references
     if startswith(rev, "pull/") && endswith(rev, "/head")
         try
-            gitobject = LibGit2.GitObject(repo, "remotes/cache/" * rev)
+            gitobject = LibGit2.GitObject(repo, "cache/" * rev)
             return gitobject, true
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
@@ -1079,7 +1079,7 @@ function get_object_or_branch(repo, rev)
     end
 
     try
-        gitobject = LibGit2.GitObject(repo, "remotes/cache/heads/" * rev)
+        gitobject = LibGit2.GitObject(repo, "cache/heads/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
