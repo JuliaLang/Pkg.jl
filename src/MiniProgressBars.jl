@@ -62,7 +62,7 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth = nothing, carriage
     p.has_shown = true
 
     progress_text = if p.mode == :percentage
-        @sprintf "%2.1f %%" perc
+        @sprintf "%5.1f %%" perc
     elseif p.mode == :int
         string(p.current, "/", p.max)
     elseif p.mode == :data
@@ -115,17 +115,6 @@ function end_progress(io, p::MiniProgressBar)
     return print(io, ansi_enablecursor * ansi_clearline)
 end
 
-# Useful when writing a progress bar in the bottom
-# makes the bottom progress bar not flicker
-# prog = MiniProgressBar(...)
-# prog.end = n
-# for progress in 1:n
-#     print_progress_bottom(io)
-#     println("stuff")
-#     prog.current = progress
-#     showprogress(io, prog)
-#  end
-#
 function print_progress_bottom(io::IO)
     ansi_clearline = "\e[2K"
     ansi_movecol1 = "\e[1G"
