@@ -80,6 +80,13 @@ The `uuid` field is mandatory for packages.
 !!! note
     It is recommended that `UUIDs.uuid4()` is used to generate random UUIDs.
 
+#### Why UUIDs are important
+
+UUIDs serve several critical purposes in the Julia package ecosystem:
+
+- **Unique identification**: UUIDs uniquely identify packages across all registries and repositories, preventing naming conflicts. Two different packages can have the same name (e.g., in different registries), but their UUIDs will always be different.
+- **Multiple registries**: UUIDs enable the use of multiple package registries (including private registries) without conflicts, as each package is uniquely identified by its UUID regardless of which registry it comes from.
+
 
 ### The `version` field
 
