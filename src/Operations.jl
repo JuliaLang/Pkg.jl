@@ -2617,7 +2617,8 @@ function test(
         test_fn = nothing,
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
-        allow_reresolve::Bool = true
+        allow_reresolve::Bool = true,
+        quiet::Bool = false
     )
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
@@ -2663,7 +2664,9 @@ function test(
             env = EnvCache(proj)
             # Instantiate test env
             Pkg.instantiate(Context(env = env); allow_autoprecomp = false)
-            status(env, ctx.registries; mode = PKGMODE_COMBINED, io = ctx.io, ignore_indent = false, show_usagetips = false)
+            if !quiet
+                status(env, ctx.registries; mode = PKGMODE_COMBINED, io = ctx.io, ignore_indent = false, show_usagetips = false)
+            end
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
@@ -2708,7 +2711,9 @@ function test(
         sandbox(ctx, pkg, testdir(source_path), test_project_override; preferences = test_project_preferences, force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
             test_fn !== nothing && test_fn()
             sandbox_ctx = Context(; io = ctx.io)
-            status(sandbox_ctx.env, sandbox_ctx.registries; mode = PKGMODE_COMBINED, io = sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
+            if !quiet
+                status(sandbox_ctx.env, sandbox_ctx.registries; mode = PKGMODE_COMBINED, io = sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
+            end
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
