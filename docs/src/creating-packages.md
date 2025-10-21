@@ -696,6 +696,28 @@ Once a package is ready it can be registered with the [General Registry](https:/
 Currently, packages are submitted via [`Registrator`](https://juliaregistrator.github.io/).
 In addition to `Registrator`, [`TagBot`](https://github.com/marketplace/actions/julia-tagbot) helps manage the process of tagging releases.
 
+## Creating new package versions
+
+After registering your package, you'll want to release new versions as you add features and fix bugs. The typical workflow is:
+
+1. **Update the version number** in your `Project.toml` file according to [semantic versioning rules](@ref Version-specifier-format). For example:
+   - Increment the patch version (1.2.3 → 1.2.4) for bug fixes
+   - Increment the minor version (1.2.3 → 1.3.0) for new features that don't break existing functionality
+   - Increment the major version (1.2.3 → 2.0.0) for breaking changes
+
+2. **Commit your changes** to your package repository, including the updated version number.
+
+3. **Tag the release** using Registrator. Comment `@JuliaRegistrator register` on a commit or pull request in your GitHub repository
+
+4. **Automated tagging**: Once you've set up [`TagBot`](https://github.com/marketplace/actions/julia-tagbot), it will automatically create a git tag in your repository when a new version is registered. This keeps your repository tags synchronized with registered versions.
+
+The registration process typically takes a few minutes. Registrator will:
+- Check that your package meets registry requirements (has tests, proper version bounds, etc.)
+- Submit a pull request to the General registry
+- Automated checks will run, and if everything passes, the PR will be automatically merged
+
+For private registries or more advanced workflows, see the documentation for [LocalRegistry.jl](https://github.com/GunnarFarneback/LocalRegistry.jl) and [RegistryCI.jl](https://github.com/JuliaRegistries/RegistryCI.jl).
+
 ## Best Practices
 
 Packages should avoid mutating their own state (writing to files within their package directory).
