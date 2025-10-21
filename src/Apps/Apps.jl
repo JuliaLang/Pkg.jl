@@ -7,6 +7,7 @@ using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest
 using Pkg.Operations: print_single, source_path, update_package_add
 using Pkg.API: handle_package_input!
 using TOML, UUIDs
+using Dates
 import Pkg.Registry
 
 app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
@@ -183,6 +184,9 @@ function add(pkg::PackageSpec)
     handle_package_input!(pkg)
 
     ctx = app_context()
+
+    Pkg.Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
+
     manifest = ctx.env.manifest
     new = false
 
