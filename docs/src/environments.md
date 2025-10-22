@@ -84,6 +84,21 @@ If you already have a resolved `Manifest.toml`, then you will still need to ensu
 
 In short, [`instantiate`](@ref Pkg.instantiate) is your friend to make sure an environment is ready to use. If there's nothing to do, `instantiate` does nothing.
 
+## Returning to the default environment
+
+To return to the default environment after working in a project environment, simply call `activate` with no arguments:
+
+```julia-repl
+(MyProject) pkg> activate
+  Activating project at `~/.julia/environments/v1.10`
+
+(@v1.10) pkg>
+```
+
+This deactivates the current project and returns you to the default shared environment (typically `@v#.#`).
+There is no separate "deactivate" command—calling `activate()` with no arguments is how you return to your
+base package setup. This only affects the current Julia session; the change does not persist when you restart Julia.
+
 !!! note "Specifying project on startup"
     Instead of using `activate` from within Julia, you can specify the project on startup using
     the `--project=<path>` flag. For example, to run a script from the command line using the
