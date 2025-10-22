@@ -334,16 +334,22 @@ compound_declarations = [
                     activate --temp
                     activate - (activates the previously active environment)
 
-                Activate the environment at the given `path`, or use the first project found in
-                `LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
-                In the latter case, for the default value of `LOAD_PATH`, the result is to activate the
-                `@v#.#` environment.
+                Activate the environment at the given `path`, or return to the default environment if no
+                `path` is specified. When called with no arguments, this returns you to the default shared
+                environment (typically `@v#.#` in `~/.julia/environments/v#.#/`), which is the standard way
+                to "deactivate" a project environment.
+
                 The active environment is the environment that is modified by executing package commands.
+                Activating an environment only affects the current Julia session and does not persist when
+                you restart Julia (unless you use the `--project` startup flag).
+
                 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
                 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
                 it will be placed in the first depot of the stack.
+
                 Use the `--temp` option to create temporary environments which are removed when the julia
                 process is exited.
+
                 Use a single `-` to activate the previously active environment.
                 """,
         ],
