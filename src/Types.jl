@@ -19,7 +19,7 @@ import Base: SHA1
 using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
-    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
+    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, ManifestRegistryEntry, Project, err_rep,
     PkgError, pkgerror,
     has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, stdlib_infos, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
@@ -100,7 +100,6 @@ mutable struct PackageSpec
     url::Union{Nothing, String}
     rev::Union{Nothing, String}
     subdir::Union{Nothing, String}
-
 end
 function PackageSpec(;
         name::Union{Nothing, AbstractString} = nothing,
@@ -112,7 +111,7 @@ function PackageSpec(;
         pinned::Bool = false,
         url = nothing,
         rev = nothing,
-        subdir = nothing
+        subdir = nothing,
     )
     uuid = uuid === nothing ? nothing : UUID(uuid)
     return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
@@ -292,6 +291,7 @@ Base.@kwdef mutable struct PackageEntry
     exts::Dict{String, Union{Vector{String}, String}} = Dict{String, String}()
     uuid::Union{Nothing, UUID} = nothing
     apps::Dict{String, AppInfo} = Dict{String, AppInfo}() # used by AppManifest.toml
+    registries::Vector{String} = String[]
     other::Union{Dict, Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -305,15 +305,37 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.weakdeps == t2.weakdeps &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid &&
-    t1.apps == t2.apps
+    t1.apps == t2.apps &&
+    t1.registries == t2.registries
 # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init = h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.registries], init = h)  # omits `other`
+
+"""
+    ManifestRegistryEntry
+
+Metadata about a registry referenced from a manifest. `id` is the stable key written
+to the manifest (typically the registry name, falling back to UUID on collision).
+Only `uuid` and `url` are written to the manifest file.
+"""
+Base.@kwdef mutable struct ManifestRegistryEntry
+    id::String
+    uuid::UUID
+    url::Union{Nothing, String} = nothing
+end
+Base.:(==)(t1::ManifestRegistryEntry, t2::ManifestRegistryEntry) =
+    t1.id == t2.id &&
+    t1.uuid == t2.uuid &&
+    t1.url == t2.url
+Base.hash(x::ManifestRegistryEntry, h::UInt) =
+    foldr(hash, (x.id, x.uuid, x.url), init = h)
+
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing, VersionNumber} = nothing # only set to VERSION when resolving
     project_hash::Union{Nothing, SHA1} = nothing
     manifest_format::VersionNumber = v"2.0.0"
     deps::Dict{UUID, PackageEntry} = Dict{UUID, PackageEntry}()
+    registries::Dict{String, ManifestRegistryEntry} = Dict{String, ManifestRegistryEntry}()
     other::Dict{String, Any} = Dict{String, Any}()
 end
 Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
@@ -329,6 +351,7 @@ Base.values(m::Manifest) = values(m.deps)
 Base.keys(m::Manifest) = keys(m.deps)
 Base.haskey(m::Manifest, key) = haskey(m.deps, key)
 
+
 function Base.show(io::IO, pkg::PackageEntry)
     f = []
     pkg.name !== nothing && push!(f, "name" => pkg.name)
@@ -339,6 +362,7 @@ function Base.show(io::IO, pkg::PackageEntry)
     pkg.repo.source !== nothing && push!(f, "url/path" => "`$(pkg.repo.source)`")
     pkg.repo.rev !== nothing && push!(f, "rev" => pkg.repo.rev)
     pkg.repo.subdir !== nothing && push!(f, "subdir" => pkg.repo.subdir)
+    !isempty(pkg.registries) && push!(f, "registries" => pkg.registries)
     print(io, "PackageEntry(\n")
     for (field, value) in f
         print(io, "  ", field, " = ", value, "\n")

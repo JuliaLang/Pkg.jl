@@ -75,6 +75,45 @@ end
 tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION) =
     !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
 
+
+# Try to download all registries referenced in `ctx.env.manifest.registries`.
+# Warn if some fail, but don't error (packages may still work with the registries we have).
+function ensure_manifest_registries!(ctx::Context)
+    manifest_regs = ctx.env.manifest.registries
+    isempty(manifest_regs) && return
+
+    regs_by_uuid = Dict(reg.uuid => reg for reg in ctx.registries)
+    missing = ManifestRegistryEntry[]
+    for entry in values(manifest_regs)
+        reg = get(regs_by_uuid, entry.uuid, nothing)
+        if reg === nothing
+            push!(missing, entry)
+        end
+    end
+
+    isempty(missing) && return
+
+    # Try to install missing registries that have URLs
+    specs = Registry.RegistrySpec[]
+    for entry in missing
+        if entry.url !== nothing
+            push!(specs, Registry.RegistrySpec(uuid = entry.uuid, url = entry.url))
+        end
+    end
+
+    if !isempty(specs)
+        try
+            Registry.add(specs; io = ctx.io)
+            copy!(ctx.registries, Registry.reachable_registries())
+        catch e
+            # Warn but don't error - packages may still work with available registries
+            @warn "Failed to install some registries from manifest" exception = (e, catch_backtrace())
+        end
+    end
+
+    return
+end
+
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.path !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
@@ -243,10 +282,48 @@ function is_instantiated(env::EnvCache, workspace::Bool = false; platform = Host
     return all(pkg -> is_package_downloaded(env.manifest_file, pkg; platform), pkgs)
 end
 
-function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
+function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version, registries::Vector{Registry.RegistryInstance})
     manifest = env.manifest
     empty!(manifest)
 
+    # Determine which registries are used by tracking packages
+    used_registry_uuids = Set{UUID}()
+    pkg_to_registries = Dict{UUID, Vector{UUID}}()
+
+    for pkg in pkgs
+        if tracking_registered_version(pkg, julia_version)
+            # Find all registries that have this package version
+            pkg_reg_uuids = UUID[]
+            for reg in registries
+                reg_pkg = get(reg, pkg.uuid, nothing)
+                reg_pkg === nothing && continue
+                pkg_info = Registry.registry_info(reg_pkg)
+                version_info = get(pkg_info.version_info, pkg.version, nothing)
+                version_info === nothing && continue
+                push!(pkg_reg_uuids, reg.uuid)
+                push!(used_registry_uuids, reg.uuid)
+            end
+            if !isempty(pkg_reg_uuids)
+                pkg_to_registries[pkg.uuid] = pkg_reg_uuids
+            end
+        end
+    end
+
+    # Build registry entries and name map for used registries only
+    uuid_to_name = Dict{UUID, String}()
+    registry_entries = Dict{String, ManifestRegistryEntry}()
+    for reg in registries
+        reg.uuid in used_registry_uuids || continue
+        reg_name = getfield(reg, :name)
+        uuid_to_name[reg.uuid] = reg_name
+        registry_entries[reg_name] = ManifestRegistryEntry(
+            id = reg_name,
+            uuid = reg.uuid,
+            url = getfield(reg, :repo),
+        )
+    end
+
+    # Build package entries
     for pkg in pkgs
         entry = PackageEntry(;
             name = pkg.name, version = pkg.version, pinned = pkg.pinned,
@@ -257,9 +334,24 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
             entry.version = stdlib_version(pkg.uuid, julia_version)
         end
         entry.deps = deps_map[pkg.uuid]
+
+        # Convert registry UUIDs to names
+        if haskey(pkg_to_registries, pkg.uuid)
+            reg_names = String[]
+            for reg_uuid in pkg_to_registries[pkg.uuid]
+                if haskey(uuid_to_name, reg_uuid)
+                    push!(reg_names, uuid_to_name[reg_uuid])
+                end
+            end
+            entry.registries = reg_names
+        end
+
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
+
+    env.manifest.registries = registry_entries
+    env.manifest.manifest_format = v"2.1.0"
     return record_project_hash(env)
 end
 
@@ -311,7 +403,11 @@ end
 # Registry Loading #
 ####################
 
-function load_tree_hash!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, julia_version)
+function load_tree_hash!(
+        registries::Vector{Registry.RegistryInstance},
+        pkg::PackageSpec,
+        julia_version,
+    )
     if is_stdlib(pkg.uuid, julia_version) && pkg.tree_hash !== nothing
         # manifests from newer julia versions might have stdlibs that are upgradable (FORMER_STDLIBS)
         # that have tree_hash recorded, which we need to clear for this version where they are not upgradable
@@ -567,6 +663,7 @@ function resolve_versions!(
         installed_only::Bool
     )
     installed_only = installed_only || OFFLINE_MODE[]
+
     # compatibility
     if julia_version !== nothing
         # only set the manifest julia_version if ctx.julia_version is not nothing
@@ -2031,7 +2128,7 @@ function add(
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
         man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-        update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version)
+        update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, ctx.registries)
         new_apply = download_source(ctx)
         fixups_from_projectfile!(ctx)
 
@@ -2069,7 +2166,7 @@ function develop(
     end
     # resolve & apply package versions
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; platform = platform, julia_version = ctx.julia_version)
@@ -2179,7 +2276,7 @@ function load_manifest_deps_up(
                 pinned = entry.pinned,
                 repo = entry.repo,
                 tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
-                version = something(entry.version, VersionSpec())
+                version = something(entry.version, VersionSpec()),
             )
         )
     end
@@ -2221,7 +2318,7 @@ function up(
         check_registered(ctx.registries, pkgs)
         deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
     end
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx, julia_version = ctx.julia_version)
@@ -2295,7 +2392,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
     new = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; julia_version = ctx.julia_version)
@@ -2345,7 +2442,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
         # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
-        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
         new = download_source(ctx)
         fixups_from_projectfile!(ctx)
         download_artifacts(ctx)
