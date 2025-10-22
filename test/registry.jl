@@ -5,6 +5,8 @@ using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
 using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
+using Pkg.Operations: get_pkg_deprecation_info
+
 using Dates: Second
 
 using ..Utils
@@ -409,6 +411,18 @@ end
             example1_info = Pkg.Registry.registry_info(example1_entry)
             @test !Pkg.Registry.isdeprecated(example1_info)
             @test example1_info.deprecated === nothing
+
+            # Test get_pkg_deprecation_info function
+            deprecated_pkg_spec = Pkg.Types.PackageSpec(name = "DeprecatedExample", uuid = pkg_uuid)
+            normal_pkg_spec = Pkg.Types.PackageSpec(name = "Example1", uuid = example1_uuid)
+
+            dep_info = get_pkg_deprecation_info(deprecated_pkg_spec, registries)
+            @test dep_info !== nothing
+            @test dep_info["reason"] == "This package is no longer maintained"
+            @test dep_info["alternative"] == "Example"
+
+            normal_info = get_pkg_deprecation_info(normal_pkg_spec, registries)
+            @test normal_info === nothing
         end
     end
 

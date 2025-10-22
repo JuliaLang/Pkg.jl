@@ -114,7 +114,11 @@ One use of the `[metadata]` table is to mark packages as deprecated using `[meta
 - Be excluded from tab-completion suggestions
 - Still be installable and usable
 
-The `[metadata.deprecated]` table can contain arbitrary metadata fields. Common fields include:
+The `[metadata.deprecated]` table can contain arbitrary metadata fields. Two special fields are recognized by Pkg and displayed when using `pkg> status --deprecated`:
+- `reason`: A string explaining why the package is deprecated
+- `alternative`: A string suggesting a replacement package
+
+Example:
 
 ```toml
 name = "MyPackage"
@@ -126,7 +130,7 @@ reason = "This package is no longer maintained"
 alternative = "ReplacementPackage"
 ```
 
-The specific fields within `[metadata.deprecated]` are not currently used by Pkg itself, but are stored to allow other tools and registries to utilize this metadata.
+Other fields can be added to `[metadata.deprecated]` for use by registries or other tools.
 
 ### Registry Compat.toml
 

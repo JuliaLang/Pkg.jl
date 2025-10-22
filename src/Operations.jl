@@ -50,16 +50,18 @@ function is_pkgversion_yanked(entry::PackageEntry, registries::Vector{Registry.R
     return is_pkgversion_yanked(entry.uuid, entry.version, registries)
 end
 
-function is_pkg_deprecated(pkg::Union{PackageSpec, PackageEntry}, registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries())
-    pkg.uuid === nothing && return false
+function get_pkg_deprecation_info(pkg::Union{PackageSpec, PackageEntry}, registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries())
+    pkg.uuid === nothing && return nothing
     for reg in registries
         reg_pkg = get(reg, pkg.uuid, nothing)
         if reg_pkg !== nothing
             info = Registry.registry_info(reg_pkg)
-            Registry.isdeprecated(info) && return true
+            if Registry.isdeprecated(info)
+                return info.deprecated
+            end
         end
     end
-    return false
+    return nothing
 end
 
 function default_preserve()
@@ -2927,11 +2929,12 @@ struct PackageStatusData
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
     changed::Bool
     extinfo::Union{Nothing, Vector{ExtInfo}}
+    deprecation_info::Union{Nothing, Dict{String, Any}}
 end
 
 function print_status(
         env::EnvCache, old_env::Union{Nothing, EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
-        uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, extensions::Bool, io::IO,
+        uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, deprecated::Bool, extensions::Bool, io::IO,
         mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool = true
     )
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.error_color()), "→", context = io)
@@ -3015,6 +3018,19 @@ function print_status(
             continue
         end
 
+        # Deprecated info
+        deprecation_info = nothing
+        pkg_deprecated = false
+        if !isnothing(new)
+            pkg_spec = something(new, old)
+            deprecation_info = get_pkg_deprecation_info(pkg_spec, registries)
+            pkg_deprecated = deprecation_info !== nothing
+        end
+
+        # if we are running with deprecated, only show packages that are deprecated
+        if deprecated && !pkg_deprecated
+            continue
+        end
 
         # TODO: Show extension deps for project as well?
 
@@ -3033,7 +3049,7 @@ function print_status(
         no_visible_packages_heldback &= (!changed || !pkg_heldback)
         no_packages_heldback &= !pkg_heldback
 
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, ext_info))
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, ext_info, deprecation_info))
     end
 
     for pkg in package_statuses
@@ -3067,8 +3083,20 @@ function print_status(
         end
 
         # show if package is deprecated
-        if is_pkg_deprecated(pkg_spec, registries)
+        if pkg.deprecation_info !== nothing
             printstyled(io, " [deprecated]"; color = :yellow)
+        end
+
+        # show deprecation details when using --deprecated flag
+        if deprecated && !diff && pkg.deprecation_info !== nothing
+            reason = get(pkg.deprecation_info, "reason", nothing)
+            alternative = get(pkg.deprecation_info, "alternative", nothing)
+            if reason !== nothing
+                printstyled(io, " (reason: ", reason, ")"; color = :yellow)
+            end
+            if alternative !== nothing
+                printstyled(io, " (alternative: ", alternative, ")"; color = :yellow)
+            end
         end
 
         if outdated && !diff && pkg.compat_data !== nothing
@@ -3161,6 +3189,17 @@ function print_status(
         It is recommended to update them to resolve a valid version.""", color = Base.warn_color(), ignore_indent)
     end
 
+    # Check if any packages are deprecated for info message
+    any_deprecated_packages = any(pkg -> pkg.deprecation_info !== nothing, package_statuses)
+
+    # Add info for deprecated packages (only if not already in deprecated mode)
+    if !deprecated && any_deprecated_packages
+        deprecated_str = sprint((io, args) -> printstyled(io, args...; color = :yellow), "[deprecated]", context = io)
+        tipend = manifest ? " -m" : ""
+        tip = show_usagetips ? " Use `status --deprecated$tipend` to see more information." : ""
+        printpkgstyle(io, :Info, """Packages marked with $deprecated_str are no longer maintained.$tip""", color = Base.info_color(), ignore_indent)
+    end
+
     return nothing
 end
 
@@ -3192,7 +3231,7 @@ end
 function status(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec} = PackageSpec[];
         header = nothing, mode::PackageMode = PKGMODE_PROJECT, git_diff::Bool = false, env_diff = nothing, ignore_indent = true,
-        io::IO, workspace::Bool = false, outdated::Bool = false, extensions::Bool = false, hidden_upgrades_info::Bool = false, show_usagetips::Bool = true
+        io::IO, workspace::Bool = false, outdated::Bool = false, deprecated::Bool = false, extensions::Bool = false, hidden_upgrades_info::Bool = false, show_usagetips::Bool = true
     )
     io == Base.devnull && return
     # if a package, print header
@@ -3223,10 +3262,10 @@ function status(
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest = false, diff, ignore_indent, io, workspace, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest = false, diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
     return if is_manifest_current(env) === false
         tip = if show_usagetips
