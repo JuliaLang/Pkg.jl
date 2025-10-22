@@ -348,6 +348,39 @@ This shows the Julia version the manifest was created on, the "format" of the ma
 and a hash of the project file, so that it is possible to see when the manifest is stale
 compared to the project file.
 
+#### Manifest format versions
+
+The `manifest_format` field indicates the structure version of the manifest file:
+- `"2.0"`: The standard format for Julia 1.7+
+- `"2.1"`: The current format (requires Julia 1.13+). This format introduced registry tracking in the `[registries]` section.
+
+### The `[registries]` section
+
+!!! compat
+    Registry tracking in manifests requires Julia 1.13+ and manifest format `"2.1"`.
+
+Starting with manifest format `2.1`, the manifest can include a `[registries]` section that tracks
+metadata about the registries from which packages were obtained. This ensures that the exact source
+of each package version can be identified, which is particularly important when using multiple
+registries or private registries.
+
+Each registry entry in the manifest looks like this:
+
+```toml
+[registries.General]
+uuid = "23338594-aafe-5451-b93e-139f81909106"
+url = "https://github.com/JuliaRegistries/General.git"
+```
+
+The registry entries include:
+* **`uuid`** (required): The unique identifier for the registry.
+* **`url`** (optional): The URL where the registry can be found. This enables automatic installation
+  of registries when instantiating an environment on a new machine.
+
+The section key (e.g., `General` in the example above) is the registry name.
+
+### Package entries
+
 Each dependency has its own section in the manifest file, and its content varies depending
 on how the dependency was added to the environment. Every
 dependency section includes a combination of the following entries:
@@ -364,6 +397,11 @@ dependency section includes a combination of the following entries:
   or a commit `repo-rev = "66607a62a83cb07ab18c0b35c038fcd62987c9b1"`.
 * `git-tree-sha1`: a content hash of the source tree, for example
   `git-tree-sha1 = "ca3820cc4e66f473467d912c4b2b3ae5dc968444"`.
+* `registries`: a reference to the registry IDs from which this package version was obtained. This can be either
+  a single string (e.g., `registries = "General"`) or a vector of strings if the package is available in multiple
+  registries (e.g., `registries = ["General", "MyRegistry"]`). All registries containing this package version
+  are recorded. This field is only present in manifest format `2.1` or later, and only for packages that were
+  added from a registry (not for developed or git-tracked packages).
 
 
 #### Added package
@@ -378,10 +416,12 @@ deps = ["DependencyA", "DependencyB"]
 git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 version = "1.2.3"
+registries = "General"
 ```
 
 Note, in particular, that no `repo-url` is present, since that information is included in
-the registry where this package was found.
+the registry where this package was found. The `registries` field (present in manifest format `2.1`+)
+references an entry in the `[registries]` section that contains the registry metadata.
 
 #### Added package by branch
 
