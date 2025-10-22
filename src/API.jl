@@ -1723,27 +1723,6 @@ function handle_package_input!(pkg::PackageSpec)
     return pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
-function upgrade_manifest(man_path::String)
-    dir = mktempdir()
-    cp(man_path, joinpath(dir, "Manifest.toml"))
-    Pkg.activate(dir) do
-        Pkg.upgrade_manifest()
-    end
-    return mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
-end
-function upgrade_manifest(ctx::Context = Context())
-    before_format = ctx.env.manifest.manifest_format
-    if before_format == v"2.1"
-        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` already up to date: manifest_format == $(before_format)")
-    elseif before_format != v"1.0" && before_format != v"2.0"
-        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecognized: manifest_format == $(before_format)")
-    end
-    ctx.env.manifest.manifest_format = v"2.1"
-    Types.write_manifest(ctx.env)
-    printpkgstyle(ctx.io, :Updated, "Format of manifest file at `$(ctx.env.manifest_file)` updated from v$(before_format.major).$(before_format.minor) to v2.1")
-    return nothing
-end
-
 """
     auto_gc(on::Bool)
 

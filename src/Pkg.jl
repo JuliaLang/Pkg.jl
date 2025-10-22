@@ -882,14 +882,6 @@ Below is a comparison between the REPL mode and the functional API::
 const RegistrySpec = Registry.RegistrySpec
 
 """
-    upgrade_manifest()
-    upgrade_manifest(manifest_path::String)
-
-Upgrades the format of the current or specified manifest file from v1.0 to v2.0 without re-resolving.
-"""
-const upgrade_manifest = API.upgrade_manifest
-
-"""
     is_manifest_current(path::AbstractString)
 
 Returns whether the manifest for the project at `path` was resolved from the current project file.

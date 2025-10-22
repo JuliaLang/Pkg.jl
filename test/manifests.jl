@@ -76,23 +76,27 @@ end
         end
     end
 
-    @testset "v1.0: activate, change, maintain manifest format" begin
+    @testset "v1.0: activate and read, upgrade on write" begin
         reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
             io = IOBuffer()
             Pkg.activate(env_dir; io = io)
             output = String(take!(io))
             @test occursin(r"Activating.*project at.*`.*v1.0`", output)
+            # Can read v1.0 format
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
+            # Operations upgrade to v2.1
             Pkg.add("Profile")
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
 
             Pkg.rm("Profile")
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
+            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
         end
     end
 
-    @testset "v2.0: activate, change, maintain manifest format" begin
+    @testset "v2.0: activate and read, upgrade on write" begin
         reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
             io = IOBuffer()
             Pkg.activate(env_dir; io = io)
@@ -100,11 +104,14 @@ end
             @test occursin(r"Activating.*project at.*`.*v2.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
 
+            # Operations upgrade to v2.1
             Pkg.add("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
 
             Pkg.rm("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
 
             m = Pkg.Types.read_manifest(env_manifest)
             @test m.other["some_other_field"] == "other"
@@ -188,38 +195,6 @@ end
         end
     end
 
-    @testset "Pkg.upgrade_manifest()" begin
-        reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
-            io = IOBuffer()
-            Pkg.activate(env_dir; io = io)
-            output = String(take!(io))
-            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
-
-            Pkg.upgrade_manifest()
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            Pkg.activate(env_dir; io = io)
-            output = String(take!(io))
-            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
-        end
-    end
-    @testset "Pkg.upgrade_manifest(manifest_path)" begin
-        reference_manifest_isolated_test("v1.0", v1 = true) do env_dir, env_manifest
-            io = IOBuffer()
-            Pkg.activate(env_dir; io = io)
-            output = String(take!(io))
-            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
-
-            Pkg.upgrade_manifest(env_manifest)
-            @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            Pkg.activate(env_dir; io = io)
-            output = String(take!(io))
-            @test occursin(r"Activating.*project at.*`.*v1.0`", output)
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
-        end
-    end
 end
 
 @testset "Manifest metadata" begin
@@ -387,12 +362,16 @@ end
                 regpath = joinpath(test_dir, "CustomReg")
                 reg_uuid = uuid4()
 
+                # Convert paths to forward slashes for TOML (works on Windows too)
+                regpath_toml = replace(regpath, "\\" => "/")
+                pkg_repo_path_toml = replace(pkg_repo_path, "\\" => "/")
+
                 mkpath(joinpath(regpath, "TestPkg"))
                 write(
                     joinpath(regpath, "Registry.toml"), """
                     name = "CustomReg"
                     uuid = "$reg_uuid"
-                    repo = "$(regpath)"
+                    repo = "$(regpath_toml)"
                     [packages]
                     $pkg_uuid = { name = "TestPkg", path = "TestPkg" }
                     """
@@ -401,7 +380,7 @@ end
                     joinpath(regpath, "TestPkg", "Package.toml"), """
                     name = "TestPkg"
                     uuid = "$pkg_uuid"
-                    repo = "$pkg_repo_path"
+                    repo = "$pkg_repo_path_toml"
                     """
                 )
                 write(
@@ -564,12 +543,15 @@ end
                 # Create two registries with the same package
                 reg1_uuid = uuid4()
                 reg1_path = joinpath(test_dir, "Registry1")
+                reg1_path_toml = replace(reg1_path, "\\" => "/")
+                pkg_repo_path_toml = replace(pkg_repo_path, "\\" => "/")
+
                 mkpath(joinpath(reg1_path, "SharedPkg"))
                 write(
                     joinpath(reg1_path, "Registry.toml"), """
                     name = "Registry1"
                     uuid = "$reg1_uuid"
-                    repo = "$(reg1_path)"
+                    repo = "$(reg1_path_toml)"
                     [packages]
                     $pkg_uuid = { name = "SharedPkg", path = "SharedPkg" }
                     """
@@ -578,7 +560,7 @@ end
                     joinpath(reg1_path, "SharedPkg", "Package.toml"), """
                     name = "SharedPkg"
                     uuid = "$pkg_uuid"
-                    repo = "$pkg_repo_path"
+                    repo = "$pkg_repo_path_toml"
                     """
                 )
                 write(
@@ -597,12 +579,14 @@ end
 
                 reg2_uuid = uuid4()
                 reg2_path = joinpath(test_dir, "Registry2")
+                reg2_path_toml = replace(reg2_path, "\\" => "/")
+
                 mkpath(joinpath(reg2_path, "SharedPkg"))
                 write(
                     joinpath(reg2_path, "Registry.toml"), """
                     name = "Registry2"
                     uuid = "$reg2_uuid"
-                    repo = "$(reg2_path)"
+                    repo = "$(reg2_path_toml)"
                     [packages]
                     $pkg_uuid = { name = "SharedPkg", path = "SharedPkg" }
                     """
@@ -611,7 +595,7 @@ end
                     joinpath(reg2_path, "SharedPkg", "Package.toml"), """
                     name = "SharedPkg"
                     uuid = "$pkg_uuid"
-                    repo = "$pkg_repo_path"
+                    repo = "$pkg_repo_path_toml"
                     """
                 )
                 write(
