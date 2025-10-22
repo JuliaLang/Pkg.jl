@@ -150,7 +150,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Typically it is not needed to manually add entries to the `[deps]` section; this is instead
 handled by Pkg operations such as `add`.
 
-### The `[sources]` section
+### [The `[sources]` section](@id sources-section)
 
 Specifying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
@@ -172,7 +172,23 @@ WithinMonorepo = {url = "https://github.org/author/BigProject", subdir = "SubPac
 SomeDependency = {path = "deps/SomeDependency.jl"}
 ```
 
-Note that this information is only used when this environment is active, i.e. it is not used if this project is a package that is being used as a dependency.
+#### When `[sources]` entries are used
+
+Sources are read and applied in the following situations:
+
+1. **Active environment**: When resolving dependencies for the currently active environment, sources from the environment's `Project.toml` override registry information for direct dependencies.
+
+2. **Automatic addition**: When you add a package by URL (e.g., `pkg> add https://github.com/...`) or develop a package (e.g., `pkg> dev Example`), Pkg automatically adds an entry to `[sources]` for that package in your active environment's `Project.toml`.
+
+3. **Recursive collection**: When a package is added by URL or path, Pkg recursively collects `[sources]` entries from that package's dependencies. This allows private dependency chains to resolve without registry metadata. For example:
+   - If you `add` Package A by URL, and Package A has a `[sources]` entry for Package B
+   - And Package B (also specified by URL in A's sources) has a `[sources]` entry for Package C
+   - Then all three packages' source information will be collected and used during resolution
+
+This recursive behavior is particularly useful for managing chains of unregistered or private packages.
+
+!!! note "Scope of sources"
+    Sources are only used when the environment containing them is the active environment being resolved. If a package is used as a dependency in another project, its `[sources]` section is **not** consulted (except when that package itself was added by URL or path, in which case recursive collection applies as described above).
 
 !!! tip "Test-specific dependencies"
     A use case for `[sources]` with `path` is in `test/Project.toml` to reference the parent package using `path = ".."`. This allows test dependencies to be managed independently with their own manifest file. See [Test-specific dependencies](@ref) for more details on this and other approaches.

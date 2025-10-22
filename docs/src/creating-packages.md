@@ -333,7 +333,7 @@ See the section on [Workspaces](@ref) in the `Project.toml` documentation for mo
 
 #### Alternative approach: Using `[sources]` with path-based dependencies
 
-An alternative to workspaces is to use the `[sources]` section in `test/Project.toml` to reference the parent package. This approach creates a **separate manifest** in the `test/` directory (unlike workspaces which create a single shared manifest).
+An alternative to workspaces is to use the `[sources]` section in `test/Project.toml` to reference the parent package. The `[sources]` section allows you to specify custom locations (paths or URLs) for dependencies, overriding registry information. This approach creates a **separate manifest** in the `test/` directory (unlike workspaces which create a single shared manifest).
 
 To use this approach:
 
@@ -361,7 +361,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 HelloWorld = {path = ".."}
 ```
 
-This creates a separate `test/Manifest.toml` that tracks the resolved dependencies for your test environment independently from the main package manifest. You can now run tests directly:
+The `[sources]` section tells Pkg to use the local path for `HelloWorld` instead of looking it up in a registry. This creates a separate `test/Manifest.toml` that tracks the resolved dependencies for your test environment independently from the main package manifest. You can now run tests directly:
 
 ```julia-repl
 $ julia --project=test
@@ -375,6 +375,8 @@ julia> include("test/runtests.jl")
 
     - With `[sources]` + path: Dependencies are resolved independently for each environment
     - With workspaces: Dependencies are resolved together, ensuring compatibility across all projects in the workspace
+
+    For more details on `[sources]`, see the [`[sources]` section](@ref sources-section) in the Project.toml documentation.
 
 #### Legacy approach: `target` based test specific dependencies
 
