@@ -360,14 +360,14 @@ end
             )
             write(joinpath(regpath, "Registry.toml"), registry_toml)
 
-            # Create deprecated package with [deprecated] table
+            # Create deprecated package with [tags.deprecated] table
             write(
                 joinpath(regpath, "DeprecatedExample", "Package.toml"), """
                 name = "DeprecatedExample"
                 uuid = "11111111-1111-1111-1111-111111111111"
                 repo = "https://github.com/test/DeprecatedExample.jl.git"
 
-                [deprecated]
+                [tags.deprecated]
                 reason = "This package is no longer maintained"
                 alternative = "Example"
                 """
