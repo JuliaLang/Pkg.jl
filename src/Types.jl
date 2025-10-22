@@ -742,6 +742,11 @@ end
 const refspecs = ["+refs/heads/*:refs/cache/heads/*"]
 const refspecs_fallback = ["+refs/*:refs/cache/*"]
 
+function looks_like_commit_hash(rev::AbstractString)
+    # Commit hashes are 7-40 hex characters
+    return occursin(r"^[0-9a-f]{7,40}$"i, rev)
+end
+
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
     # realpath needed to expand symlinks before taking the relative path
@@ -971,7 +976,12 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     pr_number = rev_or_hash[6:(end - 5)]  # Extract number from "pull/X/head"
                     pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs)
+                    # For branch names, fetch only the specific branch
+                elseif !looks_like_commit_hash(string(rev_or_hash))
+                    specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec)
                 else
+                    # For commit hashes, fetch all branches
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
                 end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
@@ -990,7 +1000,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             innerentry = manifest_info(ctx.env.manifest, pkg.uuid)
             ispinned = innerentry !== nothing && innerentry.pinned
             if isbranch && !fetched && !ispinned
-                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
+                # Fetch only the specific branch being tracked
+                specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec)
                 gitobject, isbranch = get_object_or_branch(repo, rev_or_hash)
             end
 
