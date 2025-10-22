@@ -707,6 +707,12 @@ function deps_graph(
         union!(uuids, fixed_uuids)
     end
 
+    # Collect all weak dependency UUIDs from fixed packages
+    all_weak_uuids = Set{UUID}()
+    for fx in values(fixed)
+        union!(all_weak_uuids, fx.weak)
+    end
+
     stdlibs_for_julia_version = Types.get_last_stdlibs(julia_version)
     seen = Set{UUID}()
 
@@ -799,16 +805,43 @@ function deps_graph(
         end
     end
 
+    # Track weak dependencies that are not available in any registry
+    unavailable_weak_uuids = Set{UUID}()
+
     for uuid in uuids
         uuid == JULIA_UUID && continue
         if !haskey(uuid_to_name, uuid)
             name = registered_name(registries, uuid)
-            name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
+            if name === nothing
+                # Allow weak dependencies to be missing from registries
+                if uuid in all_weak_uuids
+                    push!(unavailable_weak_uuids, uuid)
+                    continue
+                end
+                pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
+            end
             uuid_to_name[uuid] = name
             entry = manifest_info(env.manifest, uuid)
             entry ≡ nothing && continue
             uuid_to_name[uuid] = entry.name
         end
+    end
+
+    # Filter out unavailable weak dependencies from fixed packages
+    if !isempty(unavailable_weak_uuids)
+        fixed_filtered = Dict{UUID, Resolve.Fixed}()
+        for (uuid, fx) in fixed
+            filtered_requires = Requires()
+            for (req_uuid, req_spec) in fx.requires
+                if !(req_uuid in unavailable_weak_uuids)
+                    filtered_requires[req_uuid] = req_spec
+                end
+            end
+            # Also filter the weak set
+            filtered_weak = setdiff(fx.weak, unavailable_weak_uuids)
+            fixed_filtered[uuid] = Resolve.Fixed(fx.version, filtered_requires, filtered_weak)
+        end
+        fixed = fixed_filtered
     end
 
     return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
