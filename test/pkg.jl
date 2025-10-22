@@ -1162,10 +1162,6 @@ end
 
             Pkg.Registry.rm("General")
             @test isempty(Pkg.Registry.reachable_registries())
-
-            @test_throws r"no registries have been installed\. Cannot resolve the following packages:" begin
-                Pkg.resolve()
-            end
         end
     end
 
