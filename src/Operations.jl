@@ -575,7 +575,17 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         names[uuid] = project.name === nothing ? "project" : project.name
     end
 
+    pkg_queue = collect(pkgs)
+    pkg_by_uuid = Dict{UUID, PackageSpec}()
     for pkg in pkgs
+        pkg.uuid === nothing && continue
+        pkg_by_uuid[pkg.uuid] = pkg
+    end
+    new_fixed_pkgs = PackageSpec[]
+    seen = Set(keys(pkg_by_uuid))
+    while !isempty(pkg_queue)
+        pkg = popfirst!(pkg_queue)
+        pkg.uuid === nothing && continue
         # add repo package if necessary
         source = source_path(env.manifest_file, pkg)
         path = source === nothing ? nothing : project_rel_path(env, source)
@@ -610,6 +620,18 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version)
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
+        for dep in deps
+            names[dep.uuid] = dep.name
+            dep_uuid = dep.uuid
+            if !is_tracking_registry(dep) && dep_uuid !== nothing && !(dep_uuid in seen)
+                push!(pkg_queue, dep)
+                push!(new_fixed_pkgs, dep)
+                pkg_by_uuid[dep_uuid] = dep
+                push!(seen, dep_uuid)
+            elseif dep_uuid !== nothing && !haskey(pkg_by_uuid, dep_uuid)
+                pkg_by_uuid[dep_uuid] = dep
+            end
+        end
     end
 
     fixed = Dict{UUID, Resolve.Fixed}()
@@ -618,18 +640,15 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         q = Dict{UUID, VersionSpec}()
         for dep in deps
             names[dep.uuid] = dep.name
-            q[dep.uuid] = dep.version
+            dep_version = dep.version
+            dep_version === nothing && continue
+            q[dep.uuid] = dep_version isa VersionSpec ? dep_version : VersionSpec(dep_version)
         end
-        if Types.is_project_uuid(env, uuid)
-            fix_pkg = env.pkg
-        else
-            idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
-            fix_pkg = pkgs[idx]
-        end
+        fix_pkg = Types.is_project_uuid(env, uuid) ? env.pkg : get(pkg_by_uuid, uuid, nothing)
         fixpkgversion = fix_pkg === nothing ? v"0.0.0" : fix_pkg.version
-        fixed[uuid] = Resolve.Fixed(fixpkgversion, q, weak_map[uuid])
+        fixed[uuid] = Resolve.Fixed(fixpkgversion, q, get(weak_map, uuid, Set{UUID}()))
     end
-    return fixed
+    return fixed, new_fixed_pkgs
 end
 
 # drops build detail in version but keeps the main prerelease context
@@ -691,7 +710,12 @@ function resolve_versions!(
         end
     end
     # this also sets pkg.version for fixed packages
-    fixed = collect_fixed!(env, filter(!is_tracking_registry, pkgs), names, julia_version)
+    pkgs_fixed = filter(!is_tracking_registry, pkgs)
+    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version)
+    for new_pkg in new_fixed_pkgs
+        any(x -> x.uuid == new_pkg.uuid, pkgs) && continue
+        push!(pkgs, new_pkg)
+    end
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
     # at this point, fixed packages have a version and `deps`
