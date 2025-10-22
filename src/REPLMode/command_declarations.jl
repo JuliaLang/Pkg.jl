@@ -460,6 +460,7 @@ compound_declarations = [
                 new versions available, but cannot be installed due to compatibility
                 constraints. To see why use `pkg> status --outdated` which shows any packages
                 that are not at their latest version and if any packages are holding them back.
+                Packages marked with `○` are not precompiled yet and can be precompiled via `pkg> precompile`.
                 Packages marked with `[yanked]` have been yanked from the registry and should be
                 updated or removed.
 
