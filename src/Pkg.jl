@@ -22,8 +22,9 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
-public activate, add, build, compat, develop, free, gc, generate, instantiate,
-    pin, precompile, readonly, redo, rm, resolve, status, test, undo, update, why
+public activate, add, allow_registry_extension, build, compat, develop, free, gc,
+    generate, instantiate, pin, precompile, readonly, redo, rm, resolve, status, test,
+    undo, update, why
 
 depots() = Base.DEPOT_PATH
 function depots1(depot_list::Union{String, Vector{String}} = depots())
@@ -62,6 +63,7 @@ const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Ref{Union{IO, Nothing}}(nothing)
+const ALLOW_REGISTRY_EXTENSION = Ref(false)
 
 # ScopedValue to track whether we're currently in REPL mode
 const IN_REPL_MODE = Base.ScopedValues.ScopedValue{Bool}()
@@ -929,9 +931,36 @@ true
 """
 const readonly = API.readonly
 
+"""
+    allow_registry_extension([state::Bool]) -> Bool
+
+Get or set the override that allows Pkg to consult registries beyond those recorded
+in the active manifest without warning. Returning to the default (`false`) restores the
+trust checks that guard against unexpected registry mirrors.
+
+# Examples
+```julia-repl
+julia> Pkg.allow_registry_extension()
+false
+
+julia> Pkg.allow_registry_extension(true)
+false
+
+julia> Pkg.allow_registry_extension()
+true
+```
+"""
+allow_registry_extension() = ALLOW_REGISTRY_EXTENSION[]
+function allow_registry_extension(state::Bool)
+    prev = ALLOW_REGISTRY_EXTENSION[]
+    ALLOW_REGISTRY_EXTENSION[] = state
+    return prev
+end
+
 function __init__()
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
     _auto_gc_enabled[] = Base.get_bool_env("JULIA_PKG_GC_AUTO", true)
+    ALLOW_REGISTRY_EXTENSION[] = Base.get_bool_env("JULIA_PKG_ALLOW_REGISTRY_EXTENSION", false)
     return nothing
 end
 

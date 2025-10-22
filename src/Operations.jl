@@ -114,6 +114,22 @@ function ensure_manifest_registries!(ctx::Context)
     return
 end
 
+function registries_mutually_trust(
+        pkg_uuid::UUID,
+        reg_uuids::Vector{UUID},
+        trust_map::Dict{UUID, Dict{UUID, Set{UUID}}},
+    )
+    reg_set = Set(reg_uuids)
+    isempty(reg_set) && return true
+    pkg_trust = get(trust_map, pkg_uuid, Dict{UUID, Set{UUID}}())
+    for reg_uuid in reg_set
+        trusted = get(pkg_trust, reg_uuid, Set{UUID}())
+        required = setdiff(reg_set, Set([reg_uuid]))
+        issubset(required, trusted) || return false
+    end
+    return true
+end
+
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.path !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
@@ -282,13 +298,36 @@ function is_instantiated(env::EnvCache, workspace::Bool = false; platform = Host
     return all(pkg -> is_package_downloaded(env.manifest_file, pkg; platform), pkgs)
 end
 
-function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version, registries::Vector{Registry.RegistryInstance})
+function update_manifest!(
+        env::EnvCache,
+        pkgs::Vector{PackageSpec},
+        deps_map,
+        julia_version,
+        registries::Vector{Registry.RegistryInstance};
+        io::IO = stderr_f(),
+    )
     manifest = env.manifest
+    old_pkg_registries = Dict{UUID, Vector{UUID}}()
+    old_registry_name_by_uuid = Dict{UUID, String}()
+    for (reg_id, reg_entry) in manifest.registries
+        old_registry_name_by_uuid[reg_entry.uuid] = reg_id
+    end
+    for (uuid, entry) in manifest
+        isempty(entry.registries) && continue
+        reg_uuids = UUID[]
+        for reg_name in entry.registries
+            reg_entry = get(manifest.registries, reg_name, nothing)
+            reg_entry === nothing && continue
+            push!(reg_uuids, reg_entry.uuid)
+        end
+        old_pkg_registries[uuid] = unique(reg_uuids)
+    end
     empty!(manifest)
 
     # Determine which registries are used by tracking packages
     used_registry_uuids = Set{UUID}()
     pkg_to_registries = Dict{UUID, Vector{UUID}}()
+    pkg_registry_trusts = Dict{UUID, Dict{UUID, Set{UUID}}}()
 
     for pkg in pkgs
         if tracking_registered_version(pkg, julia_version)
@@ -302,9 +341,11 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
                 version_info === nothing && continue
                 push!(pkg_reg_uuids, reg.uuid)
                 push!(used_registry_uuids, reg.uuid)
+                trust_entries = get!(pkg_registry_trusts, pkg.uuid, Dict{UUID, Set{UUID}}())
+                trust_entries[reg.uuid] = Set(pkg_info.trusted_registries)
             end
             if !isempty(pkg_reg_uuids)
-                pkg_to_registries[pkg.uuid] = pkg_reg_uuids
+                pkg_to_registries[pkg.uuid] = unique(pkg_reg_uuids)
             end
         end
     end
@@ -321,6 +362,27 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
             uuid = reg.uuid,
             url = getfield(reg, :repo),
         )
+    end
+    registry_name_lookup = merge(copy(old_registry_name_by_uuid), uuid_to_name)
+
+    warnings = Vector{Tuple{PackageSpec, Vector{UUID}, Vector{UUID}}}()
+    for pkg in pkgs
+        tracking_registered_version(pkg, julia_version) || continue
+        haskey(old_pkg_registries, pkg.uuid) || continue
+        new_regs = get(pkg_to_registries, pkg.uuid, UUID[])
+        isempty(new_regs) && continue
+        old_regs = get(old_pkg_registries, pkg.uuid, UUID[])
+        new_set = unique(new_regs)
+        new_reg_set = Set(new_set)
+        old_reg_set = Set(old_regs)
+        # A single registry cannot participate in a trust relationship, so skip the warning when
+        # the set remains empty or collapses to one registry with no new entries.
+        if length(new_set) <= 1 && isempty(setdiff(new_reg_set, old_reg_set))
+            continue
+        end
+        Pkg.ALLOW_REGISTRY_EXTENSION[] && continue
+        registries_mutually_trust(pkg.uuid, new_set, pkg_registry_trusts) && continue
+        push!(warnings, (pkg, old_regs, new_set))
     end
 
     # Build package entries
@@ -352,6 +414,30 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
 
     env.manifest.registries = registry_entries
     env.manifest.manifest_format = v"2.1.0"
+
+    if !isempty(warnings)
+        # The manifest already reflects the new registry data at this point. Emit warnings so users
+        # know the update occurred and can investigate or roll back if necessary.
+        for (pkg, old_regs, new_regs) in warnings
+            pkg_name = pkg.name === nothing ? string(pkg.uuid) : pkg.name
+            old_names = [get(registry_name_lookup, reg_uuid, string(reg_uuid)) for reg_uuid in old_regs]
+            new_names = [get(registry_name_lookup, reg_uuid, string(reg_uuid)) for reg_uuid in new_regs]
+            added_names = setdiff(Set(new_names), Set(old_names))
+            new_list = join(new_names, ", ")
+            old_list = join(old_names, ", ")
+            if isempty(old_regs)
+                message = "Package $pkg_name ($(pkg.uuid)) is available in registries $(new_list) without mutual `trusted_registries` declarations. Pkg continues using all registries for now."
+            else
+                message = "Package $pkg_name ($(pkg.uuid)) now relies on registries $(new_list) beyond the manifest record $(old_list). Missing mutual `trusted_registries` declarations cause this warning."
+            end
+            if !isempty(added_names)
+                added_list = join(collect(added_names), ", ")
+                message *= " Newly seen registries: $(added_list)."
+            end
+            printpkgstyle(io, :Warning, message)
+        end
+    end
+
     return record_project_hash(env)
 end
 
@@ -2128,7 +2214,7 @@ function add(
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
         man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-        update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, ctx.registries)
+        update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, ctx.registries; io = ctx.io)
         new_apply = download_source(ctx)
         fixups_from_projectfile!(ctx)
 
@@ -2166,7 +2252,7 @@ function develop(
     end
     # resolve & apply package versions
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries; io = ctx.io)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; platform = platform, julia_version = ctx.julia_version)
@@ -2318,7 +2404,7 @@ function up(
         check_registered(ctx.registries, pkgs)
         deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
     end
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries; io = ctx.io)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx, julia_version = ctx.julia_version)
@@ -2392,7 +2478,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
     pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries; io = ctx.io)
     new = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; julia_version = ctx.julia_version)
@@ -2442,7 +2528,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
         # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
-        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
+        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries; io = ctx.io)
         new = download_source(ctx)
         fixups_from_projectfile!(ctx)
         download_artifacts(ctx)

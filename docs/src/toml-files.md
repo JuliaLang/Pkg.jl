@@ -403,6 +403,16 @@ dependency section includes a combination of the following entries:
   are recorded. This field is only present in manifest format `2.1` or later, and only for packages that were
   added from a registry (not for developed or git-tracked packages).
 
+When the registry set for a package grows beyond what is already recorded in the manifest, Pkg emits a warning
+explaining that the additional registry was not expected. Registries can silence this warning by mutually
+declaring trust for each other (see [`trusted_registries`](registries.md#trusted-registries) in the registry
+format documentation). Future releases may tighten this behaviour, so registry maintainers are encouraged
+to add the trust declarations before publishing new mirrored versions. For short-term triage, developers may
+call `Pkg.allow_registry_extension(true)` (or set the environment variable
+`JULIA_PKG_ALLOW_REGISTRY_EXTENSION=true`) to suppress the warning while they investigate. This override also updates
+the manifest to include the newly observed registry; if the registry should not remain trusted, revert the manifest
+change before turning the override back off.
+
 
 #### Added package
 

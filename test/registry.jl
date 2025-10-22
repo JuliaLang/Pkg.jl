@@ -26,11 +26,13 @@ function setup_test_registries(dir = pwd())
             $(pkg_uuids[i]) = { name = "Example$(i)", path = "Example" }
             """
         )
+        other_reg = reg_uuids[3 - i]
         write(
             joinpath(regpath, "Example", "Package.toml"), """
             name = "Example$(i)"
             uuid = "$(pkg_uuids[i])"
             repo = "https://github.com/JuliaLang/Example.jl.git"
+            trusted_registries = ["$(other_reg)"]
             """
         )
         write(
@@ -99,6 +101,13 @@ end
                 name = "RegistryFoo", uuid = "a8e078ad-b4bd-4e09-a52f-c464826eef9d",
                 url = joinpath(regdir, "RegistryFoo2")
             )
+
+            reg1_instance = Pkg.Registry.RegistryInstance(joinpath(regdir, "RegistryFoo1"))
+            info1 = Pkg.Registry.registry_info(reg1_instance.pkgs[Example1.uuid])
+            @test Set(info1.trusted_registries) == Set([Foo2.uuid])
+            reg2_instance = Pkg.Registry.RegistryInstance(joinpath(regdir, "RegistryFoo2"))
+            info2 = Pkg.Registry.registry_info(reg2_instance.pkgs[Example2.uuid])
+            @test Set(info2.trusted_registries) == Set([Foo1.uuid])
 
             # Packages in registries
             Example = PackageSpec(name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"))

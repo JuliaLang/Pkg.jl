@@ -663,6 +663,103 @@ end
             end
         end
     end
+
+    @testset "registry trust warnings" begin
+        isolate() do
+            mktempdir() do tmp
+                function make_registry(
+                        root,
+                        reg_name::String,
+                        reg_uuid::UUID,
+                        pkg_name::String,
+                        pkg_uuid::UUID;
+                        trusted::Vector{UUID} = UUID[],
+                    )
+                    reg_path = joinpath(root, reg_name)
+                    mkpath(joinpath(reg_path, pkg_name))
+                    write(
+                        joinpath(reg_path, "Registry.toml"),
+                        """
+                        name = "$reg_name"
+                        uuid = "$(reg_uuid)"
+                        repo = "https://example.com/$reg_name.git"
+                        [packages]
+                        $(pkg_uuid) = { name = "$pkg_name", path = "$pkg_name" }
+                        """
+                    )
+                    write(
+                        joinpath(reg_path, pkg_name, "Package.toml"),
+                        """
+                        name = "$pkg_name"
+                        uuid = "$(pkg_uuid)"
+                        repo = "https://example.com/$pkg_name.git"
+                        $(isempty(trusted) ? "" : "trusted_registries = [" * join(string.(trusted), ", ") * "]")
+                        """ |> x -> replace(x, "[]\n" => "[]\n") # ensure newline when empty
+                    )
+                    write(
+                        joinpath(reg_path, pkg_name, "Versions.toml"),
+                        """
+                        ["1.0.0"]
+                        git-tree-sha1 = "0000000000000000000000000000000000000000"
+                        """
+                    )
+                    write(
+                        joinpath(reg_path, pkg_name, "Deps.toml"),
+                        """
+                        ["1"]
+                        julia = "1"
+                        """
+                    )
+                    write(
+                        joinpath(reg_path, pkg_name, "Compat.toml"),
+                        """
+                        ["1"]
+                        julia = "1"
+                        """
+                    )
+                    git_init_and_commit(reg_path)
+                    return reg_path
+                end
+
+                pkg_uuid = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+                reg1_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+                reg2_uuid = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+                reg1_path = make_registry(tmp, "TrustRegA", reg1_uuid, "TrustPkg", pkg_uuid)
+                reg2_path = make_registry(tmp, "TrustRegB", reg2_uuid, "TrustPkg", pkg_uuid)
+
+                buf = IOBuffer()
+                Pkg.activate(; temp = true, io = buf)
+                take!(buf)
+
+                # Install the first registry and add the package so the manifest records it once
+                Pkg.Registry.add(url = reg1_path; io = buf)
+                take!(buf)
+                Pkg.add(Pkg.PackageSpec(name = "TrustPkg", uuid = pkg_uuid); io = buf)
+                take!(buf)
+
+                # Add the second registry and refresh registries without performing another add
+                Pkg.Registry.add(url = reg2_path; io = buf)
+                take!(buf)
+                Pkg.Registry.update(; io = buf)
+                take!(buf)
+
+                # Trigger an update; this should warn about the new registry
+                Pkg.update(; io = buf)
+                output = String(take!(buf))
+                @test occursin("trusted_registries", output)
+                @test occursin("TrustRegB", output)
+
+                # Override suppresses the warning during update
+                prev = Pkg.allow_registry_extension(true)
+                try
+                    Pkg.update(; io = buf)
+                    @test String(take!(buf)) == ""
+                finally
+                    Pkg.allow_registry_extension(prev)
+                end
+            end
+        end
+    end
 end
 
 end # module

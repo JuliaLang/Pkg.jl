@@ -47,6 +47,7 @@ struct PkgInfo
     # Package.toml:
     repo::Union{String, Nothing}
     subdir::Union{String, Nothing}
+    trusted_registries::Vector{UUID}
 
     # Versions.toml:
     version_info::Dict{VersionNumber, VersionInfo}
@@ -186,6 +187,7 @@ mutable struct PkgEntry
 end
 
 registry_info(pkg::PkgEntry) = init_package_info!(pkg)
+trusted_registries(pkg::PkgEntry) = registry_info(pkg).trusted_registries
 
 function init_package_info!(pkg::PkgEntry)
     # Thread-safe lazy loading with double-check pattern
@@ -200,6 +202,23 @@ function init_package_info!(pkg::PkgEntry)
         name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
         repo = get(d_p, "repo", nothing)::Union{Nothing, String}
         subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
+        trusted_registries = begin
+            reg_field = get(d_p, "trusted_registries", nothing)
+            if reg_field === nothing
+                UUID[]
+            elseif reg_field isa AbstractString
+                UUID[UUID(String(reg_field))]
+            elseif reg_field isa Vector
+                uuids = UUID[]
+                for val in reg_field
+                    val isa AbstractString || error("`trusted_registries` for $(pkg.name) must contain only strings")
+                    push!(uuids, UUID(String(val)))
+                end
+                uuids
+            else
+                error("`trusted_registries` for $(pkg.name) must be a String or an Array of Strings")
+            end
+        end
 
         # Versions.toml
         d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
@@ -254,9 +273,8 @@ function init_package_info!(pkg::PkgEntry)
             d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
             weak_deps[vr] = d
         end
-
         @assert !isdefined(pkg, :info)
-        pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps, pkg.info_lock)
+        pkg.info = PkgInfo(repo, subdir, trusted_registries, version_info, compat, deps, weak_compat, weak_deps, pkg.info_lock)
 
         return pkg.info
     end

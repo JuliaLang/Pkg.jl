@@ -176,6 +176,38 @@ pkg> registry add https://github.com/JuliaRegistries/General.git
 !!! note
     The environment variable `JULIA_PKG_SERVER` controls whether package servers are used. Setting it to an empty string (`JULIA_PKG_SERVER=""`) disables package server usage and forces git clones. To force unpacking even when using a package server, set `JULIA_PKG_UNPACK_REGISTRY=true`.
 
+### `Package.toml` metadata
+
+Each package directory within a registry contains a `Package.toml` file with static metadata about the package.
+Typical keys include:
+
+- `name`: the package name.
+- `uuid`: the package UUID.
+- `repo`: an optional URL pointing to the canonical source repository.
+- `subdir`: an optional subdirectory within that repository containing the package.
+
+#### `trusted_registries` {#trusted-registries}
+
+To prevent "dependency confusion" style attacks, registries can record which other registries they explicitly trust
+for a given `(name, uuid)` pair. Set the `trusted_registries` key in `Package.toml` to a single UUID string or an
+array of UUID strings:
+
+```toml
+trusted_registries = [
+    "23338594-aafe-5451-b93e-139f81909106", # General
+    "e9fceed0-5623-4384-aff0-6db4c442647a", # Private registry
+]
+```
+
+When two registries contain the same package, both must list one another in `trusted_registries` for Pkg to treat
+the pairing as safe. If a manifest encounters a new registry for a package that lacks mutual trust entries,
+Pkg records the metadata but emits a warning so that maintainers can investigate before escalating to an error
+in a future release. For diagnostic sessions, you can temporarily opt out of the warning with
+`Pkg.allow_registry_extension(true)` or by exporting the environment variable
+`JULIA_PKG_ALLOW_REGISTRY_EXTENSION=true`. The override confirms the additional registry and writes it to the
+manifest; if you later decide that registry should not remain trusted, undo the manifest change before
+disabling the override again.
+
 ### Registry flavors
 
 The default Pkg Server (`pkg.julialang.org`) offers two different "flavors" of registry.
