@@ -9,6 +9,7 @@ using Random: randstring
 import LibGit2, Dates, TOML
 
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
+import ..Types: ensure_registry_origin!
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
     artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
@@ -74,6 +75,73 @@ end
 # the only way to know for sure is to key into the registries
 tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION) =
     !is_stdlib(pkg.uuid, julia_version) && pkg.path === nothing && pkg.repo.source === nothing
+
+"""
+    ensure_manifest_registries!(ctx::Context)
+
+Ensure that every registry referenced in `ctx.env.manifest.registries` is installed.
+The function is intentionally cheap when all registries are already present: it performs
+an early return once it sees no missing entries. If installation metadata is incomplete,
+an informative error is thrown so the user can either install the registry or update
+the manifest.
+"""
+function ensure_manifest_registries!(ctx::Context)
+    manifest_regs = ctx.env.manifest.registries
+    isempty(manifest_regs) && return
+
+    regs_by_uuid = Dict(reg.uuid => reg for reg in ctx.registries)
+    missing = ManifestRegistryEntry[]
+    missing_reasons = String[]
+    for entry in values(manifest_regs)
+        reg = get(regs_by_uuid, entry.uuid, nothing)
+        if reg === nothing
+            push!(missing, entry)
+            continue
+        end
+    end
+
+    isempty(missing) && return
+
+    if !isempty(missing)
+        specs = Registry.RegistrySpec[]
+        unresolved = ManifestRegistryEntry[]
+        for entry in missing
+            spec_kwargs = Dict{Symbol, Any}(:uuid => entry.uuid)
+            entry.name === nothing || (spec_kwargs[:name] = entry.name)
+            spec = nothing
+            if entry.url !== nothing
+                spec_kwargs[:url] = entry.url
+                spec = Registry.RegistrySpec(; spec_kwargs...)
+            elseif haskey(spec_kwargs, :name)
+                spec = Registry.RegistrySpec(; spec_kwargs...)
+            else
+                push!(unresolved, entry)
+                push!(missing_reasons, "$(entry.name) ($(entry.uuid)) → manifest entry is missing a `url`; use `Pkg.Registry.add` or update the manifest entry")
+                continue
+            end
+            push!(specs, spec)
+        end
+        if !isempty(specs)
+            Registry.add(specs; io = ctx.io)
+            copy!(ctx.registries, Registry.reachable_registries())
+            regs_by_uuid = Dict(reg.uuid => reg for reg in ctx.registries)
+        end
+        for entry in missing
+            if !haskey(regs_by_uuid, entry.uuid)
+                push!(unresolved, entry)
+                push!(missing_reasons, "$(entry.name) ($(entry.uuid)) → registry could not be installed automatically; install it manually with `Pkg.Registry.add` or remove it from the manifest")
+            end
+        end
+        if !isempty(unresolved)
+            msgs = isempty(missing_reasons) ?
+                join(["$(entry.name) ($(entry.uuid))" for entry in unresolved], ", ") :
+                join(missing_reasons, "; ")
+            pkgerror("The manifest references registries that could not be installed: ", msgs, ". Install the registry manually or update the manifest.")
+        end
+    end
+
+    return
+end
 
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
@@ -183,6 +251,7 @@ function load_manifest_deps(
                 repo = entry.repo,
                 tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
                 version = load_version(entry.version, isfixed(entry), preserve),
+                registry = entry.registry,
             )
         )
     end
@@ -243,9 +312,11 @@ function is_instantiated(env::EnvCache, workspace::Bool = false; platform = Host
     return all(pkg -> is_package_downloaded(env.manifest_file, pkg; platform), pkgs)
 end
 
-function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version)
+function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version, registry_entries::Dict{String, ManifestRegistryEntry})
     manifest = env.manifest
     empty!(manifest)
+
+    used_registry_ids = Set{String}()
 
     for pkg in pkgs
         entry = PackageEntry(;
@@ -257,9 +328,27 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
             entry.version = stdlib_version(pkg.uuid, julia_version)
         end
         entry.deps = deps_map[pkg.uuid]
+        entry.registry = pkg.registry
+        if pkg.registry !== nothing
+            push!(used_registry_ids, pkg.registry)
+        end
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
+
+    if isempty(used_registry_ids)
+        empty!(env.manifest.registries)
+    else
+        env.manifest.registries = Dict{String, ManifestRegistryEntry}()
+        for id in used_registry_ids
+            if haskey(registry_entries, id)
+                env.manifest.registries[id] = deepcopy(registry_entries[id])
+            else
+                @warn "missing registry metadata for $(id); entry will be omitted from manifest" maxlog = 1
+            end
+        end
+        env.manifest.manifest_format = max(env.manifest.manifest_format, v"2.1.0")
+    end
     return record_project_hash(env)
 end
 
@@ -311,7 +400,13 @@ end
 # Registry Loading #
 ####################
 
-function load_tree_hash!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, julia_version)
+function load_tree_hash!(
+        registries::Vector{Registry.RegistryInstance},
+        pkg::PackageSpec,
+        julia_version,
+        uuid_to_id::Dict{UUID, String},
+        origins::Dict{String, ManifestRegistryEntry},
+    )
     if is_stdlib(pkg.uuid, julia_version) && pkg.tree_hash !== nothing
         # manifests from newer julia versions might have stdlibs that are upgradable (FORMER_STDLIBS)
         # that have tree_hash recorded, which we need to clear for this version where they are not upgradable
@@ -332,6 +427,9 @@ function load_tree_hash!(registries::Vector{Registry.RegistryInstance}, pkg::Pac
             hash == hash′ || pkgerror("hash mismatch in registries for $(pkg.name) at version $(pkg.version)")
         end
         hash = hash′
+        if tracking_registered_version(pkg, julia_version)
+            ensure_registry_origin!(uuid_to_id, origins, reg, pkg, registries)
+        end
     end
     pkg.tree_hash = hash
     return pkg
@@ -567,6 +665,13 @@ function resolve_versions!(
         installed_only::Bool
     )
     installed_only = installed_only || OFFLINE_MODE[]
+
+    registry_id_by_uuid = Dict{UUID, String}()
+    registry_entries = Dict{String, ManifestRegistryEntry}()
+    for (id, entry) in env.manifest.registries
+        registry_entries[id] = deepcopy(entry)
+        registry_id_by_uuid[entry.uuid] = id
+    end
     # compatibility
     if julia_version !== nothing
         # only set the manifest julia_version if ctx.julia_version is not nothing
@@ -662,7 +767,7 @@ function resolve_versions!(
     end
     final_deps_map = Dict{UUID, Dict{String, UUID}}()
     for pkg in pkgs
-        load_tree_hash!(registries, pkg, julia_version)
+        load_tree_hash!(registries, pkg, julia_version, registry_id_by_uuid, registry_entries)
         deps = begin
             if pkg.uuid in keys(fixed)
                 deps_fixed = Dict{String, UUID}()
@@ -686,7 +791,7 @@ function resolve_versions!(
         filter!(d -> d.first != "julia", deps)
         final_deps_map[pkg.uuid] = deps
     end
-    return final_deps_map
+    return final_deps_map, registry_entries
 end
 
 get_or_make!(d::Dict{K, V}, k::K) where {K, V} = get!(d, k) do;
@@ -1870,8 +1975,8 @@ function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryIns
     end
     check_registered(registries, pkgs)
 
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
-    return pkgs, deps_map
+    deps_map, registry_entries = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    return pkgs, deps_map, registry_entries
 end
 
 function _resolve(
@@ -1997,8 +2102,8 @@ function add(
 
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
-        man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-        update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version)
+        man_pkgs, deps_map, registry_entries = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+        update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, registry_entries)
         new_apply = download_source(ctx)
         fixups_from_projectfile!(ctx)
 
@@ -2035,8 +2140,8 @@ function develop(
         ctx.env.project.deps[pkg.name] = pkg.uuid
     end
     # resolve & apply package versions
-    pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+    pkgs, deps_map, registry_entries = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, registry_entries)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; platform = platform, julia_version = ctx.julia_version)
@@ -2095,6 +2200,9 @@ function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     if pkg.path === nothing
         pkg.path = entry.path
     end
+    if pkg.registry === nothing
+        pkg.registry = entry.registry
+    end
     return pkg.pinned = entry.pinned
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
@@ -2146,7 +2254,8 @@ function load_manifest_deps_up(
                 pinned = entry.pinned,
                 repo = entry.repo,
                 tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
-                version = something(entry.version, VersionSpec())
+                version = something(entry.version, VersionSpec()),
+                registry = entry.registry,
             )
         )
     end
@@ -2156,8 +2265,8 @@ end
 function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
     pkgs = load_manifest_deps_up(env, pkgs; preserve = preserve)
     check_registered(registries, pkgs)
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
-    return pkgs, deps_map
+    deps_map, registry_entries = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    return pkgs, deps_map, registry_entries
 end
 
 function up(
@@ -2181,14 +2290,15 @@ function up(
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         up_load_manifest_info!(pkg, entry)
     end
+    registry_entries = Dict{String, ManifestRegistryEntry}()
     if preserve !== nothing
-        pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+        pkgs, deps_map, registry_entries = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     else
         pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
         check_registered(ctx.registries, pkgs)
-        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
+        deps_map, registry_entries = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
     end
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, registry_entries)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx, julia_version = ctx.julia_version)
@@ -2260,9 +2370,9 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     pkgs = load_direct_deps(ctx.env, pkgs)
 
     # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
-    pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
+    pkgs, deps_map, registry_entries = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, registry_entries)
     new = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; julia_version = ctx.julia_version)
@@ -2310,9 +2420,9 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
         check_registered(ctx.registries, pkgs)
 
         # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
-        pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
+        pkgs, deps_map, registry_entries = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
 
-        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version)
+        update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, registry_entries)
         new = download_source(ctx)
         fixups_from_projectfile!(ctx)
         download_artifacts(ctx)

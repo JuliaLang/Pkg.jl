@@ -67,6 +67,45 @@ function safe_path(path::String)
     return path
 end
 
+function read_registry_entry(id::String, info::Dict{String, Any})
+    name_val = get(info, "name", id)
+    name_val isa String || pkgerror("Expected registry `name` to be a String.")
+    uuid_val = get(info, "uuid", nothing)
+    uuid_val isa String || pkgerror("Registry entry `$id` is missing a string `uuid` field.")
+    uuid = safe_uuid(uuid_val)
+    url_val = get(info, "url", nothing)
+    url_val === nothing || url_val isa String || pkgerror("Field `url` for registry `$id` must be a String.")
+
+    other = Dict{String, Any}()
+    for (k, v) in info
+        if k ∉ ("name", "uuid", "git-tree-sha1", "url", "path")
+            other[k] = v
+        end
+    end
+
+    return ManifestRegistryEntry(
+        id = id,
+        name = String(name_val),
+        uuid = uuid,
+        url = url_val === nothing ? nothing : String(url_val),
+        path = nothing,
+        other = other,
+    )
+end
+
+function registry_entry_toml(entry::ManifestRegistryEntry)
+    d = Dict{String, Any}()
+    if entry.name != entry.id
+        d["name"] = entry.name
+    end
+    d["uuid"] = string(entry.uuid)
+    entry.url === nothing || (d["url"] = entry.url)
+    for (k, v) in entry.other
+        d[k] = v
+    end
+    return d
+end
+
 read_deps(::Nothing) = Dict{String, UUID}()
 read_deps(deps) = pkgerror("Expected `deps` field to be either a list or a table.")
 function read_deps(deps::AbstractVector)
@@ -154,7 +193,7 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
     return final
 end
 
-function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any})
+function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any}, registries::Dict{String, ManifestRegistryEntry})
     # expand vector format deps
     for (name, infos) in stage1, info in infos
         info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
@@ -189,7 +228,7 @@ function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project
             end
         end
     end
-    return Manifest(; julia_version, project_hash, manifest_format, deps, other)
+    return Manifest(; julia_version, project_hash, manifest_format, deps, registries, other)
 end
 
 function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
@@ -226,6 +265,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     entry.repo.subdir = read_field("repo-subdir", nothing, info, identity)
                     entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
                     entry.uuid = uuid
+                    entry.registry = read_field("registry", nothing, info, identity)
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})
@@ -242,14 +282,23 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
         # by this point, all the fields of the `PackageEntry`s have been type casted
         # but we have *not* verified the _graph_ structure of the manifest
     end
+    registries = Dict{String, ManifestRegistryEntry}()
+    if haskey(raw, "registries")
+        regs_raw = raw["registries"]::Dict{String, Any}
+        for (reg_id, info_any) in regs_raw
+            info = info_any::Dict{String, Any}
+            registries[reg_id] = read_registry_entry(reg_id, info)
+        end
+    end
+
     other = Dict{String, Any}()
     for (k, v) in raw
-        if k in ("julia_version", "deps", "manifest_format")
+        if k in ("julia_version", "deps", "manifest_format", "registries")
             continue
         end
         other[k] = v
     end
-    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other)
+    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other, registries)
 end
 
 function read_manifest(f_or_io::Union{String, IO})
@@ -296,6 +345,10 @@ function destructure(manifest::Manifest)::Dict
         end
     end
 
+    if !isempty(manifest.registries) && manifest.manifest_format < v"2.1.0"
+        manifest.manifest_format = v"2.1.0"
+    end
+
     unique_name = Dict{String, Bool}()
     for (uuid, entry) in manifest
         unique_name[entry.name] = !haskey(unique_name, entry.name)
@@ -316,6 +369,13 @@ function destructure(manifest::Manifest)::Dict
         raw["deps"] = Dict{String, Vector{Dict{String, Any}}}()
         for (k, v) in manifest.other
             raw[k] = v
+        end
+        if !isempty(manifest.registries)
+            regs = Dict{String, Any}()
+            for (id, entry) in manifest.registries
+                regs[id] = registry_entry_toml(entry)
+            end
+            raw["registries"] = regs
         end
     end
 
@@ -341,6 +401,7 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "repo-url", repo_source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
         entry!(new_entry, "repo-subdir", entry.repo.subdir)
+        entry!(new_entry, "registry", entry.registry)
         for (deptype, depname) in [(entry.deps, "deps"), (entry.weakdeps, "weakdeps")]
             if isempty(deptype)
                 delete!(new_entry, depname)

@@ -19,7 +19,7 @@ import Base: SHA1
 using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
-    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
+    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, ManifestRegistryEntry, Project, err_rep,
     PkgError, pkgerror,
     has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, stdlib_infos, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
@@ -100,7 +100,7 @@ mutable struct PackageSpec
     url::Union{Nothing, String}
     rev::Union{Nothing, String}
     subdir::Union{Nothing, String}
-
+    registry::Union{Nothing, String}
 end
 function PackageSpec(;
         name::Union{Nothing, AbstractString} = nothing,
@@ -112,10 +112,12 @@ function PackageSpec(;
         pinned::Bool = false,
         url = nothing,
         rev = nothing,
-        subdir = nothing
+        subdir = nothing,
+        registry::Union{Nothing, AbstractString} = nothing
     )
     uuid = uuid === nothing ? nothing : UUID(uuid)
-    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
+    registry_str = registry === nothing ? nothing : String(registry)
+    return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir, registry_str)
 end
 PackageSpec(name::AbstractString) = PackageSpec(; name = name)::PackageSpec
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(; name = name, uuid = uuid)::PackageSpec
@@ -126,10 +128,10 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(; name = 
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
         a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
-        a.pinned == b.pinned
+        a.pinned == b.pinned && a.registry == b.registry
 end
 function Base.hash(a::PackageSpec, h::UInt)
-    return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init = h)
+    return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned, a.registry], init = h)
 end
 
 function err_rep(pkg::PackageSpec; quotes::Bool = true)
@@ -292,6 +294,7 @@ Base.@kwdef mutable struct PackageEntry
     exts::Dict{String, Union{Vector{String}, String}} = Dict{String, String}()
     uuid::Union{Nothing, UUID} = nothing
     apps::Dict{String, AppInfo} = Dict{String, AppInfo}() # used by AppManifest.toml
+    registry::Union{Nothing, String} = nothing
     other::Union{Dict, Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -305,15 +308,106 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.weakdeps == t2.weakdeps &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid &&
-    t1.apps == t2.apps
+    t1.apps == t2.apps &&
+    t1.registry == t2.registry
 # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init = h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.registry], init = h)  # omits `other`
+
+"""
+    ManifestRegistryEntry
+
+Metadata about a registry referenced from a manifest. `id` is the stable key written
+to the manifest (typically the registry name, falling back to UUID on collision),
+while `name` mirrors the registry's self-declared name. `url` and `path` capture how
+the registry can be rehydrated on another machine.
+"""
+Base.@kwdef mutable struct ManifestRegistryEntry
+    id::String
+    name::String
+    uuid::UUID
+    url::Union{Nothing, String} = nothing
+    path::Union{Nothing, String} = nothing
+    other::Dict{String, Any} = Dict{String, Any}()
+end
+Base.:(==)(t1::ManifestRegistryEntry, t2::ManifestRegistryEntry) =
+    t1.id == t2.id &&
+    t1.name == t2.name &&
+    t1.uuid == t2.uuid &&
+    t1.url == t2.url &&
+    t1.path == t2.path &&
+    t1.other == t2.other
+Base.hash(x::ManifestRegistryEntry, h::UInt) =
+    foldr(hash, (x.id, x.name, x.uuid, x.url, x.path, x.other), init = h)
+
+function default_registry_identifier(reg::Registry.RegistryInstance, registries::Vector{Registry.RegistryInstance})
+    name = getfield(reg, :name)
+    if name === nothing
+        return string(reg.uuid)
+    end
+    for other in registries
+        other === reg && continue
+        if getfield(other, :name) == name && other.uuid != reg.uuid
+            return string(reg.uuid)
+        end
+    end
+    return name
+end
+
+function manifest_registry_entry_from_instance(id::String, reg::Registry.RegistryInstance)
+    return ManifestRegistryEntry(
+        id = id,
+        name = getfield(reg, :name),
+        uuid = reg.uuid,
+        url = getfield(reg, :repo),
+        path = getfield(reg, :path),
+        other = Dict{String, Any}(),
+    )
+end
+
+function update_registry_entry!(entry::ManifestRegistryEntry, reg::Registry.RegistryInstance)
+    entry.name = getfield(reg, :name)
+    entry.uuid = reg.uuid
+    entry.url = getfield(reg, :repo)
+    entry.path = getfield(reg, :path)
+    return entry
+end
+
+function ensure_registry_origin!(
+        uuid_to_id::Dict{UUID, String},
+        origins::Dict{String, ManifestRegistryEntry},
+        reg::Registry.RegistryInstance,
+        pkg::PackageSpec,
+        registries::Vector{Registry.RegistryInstance},
+    )
+    desired = pkg.registry
+    if desired === nothing
+        desired = get(uuid_to_id, reg.uuid, nothing)
+        if desired === nothing
+            candidate = default_registry_identifier(reg, registries)
+            if haskey(origins, candidate) && origins[candidate].uuid != reg.uuid
+                candidate = string(reg.uuid)
+            end
+            desired = candidate
+        end
+    end
+    if haskey(origins, desired) && origins[desired].uuid != reg.uuid
+        desired = string(reg.uuid)
+    end
+    uuid_to_id[reg.uuid] = desired
+    pkg.registry = desired
+    entry = get!(origins, desired) do
+        manifest_registry_entry_from_instance(desired, reg)
+    end
+    update_registry_entry!(entry, reg)
+    return desired
+end
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing, VersionNumber} = nothing # only set to VERSION when resolving
     project_hash::Union{Nothing, SHA1} = nothing
     manifest_format::VersionNumber = v"2.0.0"
     deps::Dict{UUID, PackageEntry} = Dict{UUID, PackageEntry}()
+    registries::Dict{String, ManifestRegistryEntry} = Dict{String, ManifestRegistryEntry}()
     other::Dict{String, Any} = Dict{String, Any}()
 end
 Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
@@ -329,6 +423,75 @@ Base.values(m::Manifest) = values(m.deps)
 Base.keys(m::Manifest) = keys(m.deps)
 Base.haskey(m::Manifest, key) = haskey(m.deps, key)
 
+function find_registry_for_entry(entry::PackageEntry, registries::Vector{Registry.RegistryInstance})
+    (entry.uuid === nothing || entry.version === nothing || !(entry.version isa VersionNumber)) && return nothing
+    for reg in registries # prefer the first installed registry that matches UUID + version
+        reg_pkg = get(reg, entry.uuid, nothing)
+        reg_pkg === nothing && continue
+        info = Registry.registry_info(reg_pkg)
+        version_info = get(info.version_info, entry.version, nothing)
+        version_info === nothing && continue
+        if entry.tree_hash !== nothing
+            hash = version_info.git_tree_sha1
+            hash === nothing && continue
+            hash == entry.tree_hash || continue
+        end
+        return reg
+    end
+    return nothing
+end
+
+function bootstrap_manifest_registries!(manifest::Manifest, registries::Vector{Registry.RegistryInstance})
+    isempty(manifest.deps) && return
+    isempty(registries) && return
+
+    origins = Dict{String, ManifestRegistryEntry}()
+    uuid_to_id = Dict{UUID, String}()
+    for (id, entry) in manifest.registries
+        origins[id] = deepcopy(entry)
+        uuid_to_id[entry.uuid] = id
+    end
+
+    used_ids = Set{String}()
+    for entry in values(manifest)
+        reg_id = entry.registry
+        if reg_id !== nothing && haskey(origins, reg_id)
+            push!(used_ids, reg_id)
+            continue
+        end
+        reg = find_registry_for_entry(entry, registries)
+        reg === nothing && continue
+        desired = reg_id === nothing ? get(uuid_to_id, reg.uuid, nothing) : reg_id
+        if desired === nothing
+            desired = default_registry_identifier(reg, registries)
+        end
+        if haskey(origins, desired) && origins[desired].uuid != reg.uuid
+            desired = string(reg.uuid)
+        end
+        uuid_to_id[reg.uuid] = desired
+        entry.registry = desired
+        origin_entry = get!(origins, desired) do
+            manifest_registry_entry_from_instance(desired, reg)
+        end
+        update_registry_entry!(origin_entry, reg)
+        push!(used_ids, desired)
+    end
+
+    if isempty(used_ids)
+        manifest.registries = Dict{String, ManifestRegistryEntry}()
+        return
+    end
+
+    manifest.registries = Dict{String, ManifestRegistryEntry}()
+    for id in used_ids
+        if haskey(origins, id)
+            manifest.registries[id] = deepcopy(origins[id])
+        end
+    end
+    manifest.manifest_format = max(manifest.manifest_format, v"2.1.0")
+    return
+end
+
 function Base.show(io::IO, pkg::PackageEntry)
     f = []
     pkg.name !== nothing && push!(f, "name" => pkg.name)
@@ -339,6 +502,7 @@ function Base.show(io::IO, pkg::PackageEntry)
     pkg.repo.source !== nothing && push!(f, "url/path" => "`$(pkg.repo.source)`")
     pkg.repo.rev !== nothing && push!(f, "rev" => pkg.repo.rev)
     pkg.repo.subdir !== nothing && push!(f, "subdir" => pkg.repo.subdir)
+    pkg.registry !== nothing && push!(f, "registry" => pkg.registry)
     print(io, "PackageEntry(\n")
     for (field, value) in f
         print(io, "  ", field, " = ", value, "\n")
@@ -426,6 +590,7 @@ function EnvCache(env::Union{Nothing, String} = nothing)
         manifestfile_path(dir)::String
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
+    bootstrap_manifest_registries!(manifest, Registry.reachable_registries())
 
     env′ = EnvCache(
         env,

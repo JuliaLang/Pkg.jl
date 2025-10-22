@@ -256,6 +256,7 @@ function develop(
     )
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
 
     for pkg in pkgs
@@ -308,6 +309,7 @@ function add(
     )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
 
     for pkg in pkgs
@@ -363,6 +365,7 @@ end
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -419,6 +422,7 @@ function up(
         kwargs...
     )
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
@@ -453,6 +457,7 @@ end
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -494,6 +499,7 @@ end
 
 function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
@@ -535,6 +541,7 @@ function test(
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
 
     if isempty(pkgs)
         ctx.env.pkg === nothing && pkgerror("The Project.toml of the package being tested must have a name and a UUID entry") #TODO Allow this?
@@ -1132,6 +1139,7 @@ end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose = false, allow_reresolve::Bool = true, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
 
     if isempty(pkgs)
         if ctx.env.pkg !== nothing
@@ -1228,6 +1236,7 @@ function instantiate(
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
     end
+    Operations.ensure_manifest_registries!(ctx)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         Types.check_manifest_julia_version_compat(_manifest, ctx.env.manifest_file; julia_version_strict)
