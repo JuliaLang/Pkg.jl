@@ -20,6 +20,11 @@ unregistered_uuid = UUID("dcb67f36-efa0-11e8-0cef-2fc465ed98ae")
 simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
 pngjll_uuid = UUID("b53b4c65-9356-5827-b1ea-8c7a1a84506f")
 
+# Create Unregistered test package once for all tests
+const UNREGISTERED_TEMPDIR = mktempdir(; cleanup = false)
+const UNREGISTERED_PATH = git_init_unregistered_package(UNREGISTERED_TEMPDIR)
+const UNREGISTERED_URL = make_file_url(UNREGISTERED_PATH)
+
 # Disable auto-gc for these tests
 Pkg._auto_gc_enabled[] = false
 
@@ -106,7 +111,7 @@ Pkg._auto_gc_enabled[] = false
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
         end
         # Also check that unregistered packages are installed properly.
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
+        Pkg.add(url = UNREGISTERED_URL)
         Pkg.dependencies(unregistered_uuid) do pkg
             @test isdir(pkg.source)
             @test isdir(Pkg.Types.add_repo_cache_path(pkg.git_source))
@@ -289,7 +294,7 @@ end
             Pkg.activate(path)
             inside_test_sandbox() do
                 Pkg.dependencies(unregistered_uuid) do pkg
-                    @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+                    @test pkg.git_source == UNREGISTERED_URL
                     @test !pkg.is_tracking_registry
                 end
             end
@@ -313,7 +318,7 @@ end
             inside_test_sandbox() do
                 Pkg.dependencies(unregistered_uuid) do pkg
                     @test !pkg.is_tracking_registry
-                    @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+                    @test pkg.git_source == UNREGISTERED_URL
                 end
             end
         end
@@ -815,9 +820,9 @@ end
     end
     # It should be possible to switch branches by reusing the URL.
     isolate(loaded_depot = true) do
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl", rev = "0.2.0")
+        Pkg.add(url = UNREGISTERED_URL, rev = "0.2.0")
         Pkg.dependencies(unregistered_uuid) do pkg
-            @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+            @test pkg.git_source == UNREGISTERED_URL
             @test !pkg.is_tracking_registry
             @test pkg.git_revision == "0.2.0"
             # We check that we have the correct branch by checking its dependencies.
@@ -826,7 +831,7 @@ end
         # Now we refer to it by name so to check that we reuse the URL.
         Pkg.add(name = "Unregistered", rev = "0.1.0")
         Pkg.dependencies(unregistered_uuid) do pkg
-            @test pkg.git_source == "https://github.com/00vareladavid/Unregistered.jl"
+            @test pkg.git_source == UNREGISTERED_URL
             @test !pkg.is_tracking_registry
             @test pkg.git_revision == "0.1.0"
             # We check that we have the correct branch by checking its dependencies.
@@ -1066,7 +1071,7 @@ end
     # Now we test packages added by URL.
     isolate(loaded_depot = true) do
         # Details: `master` is past `0.1.0`
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl", rev = "0.1.0")
+        Pkg.add(url = UNREGISTERED_URL, rev = "0.1.0")
         Pkg.dependencies(unregistered_uuid) do pkg
             @test pkg.name == "Unregistered"
             @test isdir(pkg.source)
@@ -1813,7 +1818,7 @@ end
     end
     # develop tries to resolve from the manifest
     isolate(loaded_depot = true) do
-        remote_url = "https://github.com/00vareladavid/Unregistered.jl"
+        remote_url = UNREGISTERED_URL
         Pkg.add(Pkg.PackageSpec(url = remote_url))
         Pkg.develop("Unregistered")
         Pkg.dependencies(unregistered_uuid) do pkg
@@ -2203,7 +2208,7 @@ end
     end
     # make sure that we preserve the state of packages which are not the target
     isolate(loaded_depot = true) do
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
+        Pkg.add(url = UNREGISTERED_URL)
         Pkg.develop("Example")
         Pkg.add(name = "JSON", version = "0.18.0")
         Pkg.add("Markdown")
@@ -2315,7 +2320,7 @@ end
     end
     # pinning to an arbitrary version should check for unregistered packages
     isolate(loaded_depot = true) do
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
+        Pkg.add(url = UNREGISTERED_URL)
         @test_throws PkgError(
             "unable to pin unregistered package `Unregistered [dcb67f36]` to an arbitrary version"
         ) Pkg.pin(name = "Unregistered", version = "0.1.0")
@@ -2339,7 +2344,7 @@ end
     end
     # package tracking repo
     isolate(loaded_depot = true) do
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
+        Pkg.add(url = UNREGISTERED_URL)
         Pkg.pin("Unregistered")
         Pkg.dependencies(unregistered_uuid) do pkg
             @test !pkg.is_tracking_registry
@@ -2413,11 +2418,11 @@ end
     end
     # free should error when called on packages tracking unregistered packages
     isolate(loaded_depot = true) do
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
+        Pkg.add(url = UNREGISTERED_URL)
         @test_throws PkgError("unable to free unregistered package `Unregistered [dcb67f36]`") Pkg.free("Unregistered")
     end
     isolate(loaded_depot = true) do
-        Pkg.develop(url = "https://github.com/00vareladavid/Unregistered.jl")
+        Pkg.develop(url = UNREGISTERED_URL)
         @test_throws PkgError("unable to free unregistered package `Unregistered [dcb67f36]`") Pkg.free("Unregistered")
     end
 end
@@ -2927,12 +2932,12 @@ end
         Pkg.add("Markdown")
         Pkg.add(name = "JSON", version = "0.18.0")
         Pkg.develop("Example")
-        Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
+        Pkg.add(url = UNREGISTERED_URL)
         Pkg.status(; io = io)
         @test occursin(r"Status `.+Project\.toml`", readline(io))
         @test occursin(r"\[7876af07\] Example\s*v\d\.\d\.\d\s*`.+`", readline(io))
         @test occursin(r"\[682c06a0\] JSON\s*v0.18.0", readline(io))
-        @test occursin(r"\[dcb67f36\] Unregistered\s*v\d\.\d\.\d\s*`https://github\.com/00vareladavid/Unregistered\.jl#master`", readline(io))
+        @test occursin(r"\[dcb67f36\] Unregistered\s*v\d\.\d\.\d\s*`file://.+Unregistered#master`", readline(io))
         @test occursin(r"\[d6f4376e\] Markdown", readline(io))
     end
     ## status warns when package not installed
