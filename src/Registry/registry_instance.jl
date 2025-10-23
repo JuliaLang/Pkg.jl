@@ -48,6 +48,9 @@ struct PkgInfo
     repo::Union{String, Nothing}
     subdir::Union{String, Nothing}
 
+    # Package.toml [metadata.deprecated]:
+    deprecated::Union{Dict{String, Any}, Nothing}
+
     # Versions.toml:
     version_info::Dict{VersionNumber, VersionInfo}
 
@@ -68,6 +71,7 @@ end
 
 isyanked(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].yanked
 treehash(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].git_tree_sha1
+isdeprecated(pkg::PkgInfo) = pkg.deprecated !== nothing
 
 function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Vector{VersionNumber}) where {T}
     @assert issorted(vsorted)
@@ -201,6 +205,11 @@ function init_package_info!(pkg::PkgEntry)
         repo = get(d_p, "repo", nothing)::Union{Nothing, String}
         subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
 
+        # The presence of a [metadata.deprecated] table indicates the package is deprecated
+        # We store the raw table to allow other tools to use the metadata
+        metadata = get(d_p, "metadata", nothing)::Union{Nothing, Dict{String, Any}}
+        deprecated = metadata !== nothing ? get(metadata, "deprecated", nothing)::Union{Nothing, Dict{String, Any}} : nothing
+
         # Versions.toml
         d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
             parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
@@ -256,7 +265,7 @@ function init_package_info!(pkg::PkgEntry)
         end
 
         @assert !isdefined(pkg, :info)
-        pkg.info = PkgInfo(repo, subdir, version_info, compat, deps, weak_compat, weak_deps, pkg.info_lock)
+        pkg.info = PkgInfo(repo, subdir, deprecated, version_info, compat, deps, weak_compat, weak_deps, pkg.info_lock)
 
         return pkg.info
     end

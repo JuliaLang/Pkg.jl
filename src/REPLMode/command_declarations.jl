@@ -441,6 +441,7 @@ compound_declarations = [
                 PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
                 PSA[:name => "diff", :short_name => "d", :api => :diff => true],
                 PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
+                PSA[:name => "deprecated", :api => :deprecated => true],
                 PSA[:name => "compat", :short_name => "c", :api => :compat => true],
                 PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
                 PSA[:name => "workspace", :api => :workspace => true],
@@ -448,9 +449,9 @@ compound_declarations = [
             :completions => :complete_installed_packages,
             :description => "summarize contents of and changes to environment",
             :help => md"""
-                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [pkgs...]
-                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-p|--project] [pkgs...]
-                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-m|--manifest] [pkgs...]
+                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [--deprecated] [pkgs...]
+                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [--deprecated] [-p|--project] [pkgs...]
+                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [--deprecated] [-m|--manifest] [pkgs...]
                     [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-p|--project] [pkgs...]
                     [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-m|--manifest] [pkgs...]
                     [st|status] [-c|--compat] [pkgs...]
@@ -461,7 +462,10 @@ compound_declarations = [
                 constraints. To see why use `pkg> status --outdated` which shows any packages
                 that are not at their latest version and if any packages are holding them back.
                 Packages marked with `[yanked]` have been yanked from the registry and should be
-                updated or removed.
+                updated or removed. Packages marked with `[deprecated]` are no longer maintained.
+
+                Use `pkg> status --deprecated` to show only deprecated packages along with deprecation
+                information such as the reason and alternative packages (if provided by the registry).
 
                 Use `pkg> status --extensions` to show dependencies with extensions and what extension dependencies
                 of those that are currently loaded.

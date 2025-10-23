@@ -99,6 +99,39 @@ are the following files: `Compat.toml`, `Deps.toml`, `Package.toml`,
 and `Versions.toml`.
 The formats of these files are described below.
 
+### Registry Package.toml
+
+The `Package.toml` file contains basic metadata about the package, such as its name, UUID, repository URL, and optional metadata.
+
+#### Package metadata
+
+The `[metadata]` table in `Package.toml` provides a location for metadata about the package that doesn't fit into the other registry files. This is an extensible framework for adding package-level metadata.
+
+#### Deprecated packages
+
+One use of the `[metadata]` table is to mark packages as deprecated using `[metadata.deprecated]`. Deprecated packages will:
+- Show as `[deprecated]` in package status output
+- Be excluded from tab-completion suggestions
+- Still be installable and usable
+
+The `[metadata.deprecated]` table can contain arbitrary metadata fields. Two special fields are recognized by Pkg and displayed when using `pkg> status --deprecated`:
+- `reason`: A string explaining why the package is deprecated
+- `alternative`: A string suggesting a replacement package
+
+Example:
+
+```toml
+name = "MyPackage"
+uuid = "..."
+repo = "..."
+
+[metadata.deprecated]
+reason = "This package is no longer maintained"
+alternative = "ReplacementPackage"
+```
+
+Other fields can be added to `[metadata.deprecated]` for use by registries or other tools.
+
 ### Registry Compat.toml
 
 The `Compat.toml` file has a series of blocks specifying version
