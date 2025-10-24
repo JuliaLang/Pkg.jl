@@ -253,8 +253,10 @@ function develop(pkg::PackageSpec)
     manifest = ctx.env.manifest
     manifest.deps[pkg.uuid] = entry
 
-    _resolve(manifest, pkg.name)
-    precompile(pkg.name)
+    # For dev, we don't create an app environment - just point shims directly to the dev'd project
+    write_manifest(manifest, app_manifest_file())
+    generate_shims_for_apps(pkg.name, project.apps, sourcepath, joinpath(Sys.BINDIR, "julia"))
+
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
     return check_apps_in_path(project.apps)
 end
