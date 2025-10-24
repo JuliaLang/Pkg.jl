@@ -667,7 +667,7 @@ function load_workspace_weak_deps(env::EnvCache)
     return weakdeps
 end
 
-# only hash the deps and compat fields as they are the only fields that affect a resolve
+# only hash the deps, compat and source fields as they are the only fields that affect a resolve
 function workspace_resolve_hash(env::EnvCache)
     # Handle deps in both [deps] and [weakdeps]
     deps = Dict(pkg.name => pkg.uuid for pkg in Pkg.Operations.load_direct_deps(env))
@@ -675,6 +675,18 @@ function workspace_resolve_hash(env::EnvCache)
     alldeps = merge(deps, weakdeps)
     compats = Dict(name => Pkg.Operations.get_compat_workspace(env, name) for (name, uuid) in alldeps)
     iob = IOBuffer()
+    function write_sources!(io, label::String, project::Project)
+        isempty(project.sources) && return
+        println(io, "[sources:$label]")
+        for name in sort!(collect(keys(project.sources)))
+            println(io, name)
+            source = project.sources[name]
+            for key in sort!(collect(keys(source)))
+                println(io, "  ", key, "=", source[key])
+            end
+        end
+        println(io)
+    end
     for (name, uuid) in sort!(collect(deps); by = first)
         println(iob, name, "=", uuid)
     end
@@ -685,6 +697,11 @@ function workspace_resolve_hash(env::EnvCache)
     println(iob)
     for (name, compat) in sort!(collect(compats); by = first)
         println(iob, name, "=", compat)
+    end
+    println(iob)
+    write_sources!(iob, "project", env.project)
+    for (path, project) in sort!(collect(env.workspace); by = first)
+        write_sources!(iob, "workspace:$path", project)
     end
     str = String(take!(iob))
     return bytes2hex(sha1(str))
