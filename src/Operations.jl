@@ -140,6 +140,7 @@ function load_direct_deps(
         env::EnvCache, pkgs::Vector{PackageSpec} = PackageSpec[];
         preserve::PreserveLevel = PRESERVE_DIRECT
     )
+    @info "load_direct_deps: input pkgs" [(pkg.name, pkg.path, pkg.repo.source) for pkg in pkgs]
     pkgs_direct = load_project_deps(env.project, env.project_file, env.manifest, env.manifest_file, pkgs; preserve)
 
     for (path, project) in env.workspace
@@ -171,7 +172,9 @@ function load_direct_deps(
         deleteat!(pkgs_direct, idx_to_drop)
     end
 
-    return vcat(pkgs, pkgs_direct)
+    result = vcat(pkgs, pkgs_direct)
+    @info "load_direct_deps: result" [(pkg.name, pkg.path, pkg.repo.source) for pkg in result]
+    return result
 end
 
 function load_project_deps(
@@ -237,15 +240,27 @@ function load_all_deps(
     # Sources takes presedence over the manifest...
     for pkg in pkgs
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg.name)
+        @info "load_all_deps: processing" pkg.name path repo.source pkg.path pkg.repo.source pkg.tree_hash
         if path !== nothing
+            # Path from [sources] takes precedence - clear tree_hash and repo from manifest
+            # This handles the case where user switched from repo to path in Project.toml
+            @info "  -> clearing tree_hash and repo, setting path" pkg.name path
+            pkg.tree_hash = nothing
+            pkg.repo = GitRepo()  # Clear any repo info
             pkg.path = path
         end
         if repo.source !== nothing
+            # Repo from [sources] takes precedence - clear path from manifest
+            # This handles the case where user switched from path to repo in Project.toml
+            @info "  -> clearing path, setting repo.source" pkg.name repo.source
+            pkg.path = nothing
             pkg.repo.source = repo.source
         end
         if repo.rev !== nothing
+            @info "  -> setting repo.rev" pkg.name repo.rev
             pkg.repo.rev = repo.rev
         end
+        @info "  -> after processing" pkg.name pkg.path pkg.repo.source pkg.tree_hash
     end
     return load_direct_deps(env, pkgs; preserve = preserve)
 end
@@ -283,6 +298,7 @@ function is_instantiated(env::EnvCache, workspace::Bool = false; platform = Host
 end
 
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version, registries::Vector{Registry.RegistryInstance})
+    @info "update_manifest!: called with pkgs" [(pkg.name, pkg.path, pkg.repo.source, pkg.tree_hash) for pkg in pkgs]
     manifest = env.manifest
     empty!(manifest)
 
@@ -325,9 +341,24 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
 
     # Build package entries
     for pkg in pkgs
+        # Ensure mutual exclusivity: path-based packages don't have tree_hash, repo packages don't have path
+        pkg_tree_hash = pkg.tree_hash
+        pkg_path = pkg.path
+        pkg_repo = pkg.repo
+        @info "update_manifest!: before adjustments" pkg.name pkg_path pkg_tree_hash pkg_repo.source
+        if pkg_tree_hash !== nothing && pkg_path !== nothing
+            # Prefer path over tree_hash when both are set (path from [sources] takes precedence)
+            pkg_tree_hash = nothing
+        end
+        if pkg_path !== nothing && pkg_repo.source !== nothing
+            # Prefer path over repo when both are set (path from [sources] takes precedence)
+            @info "update_manifest!: clearing repo because path is set" pkg.name pkg_path
+            pkg_repo = GitRepo()
+        end
+        @info "update_manifest!: after adjustments" pkg.name pkg_path pkg_tree_hash pkg_repo.source
         entry = PackageEntry(;
             name = pkg.name, version = pkg.version, pinned = pkg.pinned,
-            tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid
+            tree_hash = pkg_tree_hash, path = pkg_path, repo = pkg_repo, uuid = pkg.uuid
         )
         if is_stdlib(pkg.uuid, julia_version)
             # Only set stdlib versions for versioned (external) stdlibs
@@ -2180,13 +2211,35 @@ end
 up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel) = false
 function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel)
     # With [sources], `pkg` can have a path or repo here
+    @info "up_load_versions!" pkg.name source_path source_repo.source entry.pinned level entry.version entry.tree_hash entry.path entry.repo.source pkg.path pkg.repo.source
     entry.version !== nothing || return false # no version to set
     if entry.pinned || level == UPLEVEL_FIXED
+        @info "  -> pinned or FIXED branch" pkg.name
         pkg.version = entry.version
         if pkg.path === nothing
             pkg.tree_hash = entry.tree_hash
         end
-    elseif entry.repo.source !== nothing || source_repo.source !== nothing # repo packages have a version but are treated specially
+    # If pkg already has a path set (from [sources] processing earlier), use that
+    elseif pkg.path !== nothing
+        @info "  -> pkg.path already set branch" pkg.name pkg.path
+        # Path already set on pkg - keep it and clear repo/tree_hash
+        pkg.tree_hash = nothing
+        pkg.repo = GitRepo()
+        pkg.version = entry.version
+    # If [sources] specifies a path, prioritize that over any repo in the manifest
+    elseif source_path !== nothing
+        @info "  -> source_path branch" pkg.name source_path
+        # Path specified in [sources] - this is a path-based (dev'd) package
+        # Clear tree_hash and repo before setting path
+        pkg.tree_hash = nothing
+        pkg.repo = GitRepo()
+        pkg.path = source_path
+        pkg.version = entry.version
+    elseif source_path === nothing && pkg.path === nothing && (entry.repo.source !== nothing || source_repo.source !== nothing) # repo packages have a version but are treated specially
+        @info "  -> repo branch" pkg.name source_repo.source entry.repo.source
+        # Clear path BEFORE setting repo to avoid triggering validation
+        # When using a repo source, path must be cleared to maintain path/tree_hash mutual exclusivity
+        pkg.path = nothing
         if source_repo.source !== nothing
             pkg.repo = source_repo
         else
@@ -2206,6 +2259,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
             pkg.tree_hash = entry.tree_hash
         end
     else
+        @debug "  -> else branch (registry package)" pkg.name
         ver = entry.version
         r = level == UPLEVEL_PATCH ? VersionRange(ver.major, ver.minor) :
             level == UPLEVEL_MINOR ? VersionRange(ver.major) :
@@ -2218,13 +2272,21 @@ end
 
 up_load_manifest_info!(pkg::PackageSpec, ::Nothing) = nothing
 function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
+    @info "up_load_manifest_info!" pkg.name pkg.path pkg.repo.source entry.path entry.repo.source
     pkg.name = entry.name # TODO check name is same
-    if pkg.repo == GitRepo()
+    # Only restore repo from manifest if we don't already have a path set
+    # If path is set, it takes precedence and repo should remain empty
+    if pkg.repo == GitRepo() && pkg.path === nothing
+        @info "  -> setting repo from entry" pkg.name entry.repo.source
         pkg.repo = entry.repo # TODO check that repo is same
     end
-    if pkg.path === nothing
+    # Only set path if tree_hash is not already set (to avoid invalid state where both are set)
+    # This can happen when transitioning from path-based to URL-based dependencies
+    if pkg.path === nothing && pkg.repo == GitRepo() && pkg.tree_hash === nothing
+        @info "  -> setting path from entry" pkg.name entry.path
         pkg.path = entry.path
     end
+    @info "  -> after up_load_manifest_info!" pkg.name pkg.path pkg.repo.source
     return pkg.pinned = entry.pinned
     # `pkg.version` and `pkg.tree_hash` is set by `up_load_versions!`
 end
@@ -2280,6 +2342,31 @@ function load_manifest_deps_up(
             )
         )
     end
+
+    # Apply [sources] overrides - same logic as in load_all_deps
+    for pkg in pkgs
+        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg.name)
+        @info "load_manifest_deps_up: processing" pkg.name path repo.source pkg.path pkg.repo.source pkg.tree_hash
+        if path !== nothing
+            # Path from [sources] takes precedence - clear tree_hash and repo from manifest
+            @info "  -> clearing tree_hash and repo, setting path" pkg.name path
+            pkg.tree_hash = nothing
+            pkg.repo = GitRepo()
+            pkg.path = path
+        end
+        if repo.source !== nothing
+            # Repo from [sources] takes precedence - clear path from manifest
+            @info "  -> clearing path, setting repo.source" pkg.name repo.source
+            pkg.path = nothing
+            pkg.repo.source = repo.source
+        end
+        if repo.rev !== nothing
+            @info "  -> setting repo.rev" pkg.name repo.rev
+            pkg.repo.rev = repo.rev
+        end
+        @info "  -> after processing" pkg.name pkg.path pkg.repo.source pkg.tree_hash
+    end
+
     return pkgs
 end
 
@@ -2287,6 +2374,7 @@ function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.Registry
     pkgs = load_manifest_deps_up(env, pkgs; preserve = preserve)
     check_registered(registries, pkgs)
     deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    @info "targeted_resolve_up: returning pkgs" [(pkg.name, pkg.path, pkg.repo.source, pkg.tree_hash) for pkg in pkgs]
     return pkgs, deps_map
 end
 
@@ -2302,6 +2390,7 @@ function up(
     # set version constraints according to `level`
     for pkg in pkgs
         source_path, source_repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, pkg.name)
+        @info "up: calling up_load_versions!" pkg.name source_path source_repo.source pkg.path pkg.repo.source
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         new = up_load_versions!(ctx, pkg, entry, source_path, source_repo, level)
         new && push!(new_git, pkg.uuid) #TODO put download + push! in utility function
@@ -2318,6 +2407,7 @@ function up(
         check_registered(ctx.registries, pkgs)
         deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
     end
+    @info "up: before update_manifest!" [(pkg.name, pkg.path, pkg.repo.source, pkg.tree_hash) for pkg in pkgs]
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)

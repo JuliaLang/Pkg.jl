@@ -121,6 +121,83 @@ PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(; name = name, uuid 
 PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(; name = name, version = version)::PackageSpec
 PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(; name = n, uuid = u, version = v)::PackageSpec
 
+disallow_setting_repo_for_localpkg = false
+
+# Validation to catch invalid state combinations
+function Base.setproperty!(pkg::PackageSpec, name::Symbol, value)
+    # Get current values (using getfield to avoid recursion)
+    current_path = getfield(pkg, :path)
+    current_tree_hash = getfield(pkg, :tree_hash)
+    current_repo = getfield(pkg, :repo)
+
+    if getfield(pkg, :name) == "LocalPkg" && name == :repo && value !== nothing && value != GitRepo() && disallow_setting_repo_for_localpkg
+        error("tryig to set repo to $value")
+    end
+
+    # Apply the new value temporarily to check the resulting state
+    if name === :path
+        new_path = value
+        new_tree_hash = current_tree_hash
+        new_repo = current_repo
+    elseif name === :tree_hash
+        new_path = current_path
+        new_tree_hash = value
+        new_repo = current_repo
+    elseif name === :repo
+        new_path = current_path
+        new_tree_hash = current_tree_hash
+        new_repo = value
+    else
+        # For other fields, just set normally
+        return setfield!(pkg, name, value)
+    end
+
+    # Validate the state after the proposed change
+    # Rule 1: Cannot have both tree_hash and path set
+    if new_tree_hash !== nothing && new_path !== nothing
+        pkg_repr = err_rep(pkg; quotes = false)
+        error_loc = try
+            # Try to get a stacktrace to show where this is being set
+            st = stacktrace()[2:min(5, end)]
+            join([string(frame) for frame in st], "\n  ")
+        catch
+            "unknown location"
+        end
+        pkgerror("""
+            Invalid PackageSpec state for $pkg_repr:
+            Attempting to set $(name) would result in both tree_hash and path being set.
+            This is not allowed - a package cannot be both git-tracked (tree_hash) and path-based (dev'd).
+
+            Current state:
+              path = $(repr(current_path))
+              tree_hash = $(repr(current_tree_hash))
+              repo.source = $(repr(current_repo.source))
+
+            Attempted change: $(name) = $(repr(value))
+
+            Location:
+              $error_loc
+
+            To fix: Either clear the path before setting tree_hash, or clear tree_hash before setting path.
+            """)
+    end
+
+    # Rule 2: If setting path to non-nothing and repo has a remote source (URL), warn
+    # This catches cases where we're dev'ing a package but haven't cleared the repo info
+    if new_path !== nothing && new_repo.source !== nothing && isurl(new_repo.source)
+        # This is a warning, not an error, since during transitions this might be temporarily OK
+        error("""
+            PackageSpec for $(err_rep(pkg; quotes = false)) has both path and remote repo.source set.
+            This typically means a package is being dev'd but repo info wasn't cleared.
+            path = $(repr(new_path))
+            repo.source = $(repr(new_repo.source))
+            """)
+    end
+
+    # If validation passed, set the field
+    return setfield!(pkg, name, value)
+end
+
 # XXX: These definitions are a bit fishy. It seems to be used in an `==` call in status printing
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
     return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
@@ -309,6 +386,101 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.registries == t2.registries
 # omits `other`
 Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.registries], init = h)  # omits `other`
+
+# Validation to catch invalid state combinations
+function Base.setproperty!(entry::PackageEntry, name::Symbol, value)
+    # Get current values (using getfield to avoid recursion)
+    current_path = getfield(entry, :path)
+    current_tree_hash = getfield(entry, :tree_hash)
+    current_repo = getfield(entry, :repo)
+
+    # Apply the new value temporarily to check the resulting state
+    if name === :path
+        new_path = value
+        new_tree_hash = current_tree_hash
+        new_repo = current_repo
+    elseif name === :tree_hash
+        new_path = current_path
+        new_tree_hash = value
+        new_repo = current_repo
+    elseif name === :repo
+        new_path = current_path
+        new_tree_hash = current_tree_hash
+        new_repo = value
+    else
+        # For other fields, just set normally
+        return setfield!(entry, name, value)
+    end
+
+    # Validate the state after the proposed change
+    # Rule 1: Cannot have both tree_hash and path set
+    # This is the assertion from manifest.jl:378
+    if new_tree_hash !== nothing && new_path !== nothing
+        entry_name = getfield(entry, :name)
+        entry_uuid = getfield(entry, :uuid)
+        entry_repr = if entry_name !== nothing && entry_uuid !== nothing
+            "$(entry_name) [$(string(entry_uuid)[1:8])]"
+        elseif entry_name !== nothing
+            entry_name
+        elseif entry_uuid !== nothing
+            string(entry_uuid)[1:8]
+        else
+            "unknown package"
+        end
+
+        error_loc = try
+            # Try to get a stacktrace to show where this is being set
+            st = stacktrace()[2:min(8, end)]
+            join([string(frame) for frame in st], "\n  ")
+        catch
+            "unknown location"
+        end
+
+        pkgerror("""
+            Invalid PackageEntry state for $entry_repr:
+            Attempting to set $(name) would result in both tree_hash and path being set.
+            This is not allowed - a package cannot be both git-tracked (tree_hash) and path-based (dev'd).
+
+            This is the state combination that causes the assertion failure at manifest.jl:378.
+
+            Current state:
+              path = $(repr(current_path))
+              tree_hash = $(repr(current_tree_hash))
+              repo.source = $(repr(current_repo.source))
+
+            Attempted change: $(name) = $(repr(value))
+
+            Location:
+              $error_loc
+
+            Possible causes:
+            1. Manually edited Project.toml to change from path-based to URL-based dependency (or vice versa)
+               without deleting Manifest.toml
+            2. Switching between 'dev' and 'add' without properly clearing old state
+            3. Conflicting information between Project.toml [sources] and Manifest.toml
+
+            To fix: Either clear the path before setting tree_hash, or clear tree_hash before setting path.
+            You may also need to delete Manifest.toml and let it regenerate.
+            """)
+    end
+
+    # Rule 2: If setting path to non-nothing and repo has a remote source (URL), warn
+    # This catches cases where we're dev'ing a package but haven't cleared the repo info
+    if new_path !== nothing && new_repo.source !== nothing && isurl(new_repo.source)
+        entry_name = getfield(entry, :name)
+        entry_repr = entry_name !== nothing ? entry_name : "unknown package"
+        # This is a warning, not an error, since during transitions this might be temporarily OK
+        @warn """
+            PackageEntry for $entry_repr has both path and remote repo.source set.
+            This typically means a package is being dev'd but repo info wasn't cleared.
+            path = $(repr(new_path))
+            repo.source = $(repr(new_repo.source))
+            """ maxlog=3
+    end
+
+    # If validation passed, set the field
+    return setfield!(entry, name, value)
+end
 
 """
     ManifestRegistryEntry
@@ -1028,6 +1200,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
                 end
             end
+            # Clear path before setting tree_hash to avoid invalid state
+            # When adding a repo package, it's no longer a path-based (dev'd) package
+            pkg.path = nothing
             pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash

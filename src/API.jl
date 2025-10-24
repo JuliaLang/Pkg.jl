@@ -227,9 +227,13 @@ function update_source_if_set(env, pkg)
         end
         path, repo = get_path_repo(project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
+            # Clear tree_hash before setting path (path-based packages don't have tree_hash)
+            pkg.tree_hash = nothing
             pkg.path = path
         end
         if repo.source !== nothing
+            # Clear path before setting repo (repo packages are not path-based)
+            pkg.path = nothing
             pkg.repo.source = repo.source
         end
         if repo.rev !== nothing
@@ -243,6 +247,8 @@ function update_source_if_set(env, pkg)
     # Packages in manifest should have their paths set to the path in the manifest
     for (path, wproj) in env.workspace
         if wproj.uuid == pkg.uuid
+            # Clear tree_hash before setting path (workspace packages are path-based)
+            pkg.tree_hash = nothing
             pkg.path = Types.relative_project_path(env.manifest_file, dirname(path))
             break
         end
@@ -435,6 +441,7 @@ function up(
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
         append_all_pkgs!(pkgs, ctx, mode)
+        @show pkgs
     else
         mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
         mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)

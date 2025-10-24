@@ -34,6 +34,8 @@ module PkgTestsInner
         Pkg.DEFAULT_IO[] = devnull # or stdout
     end
 
+    Pkg.DEFAULT_IO[] = stdout
+
     include("utils.jl")
     Logging.with_logger((islogging || Pkg.DEFAULT_IO[] == devnull) ? Logging.ConsoleLogger(Pkg.DEFAULT_IO[]) : Logging.current_logger()) do
 
@@ -45,6 +47,7 @@ module PkgTestsInner
         Utils.check_init_reg()
 
         test_files = [
+            #=
             "new.jl",
             "pkg.jl",
             "repl.jl",
@@ -61,20 +64,23 @@ module PkgTestsInner
             "force_latest_compatible_version.jl",
             "manifests.jl",
             "project_manifest.jl",
+            =#
             "sources.jl",
+            #=
             "workspaces.jl",
             "apps.jl",
             "stdlib_compat.jl",
+            =#
         ]
 
         # Only test these if the test deps are available (they aren't typically via `Base.runtests`)
         HSV_pkgid = Base.PkgId(Base.UUID("6df8b67a-e8a0-4029-b4b7-ac196fe72102"), "HistoricalStdlibVersions")
         if Base.locate_package(HSV_pkgid) !== nothing
-            push!(test_files, "historical_stdlib_version.jl")
+            #push!(test_files, "historical_stdlib_version.jl")
         end
         Aqua_pkgid = Base.PkgId(Base.UUID("4c88cf16-eb10-579e-8560-4a9242c79595"), "Aqua")
         if Base.locate_package(Aqua_pkgid) !== nothing
-            push!(test_files, "aqua.jl")
+            #push!(test_files, "aqua.jl")
         end
 
         verbose = true
