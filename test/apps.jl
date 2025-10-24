@@ -97,6 +97,12 @@ using Test
             # https://github.com/JuliaLang/Pkg.jl/issues/4258
             Pkg.Apps.add(path = path)
             Pkg.Apps.develop(path = path)
+
+            # Verify that dev does not create an app environment directory
+            app_env_dir = joinpath(first(DEPOT_PATH), "environments", "apps", "Rot13")
+            @test !isdir(app_env_dir)
+
+            # Verify that changes to the dev'd package are immediately reflected
             mv(joinpath(path, "src", "Rot13_edited.jl"), joinpath(path, "src", "Rot13.jl"); force = true)
             withenv("PATH" => string(joinpath(first(DEPOT_PATH), "bin"), sep, current_path)) do
                 @test read(`$exename test`, String) == "Updated!\n"
