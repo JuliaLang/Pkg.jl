@@ -3,6 +3,7 @@ module SourcesTest
 import ..Pkg # ensure we are using the correct Pkg
 using Test, Pkg
 using ..Utils
+using UUIDs
 
 temp_pkg_dir() do project_path
     @testset "test Project.toml [sources]" begin
@@ -149,6 +150,91 @@ temp_pkg_dir() do project_path
                     """
                 )
                 @test result == 47
+            end
+        end
+    end
+
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4337
+    # Switching between path and repo sources should not cause assertion error
+    @testset "switching between path and repo sources (#4337)" begin
+        mktempdir() do tmp
+            cd(tmp) do
+                # Create a local package and initialize it as a git repo
+                local_pkg_uuid = UUID("00000000-0000-0000-0000-000000000001")
+                mkdir("LocalPkg")
+                write(
+                    joinpath("LocalPkg", "Project.toml"), """
+                    name = "LocalPkg"
+                    uuid = "$local_pkg_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                mkdir(joinpath("LocalPkg", "src"))
+                write(joinpath("LocalPkg", "src", "LocalPkg.jl"), "module LocalPkg end")
+
+                # Initialize as a git repo
+                git_init_and_commit("LocalPkg")
+
+                # Get the absolute path for file:// URL
+                local_pkg_url = make_file_url(abspath("LocalPkg"))
+
+                # Create test project with path source
+                write(
+                    "Project.toml", """
+                    [deps]
+                    LocalPkg = "$local_pkg_uuid"
+
+                    [sources]
+                    LocalPkg = { path = "LocalPkg" }
+                    """
+                )
+
+                with_current_env() do
+                    # Initial resolve with path source
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    @test manifest[local_pkg_uuid].path !== nothing
+                    @test manifest[local_pkg_uuid].tree_hash === nothing
+                    @test manifest[local_pkg_uuid].repo.source === nothing
+                    # Update should work without error
+                    Pkg.update()
+
+                    # Switch to repo source using file:// protocol
+                    write(
+                        "Project.toml", """
+                        [deps]
+                        LocalPkg = "$local_pkg_uuid"
+
+                        [sources]
+                        LocalPkg = { url = "$local_pkg_url", rev = "HEAD" }
+                        """
+                    )
+
+                    # This should NOT cause an assertion error about tree_hash and path both being set
+                    Pkg.update()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    @test manifest[local_pkg_uuid].path === nothing
+                    @test manifest[local_pkg_uuid].tree_hash !== nothing
+                    @test manifest[local_pkg_uuid].repo.source !== nothing
+
+                    # Switch back to path source
+                    write(
+                        "Project.toml", """
+                        [deps]
+                        LocalPkg = "$local_pkg_uuid"
+
+                        [sources]
+                        LocalPkg = { path = "LocalPkg" }
+                        """
+                    )
+
+                    # This should work and restore the path source without assertion error
+                    Pkg.update()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    @test manifest[local_pkg_uuid].path !== nothing
+                    @test manifest[local_pkg_uuid].tree_hash === nothing
+                    @test manifest[local_pkg_uuid].repo.source === nothing
+                end
             end
         end
     end

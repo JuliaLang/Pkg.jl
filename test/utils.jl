@@ -11,7 +11,7 @@ using UUIDs
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache
+    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url
 
 const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
 
@@ -365,6 +365,17 @@ function recursive_rm_cov_files(rootdir::String)
         end
     end
     return
+end
+
+# Convert a path into a file URL.
+function make_file_url(path)
+    # Turn the slashes on Windows. In case the path starts with a
+    # drive letter, an extra slash will be needed in the file URL.
+    path = replace(path, "\\" => "/")
+    if !startswith(path, "/")
+        path = "/" * path
+    end
+    return "file://$(path)"
 end
 
 end

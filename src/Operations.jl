@@ -252,9 +252,14 @@ function load_all_deps(
     for pkg in pkgs
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
+            # Path from [sources] takes precedence - clear tree_hash and repo from manifest
+            pkg.tree_hash = nothing
+            pkg.repo = GitRepo()  # Clear any repo info
             pkg.path = path
         end
         if repo.source !== nothing
+            # Repo from [sources] takes precedence - clear path from manifest
+            pkg.path = nothing
             pkg.repo.source = repo.source
         end
         if repo.rev !== nothing
@@ -2224,7 +2229,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
         if pkg.path === nothing
             pkg.tree_hash = entry.tree_hash
         end
-    elseif entry.repo.source !== nothing || source_repo.source !== nothing # repo packages have a version but are treated specially
+    elseif source_path === nothing && pkg.path === nothing && (entry.repo.source !== nothing || source_repo.source !== nothing) # repo packages have a version but are treated specially
         if source_repo.source !== nothing
             pkg.repo = source_repo
         else
@@ -2257,10 +2262,12 @@ end
 up_load_manifest_info!(pkg::PackageSpec, ::Nothing) = nothing
 function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     pkg.name = entry.name # TODO check name is same
-    if pkg.repo == GitRepo()
+    # Only restore repo from manifest if we don't already have a path set
+    if pkg.repo == GitRepo() && pkg.path === nothing
         pkg.repo = entry.repo # TODO check that repo is same
     end
-    if pkg.path === nothing
+    # Only set path if tree_hash is not already set (to avoid invalid state where both are set)
+    if pkg.path === nothing && pkg.repo == GitRepo() && pkg.tree_hash === nothing
         pkg.path = entry.path
     end
     return pkg.pinned = entry.pinned
