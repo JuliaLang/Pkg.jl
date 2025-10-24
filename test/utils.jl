@@ -10,7 +10,7 @@ using UUIDs
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
-    git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
+    git_init_package, git_init_unregistered_package, make_file_url, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
     list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache
 
 const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
@@ -286,6 +286,52 @@ function git_init_package(tmp, path)
     pkgpath = joinpath(tmp, base)
     cp(path, pkgpath)
     git_init_and_commit(pkgpath)
+    return pkgpath
+end
+
+function make_file_url(path)
+    # Convert a path into a file URL.
+    # Turn the slashes on Windows. In case the path starts with a
+    # drive letter, an extra slash will be needed in the file URL.
+    path = replace(path, "\\" => "/")
+    if !startswith(path, "/")
+        path = "/" * path
+    end
+    return "file://$(path)"
+end
+
+function git_init_unregistered_package(tmp)
+    # Create Unregistered package with two tagged versions (0.1.0 and 0.2.0)
+    path = joinpath(@__DIR__, "test_packages", "Unregistered")
+    base = basename(path)
+    pkgpath = joinpath(tmp, base)
+    cp(path, pkgpath)
+
+    # Initialize git and create version 0.1.0
+    LibGit2.with(LibGit2.init(pkgpath)) do repo
+        LibGit2.add!(repo, "*")
+        commit_oid = LibGit2.commit(repo, "Version 0.1.0"; author = TEST_SIG, committer = TEST_SIG)
+        LibGit2.tag_create(repo, "0.1.0", commit_oid, sig = TEST_SIG, msg = "Version 0.1.0")
+
+        # Update to version 0.2.0 with Example dependency
+        project_path = joinpath(pkgpath, "Project.toml")
+        write(
+            project_path, """
+            name = "Unregistered"
+            uuid = "dcb67f36-efa0-11e8-0cef-2fc465ed98ae"
+            authors = ["David Varela <00.varela.david@gmail.com>"]
+            version = "0.2.0"
+
+            [deps]
+            Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+            """
+        )
+
+        LibGit2.add!(repo, "Project.toml")
+        commit_oid = LibGit2.commit(repo, "Version 0.2.0"; author = TEST_SIG, committer = TEST_SIG)
+        LibGit2.tag_create(repo, "0.2.0", commit_oid, sig = TEST_SIG, msg = "Version 0.2.0")
+    end
+
     return pkgpath
 end
 
