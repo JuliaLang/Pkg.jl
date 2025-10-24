@@ -579,21 +579,7 @@ end
 const UsageDict = Dict{String, DateTime}
 const UsageByDepotDict = Dict{String, UsageDict}
 
-"""
-    gc(ctx::Context=Context(); verbose=false, force=false, kwargs...)
-
-Garbage-collect package and artifact installations by sweeping over all known
-`Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
-finding artifacts and packages that are thereafter not used by any other projects.
-Unused packages, artifacts, repos, and scratch spaces are immediately deleted.
-
-Garbage collection is only applied to the "user depot", e.g. the first entry in the
-depot path. If you want to run `gc` on all depots set `force=true` (this might require
-admin privileges depending on the setup).
-
-Use verbose mode (`verbose=true`) for detailed output.
-"""
-function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = nothing, verbose = false, force = false, kwargs...)
+function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = nothing, verbose = false, force = false, collect_unused_for::Union{Period, Nothing} = nothing, kwargs...)
     Context!(ctx; kwargs...)
     if collect_delay !== nothing
         @warn "The `collect_delay` parameter is no longer used. Packages are now deleted immediately when they become unreachable."
@@ -689,6 +675,33 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     all_artifact_tomls = Set(filter(Pkg.isfile_nothrow, all_artifact_tomls))
     all_scratch_dirs = Set(filter(Pkg.isdir_nothrow, all_scratch_dirs))
     all_scratch_parents = Set(filter(Pkg.isfile_nothrow, all_scratch_parents))
+
+    # Apply time-based filtering if collect_unused_for is specified
+    # This creates a separate filtered set for marking packages as active,
+    # but preserves the full manifest list for writing back to usage files
+    manifest_tomls_for_gc = all_manifest_tomls
+    if collect_unused_for !== nothing
+        # Create a unified usage dict to check timestamps across all depots
+        unified_manifest_usage = UsageDict()
+        for (depot, usage) in manifest_usage_by_depot
+            for (manifest, time) in usage
+                # Keep the most recent time if a manifest appears in multiple depots
+                unified_manifest_usage[manifest] = max(get(unified_manifest_usage, manifest, DateTime(0)), time)
+            end
+        end
+
+        cutoff_time = now() - collect_unused_for
+        # Filter out manifests that haven't been used since the cutoff time
+        # This only affects which packages are marked as active for this GC run
+        manifest_tomls_for_gc = Set(f for f in all_manifest_tomls if get(unified_manifest_usage, f, DateTime(0)) >= cutoff_time)
+
+        if verbose
+            n_filtered = length(all_manifest_tomls) - length(manifest_tomls_for_gc)
+            if n_filtered > 0
+                printpkgstyle(ctx.io, :Filtered, "$(n_filtered) manifest(s) older than $(collect_unused_for)")
+            end
+        end
+    end
 
     # Immediately write these back as condensed toml files
     function write_condensed_toml(f::Function, usage_by_depot, fname)
@@ -868,9 +881,10 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
 
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
+    # Use manifest_tomls_for_gc which excludes old manifests if collect_unused_for is set
     # printpkgstyle(ctx.io, :Active, "manifests:")
     packages_to_keep = mark(
-        process_manifest_pkgs, all_manifest_tomls, ctx,
+        process_manifest_pkgs, manifest_tomls_for_gc, ctx,
         verbose = verbose, file_str = "manifest files"
     )
 
@@ -881,7 +895,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         x -> process_artifacts_toml(x, String[]),
         all_artifact_tomls, ctx; verbose = verbose, file_str = "artifact files"
     )
-    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print = false)
+    repos_to_keep = mark(process_manifest_repos, manifest_tomls_for_gc, ctx; do_print = false)
     # printpkgstyle(ctx.io, :Active, "scratchspaces:")
     spaces_to_keep = mark(
         x -> process_scratchspace(x, String[]),
