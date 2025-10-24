@@ -987,6 +987,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
                 end
             end
+            @assert pkg.path === nothing
             pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
