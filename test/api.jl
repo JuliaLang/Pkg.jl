@@ -250,7 +250,7 @@ import .FakeTerminals.FakeTerminal
                 Pkg.precompile(io = iob)
                 str = String(take!(iob))
                 @test occursin("Precompiling", str)
-                @test occursin("Waiting for background task / IO / timer.", str)
+                @test occursin("waiting for IO to finish", str) || occursin("Waiting for background task / IO / timer.", str)
             end
 
             @testset "pidlocked precompile" begin
