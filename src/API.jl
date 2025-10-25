@@ -12,9 +12,9 @@ import FileWatching
 
 import Base: StaleCacheKey
 
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped, ..manifest_rel_path
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write, ..safe_realpath
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -64,7 +64,7 @@ end
 function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
         isurl(pkg.repo.source::String) ? pkg.repo.source::String :
-        Operations.project_rel_path(env, pkg.repo.source::String)
+        safe_realpath(manifest_rel_path(env, pkg.repo.source::String))
     _source_path = Operations.source_path(env.manifest_file, pkg)
     if _source_path === nothing
         @debug "Manifest file $(env.manifest_file) contents:\n$(read(env.manifest_file, String))"
@@ -81,7 +81,7 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
         is_tracking_registry = Operations.is_tracking_registry(pkg),
         git_revision = pkg.repo.rev,
         git_source = git_source,
-        source = Operations.project_rel_path(env, _source_path),
+        source = _source_path,
         dependencies = copy(entry.deps), #TODO is copy needed?
     )
     return info
@@ -250,6 +250,19 @@ function update_source_if_set(env, pkg)
     return
 end
 
+# Normalize relative paths from user input (pwd-relative) to internal representation (manifest-relative)
+# This ensures all relative paths in Pkg are consistently relative to the manifest file
+function normalize_package_paths!(ctx::Context, pkgs::Vector{PackageSpec})
+    for pkg in pkgs
+        if pkg.repo.source !== nothing && !isurl(pkg.repo.source) && !isabspath(pkg.repo.source)
+            # User provided a relative path (relative to pwd), convert to manifest-relative
+            absolute_path = abspath(pkg.repo.source)
+            pkg.repo.source = Types.relative_project_path(ctx.env.manifest_file, absolute_path)
+        end
+    end
+    return
+end
+
 function develop(
         ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool = true,
         preserve::PreserveLevel = Operations.default_preserve(), platform::AbstractPlatform = HostPlatform(), kwargs...
@@ -284,6 +297,8 @@ function develop(
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
     end
+
+    normalize_package_paths!(ctx, pkgs)
 
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
@@ -336,6 +351,8 @@ function add(
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
     end
+
+    normalize_package_paths!(ctx, pkgs)
 
     repo_pkgs = PackageSpec[pkg for pkg in pkgs if (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)]
     new_git = handle_repos_add!(ctx, repo_pkgs)
@@ -782,7 +799,15 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         end
 
         # Collect the locations of every repo referred to in this manifest
-        return [Types.add_repo_cache_path(e.repo.source) for (u, e) in manifest if e.repo.source !== nothing]
+        return [
+            Types.add_repo_cache_path(
+                    isurl(e.repo.source) ? e.repo.source :
+                    safe_realpath(
+                        isabspath(e.repo.source) ? e.repo.source :
+                        normpath(joinpath(dirname(path), e.repo.source))
+                    )
+                ) for (u, e) in manifest if e.repo.source !== nothing
+        ]
     end
 
     function process_artifacts_toml(path, pkgs_to_delete)
@@ -1314,7 +1339,7 @@ function instantiate(
         ## Download repo at tree hash
         # determine canonical form of repo source
         if !isurl(repo_source)
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), repo_source))
+            repo_source = manifest_rel_path(ctx.env, repo_source)
         end
         if !isurl(repo_source) && !isdir(repo_source)
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")

@@ -212,3 +212,7 @@ function discover_repo(path::AbstractString)
     end
     return
 end
+
+# Resolve a manifest-relative path to an absolute path
+# Note: Despite the name "manifest_rel_path", this resolves relative to the manifest file
+manifest_rel_path(env, path::String) = normpath(joinpath(dirname(env.manifest_file), path))
