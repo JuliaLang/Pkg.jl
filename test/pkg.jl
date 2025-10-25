@@ -1156,4 +1156,56 @@ end
     end
 end
 
+# issue #2291: relative paths in manifests should be resolved relative to manifest location
+@testset "relative path resolution from different directories (issue #2291)" begin
+    mktempdir() do dir
+        # Create a local package with a git repo
+        pkg_path = joinpath(dir, "LocalPackage")
+        mkpath(joinpath(pkg_path, "src"))
+        write(
+            joinpath(pkg_path, "Project.toml"), """
+            name = "LocalPackage"
+            uuid = "00000000-0000-0000-0000-000000000001"
+            version = "0.1.0"
+            """
+        )
+        write(
+            joinpath(pkg_path, "src", "LocalPackage.jl"), """
+            module LocalPackage
+            greet() = "Hello from LocalPackage!"
+            end
+            """
+        )
+
+        # Initialize git repo
+        LibGit2.with(LibGit2.init(pkg_path)) do repo
+            LibGit2.add!(repo, "*")
+            LibGit2.commit(repo, "Initial commit"; author = TEST_SIG, committer = TEST_SIG)
+        end
+
+        # Create a project in a subdirectory and add the package with relative path
+        project_path = joinpath(dir, "project")
+        mkpath(project_path)
+        cd(project_path) do
+            Pkg.activate(".")
+            Pkg.add(Pkg.PackageSpec(path = "../LocalPackage"))
+
+            # Verify the package was added with relative path
+            manifest = read_manifest(joinpath(project_path, "Manifest.toml"))
+            pkg_entry = manifest[UUID("00000000-0000-0000-0000-000000000001")]
+            @test pkg_entry.repo.source == "../LocalPackage"
+        end
+
+        # Now change to parent directory and try to update - this should work
+        cd(dir) do
+            Pkg.activate("project")
+            Pkg.update()  # This should not fail
+            # Check the package is installed by looking it up in dependencies
+            pkg_info = Pkg.dependencies()[UUID("00000000-0000-0000-0000-000000000001")]
+            @test pkg_info.name == "LocalPackage"
+            @test isinstalled(PackageSpec(uuid = UUID("00000000-0000-0000-0000-000000000001"), name = "LocalPackage"))
+        end
+    end
+end
+
 end # module
