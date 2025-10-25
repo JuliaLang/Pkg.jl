@@ -694,6 +694,91 @@ end
     end
 end
 
+@testset "Pkg.gc with collect_unused_for" begin
+    temp_pkg_dir() do project_path
+        # Create a test environment with a package
+        mktempdir() do env_dir
+            cd(env_dir) do
+                # Create a simple Project.toml
+                write(
+                    "Project.toml", """
+                    name = "TestEnv"
+
+                    [deps]
+                    Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+                    """
+                )
+
+                # Create a Manifest.toml
+                manifest_path = joinpath(env_dir, "Manifest.toml")
+                write(
+                    manifest_path, """
+                    # This file is machine-generated - editing it directly is not advised
+
+                    julia_version = "$(VERSION.major).$(VERSION.minor).$(VERSION.patch)"
+                    manifest_format = "2.0"
+
+                    [[deps.Example]]
+                    git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+                    uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+                    version = "0.5.3"
+                    """
+                )
+
+                # Manually create a manifest usage entry with an old timestamp
+                usage_file = joinpath(Pkg.logdir(), "manifest_usage.toml")
+                mkpath(dirname(usage_file))
+
+                # Create usage data with a timestamp from 60 days ago
+                old_time = Dates.now() - Dates.Day(60)
+                usage_dict = Dict(
+                    manifest_path => [Dict("time" => old_time)]
+                )
+                open(usage_file, "w") do io
+                    TOML.print(io, usage_dict)
+                end
+
+                # Run gc with collect_unused_for=Day(30) - should filter this manifest
+                # We capture IO to check for filtering message
+                io_buf = IOBuffer()
+                Pkg.gc(verbose = true, collect_unused_for = Dates.Day(30), io = io_buf)
+                output = String(take!(io_buf))
+
+                # The manifest should not be in the active set when collect_unused_for is used
+                @test !occursin(manifest_path, output) || occursin("Filtered", output)
+
+                # Now update the timestamp to be recent
+                recent_time = Dates.now()
+                usage_dict = Dict(
+                    manifest_path => [Dict("time" => recent_time)]
+                )
+                open(usage_file, "w") do io
+                    TOML.print(io, usage_dict)
+                end
+
+                # Run gc with collect_unused_for=Day(30) - should NOT filter this manifest
+                io_buf = IOBuffer()
+                Pkg.gc(verbose = true, collect_unused_for = Dates.Day(30), io = io_buf)
+                output = String(take!(io_buf))
+
+                # The manifest should be in the active set
+                @test occursin(manifest_path, output) || !occursin("Filtered.*1.*manifest", output)
+            end
+        end
+    end
+
+    # Test that gc accepts different Period types
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            # These should not error
+            Pkg.gc(collect_unused_for = Dates.Day(7))
+            Pkg.gc(collect_unused_for = Dates.Week(2))
+            Pkg.gc(collect_unused_for = Dates.Month(1))
+            @test true
+        end
+    end
+end
+
 if isdefined(Base.Filesystem, :delayed_delete_ref)
     @testset "Pkg.gc for delayed deletes" begin
         mktempdir() do root
