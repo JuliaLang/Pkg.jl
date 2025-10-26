@@ -46,6 +46,7 @@ module PkgTestsInner
 
         test_files = [
             "new.jl",
+            "depwarn_flags.jl",
             "pkg.jl",
             "repl.jl",
             "api.jl",
