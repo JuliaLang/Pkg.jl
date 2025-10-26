@@ -2539,9 +2539,16 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     try
         has_depwarn = any(x -> occursin(r"^--depwarn($|=)", x), julia_args.exec)
     catch
-        # If we can't inspect julia_args.exec for any reason, fall back to
-        # conservatively not clobbering user flags (so we'll append the flag).
+        # If inspection fails, assume no explicit depwarn to be conservative.
         has_depwarn = false
+    end
+
+    # Render julia_args to a clean space-joined string to avoid interpolating
+    # the raw Cmd object which can produce extraneous empty tokens (e.g. "''").
+    julia_args_str = try
+        isempty(julia_args.exec) ? "" : join(string.(julia_args.exec), " ")
+    catch
+        string(julia_args)
     end
 
     return ```
@@ -2551,8 +2558,8 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
         --warn-overwrite=yes
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
-        --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
-        $(julia_args)
+        --track-allocation=$(('none', 'user', 'all')[Base.JLOptions().malloc_log + 1])
+        $(julia_args_str)
         $(has_depwarn ? "" : "--depwarn=yes")
     ```
 end
