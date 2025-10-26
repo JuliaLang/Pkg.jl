@@ -36,10 +36,6 @@ custom_isfile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractString, 
 mutable struct VersionInfo
     const git_tree_sha1::Base.SHA1
     const yanked::Bool
-    uncompressed_compat::Dict{UUID, VersionSpec} # lazily initialized
-    weak_uncompressed_compat::Dict{UUID, VersionSpec} # lazily initialized
-
-    VersionInfo(git_tree_sha1::Base.SHA1, yanked::Bool) = new(git_tree_sha1, yanked)
 end
 
 # This is the information that exists in e.g. General/A/ACME
@@ -54,124 +50,25 @@ struct PkgInfo
     # Versions.toml:
     version_info::Dict{VersionNumber, VersionInfo}
 
-    # Compat.toml
-    compat::Dict{VersionRange, Dict{String, VersionSpec}}
+    # Deps.toml - which dependencies exist
+    deps::Dict{VersionRange, Set{UUID}}
 
-    # Deps.toml
-    deps::Dict{VersionRange, Dict{String, UUID}}
+    # Compat.toml - version constraints on deps
+    compat::Dict{VersionRange, Dict{UUID, VersionSpec}}
 
-    # WeakCompat.toml
-    weak_compat::Dict{VersionRange, Dict{String, VersionSpec}}
+    # WeakDeps.toml - which weak dependencies exist
+    weak_deps::Dict{VersionRange, Set{UUID}}
 
-    # WeakDeps.toml
-    weak_deps::Dict{VersionRange, Dict{String, UUID}}
-
-    info_lock::ReentrantLock
+    # WeakCompat.toml - version constraints on weak deps
+    weak_compat::Dict{VersionRange, Dict{UUID, VersionSpec}}
 end
 
 isyanked(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].yanked
 treehash(pkg::PkgInfo, v::VersionNumber) = pkg.version_info[v].git_tree_sha1
 isdeprecated(pkg::PkgInfo) = pkg.deprecated !== nothing
 
-function uncompress(compressed::Dict{VersionRange, Dict{String, T}}, vsorted::Vector{VersionNumber}) where {T}
-    @assert issorted(vsorted)
-    uncompressed = Dict{VersionNumber, Dict{String, T}}()
-    for v in vsorted
-        uncompressed[v] = Dict{String, T}()
-    end
-    for (vs, data) in compressed
-        first = length(vsorted) + 1
-        # We find the first and last version that are in the range
-        # and since the versions are sorted, all versions in between are sorted
-        for i in eachindex(vsorted)
-            v = vsorted[i]
-            v in vs && (first = i; break)
-        end
-        last = 0
-        for i in reverse(eachindex(vsorted))
-            v = vsorted[i]
-            v in vs && (last = i; break)
-        end
-        for i in first:last
-            v = vsorted[i]
-            uv = uncompressed[v]
-            for (key, value) in data
-                if haskey(uv, key)
-                    error("Overlapping ranges for $(key) for version $v in registry.")
-                else
-                    uv[key] = value
-                end
-            end
-        end
-    end
-    return uncompressed
-end
-
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
-function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
-    # Only valid to call this with existing versions of the package
-    # Remove all versions we have already uncompressed
-    versions = filter!(v -> !isdefined(pkg.version_info[v], :uncompressed_compat), collect(versions))
 
-    sort!(versions)
-
-    uncompressed_compat = uncompress(pkg.compat, versions)
-    uncompressed_deps = uncompress(pkg.deps, versions)
-
-    for v in versions
-        vinfo = pkg.version_info[v]
-        compat = Dict{UUID, VersionSpec}()
-        uncompressed_deps_v = uncompressed_deps[v]
-        # Everything depends on Julia
-        uncompressed_deps_v["julia"] = JULIA_UUID
-        uncompressed_compat_v = uncompressed_compat[v]
-        for (pkg, uuid) in uncompressed_deps_v
-            vspec = get(uncompressed_compat_v, pkg, nothing)
-            compat[uuid] = vspec === nothing ? VersionSpec() : vspec
-        end
-        @assert !isdefined(vinfo, :uncompressed_compat)
-        vinfo.uncompressed_compat = compat
-    end
-    return pkg
-end
-
-function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info))
-    # Only valid to call this with existing versions of the package
-    # Remove all versions we have already uncompressed
-    versions = filter!(v -> !isdefined(pkg.version_info[v], :weak_uncompressed_compat), collect(versions))
-
-    sort!(versions)
-
-    weak_uncompressed_compat = uncompress(pkg.weak_compat, versions)
-    weak_uncompressed_deps = uncompress(pkg.weak_deps, versions)
-
-    for v in versions
-        vinfo = pkg.version_info[v]
-        weak_compat = Dict{UUID, VersionSpec}()
-        weak_uncompressed_deps_v = weak_uncompressed_deps[v]
-        weak_uncompressed_compat_v = weak_uncompressed_compat[v]
-        for (pkg, uuid) in weak_uncompressed_deps_v
-            vspec = get(weak_uncompressed_compat_v, pkg, nothing)
-            weak_compat[uuid] = vspec === nothing ? VersionSpec() : vspec
-        end
-        @assert !isdefined(vinfo, :weak_uncompressed_compat)
-        vinfo.weak_uncompressed_compat = weak_compat
-    end
-    return pkg
-end
-
-function compat_info(pkg::PkgInfo)
-    @lock pkg.info_lock initialize_uncompressed!(pkg)
-    return Dict(v => info.uncompressed_compat for (v, info) in pkg.version_info)
-end
-
-function weak_compat_info(pkg::PkgInfo)
-    if isempty(pkg.weak_deps)
-        return nothing
-    end
-    @lock pkg.info_lock initialize_weak_uncompressed!(pkg)
-    return Dict(v => info.weak_uncompressed_compat for (v, info) in pkg.version_info)
-end
 
 mutable struct PkgEntry
     # Registry.toml:
@@ -180,95 +77,257 @@ mutable struct PkgEntry
     const name::String
     const uuid::UUID
 
-    const in_memory_registry::Union{Dict{String, String}, Nothing}
-    # Lock for thread-safe lazy loading
-    const info_lock::ReentrantLock
     # Version.toml / (Compat.toml / Deps.toml):
     info::PkgInfo # lazily initialized
 
-    PkgEntry(path, registry_path, name, uuid, in_memory_registry) = new(path, registry_path, name, uuid, in_memory_registry, ReentrantLock() #= undef =#)
+    PkgEntry(path, registry_path, name, uuid) = new(path, registry_path, name, uuid #= undef =#)
 end
 
-registry_info(pkg::PkgEntry) = init_package_info!(pkg)
-
-function init_package_info!(pkg::PkgEntry)
-    # Thread-safe lazy loading with double-check pattern
-    return @lock pkg.info_lock begin
-        # Double-check: if another thread loaded while we were waiting for the lock
-        isdefined(pkg, :info) && return pkg.info
-
-        path = pkg.registry_path
-
-        d_p = parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
-        name = d_p["name"]::String
-        name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
-        repo = get(d_p, "repo", nothing)::Union{Nothing, String}
-        subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
-
-        # The presence of a [metadata.deprecated] table indicates the package is deprecated
-        # We store the raw table to allow other tools to use the metadata
-        metadata = get(d_p, "metadata", nothing)::Union{Nothing, Dict{String, Any}}
-        deprecated = metadata !== nothing ? get(metadata, "deprecated", nothing)::Union{Nothing, Dict{String, Any}} : nothing
-
-        # Versions.toml
-        d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
-            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
-        version_info = Dict{VersionNumber, VersionInfo}(
-            VersionNumber(k) =>
-                VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v
-        )
-
-        # Compat.toml
-        compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
-            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) : Dict{String, Any}()
-        compat = Dict{VersionRange, Dict{String, VersionSpec}}()
-        for (v, data) in compat_data_toml
-            data = data::Dict{String, Any}
-            vr = VersionRange(v)
-            d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
-            compat[vr] = d
+# Helper to load deps data from Deps.toml or WeakDeps.toml
+# Returns Dict{VersionRange, Set{UUID}} - just lists which deps exist
+function load_deps_data(in_memory_registry, registry_path, pkg_path, filename, name_to_uuid)
+    deps_data_toml = custom_isfile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) ?
+        parsefile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) : Dict{String, Any}()
+    deps = Dict{VersionRange, Set{UUID}}()
+    for (v, data) in deps_data_toml
+        data = data::Dict{String, Any}
+        vr = VersionRange(v)
+        d = Set{UUID}()
+        for (dep, uuid_str) in data
+            uuid_val = UUID(uuid_str::String)
+            push!(d, uuid_val)
+            name_to_uuid[dep] = uuid_val
         end
-
-        # Deps.toml
-        deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) ?
-            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Deps.toml")) : Dict{String, Any}()
-        deps = Dict{VersionRange, Dict{String, UUID}}()
-        for (v, data) in deps_data_toml
-            data = data::Dict{String, Any}
-            vr = VersionRange(v)
-            d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
-            deps[vr] = d
-        end
-        # All packages depend on julia
-        deps[VersionRange()] = Dict("julia" => JULIA_UUID)
-
-        # WeakCompat.toml
-        weak_compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) ?
-            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakCompat.toml")) : Dict{String, Any}()
-        weak_compat = Dict{VersionRange, Dict{String, VersionSpec}}()
-        for (v, data) in weak_compat_data_toml
-            data = data::Dict{String, Any}
-            vr = VersionRange(v)
-            d = Dict{String, VersionSpec}(dep => VersionSpec(vr_dep) for (dep, vr_dep::Union{String, Vector{String}}) in data)
-            weak_compat[vr] = d
-        end
-
-        # WeakDeps.toml
-        weak_deps_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) ?
-            parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "WeakDeps.toml")) : Dict{String, Any}()
-        weak_deps = Dict{VersionRange, Dict{String, UUID}}()
-        for (v, data) in weak_deps_data_toml
-            data = data::Dict{String, Any}
-            vr = VersionRange(v)
-            d = Dict{String, UUID}(dep => UUID(uuid) for (dep, uuid::String) in data)
-            weak_deps[vr] = d
-        end
-
-        @assert !isdefined(pkg, :info)
-        pkg.info = PkgInfo(repo, subdir, deprecated, version_info, compat, deps, weak_compat, weak_deps, pkg.info_lock)
-
-        return pkg.info
+        deps[vr] = d
     end
+    return deps
+end
+
+# Helper to load compat data from Compat.toml or WeakCompat.toml
+function load_compat_data(in_memory_registry, registry_path, pkg_path, filename, name_to_uuid)
+    compat_data_toml = custom_isfile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) ?
+        parsefile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) : Dict{String, Any}()
+    compat = Dict{VersionRange, Dict{UUID, VersionSpec}}()
+    for (v, data) in compat_data_toml
+        data = data::Dict{String, Any}
+        vr = VersionRange(v)
+        d = Dict{UUID, VersionSpec}()
+        for (dep, vr_dep::Union{String, Vector{String}}) in data
+            d[name_to_uuid[dep]] = VersionSpec(vr_dep)
+        end
+        compat[vr] = d
+    end
+    return compat
+end
+
+# Helper function to query just the dependencies (without compat specs) for a version
+# Returns Set{UUID} of all dependencies (both strong and weak) for the given version
+function query_deps_for_version(
+        deps_compressed::Dict{VersionRange, Set{UUID}},
+        weak_deps_compressed::Dict{VersionRange, Set{UUID}},
+        version::VersionNumber
+    )::Set{UUID}
+    result = Set{UUID}()
+    for compressed in (deps_compressed, weak_deps_compressed)
+        for (vrange, deps_set) in compressed
+            if version in vrange
+                union!(result, deps_set)
+            end
+        end
+    end
+    return result
+end
+
+# Helper function to query deps for a specific version from multi-registry maps
+function query_deps_for_version(
+        deps_map::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
+        weak_deps_map::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
+        uuid::UUID,
+        version::VersionNumber
+    )::Set{UUID}
+    result = Set{UUID}()
+    deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, deps_map, uuid)
+    weak_deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, weak_deps_map, uuid)
+
+    # Query each registry's data
+    for i in eachindex(deps_list)
+        deps_compressed = deps_list[i]
+        weak_deps_compressed = weak_deps_list[i]
+        union!(result, query_deps_for_version(deps_compressed, weak_deps_compressed, version))
+    end
+
+    return result
+end
+
+# Helper function to query compressed compat data from PkgInfo
+# Convenience wrapper that uses PkgInfo's compressed data directly
+# Returns Dict{UUID, VersionSpec} if target_uuid is nothing
+# Returns Union{VersionSpec, Nothing} if target_uuid is provided
+function query_compat_for_version(
+        pkg_info::PkgInfo,
+        version::VersionNumber,
+        target_uuid::Union{UUID, Nothing} = nothing
+    )
+    return query_compat_for_version(pkg_info.deps, pkg_info.compat, pkg_info.weak_deps, pkg_info.weak_compat, version, target_uuid)
+end
+
+# Mutating helper function to query compressed compat data for a specific version
+# Merges deps (which dependencies exist) with compat (version constraints on those deps)
+# Dependencies without explicit compat entries get VersionSpec() (any version)
+# Includes both strong and weak dependencies
+# If target_uuid is provided, only includes that UUID if it exists
+# The result dictionary is emptied before populating
+function query_compat_for_version!(
+        result::Dict{UUID, VersionSpec},
+        deps_compressed::Dict{VersionRange, Set{UUID}},
+        compat_compressed::Dict{VersionRange, Dict{UUID, VersionSpec}},
+        weak_deps_compressed::Dict{VersionRange, Set{UUID}},
+        weak_compat_compressed::Dict{VersionRange, Dict{UUID, VersionSpec}},
+        version::VersionNumber,
+        target_uuid::Union{UUID, Nothing} = nothing
+    )
+    empty!(result)
+
+    for deps_dict in (deps_compressed, weak_deps_compressed)
+        for (vrange, deps_set) in deps_dict
+            if version in vrange
+                for dep_uuid in deps_set
+                    if target_uuid === nothing || dep_uuid == target_uuid
+                        result[dep_uuid] = VersionSpec()  # Default: any version
+                    end
+                end
+            end
+        end
+    end
+
+    # Override with explicit compat specs from regular and weak compat
+    for compat_dict in (compat_compressed, weak_compat_compressed)
+        for (vrange, compat_entries) in compat_dict
+            if version in vrange
+                for (dep_uuid, vspec) in compat_entries
+                    if target_uuid === nothing || dep_uuid == target_uuid
+                        result[dep_uuid] = vspec
+                    end
+                end
+            end
+        end
+    end
+
+    return nothing
+end
+
+# Non-mutating wrapper for backwards compatibility
+# If target_uuid is provided, returns VersionSpec or nothing for that specific UUID
+# If target_uuid is nothing, returns Dict{UUID, VersionSpec} for all dependencies
+function query_compat_for_version(
+        deps_compressed::Dict{VersionRange, Set{UUID}},
+        compat_compressed::Dict{VersionRange, Dict{UUID, VersionSpec}},
+        weak_deps_compressed::Dict{VersionRange, Set{UUID}},
+        weak_compat_compressed::Dict{VersionRange, Dict{UUID, VersionSpec}},
+        version::VersionNumber,
+        target_uuid::Union{UUID, Nothing} = nothing
+    )
+    result = Dict{UUID, VersionSpec}()
+    query_compat_for_version!(result, deps_compressed, compat_compressed, weak_deps_compressed, weak_compat_compressed, version, target_uuid)
+
+    # If a specific UUID was requested, return just its VersionSpec (or nothing)
+    if target_uuid !== nothing
+        return get(result, target_uuid, nothing)
+    end
+
+    return result
+end
+
+# Helper to check if a UUID is in the weak deps for a specific version
+function is_weak_dep(
+        weak_compressed::Dict{VersionRange, Set{UUID}},
+        version::VersionNumber,
+        dep_uuid::UUID
+    )::Bool
+    for (vrange, weak_set) in weak_compressed
+        if version in vrange && (dep_uuid in weak_set)
+            return true
+        end
+    end
+    return false
+end
+
+# Helper function to query compat across multiple registries
+# Each registry has its own compressed dictionaries and version set
+# Only queries a registry if the version actually exists in that registry
+function query_compat_for_version_multi_registry!(
+        result::Dict{UUID, VersionSpec},
+        reg_result::Dict{UUID, VersionSpec},
+        deps_list::Vector{Dict{VersionRange, Set{UUID}}},
+        compat_list::Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}},
+        weak_deps_list::Vector{Dict{VersionRange, Set{UUID}}},
+        weak_compat_list::Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}},
+        versions_per_registry::Vector{Set{VersionNumber}},
+        version::VersionNumber
+    )
+    empty!(result)
+
+    # Query each registry's data separately
+    for i in eachindex(deps_list)
+        # CRITICAL: Only query this registry if the version exists in it!
+        if !(version in versions_per_registry[i])
+            continue
+        end
+
+        reg_deps = deps_list[i]
+        reg_compat = compat_list[i]
+        reg_weak_deps = weak_deps_list[i]
+        reg_weak_compat = weak_compat_list[i]
+
+        # Use the mutating query function to avoid allocation
+        query_compat_for_version!(reg_result, reg_deps, reg_compat, reg_weak_deps, reg_weak_compat, version)
+
+        # Merge results, preferring the first registry's compat if there's overlap
+        for (uuid, vspec) in reg_result
+            if !haskey(result, uuid)
+                result[uuid] = vspec
+            end
+            # If uuid already exists, keep the first registry's vspec (first wins)
+        end
+    end
+
+    return nothing
+end
+
+# Validate that no version ranges overlap for the same dependency
+# This enforces the registry invariant that each dependency should be specified
+# at most once for any given version
+# Works with any collection type (Set, Dict, etc.) and any key type (UUID, String, etc.)
+function validate_no_overlapping_ranges(
+        compressed::Dict{VersionRange, T},
+        versions::Vector{VersionNumber},
+        pkg_name::String,
+        data_type::String, # "Deps", "WeakDeps", "Compat", or "WeakCompat"
+        name_to_uuid::Dict{String, UUID}
+    ) where {T}
+    # Build inverse mapping for better error messages
+    uuid_to_name = Dict{UUID, String}(uuid => name for (name, uuid) in name_to_uuid)
+
+    # For each version, check that no dependency UUID appears in multiple ranges
+    for v in versions
+        seen_deps = Dict{UUID, VersionRange}()
+        for (vrange, dep_collection) in compressed
+            if v in vrange
+                # Works for both Set{UUID} (iterate directly) and Dict{UUID,...} (iterate keys)
+                for dep_uuid in (dep_collection isa AbstractDict ? keys(dep_collection) : dep_collection)
+                    if haskey(seen_deps, dep_uuid)
+                        dep_name = get(uuid_to_name, dep_uuid, string(dep_uuid))
+                        error(
+                            "Overlapping ranges for dependency $(dep_name) in $(pkg_name) $(data_type).toml: " *
+                                "version $v is covered by both $(seen_deps[dep_uuid]) and $(vrange)"
+                        )
+                    end
+                    seen_deps[dep_uuid] = vrange
+                end
+            end
+        end
+    end
+    return
 end
 
 
@@ -324,6 +383,86 @@ end
 
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
 
+function init_package_info!(registry::RegistryInstance, pkg::PkgEntry)
+    # Thread-safe lazy loading with double-check pattern
+    # Use the registry's load_lock to protect lazy loading of package info
+    return @lock registry.load_lock begin
+        # Double-check: if another thread loaded while we were waiting for the lock
+        isdefined(pkg, :info) && return pkg.info
+
+        path = pkg.registry_path
+        in_memory_registry = registry.in_memory_registry
+
+        d_p = parsefile(in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
+        name = d_p["name"]::String
+        name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
+        repo = get(d_p, "repo", nothing)::Union{Nothing, String}
+        subdir = get(d_p, "subdir", nothing)::Union{Nothing, String}
+
+        # The presence of a [metadata.deprecated] table indicates the package is deprecated
+        # We store the raw table to allow other tools to use the metadata
+        metadata = get(d_p, "metadata", nothing)::Union{Nothing, Dict{String, Any}}
+        deprecated = metadata !== nothing ? get(metadata, "deprecated", nothing)::Union{Nothing, Dict{String, Any}} : nothing
+
+        # Versions.toml
+        d_v = custom_isfile(in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
+            parsefile(in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
+        version_info = Dict{VersionNumber, VersionInfo}(
+            VersionNumber(k) =>
+                VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v
+        )
+
+        # Deps.toml (load first to build name -> UUID mapping)
+        name_to_uuid = Dict{String, UUID}()
+        deps = load_deps_data(in_memory_registry, pkg.registry_path, pkg.path, "Deps.toml", name_to_uuid)
+        # All packages depend on julia
+        deps[VersionRange()] = Set([JULIA_UUID])
+        name_to_uuid["julia"] = JULIA_UUID
+
+        # WeakDeps.toml (load to extend name -> UUID mapping)
+        weak_deps = load_deps_data(in_memory_registry, pkg.registry_path, pkg.path, "WeakDeps.toml", name_to_uuid)
+
+        # Compat.toml (convert names to UUIDs using the mapping)
+        compat = load_compat_data(in_memory_registry, pkg.registry_path, pkg.path, "Compat.toml", name_to_uuid)
+
+        # WeakCompat.toml (convert names to UUIDs using the mapping)
+        weak_compat = load_compat_data(in_memory_registry, pkg.registry_path, pkg.path, "WeakCompat.toml", name_to_uuid)
+
+        #=
+        # These validations are a bit too expensive
+        # RegistryTools does this already: https://github.com/JuliaRegistries/RegistryTools.jl/blob/b5ff4d541b0aad2261ac21416113cee9718e28b3/src/Compress.jl#L64
+        # Validate that no ranges overlap for the same dependency (registry invariant)
+        versions_list = sort!(collect(keys(version_info)))
+        if !isempty(deps)
+            validate_no_overlapping_ranges(deps, versions_list, pkg.name, "Deps", name_to_uuid)
+        end
+        if !isempty(weak_deps)
+            validate_no_overlapping_ranges(weak_deps, versions_list, pkg.name, "WeakDeps", name_to_uuid)
+        end
+        if !isempty(compat)
+            validate_no_overlapping_ranges(compat, versions_list, pkg.name, "Compat", name_to_uuid)
+        end
+        if !isempty(weak_compat)
+            validate_no_overlapping_ranges(weak_compat, versions_list, pkg.name, "WeakCompat", name_to_uuid)
+        end
+        =#
+
+        @assert !isdefined(pkg, :info)
+        pkg.info = PkgInfo(repo, subdir, deprecated, version_info, deps, compat, weak_deps, weak_compat)
+
+        # Free memory: delete the package's files from in_memory_registry since we've fully parsed them
+        if in_memory_registry !== nothing
+            for filename in ("Package.toml", "Versions.toml", "Deps.toml", "WeakDeps.toml", "Compat.toml", "WeakCompat.toml")
+                delete!(in_memory_registry, to_tar_path_format(joinpath(pkg.path, filename)))
+            end
+        end
+
+        return pkg.info
+    end
+end
+
+registry_info(registry::RegistryInstance, pkg::PkgEntry) = init_package_info!(registry, pkg)
+
 @noinline function _ensure_registry_loaded_slow!(r::RegistryInstance)
     return @lock r.load_lock begin
         # Double-check pattern: if another thread loaded while we were waiting for the lock
@@ -347,7 +486,7 @@ const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
             info::Dict{String, Any}
             name = info["name"]::String
             pkgpath = info["path"]::String
-            pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid, r.in_memory_registry)
+            pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid)
             r.pkgs[uuid] = pkg
         end
 

@@ -937,7 +937,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
-        info = Pkg.Registry.registry_info(regpkg)
+        info = Pkg.Registry.registry_info(reg, regpkg)
         url = info.repo
         url === nothing && continue
         pkg.repo.source = url
@@ -1343,7 +1343,7 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
         for reg in registries
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
-            info = Pkg.Registry.registry_info(pkg)
+            info = Pkg.Registry.registry_info(reg, pkg)
             repo = info.repo
             repo === nothing && continue
             push!(repo_infos, (reg.name, repo, uuid))

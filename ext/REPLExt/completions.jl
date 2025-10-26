@@ -78,31 +78,29 @@ function complete_remote_package!(comps, partial; hint::Bool)
             name = regpkg.name
             name in cmp && continue
             if startswith(regpkg.name, partial)
-                pkg = Registry.registry_info(regpkg)
+                pkg = Registry.registry_info(reg, regpkg)
                 Registry.isdeprecated(pkg) && continue
-                compat_info = Registry.compat_info(pkg)
-                # Filter versions
-                for (v, uncompressed_compat) in compat_info
+                # Check if any non-yanked version is compatible with current Julia
+                found_compatible_version = false
+                for v in keys(pkg.version_info)
                     Registry.isyanked(pkg, v) && continue
                     # TODO: Filter based on offline mode
-                    is_julia_compat = nothing
-                    for (pkg_uuid, vspec) in uncompressed_compat
-                        if pkg_uuid == JULIA_UUID
-                            is_julia_compat = VERSION in vspec
-                            is_julia_compat && continue
-                        end
-                    end
-                    # Found a compatible version or compat on julia at all => compatible
-                    if is_julia_compat === nothing || is_julia_compat
-                        push!(cmp, name)
-                        # In hint mode the result is only used if there is a single matching entry
-                        # so we can return no matches in case of more than one match
-                        if hint && found_match
-                            return true # true means returned early
-                        end
-                        found_match = true
+                    # Query compressed compat for this version (optimized: only fetch Julia compat)
+                    julia_vspec = Pkg.Registry.query_compat_for_version(pkg, v, JULIA_UUID)
+                    # Found a compatible version or no julia compat at all => compatible
+                    if julia_vspec === nothing || VERSION in julia_vspec
+                        found_compatible_version = true
                         break
                     end
+                end
+                if found_compatible_version
+                    push!(cmp, name)
+                    # In hint mode the result is only used if there is a single matching entry
+                    # so we can return no matches in case of more than one match
+                    if hint && found_match
+                        return true # true means returned early
+                    end
+                    found_match = true
                 end
             end
         end
