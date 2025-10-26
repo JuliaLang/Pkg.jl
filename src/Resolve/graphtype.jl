@@ -113,19 +113,20 @@ mutable struct GraphData
     rlog::ResolveLog
 
     function GraphData(
-            compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
+            compat_compressed::Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}},
+            pkg_versions::Dict{UUID, Vector{VersionNumber}},
             uuid_to_name::Dict{UUID, String},
             verbose::Bool = false
         )
         # generate pkgs
-        pkgs = sort!(collect(keys(compat)))
+        pkgs = sort!(collect(keys(pkg_versions)))
         np = length(pkgs)
 
         # generate pdict
         pdict = Dict{UUID, Int}(pkgs[p0] => p0 for p0 in 1:np)
 
-        # generate spp and pvers
-        pvers = [sort!(collect(keys(compat[pkgs[p0]]))) for p0 in 1:np]
+        # generate spp and pvers from provided version lists
+        pvers = [pkg_versions[pkgs[p0]] for p0 in 1:np]
         spp = length.(pvers) .+ 1
 
         # generate vdict
@@ -235,8 +236,12 @@ mutable struct Graph
     cavfld::Vector{FieldValue}
 
     function Graph(
-            compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
-            compat_weak::Dict{UUID, Dict{VersionNumber, Set{UUID}}},
+            deps_compressed::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
+            compat_compressed::Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}},
+            weak_deps_compressed::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
+            weak_compat_compressed::Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}},
+            pkg_versions::Dict{UUID, Vector{VersionNumber}},
+            pkg_versions_per_registry::Dict{UUID, Vector{Set{VersionNumber}}},
             uuid_to_name::Dict{UUID, String},
             reqs::Requires,
             fixed::Dict{UUID, Fixed},
@@ -248,21 +253,54 @@ mutable struct Graph
         uuid_to_name[uuid_julia] = "julia"
         if julia_version !== nothing
             fixed[uuid_julia] = Fixed(julia_version)
-            compat[uuid_julia] = Dict(julia_version => Dict{VersionNumber, Dict{UUID, VersionSpec}}())
+            deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            weak_deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            weak_compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            pkg_versions[uuid_julia] = [julia_version]
+            pkg_versions_per_registry[uuid_julia] = [Set([julia_version])]
         else
-            compat[uuid_julia] = Dict{VersionNumber, Dict{UUID, VersionSpec}}()
+            deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            weak_deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            weak_compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            pkg_versions[uuid_julia] = VersionNumber[]
+            pkg_versions_per_registry[uuid_julia] = [Set{VersionNumber}()]
         end
 
-        data = GraphData(compat, uuid_to_name, verbose)
+        data = GraphData(compat_compressed, pkg_versions, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
         extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
             [Vector{Dict{Int, BitVector}}(undef, spp[p0] - 1) for p0 in 1:np]
         end
+        vnmap = Dict{UUID, VersionSpec}()
+        reg_result = Dict{UUID, VersionSpec}()
+        req = Dict{Int, VersionSpec}()
         for p0 in 1:np, v0 in 1:(spp[p0] - 1)
             vn = pvers[p0][v0]
-            req = Dict{Int, VersionSpec}()
+            empty!(req)
             uuid0 = pkgs[p0]
-            vnmap = get(Dict{UUID, VersionSpec}, compat[uuid0], vn)
+
+            # Query compressed deps and compat data for this version (including weak deps)
+            # We have a vector of per-registry dictionaries, need to query across all
+            uuid0_deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, deps_compressed, uuid0)
+            uuid0_compat_list = get(Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}, compat_compressed, uuid0)
+            uuid0_weak_deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, weak_deps_compressed, uuid0)
+            uuid0_weak_compat_list = get(Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}, weak_compat_compressed, uuid0)
+            uuid0_versions_per_reg = get(Vector{Set{VersionNumber}}, pkg_versions_per_registry, uuid0)
+            Registry.query_compat_for_version_multi_registry!(vnmap, reg_result, uuid0_deps_list, uuid0_compat_list, uuid0_weak_deps_list, uuid0_weak_compat_list, uuid0_versions_per_reg, vn)
+
+            # Filter out incompatible stdlib compat entries from registry dependencies
+            for (dep_uuid, dep_compat) in vnmap
+                if Types.is_stdlib(dep_uuid) && !(dep_uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+                    stdlib_ver = Types.stdlib_version(dep_uuid, julia_version)
+                    if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
+                        @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat package = uuid_to_name[uuid0] version = vn
+                        delete!(vnmap, dep_uuid)
+                    end
+                end
+            end
+
             for (uuid1, vs) in vnmap
                 p1 = pdict[uuid1]
                 p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
@@ -275,18 +313,26 @@ mutable struct Graph
                     req[p1] = req_p1 ∩ vs
                 end
             end
+
             # Translate the requirements into bit masks
             # Hot code, measure performance before changing
             req_msk = Dict{Int, BitVector}()
             sizehint!(req_msk, length(req))
-            maybe_weak = haskey(compat_weak, uuid0) && haskey(compat_weak[uuid0], vn)
+
             for (p1, vs) in req
                 pv = pvers[p1]
                 req_msk_p1 = BitVector(undef, spp[p1])
                 @inbounds for i in 1:(spp[p1] - 1)
                     req_msk_p1[i] = pv[i] ∈ vs
                 end
-                weak = maybe_weak && (pkgs[p1] ∈ compat_weak[uuid0][vn])
+                # Check if this is a weak dep across all registries
+                weak = false
+                for weak_deps_dict in uuid0_weak_deps_list
+                    if Registry.is_weak_dep(weak_deps_dict, vn, pkgs[p1])
+                        weak = true
+                        break
+                    end
+                end
                 req_msk_p1[end] = weak
                 req_msk[p1] = req_msk_p1
             end
