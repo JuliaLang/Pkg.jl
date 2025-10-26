@@ -2543,25 +2543,46 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
         has_depwarn = false
     end
 
-    # Render julia_args to a clean space-joined string to avoid interpolating
-    # the raw Cmd object which can produce extraneous empty tokens (e.g. "''").
-    julia_args_str = try
-        isempty(julia_args.exec) ? "" : join(string.(julia_args.exec), " ")
+    # Split any entries in julia_args.exec that may contain multiple flags
+    # (e.g. "--check-bounds=yes --compiled-modules=yes ...") into individual
+    # tokens so they are passed as separate argv entries to the subprocess.
+    tokens = String[]
+    try
+        for e in julia_args.exec
+            append!(tokens, split(String(e)))
+        end
     catch
-        string(julia_args)
+        # Fall back to empty tokens on error
+        tokens = String[]
     end
 
-    return ```
-        --code-coverage=$(coverage_arg)
-        --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
-        --check-bounds=yes
-        --warn-overwrite=yes
-        --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
-        --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
-    --track-allocation=$( ("none", "user", "all")[Base.JLOptions().malloc_log + 1] )
-        $(julia_args_str)
-        $(has_depwarn ? "" : "--depwarn=yes")
-    ```
+    # Recompute has_depwarn based on split tokens to be robust
+    has_depwarn = any(x -> occursin(r"^--depwarn($|=)", x), tokens)
+
+    if has_depwarn
+        return ```
+            --code-coverage=$(coverage_arg)
+            --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
+            --check-bounds=yes
+            --warn-overwrite=yes
+            --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
+            --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
+            --track-allocation=$( ("none", "user", "all")[Base.JLOptions().malloc_log + 1] )
+            $(tokens...)
+        ```
+    else
+        return ```
+            --code-coverage=$(coverage_arg)
+            --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
+            --check-bounds=yes
+            --warn-overwrite=yes
+            --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
+            --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
+            --track-allocation=$( ("none", "user", "all")[Base.JLOptions().malloc_log + 1] )
+            $(tokens...)
+            --depwarn=yes
+        ```
+    end
 end
 
 function with_temp_env(fn::Function, temp_env::String)
