@@ -2536,16 +2536,28 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     else
         throw(ArgumentError("coverage should be a boolean or a string."))
     end
+    # Check whether the user provided an explicit --depwarn flag in julia_args;
+    # if so, respect it. Otherwise, ensure we append `--depwarn=yes` so
+    # `]test` runs with deprecation warnings enabled by default.
+    has_depwarn = false
+    try
+        has_depwarn = any(x -> occursin(r"^--depwarn($|=)", x), julia_args.exec)
+    catch
+        # If we can't inspect julia_args.exec for any reason, fall back to
+        # conservatively not clobbering user flags (so we'll append the flag).
+        has_depwarn = false
+    end
+
     return ```
         --code-coverage=$(coverage_arg)
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
         --check-bounds=yes
         --warn-overwrite=yes
-        --depwarn=$(Base.JLOptions().depwarn == 2 ? "error" : "yes")
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
         --startup-file=$(Base.JLOptions().startupfile == 1 ? "yes" : "no")
         --track-allocation=$(("none", "user", "all")[Base.JLOptions().malloc_log + 1])
         $(julia_args)
+        $(has_depwarn ? "" : "--depwarn=yes")
     ```
 end
 
