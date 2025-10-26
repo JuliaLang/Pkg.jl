@@ -16,7 +16,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io, discover_repo, create_cachedir_tag
+import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path
 
 #########
 # Utils #
@@ -130,7 +130,7 @@ end
 
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        pkg.path !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
+        pkg.path !== nothing ? normpath(joinpath(dirname(manifest_file), pkg.path)) :
         is_or_was_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
         nothing
 end
@@ -540,7 +540,7 @@ is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
-    source = project_rel_path(env, source_path(env.manifest_file, pkg))
+    source = source_path(env.manifest_file, pkg)
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
     for pkg in pkgs
@@ -553,10 +553,7 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
             # otherwise relative to manifest file....
             pkg.path = Types.relative_project_path(
                 env.manifest_file,
-                project_rel_path(
-                    source_env,
-                    source_path(source_env.manifest_file, pkg)
-                )
+                source_path(source_env.manifest_file, pkg)
             )
             push!(developed, pkg)
             collect_developed!(env, pkg, developed)
@@ -607,13 +604,13 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         pkg.uuid === nothing && continue
         # add repo package if necessary
         source = source_path(env.manifest_file, pkg)
-        path = source === nothing ? nothing : project_rel_path(env, source)
+        path = source
         if (path === nothing || !isdir(path)) && (pkg.repo.rev !== nothing || pkg.repo.source !== nothing)
             # ensure revved package is installed
             # pkg.tree_hash is set in here
             Types.handle_repo_add!(Types.Context(env = env), pkg)
             # Recompute path
-            path = project_rel_path(env, source_path(env.manifest_file, pkg))
+            path = source_path(env.manifest_file, pkg)
         end
         if !isdir(path)
             # Find which packages depend on this missing package for better error reporting
@@ -1538,7 +1535,6 @@ end
 ################################
 # Manifest update and pruning #
 ################################
-project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.manifest_file), path))
 
 function prune_manifest(env::EnvCache)
     # if project uses another manifest, only prune project entry in manifest
@@ -2601,7 +2597,7 @@ end
 function abspath!(env::EnvCache, manifest::Manifest)
     for (uuid, entry) in manifest
         if entry.path !== nothing
-            entry.path = project_rel_path(env, entry.path)
+            entry.path = manifest_rel_path(env, entry.path)
         end
     end
     return manifest
@@ -2828,7 +2824,7 @@ function test(
     missing_runtests = String[]
     source_paths = String[] # source_path is the package root (not /src)
     for pkg in pkgs
-        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.manifest_file, pkg, ctx.julia_version)) # TODO
+        sourcepath = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
     end
