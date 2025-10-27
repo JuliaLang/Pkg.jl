@@ -3,6 +3,8 @@ Pkg v1.14 Release Notes
 
 - `Pkg.status` now displays a `○` indicator for packages that are not yet precompiled, helping users identify which
   packages will require precompilation on first load. ([#4415])
+- Pkg can be used from a terminal: `julia -m Pkg add Example` runs the commands of the Pkg REPL, on the project
+  in the current directory unless `--project` says otherwise. The same interface is declared as the app `pkg`. ([#4473])
 - `Pkg.status(outdated = true)` (`pkg> status --outdated`) now resolves what an update would do: `⌃` marks the
   packages `Pkg.update()` upgrades and `⌅` those it leaves alone, with what holds them back. A plain `status`
   no longer guesses: `⌃` there marks every package with a newer version and `⌅` is not shown. ([#4922])
@@ -307,3 +309,4 @@ Pkg v1.7 Release Notes
 [#4922]: https://github.com/JuliaLang/Pkg.jl/pull/4922
 [#4926]: https://github.com/JuliaLang/Pkg.jl/pull/4926
 [#4415]: https://github.com/JuliaLang/Pkg.jl/pull/4415
+[#4473]: https://github.com/JuliaLang/Pkg.jl/pull/4473

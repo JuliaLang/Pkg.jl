@@ -307,13 +307,14 @@ function core_parse(words::Vector{QString}; only_cmd = false)
     return statement, words[end].raw
 end
 
-parse(input::String) =
-    map(Base.Iterators.filter(!isempty, tokenize(strip(input)))) do words
+function parse_statement(words::Vector{QString}; hint = "Type ? for help with available commands")
     statement, input_word = core_parse(words)
-    statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. Type ? for help with available commands")
+    statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. $hint")
     statement.options = map(parse_option, statement.options)
-    statement
+    return statement
 end
+
+parse(input::String) = map(parse_statement, Base.Iterators.filter(!isempty, tokenize(strip(input))))
 
 #------------#
 # APIOptions #
