@@ -272,14 +272,14 @@ function init_package_info!(pkg::PkgEntry)
 end
 
 
-function uncompress_registry(tar_gz::AbstractString)
-    if !isfile(tar_gz)
-        error("$(repr(tar_gz)): No such file")
+function uncompress_registry(compressed_tar::AbstractString)
+    if !isfile(compressed_tar)
+        error("$(repr(compressed_tar)): No such file")
     end
     data = Dict{String, String}()
     buf = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE)
     io = IOBuffer()
-    open(`$(exe7z()) x $tar_gz -so`) do tar
+    open(get_extract_cmd(compressed_tar)) do tar
         Tar.read_tarball(x -> true, tar; buf = buf) do hdr, _
             if hdr.type == :file
                 Tar.read_data(tar, io; size = hdr.size, buf = buf)
