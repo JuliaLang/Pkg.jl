@@ -1285,8 +1285,15 @@ function compute_eq_classes!(graph::Graph)
 
     np = graph.np
     sumspp = sum(graph.spp)
+
+    # Preallocate workspace matrix - make it large enough for worst case
+    max_rows = maximum(1 + sum(size(m, 1) for m in graph.gmsk[p0]; init = 0) for p0 in 1:np; init = 1)
+    max_cols = maximum(graph.spp; init = 1)
+    cmat_workspace = BitMatrix(undef, max_rows, max_cols)
+    cvecs_workspace = [BitVector(undef, max_rows) for _ in 1:max_cols]
+
     for p0 in 1:np
-        build_eq_classes1!(graph, p0)
+        build_eq_classes1!(graph, p0, cmat_workspace, cvecs_workspace)
     end
 
     log_event_global!(graph, "computed version equivalence classes, stats (total n. of states): before = $(sumspp) after = $(sum(graph.spp))")
@@ -1296,7 +1303,7 @@ function compute_eq_classes!(graph::Graph)
     return graph
 end
 
-function build_eq_classes1!(graph::Graph, p0::Int)
+function build_eq_classes1!(graph::Graph, p0::Int, cmat_workspace::BitMatrix, cvecs_workspace::Vector{BitVector})
     np = graph.np
     spp = graph.spp
     gadj = graph.gadj
@@ -1312,8 +1319,24 @@ function build_eq_classes1!(graph::Graph, p0::Int)
 
     # concatenate all the constraints; the columns of the
     # result encode the behavior of each version
-    cmat = vcat(BitMatrix(permutedims(gconstr[p0])), gmsk[p0]...)
-    cvecs = [cmat[:, v0] for v0 in 1:spp[p0]]
+    # cmat = vcat(BitMatrix(permutedims(gconstr[p0])), gmsk[p0]...)
+    ncols = spp[p0]
+    cmat_workspace[1, 1:ncols] = gconstr[p0]
+    row_idx = 2
+    for j1 in 1:length(gmsk[p0])
+        msk = gmsk[p0][j1]
+        nrows_msk = size(msk, 1)
+        cmat_workspace[row_idx:(row_idx + nrows_msk - 1), 1:ncols] = msk
+        row_idx += nrows_msk
+    end
+
+    # cvecs = [cmat[:, v0] for v0 in 1:spp[p0]]
+    nrows = row_idx - 1
+    cvecs = view(cvecs_workspace, 1:ncols)
+    for v0 in 1:ncols
+        resize!(cvecs[v0], nrows)
+        copy!(cvecs[v0], view(cmat_workspace, 1:nrows, v0))
+    end
 
     # find unique behaviors
     repr_vecs = unique(cvecs)
