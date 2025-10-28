@@ -148,7 +148,7 @@ let
                 Base.rm(tmp; recursive = true)
             catch
             end
-
+            Base.precompile(Tuple{typeof(Pkg.main), Vector{String}})
             Base.precompile(Tuple{typeof(Pkg.API.status)})
             Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project})
             Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch})

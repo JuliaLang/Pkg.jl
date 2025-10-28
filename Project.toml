@@ -51,3 +51,6 @@ UUIDs = "1.11"
 Zstd_jll = "1.5.7"
 julia = "1.12"
 p7zip_jll = "17.5"
+
+[apps]
+pkg = {}
