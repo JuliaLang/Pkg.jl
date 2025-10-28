@@ -80,6 +80,7 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int}, Nothing}, previo
     np = graph.np
     spp = graph.spp
     gconstr = graph.gconstr
+    downgrade = graph.downgrade
 
     if lower_bound ≢ nothing
         for p0 in 1:np
@@ -134,6 +135,10 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int}, Nothing}, previo
         log_event_global!(graph, "the solver found an optimal configuration")
         return sol
     else
+        if downgrade
+            log_event_global!(graph, "downgrade mode: using feasible configuration without further optimization")
+            return sol
+        end
         enforce_optimality!(sol, graph)
         if lower_bound ≢ nothing
             @assert all(sol .≥ lower_bound)
@@ -308,6 +313,7 @@ function greedysolver(graph::Graph)
     gadj = graph.gadj
     gmsk = graph.gmsk
     np = graph.np
+    downgrade = graph.downgrade
 
     push_snapshot!(graph)
     gconstr = graph.gconstr
@@ -320,10 +326,10 @@ function greedysolver(graph::Graph)
     #        since it may include implicit requirements)
     req_inds = Set{Int}(p0 for p0 in 1:np if !gconstr[p0][end])
 
-    # set up required packages to their highest allowed versions
+    # set up required packages to their highest (or lowest in downgrade mode) allowed versions
     for rp0 in req_inds
-        # look for the highest version which satisfies the requirements
-        rv0 = findlast(gconstr[rp0])
+        # look for the highest/lowest version which satisfies the requirements
+        rv0 = downgrade ? findfirst(gconstr[rp0]) : findlast(gconstr[rp0])
         @assert rv0 ≢ nothing && rv0 ≠ spp[rp0]
         sol[rp0] = rv0
         fill!(gconstr[rp0], false)
@@ -353,8 +359,8 @@ function greedysolver(graph::Graph)
             # scan dependencies
             for (j1, p1) in enumerate(gadj[p0])
                 msk = gmsk[p0][j1]
-                # look for the highest version which satisfies the requirements
-                v1 = findlast(msk[:, s0] .& gconstr[p1])
+                # look for the highest/lowest version which satisfies the requirements
+                v1 = downgrade ? findfirst(msk[:, s0] .& gconstr[p1]) : findlast(msk[:, s0] .& gconstr[p1])
                 v1 == spp[p1] && continue # p1 is not required by p0's current version
                 # if we found a version, and the package was uninstalled
                 # or the same version was already selected, we're ok;

@@ -391,6 +391,34 @@ compound_declarations = [
                 """,
         ],
         PSA[
+            :name => "downgrade",
+            :short_name => "down",
+            :api => API.down,
+            :should_splat => false,
+            :arg_count => 0 => Inf,
+            :arg_parser => parse_package,
+            :option_spec => [
+                PSA[:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
+                PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
+                PSA[:name => "major", :api => :level => UPLEVEL_MAJOR],
+                PSA[:name => "minor", :api => :level => UPLEVEL_MINOR],
+                PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
+                PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
+                PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+            ],
+            :completions => :complete_installed_packages,
+            :description => "downgrade packages to minimum compatible versions",
+            :help => md"""
+                    [down|downgrade] [-p|--project]  [opts] pkg[=uuid] [@version] ...
+                    [down|downgrade] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
+
+                    opts: --major | --minor | --patch | --fixed
+                          --preserve=<all/direct/none>
+
+                Same as `update` except prefer lower versions instead of higher.
+                """,
+        ],
+        PSA[
             :name => "generate",
             :api => API.generate,
             :arg_count => 1 => 1,
