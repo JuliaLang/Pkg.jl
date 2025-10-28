@@ -1083,6 +1083,12 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
         sources
 
     seen = copy(staged)
+    staged_next = Set{Int}()
+
+    # Pre-allocate workspace for added constraints
+    max_spp = maximum(spp, init = 0)
+    added_constr1 = BitVector(undef, max_spp)
+    old_gconstr1 = BitVector(undef, max_spp)
 
     while !isempty(staged)
         staged_next = Set{Int}()
@@ -1097,16 +1103,28 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
                 pkgs[p1] == uuid_julia && continue
 
                 msk = gmsk[p0][j1]
-                # consider the sub-mask with only allowed versions of p0
-                sub_msk = msk[:, gconstr0]
                 # if an entire row of the sub-mask is false, that version of p1
                 # is effectively forbidden
                 # (this is just like calling `any` row-wise)
-                added_constr1 = any!(BitVector(undef, spp[p1]), sub_msk)
+                # sub_msk = msk[:, gconstr0]
+                # added_constr1 = any!(BitVector(undef, spp[p1]), sub_msk)
+                # The code below is equivalent to the shorter code above, but avoids allocating
+                spp1 = spp[p1]
+                resize!(added_constr1, spp1)
+                fill!(added_constr1, false)
+                for v1 in 1:spp1
+                    for v0 in 1:spp[p0]
+                        if gconstr0[v0] && msk[v1, v0]
+                            added_constr1[v1] = true
+                            break
+                        end
+                    end
+                end
+
                 # apply the new constraints, checking for contradictions
                 # (keep the old ones for comparison)
                 gconstr1 = gconstr[p1]
-                old_gconstr1 = copy(gconstr1)
+                copy!(old_gconstr1, gconstr1)
                 gconstr1 .&= added_constr1
                 # if the new constraints are more restrictive than the
                 # previous ones, record it and propagate them next
