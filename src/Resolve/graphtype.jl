@@ -229,6 +229,9 @@ mutable struct Graph
     # number of packages (all Vectors above have this length)
     np::Int
 
+    # downgrade mode: if true, prefer lower versions instead of higher
+    downgrade::Bool
+
     # some workspace vectors
     newmsg::Vector{FieldValue}
     diff::Vector{FieldValue}
@@ -241,7 +244,8 @@ mutable struct Graph
             reqs::Requires,
             fixed::Dict{UUID, Fixed},
             verbose::Bool = false,
-            julia_version::Union{VersionNumber, Nothing} = VERSION
+            julia_version::Union{VersionNumber, Nothing} = VERSION,
+            downgrade::Bool = false
         )
 
         # Tell the resolver about julia itself
@@ -342,7 +346,7 @@ mutable struct Graph
 
         graph = new(
             data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np,
-            FieldValue[], FieldValue[], FieldValue[]
+            downgrade, FieldValue[], FieldValue[], FieldValue[]
         )
 
         _add_fixed!(graph, fixed)
@@ -366,8 +370,9 @@ mutable struct Graph
         fix_inds = copy(graph.fix_inds)
         ignored = copy(graph.ignored)
         solve_stack = [([copy(gc0) for gc0 in sav_gconstr], copy(sav_ignored)) for (sav_gconstr, sav_ignored) in graph.solve_stack]
+        downgrade = graph.downgrade
 
-        return new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np)
+        return new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np, downgrade)
     end
 end
 
@@ -1206,6 +1211,7 @@ function validate_versions!(graph::Graph, sources::Set{Int} = Set{Int}(); skim::
     id(p0::Int) = pkgID(p0, graph)
 
     log_event_global!(graph, "validating versions [mode=$(skim ? "skim" : "deep")]")
+    downgrade = graph.downgrade
 
     sumspp = sum(count(gconstr[p0]) for p0 in 1:np)
 
@@ -1220,7 +1226,9 @@ function validate_versions!(graph::Graph, sources::Set{Int} = Set{Int}(); skim::
 
         gconstr0 = gconstr[p0]
         old_gconstr0 = copy(gconstr0)
-        for v0 in reverse!(findall(gconstr0))
+        version_indices = findall(gconstr0)
+        downgrade || reverse!(version_indices) # prefer higher versions when upgrading
+        for v0 in version_indices
             push_snapshot!(graph)
             fill!(graph.gconstr[p0], false)
             graph.gconstr[p0][v0] = true
@@ -1244,13 +1252,15 @@ function validate_versions!(graph::Graph, sources::Set{Int} = Set{Int}(); skim::
             changed = true
             unsat = !any(gconstr0)
             if unsat
-                # we'll trigger a failure by pinning the highest version
-                v0 = findlast(old_gconstr0[1:(end - 1)])
+                # we'll trigger a failure by pinning the highest (or lowest) version
+                selector = downgrade ? findfirst : findlast
+                v0 = selector(old_gconstr0[1:(end - 1)])
                 @assert v0 ≢ nothing # this should be ensured by a previous pruning
                 # @info "pinning $(logstr(id(p0))) to version $(pvers[p0][v0])"
                 log_event_pin!(graph, pkgs[p0], pvers[p0][v0])
                 graph.gconstr[p0][v0] = true
-                err_msg_preamble = "Package $(logstr(id(p0))) has no possible versions; here is the log when trying to validate the highest version left until this point, $(logstr(id(p0), pvers[p0][v0]))):\n"
+                direction = downgrade ? "lowest" : "highest"
+                err_msg_preamble = "Package $(logstr(id(p0))) has no possible versions; here is the log when trying to validate the $direction version left until this point, $(logstr(id(p0), pvers[p0][v0]))):\n"
                 propagate_constraints!(graph, Set{Int}([p0]); err_msg_preamble)
                 @assert false # the above call must fail
             end
@@ -1397,6 +1407,7 @@ function build_eq_classes_soft1!(graph::Graph, p0::Int)
     gmsk = graph.gmsk
     gconstr = graph.gconstr
     ignored = graph.ignored
+    downgrade = graph.downgrade
 
     # concatenate all the constraints; the columns of the
     # result encode the behavior of each version
@@ -1417,10 +1428,15 @@ function build_eq_classes_soft1!(graph::Graph, p0::Int)
     neq == eff_spp0 && return # nothing to do here
 
     # group versions into sets that behave identically
-    # each set is represented by its highest-valued member
-    repr_vers = sort!(Int[findlast(isequal(repr_vecs[w0]), cvecs) for w0 in 1:neq])
+    # each set is represented by its extreme member (highest for upgrade, lowest for downgrade)
+    selector = downgrade ? findfirst : findlast
+    repr_vers = sort!(Int[selector(isequal(repr_vecs[w0]), cvecs) for w0 in 1:neq])
     @assert all(>(0), repr_vers)
-    @assert repr_vers[end] == eff_spp0
+    if downgrade
+        @assert repr_vers[1] == 1
+    else
+        @assert repr_vers[end] == eff_spp0
+    end
 
     # convert the version numbers into the original numbering
     repr_vers = findall(gconstr0)[repr_vers]

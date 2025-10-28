@@ -22,7 +22,7 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec
 
-public activate, add, build, compat, develop, free, gc, generate, instantiate,
+public activate, add, build, compat, develop, downgrade, free, gc, generate, instantiate,
     pin, precompile, readonly, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
@@ -352,6 +352,15 @@ After any package updates the project will be precompiled. See more at [Environm
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
 const update = API.up
+
+"""
+    Pkg.downgrade(; kwargs...)
+    Pkg.downgrade(pkg::Union{String, Vector{String}}; kwargs...)
+    Pkg.downgrade(pkgs::Union{PackageSpec, Vector{PackageSpec}}; kwargs...)
+
+Same as `Pkg.update` but prefer lower versions over higher.
+"""
+const downgrade = API.down
 
 """
     Pkg.test(; kwargs...)

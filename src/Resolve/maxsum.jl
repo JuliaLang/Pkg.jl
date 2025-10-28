@@ -52,11 +52,16 @@ mutable struct Messages
         ignored = graph.ignored
         pvers = graph.data.pvers
         pdict = graph.data.pdict
+        downgrade = graph.downgrade
 
         ## generate wveights (v0 == spp[p0] is the "uninstalled" state)
+        # In downgrade mode, we negate the version weights to prefer lower versions
         vweight = [[VersionWeight(v0 < spp[p0] ? pvers[p0][v0] : v"0") for v0 in 1:spp[p0]] for p0 in 1:np]
+        if downgrade
+            vweight = [[-w for w in vweight[p0]] for p0 in 1:np]
+        end
 
-        # external fields: favor newest versions over older, and no-version over all;
+        # external fields: favor newest versions over older (or oldest in downgrade mode), and no-version over all;
         #                  explicit requirements use level l1 instead of l2
         fv(p0, v0) = p0 ∈ req_inds ?
             FieldValue(0, vweight[p0][v0], zero(VersionWeight), (v0 == spp[p0])) :
@@ -371,6 +376,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
     yield()
     isopen(timer) || return :timedout
 
+    downgrade = graph.downgrade
     is_best_sofar = update_solution!(strace, graph)
 
     # this is the base of the recursion: the case when
@@ -387,7 +393,8 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
         if maxdiff isa Unsat
             if is_best_sofar
                 p0 = maxdiff.p0
-                s0 = findlast(graph.gconstr[p0])
+                selector = downgrade ? findfirst : findlast
+                s0 = selector(graph.gconstr[p0])
                 strace.staged = (p0, s0)
             end
             return :unsat

@@ -695,7 +695,7 @@ end
 # all versioned packages should have a `tree_hash`
 function resolve_versions!(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
-        installed_only::Bool
+        installed_only::Bool, downgrade::Bool = false
     )
     installed_only = installed_only || OFFLINE_MODE[]
 
@@ -763,7 +763,7 @@ function resolve_versions!(
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
-    graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
+    graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only, downgrade)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
 
@@ -835,7 +835,7 @@ const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
         reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
-        installed_only::Bool
+        installed_only::Bool, downgrade::Bool = false
     )
     uuids = Set{UUID}()
     union!(uuids, keys(reqs))
@@ -981,7 +981,7 @@ function deps_graph(
         fixed = fixed_filtered
     end
 
-    return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
+    return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version, downgrade),
         all_compat
 end
 
@@ -2324,18 +2324,17 @@ function load_manifest_deps_up(
     return pkgs
 end
 
-function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version, downgrade::Bool = false)
     pkgs = load_manifest_deps_up(env, pkgs; preserve = preserve)
     check_registered(registries, pkgs)
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED, downgrade)
     return pkgs, deps_map
 end
 
 function up(
         ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
-        skip_writing_project::Bool = false, preserve::Union{Nothing, PreserveLevel} = nothing
+        skip_writing_project::Bool = false, preserve::Union{Nothing, PreserveLevel} = nothing, downgrade::Bool = false
     )
-
     requested_pkgs = pkgs
 
     new_git = Set{UUID}()
@@ -2353,11 +2352,11 @@ function up(
         up_load_manifest_info!(pkg, entry)
     end
     if preserve !== nothing
-        pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+        pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version, downgrade)
     else
         pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
         check_registered(ctx.registries, pkgs)
-        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
+        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false, downgrade)
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
     new_apply = download_source(ctx)
@@ -2393,6 +2392,13 @@ function up(
     end
 
     return build_versions(ctx, union(new_apply, new_git))
+end
+
+function down(
+        ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
+        skip_writing_project::Bool = false, preserve::Union{Nothing, PreserveLevel} = nothing
+    )
+    return up(ctx, pkgs, level; skip_writing_project, preserve, downgrade = true)
 end
 
 function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})

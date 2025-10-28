@@ -18,6 +18,7 @@ Pkg v1.13 Release Notes
   improving efficiency when performing several environment changes. ([#4262])
 - Added `Pkg.autoprecompilation_enabled(state::Bool)` to globally enable or disable automatic precompilation for Pkg
   operations. ([#4262])
+- Added `Pkg.downgrade`/`pkg> down` command to resolve packages to their lowest compatible versions ([#XXXX])
 - Implemented atomic TOML writes to prevent data corruption when Pkg operations are interrupted or multiple processes
   write simultaneously. All TOML files are now written atomically using temporary files and atomic moves. ([#4293])
 - Implemented lazy loading for RegistryInstance to significantly improve startup performance for operations that don't
