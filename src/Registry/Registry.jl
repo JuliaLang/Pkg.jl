@@ -41,7 +41,7 @@ module Registry
 import ..Pkg
 using ..Pkg: depots, depots1, printpkgstyle, stderr_f, isdir_nothrow, pathrepr, pkg_server,
     GitTools, atomic_toml_write, create_cachedir_tag
-using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, exe7z, verify_archive_tree_hash
+using ..Pkg.PlatformEngines: download_verify_unpack, download, download_verify, verify_archive_tree_hash, get_extract_cmd, detect_archive_format
 using UUIDs, LibGit2, TOML, Dates
 import FileWatching
 
@@ -240,6 +240,25 @@ function check_registry_state(reg)
     return nothing
 end
 
+function archive_format_to_extension(filepath::AbstractString)::String
+    format = detect_archive_format(filepath)
+    # Map detected format to file extension
+    if format == "zstd"
+        return ".tar.zst"
+    elseif format == "gzip"
+        return ".tar.gz"
+    elseif format == "bzip2"
+        return ".tar.bz2"
+    elseif format == "xz"
+        return ".tar.xz"
+    elseif format == "lz4"
+        return ".tar.lz4"
+    else
+        # Default to .tar.gz for tar or unknown formats
+        return ".tar.gz"
+    end
+end
+
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{String, Vector{String}} = depots())
     # Use the first depot as the target
     target_depot = depots1(depots)
@@ -282,8 +301,10 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     reg_unc = uncompress_registry(tmp)
                     reg.name = TOML.parse(reg_unc["Registry.toml"])["name"]::String
                 end
-                mv(tmp, joinpath(regdir, reg.name * ".tar.gz"); force = true)
-                reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ".tar.gz")
+                # Detect what we actually got from the server (defensive against servers that don't support zstd yet)
+                ext = archive_format_to_extension(tmp)
+                mv(tmp, joinpath(regdir, reg.name * ext); force = true)
+                reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ext)
                 atomic_toml_write(joinpath(regdir, reg.name * ".toml"), reg_info)
                 registry_update_log[string(reg.uuid)] = now()
                 printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
@@ -546,8 +567,11 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
                                             Base.rm(reg.path; recursive = true, force = true)
                                         end
                                         registry_path = dirname(reg.path)
-                                        mv(tmp, joinpath(registry_path, reg.name * ".tar.gz"); force = true)
-                                        reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ".tar.gz")
+                                        # Detect what we actually got from the server (defensive against servers that don't support zstd yet)
+                                        format = detect_archive_format(tmp)
+                                        ext = format == "zstd" ? ".tar.zst" : ".tar.gz"
+                                        mv(tmp, joinpath(registry_path, reg.name * ext); force = true)
+                                        reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ext)
                                         atomic_toml_write(joinpath(registry_path, reg.name * ".toml"), reg_info)
                                         registry_update_log[string(reg.uuid)] = now()
                                         @label done_tarball_read
