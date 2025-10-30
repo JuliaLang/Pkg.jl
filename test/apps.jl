@@ -94,18 +94,30 @@ using Test
                 @test Sys.which(flagsexename) == nothing
             end
 
-            # https://github.com/JuliaLang/Pkg.jl/issues/4258
-            Pkg.Apps.add(path = path)
-            Pkg.Apps.develop(path = path)
+            # Test both absolute path and relative path "." work for develop
+            # https://github.com/JuliaLang/Pkg.jl/issues/4258 and #4480
+            for test_path in [path, "."]
+                if test_path == "."
+                    cd(path) do
+                        Pkg.Apps.develop(path = test_path)
+                    end
+                else
+                    Pkg.Apps.develop(path = test_path)
+                end
 
-            # Verify that dev does not create an app environment directory
-            app_env_dir = joinpath(first(DEPOT_PATH), "environments", "apps", "Rot13")
-            @test !isdir(app_env_dir)
+                # Verify that dev does not create an app environment directory
+                app_env_dir = joinpath(first(DEPOT_PATH), "environments", "apps", "Rot13")
+                @test !isdir(app_env_dir)
 
-            # Verify that changes to the dev'd package are immediately reflected
-            mv(joinpath(path, "src", "Rot13_edited.jl"), joinpath(path, "src", "Rot13.jl"); force = true)
-            withenv("PATH" => string(joinpath(first(DEPOT_PATH), "bin"), sep, current_path)) do
-                @test read(`$exename test`, String) == "Updated!\n"
+                # Verify that changes to the dev'd package are immediately reflected (only test once)
+                if test_path == path
+                    mv(joinpath(path, "src", "Rot13_edited.jl"), joinpath(path, "src", "Rot13.jl"); force = true)
+                    withenv("PATH" => string(joinpath(first(DEPOT_PATH), "bin"), sep, current_path)) do
+                        @test read(`$exename test`, String) == "Updated!\n"
+                    end
+                end
+
+                Pkg.Apps.rm("Rot13")
             end
         end
     end
