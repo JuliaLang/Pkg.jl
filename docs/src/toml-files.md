@@ -12,7 +12,6 @@ UUIDs etc.
     [Code Loading](https://docs.julialang.org/en/v1/manual/code-loading/)
     in the Julia manual.
 
-
 ## `Project.toml`
 
 The project file describes the project on a high level, for example, the package/project
@@ -542,3 +541,10 @@ uuid = "edca9bc6-334e-11e9-3554-9595dbb4349c"
 
 There is now an array of the two `B` packages, and the `[deps]` section for `A` has been
 expanded to be explicit about which `B` package `A` depends on.
+## Portable scripts
+
+Julia scripts can embed project and manifest data inline with fenced
+comments such as `#!project … #!project end` and `#!manifest … #!manifest end`.
+When the active project is set to a `.jl` file, Pkg reads and writes inline project metadata
+from that file. All commands that modify the project or manifest
+content (e.g. `Pkg.add`, `Pkg.rm`, `Pkg.update`) will update the inline sections accordingly.

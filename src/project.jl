@@ -244,12 +244,31 @@ function Project(raw::Dict; file = nothing)
     return project
 end
 
-function read_project(f_or_io::Union{String, IO})
+function read_project(f_or_io::Union{String, IO}; source_file::Union{String, Nothing} = nothing)
     raw = try
         if f_or_io isa IO
-            TOML.parse(read(f_or_io, String))
-        else
-            isfile(f_or_io) ? parse_toml(f_or_io) : return Project()
+            # TODO: This is kind of ugly and seems to only be used for git diff status.
+            # If source_file indicates a .jl file, write to temp file and parse as inline
+            if source_file !== nothing && endswith(source_file, ".jl")
+                content = read(f_or_io, String)
+                temp_file = tempname() * ".jl"
+                try
+                    write(temp_file, content)
+                    parse_toml(temp_file, project=true)
+                finally
+                    rm(temp_file; force=true)
+                end
+            else
+                TOML.parse(read(f_or_io, String))
+            end
+        elseif f_or_io isa String
+            if !isfile(f_or_io)
+                return Project()
+            elseif endswith(f_or_io, ".jl")
+                parse_toml(f_or_io, project=true)
+            else
+                parse_toml(f_or_io)
+            end
         end
     catch e
         if e isa TOML.ParserError
@@ -257,7 +276,7 @@ function read_project(f_or_io::Union{String, IO})
         end
         pkgerror("Errored when reading $f_or_io, got: ", sprint(showerror, e))
     end
-    return Project(raw; file = f_or_io isa IO ? nothing : f_or_io)
+    return Project(raw; file = f_or_io isa IO ? source_file : f_or_io)
 end
 
 
@@ -345,6 +364,11 @@ function write_project(io::IO, project::Dict)
     return nothing
 end
 function write_project(project::Dict, project_file::AbstractString)
+    if endswith(project_file, ".jl")
+        str = sprint(write_project, project)
+        update_inline_project!(project_file, str)
+        return nothing
+    end
     str = sprint(write_project, project)
     mkpath(dirname(project_file))
     return write(project_file, str)
