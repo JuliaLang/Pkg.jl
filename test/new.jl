@@ -2765,7 +2765,7 @@ end
         @test isempty(opts)
         api, opts = first(Pkg.pkg"gc --all")
         @test api == Pkg.gc
-        @test opts[:collect_delay] == Hour(0)
+        # N.B.: `--all` is now a no-op, but is retained for now for compatibility.
     end
 end
 
