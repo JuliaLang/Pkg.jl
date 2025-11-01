@@ -512,7 +512,7 @@ compound_declarations = [
             :name => "gc",
             :api => API.gc,
             :option_spec => [
-                PSA[:name => "all", :api => :collect_delay => Hour(0)],
+                PSA[:name => "all", :api => :collect_delay => nothing],
                 PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
             ],
             :description => "garbage collect packages not used for a significant time",
