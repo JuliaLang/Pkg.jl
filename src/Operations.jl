@@ -923,8 +923,18 @@ function deps_graph(
                                 end
                             end
                             dv = get_or_make!(d, v)
-                            merge!(dv, compat_info)
-                            union!(uuids, keys(compat_info))
+                            # Filter out incompatible stdlib compat entries from registry dependencies
+                            for (dep_uuid, dep_compat) in compat_info
+                                if is_stdlib(dep_uuid) && !(dep_uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+                                    stdlib_ver = stdlib_version(dep_uuid, julia_version)
+                                    if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
+                                        @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat registry = reg.name package = pkg.name version = v
+                                        continue
+                                    end
+                                end
+                                dv[dep_uuid] = dep_compat
+                                push!(uuids, dep_uuid)
+                            end
                         end
                         return
                     end
