@@ -1154,7 +1154,7 @@ function install_git(
         first_url = first(urls)
         repo = GitTools.ensure_clone(
             io, repo_path, first_url; isbare = true,
-            header = "[$uuid] $name from $first_url"
+            header = "[$uuid] $name from $first_url", depth = 1
         )
         git_hash = LibGit2.GitHash(hash.bytes)
         for url in urls
@@ -1165,7 +1165,7 @@ function install_git(
             catch err
                 err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
             end
-            GitTools.fetch(io, repo, url, refspecs = refspecs)
+            GitTools.fetch(io, repo, url, refspecs = refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
         end
         tree = try
             LibGit2.GitObject(repo, git_hash)

@@ -351,7 +351,8 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                         return
                     elseif reg.url !== nothing # clone from url
                         # retry to help spurious connection issues, particularly on CI
-                        repo = retry(GitTools.clone, delays = fill(1.0, 5), check = (s, e) -> isa(e, LibGit2.GitError))(io, reg.url, tmp; header = "registry from $(repr(reg.url))")
+                        # Use shallow clone (depth=1) for registries since we only need the latest state
+                        repo = retry(GitTools.clone, delays = fill(1.0, 5), check = (s, e) -> isa(e, LibGit2.GitError))(io, reg.url, tmp; header = "registry from $(repr(reg.url))", depth = 1)
                         LibGit2.close(repo)
                     else
                         Pkg.Types.pkgerror("no path or url specified for registry")
@@ -632,7 +633,9 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
                                 end
                                 branch = LibGit2.headname(repo)
                                 try
-                                    GitTools.fetch(io, repo; refspecs = ["+refs/heads/$branch:refs/remotes/origin/$branch"])
+                                    # If this is a shallow clone, continue using shallow fetches
+                                    fetch_depth = GitTools.isshallow(repo) ? 1 : 0
+                                    GitTools.fetch(io, repo; refspecs = ["+refs/heads/$branch:refs/remotes/origin/$branch"], depth = fetch_depth)
                                 catch e
                                     e isa Pkg.Types.PkgError || rethrow()
                                     push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
