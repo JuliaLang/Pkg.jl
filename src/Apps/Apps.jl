@@ -251,7 +251,7 @@ end
 
 function develop(pkg::PackageSpec)
     if pkg.path !== nothing
-        pkg.path == abspath(pkg.path)
+        pkg.path = abspath(pkg.path)
     end
     handle_package_input!(pkg)
     ctx = app_context()
