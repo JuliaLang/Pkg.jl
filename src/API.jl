@@ -154,7 +154,7 @@ function check_readonly(ctx::Context)
 end
 
 # Provide some convenience calls
-for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :precompile)
+for f in (:develop, :add, :rm, :up, :down, :pin, :free, :test, :build, :status, :why, :precompile)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
         $f(pkgs::Vector{<:AbstractString}; kwargs...) = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
@@ -170,8 +170,8 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
-            $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
+            $(f in (:up, :down, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
+            $(f in (:up, :down, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -181,7 +181,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
                 url = nothing, rev = nothing, path = nothing, mode = PKGMODE_PROJECT, subdir = nothing, kwargs...
             )
             pkg = PackageSpec(; name, uuid, version, url, rev, path, subdir)
-            if $f === status || $f === rm || $f === up
+            if $f === status || $f === rm || $f === up || $f === down
                 kwargs = merge((; kwargs...), (:mode => mode,))
             end
             # Handle $f() case
@@ -436,13 +436,16 @@ function up(
         preserve::Union{Nothing, PreserveLevel} = isempty(pkgs) ? nothing : PRESERVE_ALL,
         update_registry::Bool = true,
         skip_writing_project::Bool = false,
+        downgrade::Bool = false,
         kwargs...
     )
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if Operations.is_fully_pinned(ctx)
-        printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
+        msg = downgrade ? "All dependencies are pinned - nothing to downgrade." : "All dependencies are pinned - nothing to update."
+        action = downgrade ? :Downgrade : :Update
+        printpkgstyle(ctx.io, action, msg, color = Base.info_color())
         return
     end
     if update_registry
@@ -462,8 +465,20 @@ function up(
     for pkg in pkgs
         update_source_if_set(ctx.env, pkg)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
+    Operations.up(ctx, pkgs, level; skip_writing_project, preserve, downgrade)
     return
+end
+
+function down(
+        ctx::Context, pkgs::Vector{PackageSpec};
+        level::UpgradeLevel = UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT,
+        preserve::Union{Nothing, PreserveLevel} = isempty(pkgs) ? nothing : PRESERVE_ALL,
+        update_registry::Bool = true,
+        skip_writing_project::Bool = false,
+        kwargs...
+    )
+    # down is just up with downgrade=true
+    return up(ctx, pkgs; level, mode, preserve, update_registry, skip_writing_project, downgrade = true, kwargs...)
 end
 
 resolve(; io::IO = stderr_f(), kwargs...) = resolve(Context(; io); kwargs...)

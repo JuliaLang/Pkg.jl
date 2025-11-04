@@ -2111,6 +2111,22 @@ end
     end
 end
 
+@testset "downgrade: prefer lower versions" begin
+    # Basic testing that downgrade works opposite to update
+    isolate(loaded_depot = true) do
+        Pkg.add(name = "Example", version = "0.5.5")
+        @test Pkg.dependencies()[exuuid].version == v"0.5.5"
+        # Downgrade should find a lower version
+        Pkg.downgrade("Example")
+        downgraded_version = Pkg.dependencies()[exuuid].version
+        @test downgraded_version < v"0.5.5"
+        # Update should bring it back up
+        Pkg.update("Example")
+        updated_version = Pkg.dependencies()[exuuid].version
+        @test updated_version > downgraded_version
+    end
+end
+
 @testset "update: package state changes" begin
     # basic update on old registered package
     isolate(loaded_depot = true) do
