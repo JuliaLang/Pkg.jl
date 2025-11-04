@@ -55,9 +55,12 @@ end
 # See loading.jl
 const TOML_CACHE = Base.TOMLCache(Base.TOML.Parser{Dates}())
 const TOML_LOCK = ReentrantLock()
+
 # Some functions mutate the returning Dict so return a copy of the cached value here
-parse_toml(toml_file::AbstractString; manifest::Bool=false, project::Bool=!manifest) =
-    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK; manifest, project))::Dict{String, Any}
+function parse_toml(toml_file::AbstractString; manifest::Bool=false, project::Bool=!manifest)
+    dd = Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK; manifest=manifest, project=project)
+    return Base.invokelatest(deepcopy_toml, dd)::Dict{String, Any}
+end
 
 #################
 # Pkg Error #
@@ -71,163 +74,101 @@ Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 #################################
 # Portable script functionality #
 #################################
-function _render_inline_block(kind::Symbol, toml::String, newline::String, format::Symbol)
-    kind_str = kind === :project ? "project" : "manifest"
-    buf = IOBuffer()
-    function emit(line)
-        write(buf, line)
-        write(buf, newline)
-    end
-    emit("#region " * kind_str)
-    emit("#!" * kind_str * " begin")
+_inline_kind_str(kind::Symbol) = kind === :project ? "project" : "manifest"
 
-    if format === :multiline
-        # Use multi-line comment format: #= ... =#
-        write(buf, "#=" * newline)
-        write(buf, toml)
-        if !endswith(toml, newline)
-            write(buf, newline)
-        end
-        write(buf, "=#" * newline)
+_detect_newline(source::String) = occursin("\r\n", source) ? "\r\n" : "\n"
+
+function _append_block(base::String, block::String, newline::String)
+    isempty(block) && return base
+    if isempty(base)
+        return block
+    elseif endswith(base, newline * newline)
+        return base * block
+    elseif endswith(base, newline)
+        return base * newline * block
     else
-        # Use line-by-line format with # prefix
-        lines = split(toml, '\n'; keepempty = true)
-        # Remove trailing empty line if toml ends with newline
-        if !isempty(lines) && isempty(lines[end])
-            pop!(lines)
-        end
-        for raw_line in lines
-            if isempty(raw_line)
-                emit("#")
-            else
-                emit("# " * raw_line)
-            end
-        end
+        return base * newline * newline * block
     end
+end
 
-    emit("#!" * kind_str * " end")
-    emit("#endregion " * kind_str)
-    return String(take!(buf))
+function _render_inline_block(kind::Symbol, toml::String, newline::String)
+    kind_str = _inline_kind_str(kind)
+    lines = split(toml, '\n'; keepempty = true)
+    if !isempty(lines) && isempty(lines[end])
+        pop!(lines)
+    end
+    body = [isempty(line) ? "#" : "# " * line for line in lines]
+    block = [
+        "#!" * kind_str * " begin",
+        body...,
+        "#!" * kind_str * " end",
+    ]
+    return join(block, newline) * newline
 end
 
 function _find_inline_section(source::String, kind::Symbol)
-    kind_str = kind === :project ? "project" : "manifest"
+    kind_str = _inline_kind_str(kind)
     begin_marker = "#!$(kind_str) begin"
     end_marker = "#!$(kind_str) end"
 
-    # Find begin marker
-    begin_idx = findfirst(begin_marker, source)
-    begin_idx === nothing && return nothing
+    begin_range = findfirst(begin_marker, source)
+    begin_range === nothing && return nothing
 
-    # Find end marker after begin
-    end_idx = findnext(end_marker, source, last(begin_idx) + 1)
-    end_idx === nothing && return nothing
+    line_start_idx = findprev(isequal('\n'), source, first(begin_range))
+    span_start = line_start_idx === nothing ? firstindex(source) : nextind(source, line_start_idx)
 
-    # Determine newline style
-    newline = contains(source, "\r\n") ? "\r\n" : "\n"
+    end_range = findnext(end_marker, source, last(begin_range))
+    end_range === nothing && return nothing
 
-    # Find the start of the line containing begin marker
-    line_start = findprev(isequal('\n'), source, first(begin_idx))
-    line_start = line_start === nothing ? 1 : line_start + 1
+    line_end_idx = findnext(isequal('\n'), source, last(end_range))
+    span_end = line_end_idx === nothing ? last(end_range) : line_end_idx
 
-    # Check if there's a #region marker on the line before
-    region_marker = "#region $(kind_str)"
-    if line_start > 1
-        prev_line_end = line_start - 1  # This is the newline character
-        prev_line_start = findprev(isequal('\n'), source, prev_line_end - 1)
-        prev_line_start = prev_line_start === nothing ? 1 : prev_line_start + 1
-        prev_line = source[prev_line_start:prev_line_end-1]
-        if strip(prev_line) == region_marker
-            line_start = prev_line_start
+    block = source[span_start:span_end]
+    newline = occursin("\r\n", block) ? "\r\n" : _detect_newline(source)
+    return (span = span_start:span_end, newline = newline)
+end
+
+function _rewrite_inline_section(source::String, kind::Symbol; toml::Union{Nothing, String} = nothing)
+    section = _find_inline_section(source, kind)
+    if toml === nothing
+        if section === nothing
+            return source
         end
+        prefix = first(section.span) == firstindex(source) ? "" : source[firstindex(source):prevind(source, first(section.span))]
+        suffix = last(section.span) >= lastindex(source) ? "" : source[nextind(source, last(section.span)):lastindex(source)]
+        return prefix * suffix
     end
 
-    # Determine format by checking if there's a #= after the begin marker
-    # Look at content between begin and end markers
-    content_start = last(begin_idx) + 1
-    content_end = first(end_idx) - 1
-    content_between = source[content_start:content_end]
-    format = contains(content_between, "#=") ? :multiline : :line
+    newline = section === nothing ? _detect_newline(source) : section.newline
+    replacement = _render_inline_block(kind, toml, newline)
 
-    # Find the newline after the end marker
-    char_after_end = last(end_idx) < lastindex(source) ? source[nextind(source, last(end_idx))] : nothing
-    included_newline = false
-    span_end_pos = if char_after_end == '\n' || (char_after_end == '\r' && last(end_idx) + 1 < lastindex(source) && source[last(end_idx) + 2] == '\n')
-        # Include the newline in the span
-        included_newline = true
-        char_after_end == '\r' ? last(end_idx) + 2 : last(end_idx) + 1
-    else
-        last(end_idx)
-    end
-
-    # Check if there's a #endregion marker on the next line after end marker
-    endregion_marker = "#endregion $(kind_str)"
-    if included_newline && span_end_pos < lastindex(source)
-        # If we included a newline, start looking at the next character
-        next_line_start = span_end_pos + 1
-        next_line_end = findnext(isequal('\n'), source, next_line_start)
-        if next_line_end !== nothing
-            next_line = source[next_line_start:next_line_end-1]
-            if strip(next_line) == endregion_marker
-                # Include the #endregion line and its newline in the span
-                span_end_pos = next_line_end + 1
-            end
-        elseif next_line_start <= lastindex(source)
-            # No newline found, check if rest of file is the endregion marker
-            next_line = source[next_line_start:end]
-            if strip(next_line) == endregion_marker
-                span_end_pos = lastindex(source)
+    if section === nothing
+        if kind === :project
+            new_source = _append_block("", replacement, newline)
+            return _append_block(new_source, source, newline)
+        else
+            project_section = _find_inline_section(source, :project)
+            if project_section === nothing
+                project_block = _render_inline_block(:project, "", newline)
+                new_source = _append_block("", project_block, newline)
+                new_source = _append_block(new_source, source, newline)
+                return _append_block(new_source, replacement, newline)
+            else
+                return _append_block(source, replacement, newline)
             end
         end
     end
 
-    return (
-        span_start = line_start,
-        span_end = span_end_pos,
-        newline = newline,
-        format = format
-    )
+    prefix = first(section.span) == firstindex(source) ? "" : source[firstindex(source):prevind(source, first(section.span))]
+    suffix = last(section.span) >= lastindex(source) ? "" : source[nextind(source, last(section.span)):lastindex(source)]
+    separator = isempty(suffix) || startswith(suffix, newline) ? "" : newline
+    return prefix * replacement * separator * suffix
 end
 
 function _update_inline_section!(path::AbstractString, kind::Symbol, toml::String)
     source = read(path, String)
-    section = _find_inline_section(source, kind)
-
-    if section === nothing
-        # No existing section, add appropriately
-        newline = contains(source, "\r\n") ? "\r\n" : "\n"
-        replacement = _render_inline_block(kind, toml, newline, :line)
-
-        if kind === :project
-            # Project goes at the beginning
-            new_source = isempty(source) ? replacement : replacement * newline * source
-        else
-            # Manifest goes at the bottom
-            project_section = _find_inline_section(source, :project)
-            if project_section === nothing
-                # No project section either, add empty project at top and manifest at bottom
-                project_block = _render_inline_block(:project, "", newline, :line)
-                if isempty(source)
-                    new_source = project_block * newline * replacement
-                else
-                    new_source = project_block * newline * source * newline * replacement
-                end
-            else
-                # Add manifest at the bottom of the file
-                replacement = _render_inline_block(kind, toml, project_section.newline, project_section.format)
-                new_source = source * project_section.newline * replacement
-            end
-        end
-    else
-        # Replace existing section
-        replacement = _render_inline_block(kind, toml, section.newline, section.format)
-        prefix = section.span_start == firstindex(source) ? "" : source[firstindex(source):prevind(source, section.span_start)]
-        suffix = section.span_end == lastindex(source) ? "" : source[nextind(source, section.span_end):lastindex(source)]
-        # Add a blank line after the section if there's content after it
-        separator = !isempty(suffix) && !startswith(suffix, section.newline) ? section.newline : ""
-        new_source = prefix * replacement * separator * suffix
-    end
-
+    new_source = _rewrite_inline_section(source, kind; toml = toml)
+    new_source === source && return nothing
     open(path, "w") do io
         write(io, new_source)
     end
@@ -236,18 +177,16 @@ end
 
 function remove_inline_section!(path::AbstractString, kind::Symbol)
     source = read(path, String)
-    section = _find_inline_section(source, kind)
-
-    if section !== nothing
-        prefix = section.span_start == firstindex(source) ? "" : source[firstindex(source):prevind(source, section.span_start)]
-        suffix = section.span_end >= lastindex(source) ? "" : source[nextind(source, section.span_end):lastindex(source)]
-        new_source = prefix * suffix
-        open(path, "w") do io
-            write(io, new_source)
-        end
+    new_source = _rewrite_inline_section(source, kind)
+    new_source === source && return nothing
+    open(path, "w") do io
+        write(io, new_source)
     end
     return nothing
 end
+
+_update_inline_section_in_memory(source::String, kind::Symbol, toml::String) =
+    _rewrite_inline_section(source, kind; toml = toml)
 
 function update_inline_project!(path::AbstractString, toml::String)
     return _update_inline_section!(path, :project, toml)
@@ -255,6 +194,24 @@ end
 
 function update_inline_manifest!(path::AbstractString, toml::String)
     return _update_inline_section!(path, :manifest, toml)
+end
+
+function update_inline_project_and_manifest!(path::AbstractString, project_toml::String, manifest_toml::String)
+    # Atomically update both project and manifest sections in a .jl file
+    # This ensures that if either update fails, the file is not modified
+    source = read(path, String)
+
+    # Apply project update
+    source = _update_inline_section_in_memory(source, :project, project_toml)
+
+    # Apply manifest update
+    source = _update_inline_section_in_memory(source, :manifest, manifest_toml)
+
+    # Write once at the end
+    open(path, "w") do io
+        write(io, source)
+    end
+    return nothing
 end
 
 ###############
@@ -647,11 +604,10 @@ function EnvCache(env::Union{Nothing, String} = nothing)
         # Case 1: inline_manifest=false but no manifest path
         # User wants external manifest but hasn't set it up yet
         if !inline_manifest && project.manifest === nothing
-            # Generate a new UUID and set manifest path
-            script_uuid = string(uuid4())
             script_name = splitext(basename(project_file))[1]
-            manifest_file = joinpath(depots1(), "environments", "scripts", "$(script_name)_$(script_uuid)", "Manifest.toml")
-            project.manifest = manifest_file
+            manifest_name = "$(script_name)-Manifest.toml"
+            manifest_file = abspath(dir, manifest_name)
+            project.manifest = manifest_name
         # Case 2: inline_manifest=true (or default) but has manifest path
         # User wants inline manifest but still has external path set
         elseif inline_manifest && project.manifest !== nothing
@@ -1652,27 +1608,44 @@ function write_env(
             # Update manifest_file to point to the script file for inline writing
             env.manifest_file = env.project_file
             # Clean up external manifest directory
-            external_dir = dirname(external_manifest_path)
-            if isdir(external_dir)
-                rm(external_dir; recursive=true, force=true)
-            end
+            isfile(external_manifest_path) && rm(external_manifest_path; force=true)
         end
     end
 
-    if (env.project != env.original_project) && (!skip_writing_project)
-        write_project(env, skip_readonly_check)
-    end
-    # Force manifest write when transitioning to inline, even if manifest hasn't changed
-    if env.manifest != env.original_manifest || transitioning_to_inline
-        write_manifest(env)
-    end
+    # For .jl files with inline manifest, perform atomic updates
+    project_needs_update = (env.project != env.original_project) && (!skip_writing_project)
+    manifest_needs_update = env.manifest != env.original_manifest || transitioning_to_inline
 
-    # Remove inline manifest section if we have external manifest
     if endswith(env.project_file, ".jl")
         inline_manifest = get(env.project.other, "inline_manifest", true)::Bool
-        if !inline_manifest
+
+        if inline_manifest
+            # Both project and manifest are in the same file - update atomically
+            if project_needs_update || manifest_needs_update
+                # Prepare both strings even if only one needs updating
+                project_str = sprint(write_project, destructure(env.project))
+                manifest_str = sprint(write_manifest, destructure(env.manifest))
+                # Atomically update both sections
+                update_inline_project_and_manifest!(env.project_file, project_str, manifest_str)
+            end
+        else
+            # External manifest - write separately
+            if project_needs_update
+                write_project(env, skip_readonly_check)
+            end
+            if manifest_needs_update
+                write_manifest(env)
+            end
             # Remove the inline manifest section since we're using external
             remove_inline_section!(env.project_file, :manifest)
+        end
+    else
+        # Regular TOML files - write separately
+        if project_needs_update
+            write_project(env, skip_readonly_check)
+        end
+        if manifest_needs_update
+            write_manifest(env)
         end
     end
 
