@@ -144,7 +144,7 @@ mutable struct GraphData
             d = Dict{InstState, Set{InstState}}()
             for v0 in 1:spp[p0]
                 let p0 = p0 # Due to https://github.com/JuliaLang/julia/issues/15276
-                    d[eq_vn(v0, p0)] = Set([eq_vn(v0, p0)])
+                    d[eq_vn(v0, p0)] = Set{InstState}((eq_vn(v0, p0),))
                 end
             end
             eq_classes[pkgs[p0]] = d
@@ -276,9 +276,7 @@ mutable struct Graph
         vnmap = Dict{UUID, VersionSpec}()
         reg_result = Dict{UUID, VersionSpec}()
         req = Dict{Int, VersionSpec}()
-        for p0 in 1:np, v0 in 1:(spp[p0] - 1)
-            vn = pvers[p0][v0]
-            empty!(req)
+        for p0 in 1:np
             uuid0 = pkgs[p0]
 
             # Query compressed deps and compat data for this version (including weak deps)
@@ -288,55 +286,60 @@ mutable struct Graph
             uuid0_weak_deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, weak_deps_compressed, uuid0)
             uuid0_weak_compat_list = get(Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}, weak_compat_compressed, uuid0)
             uuid0_versions_per_reg = get(Vector{Set{VersionNumber}}, pkg_versions_per_registry, uuid0)
-            Registry.query_compat_for_version_multi_registry!(vnmap, reg_result, uuid0_deps_list, uuid0_compat_list, uuid0_weak_deps_list, uuid0_weak_compat_list, uuid0_versions_per_reg, vn)
 
-            # Filter out incompatible stdlib compat entries from registry dependencies
-            for (dep_uuid, dep_compat) in vnmap
-                if Types.is_stdlib(dep_uuid) && !(dep_uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
-                    stdlib_ver = Types.stdlib_version(dep_uuid, julia_version)
-                    if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
-                        @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat package = uuid_to_name[uuid0] version = vn
-                        delete!(vnmap, dep_uuid)
+            for v0 in 1:(spp[p0] - 1)
+                vn = pvers[p0][v0]
+                empty!(req)
+                Registry.query_compat_for_version_multi_registry!(vnmap, reg_result, uuid0_deps_list, uuid0_compat_list, uuid0_weak_deps_list, uuid0_weak_compat_list, uuid0_versions_per_reg, vn)
+
+                # Filter out incompatible stdlib compat entries from registry dependencies
+                for (dep_uuid, dep_compat) in vnmap
+                    if Types.is_stdlib(dep_uuid) && !(dep_uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+                        stdlib_ver = Types.stdlib_version(dep_uuid, julia_version)
+                        if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
+                            @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat package = uuid_to_name[uuid0] version = vn
+                            delete!(vnmap, dep_uuid)
+                        end
                     end
                 end
-            end
 
-            for (uuid1, vs) in vnmap
-                p1 = pdict[uuid1]
-                p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
-                # check conflicts instead of intersecting?
-                # (intersecting is used by fixed packages though...)
-                req_p1 = get(req, p1, nothing)
-                if req_p1 == nothing
-                    req[p1] = vs
-                else
-                    req[p1] = req_p1 ∩ vs
-                end
-            end
-
-            # Translate the requirements into bit masks
-            # Hot code, measure performance before changing
-            req_msk = Dict{Int, BitVector}()
-            sizehint!(req_msk, length(req))
-
-            for (p1, vs) in req
-                pv = pvers[p1]
-                req_msk_p1 = BitVector(undef, spp[p1])
-                @inbounds for i in 1:(spp[p1] - 1)
-                    req_msk_p1[i] = pv[i] ∈ vs
-                end
-                # Check if this is a weak dep across all registries
-                weak = false
-                for weak_deps_dict in uuid0_weak_deps_list
-                    if Registry.is_weak_dep(weak_deps_dict, vn, pkgs[p1])
-                        weak = true
-                        break
+                for (uuid1, vs) in vnmap
+                    p1 = pdict[uuid1]
+                    p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
+                    # check conflicts instead of intersecting?
+                    # (intersecting is used by fixed packages though...)
+                    req_p1 = get(req, p1, nothing)
+                    if req_p1 == nothing
+                        req[p1] = vs
+                    else
+                        req[p1] = req_p1 ∩ vs
                     end
                 end
-                req_msk_p1[end] = weak
-                req_msk[p1] = req_msk_p1
+
+                # Translate the requirements into bit masks
+                # Hot code, measure performance before changing
+                req_msk = Dict{Int, BitVector}()
+                sizehint!(req_msk, length(req))
+
+                for (p1, vs) in req
+                    pv = pvers[p1]
+                    # Allocate BitVector with space for weak dep flag
+                    req_msk_p1 = BitVector(undef, spp[p1])
+                    # Use optimized batch version check (fills indices 1 through spp[p1]-1)
+                    Versions.matches_spec_range!(req_msk_p1, pv, vs, spp[p1] - 1)
+                    # Check if this is a weak dep across all registries
+                    weak = false
+                    for weak_deps_dict in uuid0_weak_deps_list
+                        if Registry.is_weak_dep(weak_deps_dict, vn, pkgs[p1])
+                            weak = true
+                            break
+                        end
+                    end
+                    req_msk_p1[end] = weak
+                    req_msk[p1] = req_msk_p1
+                end
+                extended_deps[p0][v0] = req_msk
             end
-            extended_deps[p0][v0] = req_msk
         end
 
         gadj = [Int[] for p0 in 1:np]
@@ -373,7 +376,7 @@ mutable struct Graph
                 bmt = gmsk[p1][j1]
             end
 
-            for v1 in 1:spp[p1]
+            @inbounds for v1 in 1:spp[p1]
                 rmsk1[v1] && continue
                 bm[v1, v0] = false
                 bmt[v0, v1] = false

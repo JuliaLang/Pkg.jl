@@ -763,7 +763,8 @@ function resolve_versions!(
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
-    graph, deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
+    deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
+    graph = Resolve.Graph(deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
 
@@ -1041,8 +1042,7 @@ function deps_graph(
         fixed = fixed_filtered
     end
 
-    return Resolve.Graph(all_deps_compressed, all_compat_compressed, weak_deps_compressed, weak_compat_compressed, pkg_versions, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version),
-        all_deps_compressed, all_compat_compressed, weak_deps_compressed, weak_compat_compressed, pkg_versions
+    return all_deps_compressed, all_compat_compressed, weak_deps_compressed, weak_compat_compressed, pkg_versions, pkg_versions_per_registry, uuid_to_name, reqs, fixed
 end
 
 ########################
