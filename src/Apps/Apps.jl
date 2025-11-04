@@ -216,6 +216,9 @@ function add(pkg::PackageSpec)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
+    if new === true || (new isa Set{UUID} && pkg.uuid in new)
+        Pkg.Operations.build_versions(ctx, Set([pkg.uuid]); verbose = true)
+    end
     precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
