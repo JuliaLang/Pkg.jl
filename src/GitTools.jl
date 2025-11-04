@@ -17,8 +17,8 @@ const RESOLVING_DELTAS_HEADER = "Resolving Deltas:"
 # We check both the LibGit2 version and the existence of `isshallow` to ensure
 # the shallow clone functionality is available
 function supports_shallow_clone()
-    # This seems buggy on 32 bit Windows
-    if Sys.iswindows() && Sys.WORD_SIZE == 32
+    # This seems buggy on Windows? Get some weird CI errors with it.
+    if Sys.iswindows()
         return false
     end
     has_version = @static if isdefined(LibGit2, :VERSION)
