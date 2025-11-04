@@ -3,6 +3,8 @@
 module Resolve
 
 using ..Versions
+using ..Registry
+using ..Types
 import ..stdout_f, ..stderr_f
 
 using Printf
