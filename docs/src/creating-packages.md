@@ -297,7 +297,12 @@ projects = ["test"]
 (HelloWorld) pkg> activate ./test
 [ Info: activating environment at `~/HelloWorld/test/Project.toml`.
 
-(HelloWorld/test) pkg> add Test
+(HelloWorld/test) pkg> dev .  # add current package to test dependencies using its path
+ Resolving package versions...
+  Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + HelloWorld v0.1.0 `..`
+
+(HelloWorld/test) pkg> add Test  # add other test dependencies
  Resolving package versions...
   Updating `~/HelloWorld/test/Project.toml`
   [8dfed614] + Test
@@ -305,12 +310,15 @@ projects = ["test"]
 
 When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single `Manifest.toml` next to the base `Project.toml`. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
 
+!!! warning
+  Unlike some earlier test dependency workflows, this one explicitly requires adding `HelloWorld` (the parent package) to your `test/Project.toml`.
+
 You can now use `Test` in the test script:
 
 ```julia-repl
 julia> write("test/runtests.jl",
              """
-             using Test
+             using HelloWorld, Test
              @test 1 == 1
              """);
 
