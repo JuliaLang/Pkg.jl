@@ -2595,7 +2595,7 @@ function gen_subprocess_flags(source_path::String; coverage, julia_args::Cmd)
     return ```
         --code-coverage=$(coverage_arg)
         --color=$(Base.have_color === nothing ? "auto" : Base.have_color ? "yes" : "no")
-        --check-bounds=yes
+        --check-bounds=$(("auto", "yes", "no")[Base.JLOptions().check_bounds + 1])
         --warn-overwrite=yes
         --depwarn=$(Base.JLOptions().depwarn == 2 ? "error" : "yes")
         --inline=$(Bool(Base.JLOptions().can_inline) ? "yes" : "no")
