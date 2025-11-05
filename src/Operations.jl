@@ -382,12 +382,12 @@ function fixups_from_projectfile!(ctx::Context)
     for pkg in values(env.manifest)
         if ctx.julia_version !== VERSION && is_stdlib(pkg.uuid, ctx.julia_version)
             # Special handling for non-current julia_version resolving given the source for historical stdlibs
-            # isn't available at this stage as Pkg thinks it should not be needed, so rely on STDLIBS_BY_VERSION
+            # isn't available at this stage as Pkg thinks it should not be needed, so query stdlib info on-demand
             stdlibs = Types.get_last_stdlibs(ctx.julia_version)
             p = stdlibs[pkg.uuid]
             pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
-            # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
-            # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
+            # pkg.exts = p.exts # TODO: stdlib data doesn't record this
+            # pkg.entryfile = p.entryfile # TODO: stdlib data doesn't record this
             for (name, _) in pkg.weakdeps
                 if !(name in p.deps)
                     delete!(pkg.deps, name)

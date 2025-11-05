@@ -6,15 +6,10 @@ using Base.BinaryPlatforms: HostPlatform, Platform, platforms_match
 using Test
 using TOML
 
-ENV["HISTORICAL_STDLIB_VERSIONS_AUTO_REGISTER"] = "false"
-using HistoricalStdlibVersions
-
 include("utils.jl")
 using .Utils
 
 @testset "is_stdlib() across versions" begin
-    HistoricalStdlibVersions.register!()
-
     networkoptions_uuid = Base.UUID("ca575930-c2e3-43a9-ace4-1e988b2c1908")
     pkg_uuid = Base.UUID("44cfe95a-1eb2-52ea-b672-e2afdf69b78f")
     mbedtls_jll_uuid = Base.UUID("c8ffd9c3-330d-5841-b78e-0817d7145fa1")
@@ -44,17 +39,13 @@ using .Utils
     @test is_stdlib(mbedtls_jll_uuid, v"1.11")
     @test is_stdlib(mbedtls_jll_uuid, v"1.10")
 
-    HistoricalStdlibVersions.unregister!()
     # Test that we can probe for stdlibs for the current version with no STDLIBS_BY_VERSION,
     # but that we throw a PkgError if we ask for a particular julia version.
     @test is_stdlib(networkoptions_uuid)
-    @test_throws Pkg.Types.PkgError is_stdlib(networkoptions_uuid, v"1.6")
 end
 
 
 @testset "Pkg.add() with julia_version" begin
-    HistoricalStdlibVersions.register!()
-
     # A package with artifacts that went from normal package -> stdlib
     gmp_jll_uuid = "781609d7-10c4-51f6-84f2-b8444358ff6d"
     # A package that has always only ever been an stdlib
@@ -153,12 +144,9 @@ end
         p7zip_jll_uuid = Base.UUID("3f19e933-33d8-53b3-aaab-bd5110c3b7a0")
         @test !("Pkg" in keys(Pkg.dependencies()[p7zip_jll_uuid].dependencies))
     end
-
-    HistoricalStdlibVersions.unregister!()
 end
 
 @testset "Resolving for another version of Julia" begin
-    HistoricalStdlibVersions.register!()
     temp_pkg_dir() do dir
         function find_by_name(versions, name)
             idx = findfirst(p -> p.name == name, versions)
@@ -207,7 +195,6 @@ end
         @test mpfr !== nothing
         @test mpfr.version.major == 4 && mpfr.version.minor == 0
     end
-    HistoricalStdlibVersions.unregister!()
 end
 
 HelloWorldC_jll_UUID = Base.UUID("dca1746e-5efc-54fc-8249-22745bc95a49")
@@ -218,7 +205,6 @@ libblastrampoline_jll_UUID = Base.UUID("8e850b90-86db-534c-a0d3-1478176c7d93")
 
 isolate(loaded_depot = true) do
     @testset "Elliot and Mosè's mini Pkg test suite" begin # https://github.com/JuliaPackaging/JLLPrefixes.jl/issues/6
-        HistoricalStdlibVersions.register!()
         @testset "Standard add" begin
             Pkg.activate(temp = true)
             # Standard add (non-stdlib, flexible version)
@@ -350,7 +336,6 @@ isolate(loaded_depot = true) do
                 end
             end
         end
-        HistoricalStdlibVersions.unregister!()
     end
 end
 
