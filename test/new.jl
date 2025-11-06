@@ -2475,6 +2475,33 @@ end
         end
     end
 
+    @testset "test: REPL" begin
+        isolate() do
+            Pkg.REPLMode.TEST_MODE[] = true
+            # test without args
+            api, args, opts = first(Pkg.pkg"test Example")
+            @test api == Pkg.test
+            @test args == [Pkg.PackageSpec(; name = "Example")]
+            @test isempty(opts)
+            # test with args
+            api, args, opts = first(Pkg.pkg"test Example -- arg1 arg2")
+            @test api == Pkg.test
+            @test args == [Pkg.PackageSpec(; name = "Example")]
+            @test opts[:test_args] == Cmd(["arg1", "arg2"])
+            # test with coverage and args
+            api, args, opts = first(Pkg.pkg"test --coverage Example -- --verbose")
+            @test api == Pkg.test
+            @test args == [Pkg.PackageSpec(; name = "Example")]
+            @test opts[:coverage] == true
+            @test opts[:test_args] == Cmd(["--verbose"])
+            # test with just args (no package name)
+            api, args, opts = first(Pkg.pkg"test -- arg1 arg2 arg3")
+            @test api == Pkg.test
+            @test isempty(args)
+            @test opts[:test_args] == Cmd(["arg1", "arg2", "arg3"])
+        end
+    end
+
     @testset "threads" begin
         mktempdir() do dir
             path = copy_test_package(dir, "TestThreads")

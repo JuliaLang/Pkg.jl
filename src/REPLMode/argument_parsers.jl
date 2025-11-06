@@ -566,3 +566,26 @@ function do_preserve(x::String)
     x == "tiered"           && return Types.PRESERVE_TIERED
     pkgerror("`$x` is not a valid argument for `--preserve`.")
 end
+
+#
+# # Test command parser
+#
+function parse_test(args::Vector{QString}, options)
+    # Find the position of "--" delimiter
+    delimiter_idx = findfirst(x -> x.raw == "--" && !x.isquoted, args)
+
+    if delimiter_idx === nothing
+        # No test args, just parse packages normally
+        return parse_package(args, options)
+    else
+        # Split at "--" delimiter
+        pkg_args = args[1:(delimiter_idx - 1)]
+        test_args = args[(delimiter_idx + 1):end]
+
+        # Store test_args in options so they can be passed to API.test
+        options[:test_args] = Cmd(unwrap(test_args))
+
+        # Parse package arguments
+        return parse_package(pkg_args, options)
+    end
+end

@@ -7,20 +7,22 @@ compound_declarations = [
             :api => API.test,
             :should_splat => false,
             :arg_count => 0 => Inf,
-            :arg_parser => parse_package,
+            :arg_parser => parse_test,
             :option_spec => [
                 PSA[:name => "coverage", :api => :coverage => true],
             ],
             :completions => :complete_installed_packages,
             :description => "run tests for packages",
             :help => md"""
-                    test [--coverage] [pkg[=uuid]] ...
+                    test [--coverage] [pkg[=uuid]] ... [-- test_args...]
 
                 Run the tests for package `pkg`, or for the current project (which thus needs to be
                 a package) if `pkg` is omitted.  This is done by running the file `test/runtests.jl`
                 in the package directory. The option `--coverage` can be used to run the tests with
                 coverage enabled. The `startup.jl` file is disabled during testing unless
                 julia is started with `--startup-file=yes`.
+
+                Arguments after `--` are passed to the test process and are available via `ARGS`.
                 """,
         ],
         PSA[

@@ -1,3 +1,9 @@
+Pkg v1.14 Release Notes
+=======================
+
+- The Pkg REPL mode now supports passing test arguments via `pkg> test [pkgs...] -- test_args...` syntax, making test
+  arguments available in the test process via `ARGS`. ([#3354])
+
 Pkg v1.13 Release Notes
 =======================
 

@@ -280,6 +280,12 @@ function core_parse(words::Vector{QString}; only_cmd = false)
 
     # full option parsing is delayed so that the completions parser can use the raw string
     while is_opt(word.raw)
+        # "--" is a special delimiter that terminates option parsing
+        if word.raw == "--"
+            pushfirst!(words, word)
+            statement.arguments = words
+            return statement, words[end].raw
+        end
         push!(statement.options, word.raw)
         next_word!() || return statement, word.raw
     end
