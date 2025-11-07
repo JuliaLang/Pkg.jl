@@ -583,7 +583,7 @@ if it finds packages under `[compat]` that is not listed in `[extras]`.
 
 For Julia 1.12+, using workspaces is recommended and this duplication is not necessary.
 
-## Package naming guidelines
+## [Package naming guidelines](@id Package-naming-rules)
 
 Package names should be sensible to most Julia users, *even to those who are not domain experts*.
 The following rules apply to the `General` registry but may be useful for other package
