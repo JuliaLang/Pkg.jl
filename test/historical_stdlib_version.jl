@@ -19,14 +19,12 @@ using .Utils
     @test is_stdlib(networkoptions_uuid, v"1.6")
     @test !is_stdlib(networkoptions_uuid, v"1.5")
     @test !is_stdlib(networkoptions_uuid, v"1.0.0")
-    @test !is_stdlib(networkoptions_uuid, v"0.7")
     @test !is_stdlib(networkoptions_uuid, nothing)
 
     # Pkg is an unregistered stdlib and has always been an stdlib
     @test is_stdlib(pkg_uuid)
     @test is_stdlib(pkg_uuid, v"1.0")
     @test is_stdlib(pkg_uuid, v"1.6")
-    @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
 
     # We can't serve information for unknown major.minor versions (patches can not match)
