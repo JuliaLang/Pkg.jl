@@ -185,9 +185,9 @@ function clone(io::IO, url, source_path; header = nothing, credentials = nothing
             Pkg.Types.pkgerror("git clone of `$url` interrupted")
         elseif (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
                 (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
-            Pkg.Types.pkgerror("git repository not found at `$(url)`")
+            Pkg.Types.pkgerror("git repository not found at `$(url)`: ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to clone from $(url), error: $err")
+            Pkg.Types.pkgerror("failed to clone from $(url): ($(err.msg))")
         end
     finally
         Base.shred!(credentials)
@@ -253,9 +253,9 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
     catch err
         err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
-            Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)'")
+            Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)': ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to fetch from $(remoteurl), error: $err")
+            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($err.msh)")
         end
     finally
         Base.shred!(credentials)
