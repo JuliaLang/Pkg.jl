@@ -58,12 +58,12 @@ mutable struct RegistrySpec
     path::Union{String, Nothing}
     linked::Union{Bool, Nothing}
 end
-RegistrySpec(name::String) = RegistrySpec(name = name)
+RegistrySpec(name::AbstractString) = RegistrySpec(name = name)
 RegistrySpec(;
-    name::Union{String, Nothing} = nothing, uuid::Union{String, UUID, Nothing} = nothing,
-    url::Union{String, Nothing} = nothing, path::Union{String, Nothing} = nothing, linked::Union{Bool, Nothing} = nothing
+    name::Union{AbstractString, Nothing} = nothing, uuid::Union{AbstractString, UUID, Nothing} = nothing,
+    url::Union{AbstractString, Nothing} = nothing, path::Union{AbstractString, Nothing} = nothing, linked::Union{Bool, Nothing} = nothing
 ) =
-    RegistrySpec(name, isa(uuid, String) ? UUID(uuid) : uuid, url, path, linked)
+    RegistrySpec(name, isa(uuid, AbstractString) ? UUID(string(uuid)) : uuid, url, path, linked)
 
 """
     Pkg.Registry.add(registry::RegistrySpec)
