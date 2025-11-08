@@ -255,7 +255,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
             Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)': ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($err.msh)")
+            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($err.msg)")
         end
     finally
         Base.shred!(credentials)
