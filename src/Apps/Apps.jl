@@ -7,6 +7,7 @@ using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest
 using Pkg.Operations: print_single, source_path, update_package_add
 using Pkg.API: handle_package_input!
 using TOML, UUIDs
+using Dates
 import Pkg.Registry
 
 app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
@@ -183,6 +184,9 @@ function add(pkg::PackageSpec)
     handle_package_input!(pkg)
 
     ctx = app_context()
+
+    Pkg.Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
+
     manifest = ctx.env.manifest
     new = false
 
@@ -211,6 +215,9 @@ function add(pkg::PackageSpec)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
+    if new === true || (new isa Set{UUID} && pkg.uuid in new)
+        Pkg.Operations.build_versions(ctx, Set([pkg.uuid]); verbose = true)
+    end
     precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
@@ -247,8 +254,10 @@ function develop(pkg::PackageSpec)
     manifest = ctx.env.manifest
     manifest.deps[pkg.uuid] = entry
 
-    _resolve(manifest, pkg.name)
-    precompile(pkg.name)
+    # For dev, we don't create an app environment - just point shims directly to the dev'd project
+    write_manifest(manifest, app_manifest_file())
+    generate_shims_for_apps(pkg.name, project.apps, sourcepath, joinpath(Sys.BINDIR, "julia"))
+
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
     check_apps_in_path(project.apps)
 end

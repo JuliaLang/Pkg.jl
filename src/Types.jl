@@ -533,12 +533,23 @@ function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_curre
     end
     historical_stdlibs_check()
     last_stdlibs = UNREGISTERED_STDLIBS
+    last_version = nothing
+
     for (version, stdlibs) in STDLIBS_BY_VERSION
+        if !isnothing(last_version) && last_version > version
+            pkgerror("STDLIBS_BY_VERSION must be sorted by version number")
+        end
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break
         end
         last_stdlibs = stdlibs
+        last_version = version
     end
+    # Serving different patches is safe-ish, but different majors or minors is most likely not.
+    if last_version !== nothing && (last_version.major != julia_version.major || last_version.minor != julia_version.minor)
+        pkgerror("Could not find a julia version in STDLIBS_BY_VERSION that matches the major & minor version of requested julia_version v$(julia_version)")
+    end
+
     return last_stdlibs
 end
 # If `julia_version` is set to `nothing`, that means (essentially) treat all registered
@@ -710,6 +721,7 @@ function read_package(path::String)
 end
 
 const refspecs = ["+refs/heads/*:refs/remotes/cache/heads/*"]
+const refspecs_fallback = ["+refs/*:refs/remotes/cache/*"]
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
@@ -921,6 +933,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 fetched = true
                 GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs=refspecs)
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
+                # If still not found, try with broader refspec as fallback
+                if obj_branch === nothing
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs_fallback)
+                    obj_branch = get_object_or_branch(repo, rev_or_hash)
+                end
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(rev_or_hash) in repository")
                 end

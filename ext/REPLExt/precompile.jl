@@ -36,7 +36,12 @@ let
     end
 
     if Base.generating_output()
-        pkgreplmode_precompile()
+        ccall(:jl_tag_newly_inferred_enable, Cvoid, ())
+        try
+            pkgreplmode_precompile()
+        finally
+            ccall(:jl_tag_newly_inferred_disable, Cvoid, ())
+        end
     end
 
 end # let
