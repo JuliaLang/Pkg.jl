@@ -77,6 +77,15 @@ jobs:
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
+          JULIA_DEPOT_PATH: ${{ github.workspace }}/do_not_modify_depot
+      - name: Check that we did not modify JULIA_DEPOT_PATH
+        run: |
+          if [ -d "${{ github.workspace }}/do_not_modify_depot/registries" ]; then
+            echo "Error: Tests modified the JULIA_DEPOT_PATH"
+            exit 1
+          fi
+        env:
+          JULIA_DEPOT_PATH: ${{ github.workspace }}/do_not_modify_depot
       - uses: actions/upload-artifact@v5
         if: ${{ always() }}
         with:
