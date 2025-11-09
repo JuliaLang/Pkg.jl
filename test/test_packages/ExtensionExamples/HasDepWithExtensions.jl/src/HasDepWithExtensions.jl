@@ -18,4 +18,11 @@ function do_something()
     return HasExtensions.foo(IndirectArray(rand(1:6, 32, 32), 1:6)) == 3 || error("Unexpected value")
 end
 
+function dummy_function_for_coverage end
+
+function __init__()
+    @eval dummy_function_for_coverage() = Base.donotdelete("Dummy")
+    Base.invokelatest(dummy_function_for_coverage)
+end
+
 end # module
