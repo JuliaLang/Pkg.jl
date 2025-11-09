@@ -1,3 +1,5 @@
+import Pkg.Status
+
 # TODO: Overload
 function _compat(ctx::Context; io = nothing, input_io = stdin)
     io = something(io, ctx.io)
@@ -9,11 +11,11 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
     opt_strs = String[]
     opt_pkgs = String[]
     compat_str = Operations.get_compat_str(ctx.env.project, "julia")
-    push!(opt_strs, Operations.compat_line(io, "julia", nothing, compat_str, longest_dep_len, indent = ""))
+    push!(opt_strs, Status.compat_line(io, "julia", nothing, compat_str, longest_dep_len, indent = ""))
     push!(opt_pkgs, "julia")
     for (dep, uuid) in sort(collect(ctx.env.project.deps); by = x -> x.first)
         compat_str = Operations.get_compat_str(ctx.env.project, dep)
-        push!(opt_strs, Operations.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
+        push!(opt_strs, Status.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
         push!(opt_pkgs, dep)
     end
     menu = TerminalMenus.RadioMenu(opt_strs; pagesize = length(opt_strs), charset = :ascii)

@@ -13,10 +13,10 @@ import FileWatching
 import Base: StaleCacheKey
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped, ..manifest_rel_path
-import ..Operations, ..GitTools, ..Pkg, ..Registry
+import ..Operations, ..GitTools, ..Pkg, ..Registry, ..Status
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write, ..safe_realpath
 using ..Types, ..TOML
-using ..Types: VersionTypes
+using ..Types: VersionTypes, is_manifest_current
 using Base.BinaryPlatforms
 import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
@@ -581,16 +581,6 @@ function test(
         allow_reresolve,
     )
     return
-end
-
-is_manifest_current(ctx::Context) = Operations.is_manifest_current(ctx.env)
-function is_manifest_current(path::AbstractString)
-    project_file = projectfile_path(path, strict = true)
-    if project_file === nothing
-        pkgerror("could not find project file at `$path`")
-    end
-    env = EnvCache(project_file)
-    return Operations.is_manifest_current(env)
 end
 
 const UsageDict = Dict{String, DateTime}
@@ -1288,7 +1278,7 @@ function instantiate(
     end
     Types.check_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file; julia_version_strict)
 
-    if Operations.is_manifest_current(ctx.env) === false
+    if is_manifest_current(ctx.env) === false
         resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
         update_cmd = Pkg.in_repl_mode() ? "pkg> update" : "Pkg.update()"
         @warn """The project dependencies or compat requirements have changed since the manifest was last resolved.
@@ -1377,16 +1367,7 @@ end
 @deprecate status(mode::PackageMode) status(mode = mode)
 
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mode = PKGMODE_PROJECT, workspace::Bool = false, outdated::Bool = false, deprecated::Bool = false, compat::Bool = false, extensions::Bool = false, io::IO = stdout_f())
-    if compat
-        diff && pkgerror("Compat status has no `diff` mode")
-        outdated && pkgerror("Compat status has no `outdated` mode")
-        deprecated && pkgerror("Compat status has no `deprecated` mode")
-        extensions && pkgerror("Compat status has no `extensions` mode")
-        Operations.print_compat(ctx, pkgs; io)
-    else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, deprecated, extensions, workspace)
-    end
-    return nothing
+    return Status.status(ctx, pkgs; diff, mode, workspace, outdated, deprecated, compat, extensions, io)
 end
 
 
@@ -1591,7 +1572,7 @@ function set_current_compat(ctx::Context, target_pkg::Union{Nothing, String} = n
     end
 
     write_env(ctx.env)
-    return Operations.print_compat(ctx; io)
+    return Status.print_compat(ctx; io)
 end
 set_current_compat(; kwargs...) = set_current_compat(Context(); kwargs...)
 
@@ -1713,7 +1694,7 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
     write_env(ctx.env; update_undo = false)
-    return Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
+    return Status.show_update(ctx.env, ctx.registries; io = ctx.io)
 end
 
 

@@ -690,6 +690,27 @@ function workspace_resolve_hash(env::EnvCache)
     return bytes2hex(sha1(str))
 end
 
+function is_manifest_current(env::EnvCache)
+    if haskey(env.manifest.other, "project_hash")
+        recorded_hash = env.manifest.other["project_hash"]
+        current_hash = workspace_resolve_hash(env)
+        return recorded_hash == current_hash
+    else
+        return nothing
+    end
+end
+
+is_manifest_current(ctx::Context) = is_manifest_current(ctx.env)
+
+function is_manifest_current(path::AbstractString)
+    project_file = projectfile_path(path, strict = true)
+    if project_file === nothing
+        pkgerror("could not find project file at `$path`")
+    end
+    env = EnvCache(project_file)
+    return is_manifest_current(env)
+end
+
 
 write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
     write_env_usage([source_file], usage_filepath)

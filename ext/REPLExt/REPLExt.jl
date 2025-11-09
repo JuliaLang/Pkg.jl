@@ -369,6 +369,6 @@ function __init__()
     end
 end
 
-include("precompile.jl")
+# include("precompile.jl")
 
 end
