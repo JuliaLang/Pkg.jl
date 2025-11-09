@@ -310,7 +310,7 @@ projects = ["test"]
 
 When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single `Manifest.toml` next to the base `Project.toml`. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
 
-!!! warning
+!!! info
     Unlike some earlier test dependency workflows, this one explicitly requires adding `HelloWorld` (the parent package) to your `test/Project.toml`.
 
 You can now use `Test` in the test script:
