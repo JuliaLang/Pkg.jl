@@ -640,10 +640,23 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             names[dep.uuid] = dep.name
             dep_uuid = dep.uuid
             if !is_tracking_registry(dep) && dep_uuid !== nothing && !(dep_uuid in seen)
-                push!(pkg_queue, dep)
-                push!(new_fixed_pkgs, dep)
-                pkg_by_uuid[dep_uuid] = dep
-                push!(seen, dep_uuid)
+                # Only recursively collect path sources if the path actually exists
+                # Repo sources (with URL/rev) are always collected
+                if is_tracking_path(dep)
+                    dep_source = source_path(env.manifest_file, dep)
+                    if dep_source !== nothing && isdir(dep_source)
+                        push!(pkg_queue, dep)
+                        push!(new_fixed_pkgs, dep)
+                        pkg_by_uuid[dep_uuid] = dep
+                        push!(seen, dep_uuid)
+                    end
+                else
+                    # Repo source - always add to queue
+                    push!(pkg_queue, dep)
+                    push!(new_fixed_pkgs, dep)
+                    pkg_by_uuid[dep_uuid] = dep
+                    push!(seen, dep_uuid)
+                end
             elseif dep_uuid !== nothing && !haskey(pkg_by_uuid, dep_uuid)
                 pkg_by_uuid[dep_uuid] = dep
             end
