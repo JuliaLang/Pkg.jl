@@ -390,7 +390,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Test"]
 ```
 
-The tests are executed in a new process with `check-bounds=yes` and by default `startup-file=no`.
+The tests are executed in a new process with the same `check-bounds` setting as the current Julia session and by default `startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
 
 Inlining of functions during testing can be disabled (for better coverage accuracy)

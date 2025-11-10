@@ -1,6 +1,8 @@
 Pkg v1.13 Release Notes
 =======================
 
+- `Pkg.test` now respects the `--check-bounds` setting from the parent Julia session instead of forcing `--check-bounds=yes`.
+
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve
