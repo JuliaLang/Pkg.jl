@@ -445,7 +445,7 @@ temp_pkg_dir() do project_path
                             rethrow()
                         end
                         yield()
-                    end"`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")),
+                    end"`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")),
                         stderr = iob, stdout = devnull
                     )
                 )
