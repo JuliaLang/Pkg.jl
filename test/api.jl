@@ -50,7 +50,7 @@ import .FakeTerminals.FakeTerminal
 
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
-    isolate(loaded_depot=true) do;
+    isolate(loaded_depot = true) do;
         cd_tempdir() do tmp
             Pkg.activate(".")
             cd(mkdir("packages")) do
