@@ -263,8 +263,14 @@ function get_metadata_headers(url::AbstractString)
 
     # Add Accept-Encoding header only for compressed archive resources
     # (registries, packages, artifacts - not for metadata endpoints like /registries or /meta)
+    # Don't use zstd for registries on Windows due to backwards compatibility with older Julia versions
+    # (7z can't decompress zstd until v17.6, older Julia versions on Windows only have 7z available)
     if occursin(r"/(registry|package|artifact)/", url)
-        push!(headers, "Accept-Encoding" => "zstd, gzip")
+        if Sys.iswindows() && occursin(r"/registry/", url)
+            # Skip zstd for registries on Windows
+        else
+            push!(headers, "Accept-Encoding" => "zstd, gzip")
+        end
     end
 
     for (key, val) in ENV
