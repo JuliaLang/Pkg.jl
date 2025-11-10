@@ -105,7 +105,7 @@ function get_max_version_register(pkg::PackageSpec, regs)
         if get(reg, pkg.uuid, nothing) !== nothing
             reg_pkg = get(reg, pkg.uuid, nothing)
             reg_pkg === nothing && continue
-            pkg_info = Registry.registry_info(reg_pkg)
+            pkg_info = Registry.registry_info(reg, reg_pkg)
             for (version, info) in pkg_info.version_info
                 info.yanked && continue
                 if pkg.version isa VersionNumber
@@ -216,6 +216,9 @@ function add(pkg::PackageSpec)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
+    if new === true || (new isa Set{UUID} && pkg.uuid in new)
+        Pkg.Operations.build_versions(ctx, Set([pkg.uuid]); verbose = true)
+    end
     precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
@@ -231,7 +234,7 @@ end
 
 function develop(pkg::PackageSpec)
     if pkg.path !== nothing
-        pkg.path == abspath(pkg.path)
+        pkg.path = abspath(pkg.path)
     end
     handle_package_input!(pkg)
     ctx = app_context()

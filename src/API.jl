@@ -1346,11 +1346,11 @@ function instantiate(
         end
         repo_path = Types.add_repo_cache_path(repo_source)
         let repo_source = repo_source
-            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare = true)) do repo
+            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare = true, depth = 1)) do repo
                 # We only update the clone if the tree hash can't be found
                 tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
                 if tree_hash_object === nothing
-                    GitTools.fetch(ctx.io, repo, repo_source; refspecs = Types.refspecs)
+                    GitTools.fetch(ctx.io, repo, repo_source; refspecs = Types.refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
                     tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
                 end
                 if tree_hash_object === nothing

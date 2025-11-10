@@ -937,7 +937,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
-        info = Pkg.Registry.registry_info(regpkg)
+        info = Pkg.Registry.registry_info(reg, regpkg)
         url = info.repo
         url === nothing && continue
         pkg.repo.source = url
@@ -1010,7 +1010,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
     return let repo_source = repo_source
         # The type-assertions below are necessary presumably due to julia#36454
-        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing, String}), repo_source::Union{Nothing, String}; isbare = true)) do repo
+        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing, String}), repo_source::Union{Nothing, String}; isbare = true, depth = 1)) do repo
             repo_source_typed = repo_source::Union{Nothing, String}
             GitTools.check_valid_HEAD(repo)
             create_cachedir_tag(dirname(add_repo_cache_path(repo_source)))
@@ -1027,11 +1027,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 if startswith(rev_or_hash, "pull/") && endswith(rev_or_hash, "/head")
                     pr_number = rev_or_hash[6:(end - 5)]  # Extract number from "pull/X/head"
                     pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs)
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs, depth = 1)
                     # For branch names, fetch only the specific branch
                 elseif !looks_like_commit_hash(string(rev_or_hash))
                     specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec)
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 else
                     # For commit hashes, fetch all branches
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
@@ -1054,7 +1054,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if isbranch && !fetched && !ispinned
                 # Fetch only the specific branch being tracked
                 specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
-                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec)
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 gitobject, isbranch = get_object_or_branch(repo, rev_or_hash)
             end
 
@@ -1343,7 +1343,7 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
         for reg in registries
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
-            info = Pkg.Registry.registry_info(pkg)
+            info = Pkg.Registry.registry_info(reg, pkg)
             repo = info.repo
             repo === nothing && continue
             push!(repo_infos, (reg.name, repo, uuid))

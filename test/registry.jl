@@ -397,7 +397,7 @@ end
             @test haskey(reg, pkg_uuid)
 
             pkg_entry = reg[pkg_uuid]
-            pkg_info = Pkg.Registry.registry_info(pkg_entry)
+            pkg_info = Pkg.Registry.registry_info(reg, pkg_entry)
 
             # Test that deprecated info is loaded correctly
             @test Pkg.Registry.isdeprecated(pkg_info)
@@ -408,7 +408,7 @@ end
             # Test that non-deprecated package is not marked as deprecated
             example1_uuid = UUID("c5f1542f-b8aa-45da-ab42-05303d706c66")
             example1_entry = reg[example1_uuid]
-            example1_info = Pkg.Registry.registry_info(example1_entry)
+            example1_info = Pkg.Registry.registry_info(reg, example1_entry)
             @test !Pkg.Registry.isdeprecated(example1_info)
             @test example1_info.deprecated === nothing
 

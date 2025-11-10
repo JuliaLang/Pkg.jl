@@ -237,6 +237,38 @@ function Base.in(v::VersionNumber, s::VersionSpec)
     return false
 end
 
+# Optimized batch version check for version lists
+# Fills dest[1:n] indicating which versions are in the VersionSpec
+# Optimized for sorted version lists (but works correctly even if unsorted)
+# Note: Only fills indices 1:n, leaves rest of dest unchanged
+function matches_spec_range!(dest::BitVector, versions::AbstractVector{VersionNumber}, spec::VersionSpec, n::Int)
+    @assert length(versions) == n
+    @assert length(dest) >= n
+
+    # Initialize to false
+    dest[1:n] .= false
+
+    isempty(spec.ranges) && return dest
+
+    # Assumes versions are sorted (as created in Operations.jl:1002)
+    # If sorted, this avoids O(n*m) comparisons by scanning linearly
+    @inbounds for range in spec.ranges
+        # Find first version that could be in range
+        i = 1
+        while i <= n && !(range.lower ≲ versions[i])
+            i += 1
+        end
+
+        # Mark all versions in range
+        while i <= n && versions[i] ≲ range.upper
+            dest[i] = true
+            i += 1
+        end
+    end
+
+    return dest
+end
+
 Base.copy(vs::VersionSpec) = VersionSpec(vs)
 
 const empty_versionspec = VersionSpec(VersionRange[])
