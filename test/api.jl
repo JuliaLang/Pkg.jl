@@ -257,6 +257,7 @@ import .FakeTerminals.FakeTerminal
                 proj = joinpath(pwd(), "packages", "SlowPrecompile")
                 cmd = addenv(
                     `$(Base.julia_cmd()) --color=no --startup-file=no --project="$(pkgdir(Pkg))" -e "
+                @show Base.DEPOT_PATH
                 using Pkg
                 Pkg.activate(\"$(escape_string(proj))\")
                 Pkg.precompile()

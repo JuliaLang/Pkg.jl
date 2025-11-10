@@ -2479,7 +2479,6 @@ end
     @testset "threads" begin
         isolate(loaded_depot = true) do;
             mktempdir() do dir
-                copy_this_pkg_cache(LOADED_DEPOT)
                 path = copy_test_package(dir, "TestThreads")
                 cd(path) do
                     # Do this all in a subprocess to protect against the parent having non-default threadpool sizes.
