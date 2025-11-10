@@ -58,7 +58,7 @@ jobs:
             pkg-server: "pkg.julialang.org"
     steps:
       - name: Set git to use LF, fix TEMP, set JULIA_DEPOT_PATH (windows)
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
         run: |
           git config --global core.autocrlf false
           git config --global core.eol lf
@@ -67,7 +67,7 @@ jobs:
           echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
           echo "JULIA_DEPOT_PATH=${GITHUB_WORKSPACE}\do_not_modify_depot;" >> ${GITHUB_ENV}
       - name: Set JULIA_DEPOT_PATH (non-windows)
-        if: matrix.os != 'windows-latest'
+        if: runner.os != 'Windows'
         run: |
           echo "JULIA_DEPOT_PATH=${GITHUB_WORKSPACE}/do_not_modify_depot:" >> ${GITHUB_ENV}
       - uses: actions/checkout@v5
