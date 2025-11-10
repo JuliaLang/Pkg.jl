@@ -330,6 +330,29 @@ function validate_no_overlapping_ranges(
     return
 end
 
+# Simplified tarball reader without path tracking overhead
+function read_tarball_simple(
+        callback::Function,
+        predicate::Function,
+        tar::IO;
+        buf::Vector{UInt8} = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE),
+    )
+    globals = Dict{String, String}()
+    while !eof(tar)
+        hdr = Tar.read_header(tar, globals = globals, buf = buf)
+        hdr === nothing && break
+        predicate(hdr)::Bool || continue
+        Tar.check_header(hdr)
+        before = applicable(position, tar) ? position(tar) : 0
+        callback(hdr)
+        applicable(position, tar) || continue
+        advanced = position(tar) - before
+        expected = Tar.round_up(hdr.size)
+        advanced == expected ||
+            error("callback read $advanced bytes instead of $expected")
+    end
+    return
+end
 
 function uncompress_registry(compressed_tar::AbstractString)
     if !isfile(compressed_tar)
@@ -339,11 +362,9 @@ function uncompress_registry(compressed_tar::AbstractString)
     buf = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE)
     io = IOBuffer()
     open(get_extract_cmd(compressed_tar)) do tar
-        Tar.read_tarball(x -> true, tar; buf = buf) do hdr, _
-            if hdr.type == :file
-                Tar.read_data(tar, io; size = hdr.size, buf = buf)
-                data[hdr.path] = String(take!(io))
-            end
+        read_tarball_simple(x -> true, tar; buf = buf) do hdr
+            Tar.read_data(tar, io; size = hdr.size, buf = buf)
+            data[hdr.path] = String(take!(io))
         end
     end
     return data
