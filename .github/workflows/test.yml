@@ -82,6 +82,7 @@ jobs:
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
+          JULIA_DEBUG: loading
       - name: Check that we did not modify JULIA_DEPOT_PATH
         run: |
           if [ -d "${{ github.workspace }}/do_not_modify_depot/registries" ]; then
