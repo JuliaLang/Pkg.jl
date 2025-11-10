@@ -254,6 +254,29 @@ function init_package_info!(pkg::PkgEntry)
     return pkg.info
 end
 
+# Simplified tarball reader without path tracking overhead
+function read_tarball_simple(
+        callback::Function,
+        predicate::Function,
+        tar::IO;
+        buf::Vector{UInt8} = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE),
+    )
+    globals = Dict{String, String}()
+    while !eof(tar)
+        hdr = Tar.read_header(tar, globals = globals, buf = buf)
+        hdr === nothing && break
+        predicate(hdr)::Bool || continue
+        Tar.check_header(hdr)
+        before = applicable(position, tar) ? position(tar) : 0
+        callback(hdr)
+        applicable(position, tar) || continue
+        advanced = position(tar) - before
+        expected = Tar.round_up(hdr.size)
+        advanced == expected ||
+            error("callback read $advanced bytes instead of $expected")
+    end
+    return
+end
 
 function uncompress_registry(tar_gz::AbstractString)
     if !isfile(tar_gz)
@@ -263,11 +286,9 @@ function uncompress_registry(tar_gz::AbstractString)
     buf = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE)
     io = IOBuffer()
     open(`$(exe7z()) x $tar_gz -so`) do tar
-        Tar.read_tarball(x -> true, tar; buf = buf) do hdr, _
-            if hdr.type == :file
-                Tar.read_data(tar, io; size = hdr.size, buf = buf)
-                data[hdr.path] = String(take!(io))
-            end
+        read_tarball_simple(x -> true, tar; buf = buf) do hdr
+            Tar.read_data(tar, io; size = hdr.size, buf = buf)
+            data[hdr.path] = String(take!(io))
         end
     end
     return data
