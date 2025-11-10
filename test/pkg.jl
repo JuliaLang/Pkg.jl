@@ -419,8 +419,9 @@ temp_pkg_dir() do project_path
             for i in 1:Sys.CPU_THREADS
                 iob = IOBuffer()
                 t = @async run(
-                    pipeline(addenv(
-                        `$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
+                    pipeline(
+                        addenv(
+                            `$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
                     -e "import Pkg;
                     Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
                     Pkg.activate(temp = true);
@@ -445,7 +446,8 @@ temp_pkg_dir() do project_path
                             rethrow()
                         end
                         yield()
-                    end"`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")),
+                    end"`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+                        ),
                         stderr = iob, stdout = devnull
                     )
                 )

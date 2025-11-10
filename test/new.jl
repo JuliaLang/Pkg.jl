@@ -186,8 +186,10 @@ end
             @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
             close(t)
             """
-            cmd = addenv(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`,
-                "JULIA_DEPOT_PATH"=>join([tmp, LOADED_DEPOT, ""], pathsep))
+            cmd = addenv(
+                `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`,
+                "JULIA_DEPOT_PATH" => join([tmp, LOADED_DEPOT, ""], pathsep)
+            )
             did_install_package = Threads.Atomic{Int}(0)
             did_install_artifact = Threads.Atomic{Int}(0)
             any_failed = Threads.Atomic{Bool}(false)
@@ -2539,9 +2541,12 @@ end
                             end
                         end
                     """
-                    @test Utils.show_output_if_command_errors(addenv(
-                        `$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`,
-                        "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")))
+                    @test Utils.show_output_if_command_errors(
+                        addenv(
+                            `$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`,
+                            "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+                        )
+                    )
                 end
             end
         end
@@ -3850,7 +3855,7 @@ end
 end
 
 @testset "status showing incompatible loaded deps" begin
-    isolate(loaded_depot=true) do
+    isolate(loaded_depot = true) do
         cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
             using Pkg
             Pkg.activate(temp=true)
