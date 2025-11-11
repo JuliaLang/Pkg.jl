@@ -19,6 +19,8 @@ module PkgTestsInner
         error("The wrong Pkg is being tested")
     end
 
+    const original_depot_had_registries = isdir(joinpath(Base.DEPOT_PATH[1], "registries"))
+
     ENV["JULIA_PKG_PRECOMPILE_AUTO"] = 0
     ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"] = 1
 
@@ -91,6 +93,9 @@ module PkgTestsInner
                 cd(original_wd)
             end
         end
+
+        # Make sure that none of our tests have left temporary registries lying around
+        @test isdir(joinpath(Base.DEPOT_PATH[1], "registries")) == original_depot_had_registries
     end
 
     if haskey(ENV, "CI")
