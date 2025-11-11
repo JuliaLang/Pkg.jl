@@ -1,6 +1,7 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 const DEFAULT_MAX_TIME = "300"
+const PREFERRED_VERSION_WEIGHT_BONUS = VersionWeight(typemax(Int32))
 
 # Some parameters to drive the decimation process
 mutable struct MaxSumParams
@@ -55,6 +56,19 @@ mutable struct Messages
 
         ## generate wveights (v0 == spp[p0] is the "uninstalled" state)
         vweight = [[VersionWeight(v0 < spp[p0] ? pvers[p0][v0] : v"0") for v0 in 1:spp[p0]] for p0 in 1:np]
+        preferred_versions = graph.preferred_versions
+        if !isempty(preferred_versions)
+            pkgs = graph.data.pkgs
+            vdict = graph.data.vdict
+            for p0 in 1:np
+                uuid = pkgs[p0]
+                pref_version = get(preferred_versions, uuid, nothing)
+                pref_version === nothing && continue
+                idx = get(vdict[p0], pref_version, 0)
+                (idx > 0 && idx < spp[p0]) || continue
+                vweight[p0][idx] += PREFERRED_VERSION_WEIGHT_BONUS
+            end
+        end
 
         # external fields: favor newest versions over older, and no-version over all;
         #                  explicit requirements use level l1 instead of l2
