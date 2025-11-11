@@ -234,6 +234,7 @@ mutable struct Graph
     newmsg::Vector{FieldValue}
     diff::Vector{FieldValue}
     cavfld::Vector{FieldValue}
+    preferred_versions::Dict{UUID, VersionNumber}
 
     function Graph(
             deps_compressed::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
@@ -246,7 +247,8 @@ mutable struct Graph
             reqs::Requires,
             fixed::Dict{UUID, Fixed},
             verbose::Bool = false,
-            julia_version::Union{VersionNumber, Nothing} = VERSION
+            julia_version::Union{VersionNumber, Nothing} = VERSION,
+            preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
         )
 
         # Tell the resolver about julia itself
@@ -391,7 +393,7 @@ mutable struct Graph
 
         graph = new(
             data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np,
-            FieldValue[], FieldValue[], FieldValue[]
+            FieldValue[], FieldValue[], FieldValue[], Dict{UUID, VersionNumber}(preferred_versions)
         )
 
         _add_fixed!(graph, fixed)
@@ -416,7 +418,8 @@ mutable struct Graph
         ignored = copy(graph.ignored)
         solve_stack = [([copy(gc0) for gc0 in sav_gconstr], copy(sav_ignored)) for (sav_gconstr, sav_ignored) in graph.solve_stack]
 
-        return new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np)
+        preferred_versions = copy(graph.preferred_versions)
+        return new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np, FieldValue[], FieldValue[], FieldValue[], preferred_versions)
     end
 end
 

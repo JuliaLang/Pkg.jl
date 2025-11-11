@@ -17,6 +17,9 @@ Pkg v1.13 Release Notes
   silently in the background while returning to the REPL), `c` to cancel, `i` for a profile peek, `v` to toggle
   verbose mode, `?`/`h` for help, and `Ctrl-C` to interrupt. After detaching, use `pkg> precompile --monitor` to
   reattach, `--stop` to stop gracefully, or `--cancel` to cancel immediately. ([#4602])
+- `Pkg.add` now prefers versions of packages that are already loaded in the current Julia session when resolving
+  dependencies. This helps maintain compatibility with code already running in your session. The behavior can be
+  disabled using `Pkg.add(pkg; prefer_loaded_versions=false)`. ([#4507])
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve
