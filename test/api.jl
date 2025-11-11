@@ -50,7 +50,7 @@ import .FakeTerminals.FakeTerminal
 
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
-    isolate() do;
+    isolate(loaded_depot = true) do;
         cd_tempdir() do tmp
             Pkg.activate(".")
             cd(mkdir("packages")) do
@@ -261,7 +261,8 @@ import .FakeTerminals.FakeTerminal
                 Pkg.activate(\"$(escape_string(proj))\")
                 Pkg.precompile()
             "`,
-                    "JULIA_PKG_PRECOMPILE_AUTO" => "0"
+                    "JULIA_PKG_PRECOMPILE_AUTO" => "0",
+                    "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                 )
                 iob1 = IOBuffer()
                 iob2 = IOBuffer()
