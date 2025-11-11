@@ -3922,4 +3922,34 @@ end
     end
 end
 
+@testset "Pkg.add prefers loaded dependency versions" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do tmp
+            pkg_path = copy_test_package(tmp, "PackageWithDependency"; use_pkg = false)
+            script = """
+            using Pkg
+            Pkg.activate(; temp = true)
+            Pkg.add(name = "Example", version = v"0.5.1")
+            using Example
+            @test pkgversion(Example) == v"0.5.1"
+            Pkg.activate(; temp = true)
+            io = IOBuffer()
+            Pkg.add("Example", io = io)
+            add_output = String(take!(io))
+            @test occursin("Preferring the version of Example that is already loaded", add_output)
+            @test occursin("direct dep Example", add_output)
+            deps = Pkg.dependencies()
+            example_dep = get(deps, exuuid, nothing)
+            @test example_dep !== nothing
+            @test example_dep.version == pkgversion(Example)
+            """
+            cmd = addenv(
+                `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
+                "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+            )
+            @test Utils.show_output_if_command_errors(cmd)
+        end
+    end
+end
+
 end #module
