@@ -238,6 +238,98 @@ temp_pkg_dir() do project_path
             end
         end
     end
+
+    @testset "changing rev in sources updates project_hash and git-tree-sha1 (#4157)" begin
+        isolate() do
+            mktempdir() do tmp
+                # Create a test package with two commits
+                test_pkg_dir = joinpath(tmp, "TestPkg")
+                mkpath(test_pkg_dir)
+                cd(test_pkg_dir) do
+                    write(
+                        "Project.toml", """
+                        name = "TestPkg"
+                        uuid = "b4017d7c-a742-4580-99f2-e286571e6290"
+                        version = "0.1.0"
+                        """
+                    )
+                    mkpath("src")
+                    write(
+                        "src/TestPkg.jl", """
+                        module TestPkg
+                        greet() = "Hello, World!"
+                        end
+                        """
+                    )
+                    run(`git init -q`)
+                    run(`git add .`)
+                    run(`git commit -q -m "Initial commit"`)
+                    first_commit = readchomp(`git rev-parse HEAD`)
+                    # Get tree hash by parsing git log
+                    first_tree_hash = match(r"tree ([0-9a-f]+)", readchomp(`git cat-file -p $first_commit`))[1]
+
+                    # Make a second commit
+                    write("README.md", "# TestPkg\n")
+                    run(`git add .`)
+                    run(`git commit -q -m "Add README"`)
+                    second_commit = readchomp(`git rev-parse HEAD`)
+                    second_tree_hash = match(r"tree ([0-9a-f]+)", readchomp(`git cat-file -p $second_commit`))[1]
+
+                    # Create consumer project
+                    consumer_dir = joinpath(tmp, "consumer")
+                    mkpath(consumer_dir)
+                    cd(consumer_dir) do
+                        # Start with first revision
+                        write(
+                            "Project.toml", """
+                            [deps]
+                            TestPkg = "b4017d7c-a742-4580-99f2-e286571e6290"
+
+                            [sources]
+                            TestPkg = { url = "$test_pkg_dir", rev = "$first_commit" }
+                            """
+                        )
+
+                        Pkg.activate(".")
+                        Pkg.resolve()
+                        @test isfile("Manifest.toml")
+                        manifest = Pkg.Types.read_manifest("Manifest.toml")
+                        first_project_hash = manifest.project_hash
+
+                        # Verify first state
+                        test_pkg_uuid = UUID("b4017d7c-a742-4580-99f2-e286571e6290")
+                        @test haskey(manifest.deps, test_pkg_uuid)
+                        test_pkg_entry = manifest[test_pkg_uuid]
+                        @test test_pkg_entry.tree_hash !== nothing
+                        @test string(test_pkg_entry.tree_hash) == first_tree_hash
+                        @test test_pkg_entry.repo.rev == first_commit
+
+                        # Change to second revision
+                        write(
+                            "Project.toml", """
+                            [deps]
+                            TestPkg = "b4017d7c-a742-4580-99f2-e286571e6290"
+
+                            [sources]
+                            TestPkg = { url = "$test_pkg_dir", rev = "$second_commit" }
+                            """
+                        )
+
+                        Pkg.resolve()
+                        manifest = Pkg.Types.read_manifest("Manifest.toml")
+                        second_project_hash = manifest.project_hash
+
+                        # Verify second state - both project_hash and git-tree-sha1 should change
+                        test_pkg_entry = manifest[test_pkg_uuid]
+                        @test test_pkg_entry.tree_hash !== nothing
+                        @test string(test_pkg_entry.tree_hash) == second_tree_hash
+                        @test test_pkg_entry.repo.rev == second_commit
+                        @test second_project_hash != first_project_hash
+                    end
+                end
+            end
+        end
+    end
 end
 
 end # module
