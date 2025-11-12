@@ -67,9 +67,20 @@ function projname(project_file::String)
         nothing
     end
     if project === nothing || project.name === nothing
-        name = basename(dirname(project_file))
+        # For .jl files, use the filename with extension as fallback
+        # For directories/Project.toml, use the directory name
+        if endswith(project_file, ".jl")
+            name = basename(project_file)
+        else
+            name = basename(dirname(project_file))
+        end
     else
-        name = project.name::String
+        # For portable scripts, include .jl extension to make it clear
+        if endswith(project_file, ".jl")
+            name = project.name::String * ".jl"
+        else
+            name = project.name::String
+        end
     end
     for depot in Base.DEPOT_PATH
         envdir = joinpath(depot, "environments")
@@ -94,17 +105,25 @@ function promptf()
         else
             project_name = projname(project_file)
             if project_name !== nothing
-                root = Types.find_root_base_project(project_file)
-                rootname = projname(root)
-                if root !== project_file
-                    path_prefix = "/" * dirname(Types.relative_project_path(root, project_file))
+                # For portable scripts (.jl files), don't show directory path
+                if endswith(project_file, ".jl")
+                    if textwidth(project_name) > 30
+                        project_name = first(project_name, 27) * "..."
+                    end
+                    prefix = "($(project_name)) "
                 else
-                    path_prefix = ""
+                    root = Types.find_root_base_project(project_file)
+                    rootname = projname(root)
+                    if root !== project_file
+                        path_prefix = "/" * dirname(Types.relative_project_path(root, project_file))
+                    else
+                        path_prefix = ""
+                    end
+                    if textwidth(rootname) > 30
+                        rootname = first(rootname, 27) * "..."
+                    end
+                    prefix = "($(rootname)$(path_prefix)) "
                 end
-                if textwidth(rootname) > 30
-                    rootname = first(rootname, 27) * "..."
-                end
-                prefix = "($(rootname)$(path_prefix)) "
                 prev_prefix = prefix
                 prev_project_timestamp = mtime(project_file)
                 prev_project_file = project_file

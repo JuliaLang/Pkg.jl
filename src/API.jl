@@ -1405,7 +1405,10 @@ function activate(; temp = false, shared = false, prev = false, io::IO = stderr_
     end
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
+    if p !== nothing
+        loc = endswith(p, ".jl") ? pathrepr(p) : "$(pathrepr(dirname(p)))"
+        printpkgstyle(io, :Activating, "project at $loc")
+    end
     add_snapshot_to_undo()
     return nothing
 end
@@ -1465,7 +1468,8 @@ function activate(path::AbstractString; shared::Bool = false, temp::Bool = false
     p = Base.active_project()
     if p !== nothing
         n = ispath(p) ? "" : "new "
-        printpkgstyle(io, :Activating, "$(n)project at $(pathrepr(dirname(p)))")
+        loc = endswith(p, ".jl") ? pathrepr(p) : "$(pathrepr(dirname(p)))"
+        printpkgstyle(io, :Activating, "$(n)project at $loc")
     end
     add_snapshot_to_undo()
     return nothing
