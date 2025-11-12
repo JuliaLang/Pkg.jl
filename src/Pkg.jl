@@ -364,12 +364,16 @@ const update = API.up
   - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
+  - `quiet::Bool=false`: suppress the dependency listing output before running tests.
 
 !!! compat "Julia 1.9"
     `allow_reresolve` requires at least Julia 1.9.
 
 !!! compat "Julia 1.9"
     Passing a string to `coverage` requires at least Julia 1.9.
+
+!!! compat "Julia 1.13"
+    `quiet` requires at least Julia 1.13.
 
 Run the tests for the given package(s), or for the current project if no positional argument is given to `Pkg.test`
 (the current project would need to be a package). The package is tested by running its `test/runtests.jl` file.
