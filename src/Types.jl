@@ -566,20 +566,26 @@ function is_or_was_stdlib(uuid::UUID, julia_version::Union{VersionNumber, Nothin
 end
 
 
-function historical_stdlibs_check()
-    return if isempty(STDLIBS_BY_VERSION)
-        pkgerror("If you want to set `julia_version`, you must first populate the `STDLIBS_BY_VERSION` global constant.  Try `using HistoricalStdlibVersions`")
-    end
-end
-
-# Find the entry in `STDLIBS_BY_VERSION`
-# that corresponds to the requested version, and use that.
-# If we can't find one, defaults to `UNREGISTERED_STDLIBS`
+# Query stdlib info for a specific Julia version.
+# Uses the compressed STDLIB_SEGMENTS data structure if available,
+# otherwise falls back to STDLIBS_BY_VERSION for backwards compatibility.
 function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_current_version = false)
     if !use_historical_for_current_version && julia_version == VERSION
         return stdlib_infos()
     end
-    historical_stdlibs_check()
+
+    # Use the new compressed data structure if this version is covered
+    if version_covered_by_segments(julia_version)
+        stdlibs = query_stdlib_segments(julia_version)
+        # Merge with unregistered stdlibs
+        return merge(UNREGISTERED_STDLIBS, stdlibs)
+    end
+
+    # Fall back to old STDLIBS_BY_VERSION logic for versions outside the covered range
+    if isempty(STDLIBS_BY_VERSION)
+        pkgerror("If you want to set `julia_version`, you must first populate the `STDLIBS_BY_VERSION` global constant.  Try `using HistoricalStdlibVersions`")
+    end
+
     last_stdlibs = UNREGISTERED_STDLIBS
     last_version = nothing
 
@@ -604,7 +610,6 @@ end
 # stdlibs as normal packages so that we get the latest versions of everything, ignoring
 # julia compat.  So we set the list of stdlibs to that of only the unregistered stdlibs.
 function get_last_stdlibs(::Nothing)
-    historical_stdlibs_check()
     return UNREGISTERED_STDLIBS
 end
 
@@ -634,7 +639,6 @@ function stdlib_version(uuid::UUID, julia_version::Union{VersionNumber, Nothing}
 end
 
 function is_unregistered_stdlib(uuid::UUID)
-    historical_stdlibs_check()
     return haskey(UNREGISTERED_STDLIBS, uuid)
 end
 
