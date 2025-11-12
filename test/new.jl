@@ -143,7 +143,6 @@ Pkg._auto_gc_enabled[] = false
             end
         end
     end
-    copy_this_pkg_cache(LOADED_DEPOT)
 end
 
 function kill_with_info(p)
@@ -172,62 +171,62 @@ end
 @testset "Concurrent setup/installation/precompilation across processes" begin
     @testset for test in 1:1 # increase for stress testing
         mktempdir() do tmp
+            copy_this_pkg_cache(tmp)
             pathsep = Sys.iswindows() ? ";" : ":"
             Pkg_dir = dirname(@__DIR__)
-            script = """
-            using Dates
-            t = Timer(t->println(stderr, Dates.now()), 4*60; interval = 10)
-            import Pkg
-            samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
-            Pkg.activate(temp=true)
-            Pkg.add(name="FFMPEG", version="0.4") # a package with a lot of deps but fast to load
-            using FFMPEG
-            @showtime FFMPEG.exe("-version")
-            @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
-            close(t)
-            """
-            cmd = addenv(
-                `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`,
-                "JULIA_DEPOT_PATH" => join([tmp, LOADED_DEPOT, ""], pathsep)
-            )
-            did_install_package = Threads.Atomic{Int}(0)
-            did_install_artifact = Threads.Atomic{Int}(0)
-            any_failed = Threads.Atomic{Bool}(false)
-            outputs = fill("", 3)
-            t = @elapsed @sync begin
-                # All but 1 process should be waiting, so should be ok to run many
-                for i in 1:3
-                    Threads.@spawn begin
-                        iob = IOBuffer()
-                        start = time()
-                        p = run(pipeline(cmd, stdout = iob, stderr = iob), wait = false)
-                        if timedwait(() -> process_exited(p), 5 * 60; pollint = 1.0) === :timed_out
-                            kill_with_info(p)
+            withenv("JULIA_DEPOT_PATH" => string(tmp, pathsep)) do
+                script = """
+                using Dates
+                t = Timer(t->println(stderr, Dates.now()), 4*60; interval = 10)
+                import Pkg
+                samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
+                Pkg.activate(temp=true)
+                Pkg.add(name="FFMPEG", version="0.4") # a package with a lot of deps but fast to load
+                using FFMPEG
+                @showtime FFMPEG.exe("-version")
+                @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
+                close(t)
+                """
+                cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
+                did_install_package = Threads.Atomic{Int}(0)
+                did_install_artifact = Threads.Atomic{Int}(0)
+                any_failed = Threads.Atomic{Bool}(false)
+                outputs = fill("", 3)
+                t = @elapsed @sync begin
+                    # All but 1 process should be waiting, so should be ok to run many
+                    for i in 1:3
+                        Threads.@spawn begin
+                            iob = IOBuffer()
+                            start = time()
+                            p = run(pipeline(cmd, stdout = iob, stderr = iob), wait = false)
+                            if timedwait(() -> process_exited(p), 5 * 60; pollint = 1.0) === :timed_out
+                                kill_with_info(p)
+                            end
+                            if !success(p)
+                                Threads.atomic_cas!(any_failed, false, true)
+                            end
+                            str = String(take!(iob))
+                            if occursin(r"Installed FFMPEG ─", str)
+                                Threads.atomic_add!(did_install_package, 1)
+                            end
+                            if occursin(r"Installed artifact FFMPEG ", str)
+                                Threads.atomic_add!(did_install_artifact, 1)
+                            end
+                            outputs[i] = string("=== test $test, process $i. Took $(time() - start) seconds.\n", str)
                         end
-                        if !success(p)
-                            Threads.atomic_cas!(any_failed, false, true)
-                        end
-                        str = String(take!(iob))
-                        if occursin(r"Installed FFMPEG ─", str)
-                            Threads.atomic_add!(did_install_package, 1)
-                        end
-                        if occursin(r"Installed artifact FFMPEG ", str)
-                            Threads.atomic_add!(did_install_artifact, 1)
-                        end
-                        outputs[i] = string("=== test $test, process $i. Took $(time() - start) seconds.\n", str)
                     end
                 end
-            end
-            if any_failed[] || did_install_package[] != 1 || did_install_artifact[] != 1
-                println("=== Concurrent Pkg.add test $test failed after $t seconds")
-                for i in 1:3
-                    printstyled(stdout, outputs[i]; color = (:blue, :green, :yellow)[i])
+                if any_failed[] || did_install_package[] != 1 || did_install_artifact[] != 1
+                    println("=== Concurrent Pkg.add test $test failed after $t seconds")
+                    for i in 1:3
+                        printstyled(stdout, outputs[i]; color = (:blue, :green, :yellow)[i])
+                    end
                 end
+                # only 1 should have actually installed FFMPEG
+                @test !any_failed[]
+                @test did_install_package[] == 1
+                @test did_install_artifact[] == 1
             end
-            # only 1 should have actually installed FFMPEG
-            @test !any_failed[]
-            @test did_install_package[] == 1
-            @test did_install_artifact[] == 1
         end
     end
 end
@@ -2477,76 +2476,69 @@ end
     end
 
     @testset "threads" begin
-        isolate(loaded_depot = true) do;
-            mktempdir() do dir
-                path = copy_test_package(dir, "TestThreads")
-                cd(path) do
-                    # Do this all in a subprocess to protect against the parent having non-default threadpool sizes.
-                    script = """
-                        using Pkg, Test
-                        @testset "JULIA_NUM_THREADS=1" begin
-                            withenv(
-                                "EXPECTED_NUM_THREADS_DEFAULT" => "1",
-                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
-                                "JULIA_NUM_THREADS" => "1",
-                            ) do
-                                Pkg.test("TestThreads")
-                            end
+        mktempdir() do dir
+            path = copy_test_package(dir, "TestThreads")
+            cd(path) do
+                # Do this all in a subprocess to protect against the parent having non-default threadpool sizes.
+                script = """
+                    using Pkg, Test
+                    @testset "JULIA_NUM_THREADS=1" begin
+                        withenv(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "1",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
+                            "JULIA_NUM_THREADS" => "1",
+                        ) do
+                            Pkg.test("TestThreads")
                         end
-                        @testset "JULIA_NUM_THREADS=2" begin
-                            withenv(
-                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
-                                "JULIA_NUM_THREADS" => "2",
-                            ) do
-                                Pkg.test("TestThreads")
-                            end
+                    end
+                    @testset "JULIA_NUM_THREADS=2" begin
+                        withenv(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
+                            "JULIA_NUM_THREADS" => "2",
+                        ) do
+                            Pkg.test("TestThreads")
                         end
-                        @testset "JULIA_NUM_THREADS=2,0" begin
-                            withenv(
-                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
-                                "JULIA_NUM_THREADS" => "2,0",
-                            ) do
-                                Pkg.test("TestThreads")
-                            end
+                    end
+                    @testset "JULIA_NUM_THREADS=2,0" begin
+                        withenv(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
+                            "JULIA_NUM_THREADS" => "2,0",
+                        ) do
+                            Pkg.test("TestThreads")
                         end
+                    end
 
-                        @testset "--threads=1" begin
-                            withenv(
-                                "EXPECTED_NUM_THREADS_DEFAULT" => "1",
-                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
-                                "JULIA_NUM_THREADS" => nothing,
-                            ) do
-                                Pkg.test("TestThreads"; julia_args=`--threads=1`)
-                            end
+                    @testset "--threads=1" begin
+                        withenv(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "1",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
+                            "JULIA_NUM_THREADS" => nothing,
+                        ) do
+                            Pkg.test("TestThreads"; julia_args=`--threads=1`)
                         end
-                        @testset "--threads=2" begin
-                            withenv(
-                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
-                                "JULIA_NUM_THREADS" => nothing,
-                            ) do
-                                Pkg.test("TestThreads"; julia_args=`--threads=2`)
-                            end
+                    end
+                    @testset "--threads=2" begin
+                        withenv(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
+                            "JULIA_NUM_THREADS" => nothing,
+                        ) do
+                            Pkg.test("TestThreads"; julia_args=`--threads=2`)
                         end
-                        @testset "--threads=2,0" begin
-                            withenv(
-                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
-                                "JULIA_NUM_THREADS" => nothing,
-                            ) do
-                                Pkg.test("TestThreads"; julia_args=`--threads=2,0`)
-                            end
+                    end
+                    @testset "--threads=2,0" begin
+                        withenv(
+                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
+                            "JULIA_NUM_THREADS" => nothing,
+                        ) do
+                            Pkg.test("TestThreads"; julia_args=`--threads=2,0`)
                         end
-                    """
-                    @test Utils.show_output_if_command_errors(
-                        addenv(
-                            `$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`,
-                            "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
-                        )
-                    )
-                end
+                    end
+                """
+                @test Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`)
             end
         end
     end
@@ -3854,20 +3846,18 @@ end
 end
 
 @testset "status showing incompatible loaded deps" begin
-    isolate(loaded_depot = true) do
-        cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
-            using Pkg
-            Pkg.activate(temp=true)
-            Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.4\"))
-            using Example
-            Pkg.activate(temp=true)
-            Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.5\"))
-            "`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"))
-        iob = IOBuffer()
-        run(pipeline(cmd, stderr = iob, stdout = iob))
-        out = String(take!(iob))
-        @test occursin("[loaded: v0.5.4]", out)
-    end
+    cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
+        using Pkg
+        Pkg.activate(temp=true)
+        Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.4\"))
+        using Example
+        Pkg.activate(temp=true)
+        Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.5\"))
+        "`)
+    iob = IOBuffer()
+    run(pipeline(cmd, stderr = iob, stdout = iob))
+    out = String(take!(iob))
+    @test occursin("[loaded: v0.5.4]", out)
 end
 
 @test allunique(unique([Pkg.PackageSpec(path = "foo"), Pkg.PackageSpec(path = "foo")]))
