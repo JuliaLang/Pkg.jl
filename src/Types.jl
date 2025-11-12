@@ -667,13 +667,18 @@ function load_workspace_weak_deps(env::EnvCache)
     return weakdeps
 end
 
-# only hash the deps and compat fields as they are the only fields that affect a resolve
+# hash the deps, compat, and sources fields as they affect a resolve
 function workspace_resolve_hash(env::EnvCache)
     # Handle deps in both [deps] and [weakdeps]
     deps = Dict(pkg.name => pkg.uuid for pkg in Pkg.Operations.load_direct_deps(env))
     weakdeps = load_workspace_weak_deps(env)
     alldeps = merge(deps, weakdeps)
     compats = Dict(name => Pkg.Operations.get_compat_workspace(env, name) for (name, uuid) in alldeps)
+    # Collect sources from project and workspace
+    sources = copy(env.project.sources)
+    for (_, proj) in env.workspace
+        merge!(sources, proj.sources)
+    end
     iob = IOBuffer()
     for (name, uuid) in sort!(collect(deps); by = first)
         println(iob, name, "=", uuid)
@@ -685,6 +690,13 @@ function workspace_resolve_hash(env::EnvCache)
     println(iob)
     for (name, compat) in sort!(collect(compats); by = first)
         println(iob, name, "=", compat)
+    end
+    println(iob)
+    for (name, source_dict) in sort!(collect(sources); by = first)
+        # Sort the source attributes for deterministic hashing
+        for (key, val) in sort!(collect(source_dict); by = first)
+            println(iob, name, ".", key, "=", val)
+        end
     end
     str = String(take!(iob))
     return bytes2hex(sha1(str))
