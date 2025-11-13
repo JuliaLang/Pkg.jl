@@ -43,6 +43,8 @@ temp_pkg_dir() do project_path
 
         @test_throws PkgError pkg"dev Example#blergh"
 
+        @test_throws PkgError pkg"add ÖÖÖ"
+
         @test_throws PkgError pkg"generate 2019Julia"
         pkg"generate Foo"
         pkg"dev ./Foo"

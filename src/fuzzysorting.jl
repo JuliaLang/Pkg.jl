@@ -197,8 +197,8 @@ function case_preservation_score(needle::AbstractString, haystack::AbstractStrin
     matches = 0
     min_len = min(length(needle), length(haystack))
 
-    for i in 1:min_len
-        if needle[i] == haystack[i]
+    for (n, h) in zip(needle, haystack)
+        if n == h
             matches += 1
         end
     end
