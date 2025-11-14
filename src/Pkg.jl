@@ -61,7 +61,7 @@ const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
-const DEFAULT_IO = Ref{Union{IO, Nothing}}(nothing)
+const DEFAULT_IO = Base.ScopedValues.ScopedValue{IO}()
 
 # ScopedValue to track whether we're currently in REPL mode
 const IN_REPL_MODE = Base.ScopedValues.ScopedValue{Bool}()
@@ -75,8 +75,8 @@ function unstableio(@nospecialize(io::IO))
         get(_io, :color, false) ? Base.ImmutableDict{Symbol, Any}(:color, true) : Base.ImmutableDict{Symbol, Any}()
     )
 end
-stderr_f() = something(DEFAULT_IO[], unstableio(stderr))
-stdout_f() = something(DEFAULT_IO[], unstableio(stdout))
+stderr_f() = something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stderr))
+stdout_f() = something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
@@ -1015,7 +1015,6 @@ end
 include("precompile.jl")
 
 # Reset globals that might have been mutated during precompilation.
-DEFAULT_IO[] = nothing
 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
 PREV_ENV_PATH[] = ""
 Types.STDLIB[] = nothing

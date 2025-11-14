@@ -754,27 +754,31 @@ end
 
 @testset "status" begin
     temp_pkg_dir() do project_path
-        pkg"""
-        add Example Random
-        status
-        status -m
-        status Example
-        status Example=7876af07-990d-54b4-ab0e-23690620f79a
-        status 7876af07-990d-54b4-ab0e-23690620f79a
-        status Example Random
-        status -m Example
-        status --outdated
-        status --compat
-        """
-        # --diff option
-        @test_logs (:warn, r"diff option only available") pkg"status --diff"
-        @test_logs (:warn, r"diff option only available") pkg"status -d"
-        git_init_and_commit(project_path)
-        @test_logs () pkg"status --diff"
-        @test_logs () pkg"status -d"
+        # Pkg.status earlyouts if `io` is `devnull`, so override for this test
+        io = PipeBuffer()
+        @Base.ScopedValues.with Pkg.DEFAULT_IO => io begin
+            pkg"""
+            add Example Random
+            status
+            status -m
+            status Example
+            status Example=7876af07-990d-54b4-ab0e-23690620f79a
+            status 7876af07-990d-54b4-ab0e-23690620f79a
+            status Example Random
+            status -m Example
+            status --outdated
+            status --compat
+            """
+            # --diff option
+            @test_logs (:warn, r"diff option only available") pkg"status --diff"
+            @test_logs (:warn, r"diff option only available") pkg"status -d"
+            git_init_and_commit(project_path)
+            @test_logs () pkg"status --diff"
+            @test_logs () pkg"status -d"
 
-        # comma-separated packages get parsed
-        pkg"status Example, Random"
+            # comma-separated packages get parsed
+            pkg"status Example, Random"
+        end
     end
 end
 

@@ -14,25 +14,26 @@ let
         original_load_path = copy(LOAD_PATH)
         __init__()
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
-        Pkg.DEFAULT_IO[] = Pkg.unstableio(devnull)
-        withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
-            tmp = Pkg._run_precompilation_script_setup()
-            cd(tmp) do
-                try_prompt_pkg_add(Symbol[:notapackage])
-                promptf()
-                term = FakeTerminal()
-                repl = REPL.LineEditREPL(term, true)
-                REPL.run_repl(repl)
-                repl_init(repl)
+        Base.ScopedValues.@with Pkg.DEFAULT_IO => Pkg.unstableio(devnull) begin
+            withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
+                tmp = Pkg._run_precompilation_script_setup()
+                cd(tmp) do
+                    try_prompt_pkg_add(Symbol[:notapackage])
+                    promptf()
+                    term = FakeTerminal()
+                    repl = REPL.LineEditREPL(term, true)
+                    REPL.run_repl(repl)
+                    repl_init(repl)
+                end
             end
-        end
-        copy!(DEPOT_PATH, original_depot_path)
-        copy!(LOAD_PATH, original_load_path)
+            copy!(DEPOT_PATH, original_depot_path)
+            copy!(LOAD_PATH, original_load_path)
 
-        Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), REPLExt.PkgCompletionProvider, REPL.LineEdit.PromptState})
-        Base.precompile(Tuple{typeof(REPL.REPLCompletions.completion_text), REPL.REPLCompletions.PackageCompletion})
-        Base.precompile(Tuple{typeof(REPLExt.on_done), REPL.LineEdit.MIState, Base.GenericIOBuffer{Memory{UInt8}}, Bool, REPL.LineEditREPL})
-        return Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:hint,), Tuple{Bool}}, typeof(REPL.LineEdit.complete_line), REPLExt.PkgCompletionProvider, REPL.LineEdit.PromptState})
+            Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), REPLExt.PkgCompletionProvider, REPL.LineEdit.PromptState})
+            Base.precompile(Tuple{typeof(REPL.REPLCompletions.completion_text), REPL.REPLCompletions.PackageCompletion})
+            Base.precompile(Tuple{typeof(REPLExt.on_done), REPL.LineEdit.MIState, Base.GenericIOBuffer{Memory{UInt8}}, Bool, REPL.LineEditREPL})
+            return Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:hint,), Tuple{Bool}}, typeof(REPL.LineEdit.complete_line), REPLExt.PkgCompletionProvider, REPL.LineEdit.PromptState})
+        end
     end
 
     if Base.generating_output()
