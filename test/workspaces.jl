@@ -133,40 +133,9 @@ temp_pkg_dir() do project_path
                 @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
                 @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
 
-                rm("Manifest.toml")
-                Pkg.activate(".")
-                # Add Example, Crayons, PrivatePackage to the "MonorepoSub" package
-                Pkg.add("Example")
-                Pkg.add(; name = "Crayons", version = "v4.0.3")
-                Pkg.compat("Crayons", "=4.0.0, =4.0.1, =4.0.2, =4.0.3")
-                Pkg.generate("PrivatePackage")
-                Pkg.develop(path = "PrivatePackage")
-                d = TOML.parsefile("Project.toml")
-                d["workspace"] = Dict("projects" => ["test", "docs", "benchmarks", "PrivatePackage"])
-                d["sources"] = Dict("PrivatePackage" => Dict("path" => "PrivatePackage"))
-                Pkg.Types.write_project(d, "Project.toml")
-                write(
-                    "src/MonorepoSub.jl", """
-                        module MonorepoSub
-                        using Example, Crayons, PrivatePackage
-                        end
-                    """
-                )
-
                 # Add some deps to PrivatePackage
                 Pkg.activate("PrivatePackage")
                 Pkg.add(; name = "Chairmarks", version = v"1.1.2")
-                @test !isfile("PrivatePackage/Manifest.toml")
-                d = TOML.parsefile("PrivatePackage/Project.toml")
-                d["workspace"] = Dict("projects" => ["test"])
-                Pkg.Types.write_project(d, "PrivatePackage/Project.toml")
-                write(
-                    "PrivatePackage/src/PrivatePackage.jl", """
-                    module PrivatePackage
-                        using Chairmarks
-                    end
-                    """
-                )
                 io = IOBuffer()
                 Pkg.status(; io)
                 status = String(take!(io))
@@ -178,7 +147,6 @@ temp_pkg_dir() do project_path
                 # Make a test subproject in PrivatePackage
                 # Note that this is a "nested subproject" since in this environment
                 # PrivatePackage is a subproject of MonorepoSub
-                mkdir("PrivatePackage/test")
                 Pkg.activate("PrivatePackage/test")
                 # This adds too many packages to the Project file...
                 Pkg.add("Test")
@@ -208,7 +176,6 @@ temp_pkg_dir() do project_path
                 end
 
                 # Add tests to MonorepoSub
-                mkdir("test")
                 Pkg.activate("test")
                 # Test specific deps
                 Pkg.add("Test")
@@ -218,7 +185,6 @@ temp_pkg_dir() do project_path
                 # Compat in base package should prevent updating to 4.0.4
                 Pkg.update()
                 @test Pkg.dependencies()[UUID("a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f")].version == v"4.0.3"
-                Pkg.generate("TestSpecificPackage")
                 Pkg.develop(path = "TestSpecificPackage")
                 d = TOML.parsefile("test/Project.toml")
                 d["sources"] = Dict("TestSpecificPackage" => Dict("path" => "../TestSpecificPackage"))
