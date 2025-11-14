@@ -4,7 +4,7 @@
 listed_deps(project::Project; include_weak::Bool) =
     vcat(collect(keys(project.deps)), collect(keys(project.extras)), include_weak ? collect(keys(project.weakdeps)) : String[])
 
-function get_path_repo(project::Project, name::String)
+function get_path_repo(project::Project, project_file::String, manifest_file::String, name::String)
     source = get(project.sources, name, nothing)
     if source === nothing
         return nothing, GitRepo()
@@ -17,6 +17,10 @@ function get_path_repo(project::Project, name::String)
         pkgerror("`path` and `url` are conflicting specifications")
     end
     repo = GitRepo(url, rev, subdir)
+    # Convert path from project-relative to manifest-relative
+    if path !== nothing
+        path = project_path_to_manifest_path(project_file, manifest_file, path)
+    end
     return path, repo
 end
 
