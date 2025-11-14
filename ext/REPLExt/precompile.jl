@@ -14,7 +14,7 @@ let
         original_load_path = copy(LOAD_PATH)
         __init__()
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
-        @Base.ScopedValues.with Pkg.DEFAULT_IO => Pkg.unstableio(devnull) begin
+        Base.ScopedValues.@with Pkg.DEFAULT_IO => Pkg.unstableio(devnull) begin
             withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
                 tmp = Pkg._run_precompilation_script_setup()
                 cd(tmp) do
