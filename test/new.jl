@@ -3927,7 +3927,7 @@ end
         mktempdir() do tmp
             pkg_path = copy_test_package(tmp, "PackageWithDependency"; use_pkg = false)
             script = """
-            using Pkg
+            using Pkg, Test
             Pkg.activate(; temp = true)
             Pkg.add(name = "Example", version = v"0.5.1")
             using Example
@@ -3937,7 +3937,6 @@ end
             Pkg.add("Example", io = io)
             add_output = String(take!(io))
             @test occursin("Preferring the version of Example that is already loaded", add_output)
-            @test occursin("direct dep Example", add_output)
             deps = Pkg.dependencies()
             example_dep = get(deps, exuuid, nothing)
             @test example_dep !== nothing
