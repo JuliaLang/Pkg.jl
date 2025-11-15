@@ -10,7 +10,7 @@ import Base.string
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, create_cachedir_tag, normalize_path_for_toml
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, create_cachedir_tag, normalize_path_for_toml
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
@@ -528,7 +528,7 @@ const UPGRADABLE_STDLIBS_UUIDS = Set{UUID}()
 const STDLIB = Ref{Union{DictStdLibs, Nothing}}(nothing)
 function load_stdlib()
     stdlib = DictStdLibs()
-    for name in readdir(stdlib_dir())
+    for name in readdir(Sys.STDLIB::String)
         projfile = projectfile_path(stdlib_path(name); strict = true)
         nothing === projfile && continue
         project = parse_toml(projfile)
