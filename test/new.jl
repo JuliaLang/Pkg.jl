@@ -3929,18 +3929,17 @@ end
             script = """
             using Pkg, Test
             Pkg.activate(; temp = true)
-            Pkg.add(name = "Example", version = v"0.5.1")
+            io = IOBuffer()
+            Pkg.add(name = "Example", version = v"0.5.1", io = io)
+            add_output = String(take!(io))
+            @test occursin("[7876af07] + Example v0.5.1", add_output)
             using Example
-            @test pkgversion(Example) == v"0.5.1"
             Pkg.activate(; temp = true)
             io = IOBuffer()
             Pkg.add("Example", io = io)
             add_output = String(take!(io))
             @test occursin("Preferring the version of Example that is already loaded", add_output)
-            deps = Pkg.dependencies()
-            example_dep = get(deps, exuuid, nothing)
-            @test example_dep !== nothing
-            @test example_dep.version == pkgversion(Example)
+            @test occursin("[7876af07] + Example v0.5.1", add_output)
             """
             cmd = addenv(
                 `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
