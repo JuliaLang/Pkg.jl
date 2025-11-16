@@ -27,11 +27,11 @@ end
 const URL_regex = r"((file|git|ssh|http(s)?)|([\w\-\.]+@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 isurl(r::String) = occursin(URL_regex, r)
 
-stdlib_path(stdlib::String) = joinpath(Sys.STDLIB::String, stdlib)
+stdlib_path(stdlib::String) = joinpath(Sys.STDLIB, stdlib)
 
 function pathrepr(path::String)
     # print stdlib paths as @stdlib/Name
-    if startswith(path, Sys.STDLIB::String)
+    if startswith(path, Sys.STDLIB)
         path = "@stdlib/" * basename(path)
     end
     return "`" * Base.contractuser(path) * "`"
