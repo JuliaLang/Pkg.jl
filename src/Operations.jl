@@ -385,7 +385,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
 
     env.manifest.registries = registry_entries
     env.manifest.manifest_format = v"2.1.0"
-    return record_project_hash(env)
+    return
 end
 
 # This has to be done after the packages have been downloaded
@@ -1666,10 +1666,6 @@ function prune_deps(iterator, keep::Set{UUID})
     return
 end
 
-function record_project_hash(env::EnvCache)
-    return env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
-end
-
 #########
 # Build #
 #########
@@ -1962,7 +1958,6 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     end
     # only keep reachable manifest entries
     prune_manifest(ctx.env)
-    record_project_hash(ctx.env)
     # update project & manifest
     write_env(ctx.env)
     return show_update(ctx.env, ctx.registries; io = ctx.io)
@@ -2242,7 +2237,6 @@ function add(
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
 
-        record_project_hash(ctx.env)
         write_env(ctx.env)
         show_update(ctx.env, ctx.registries; io = ctx.io)
 
@@ -2264,14 +2258,12 @@ function add(
 
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
-        record_project_hash(ctx.env) # compat entries changed the hash after it was last recorded in update_manifest!
 
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
         build_versions(ctx, union(new_apply, new_git))
         allow_autoprecomp && Pkg._auto_precompile(ctx, pkgs)
     else
-        record_project_hash(ctx.env)
         write_env(ctx.env)
         names_str = join(names, ", ")
         printpkgstyle(ctx.io, :Added, "$names_str to [$(target)]")
@@ -2663,7 +2655,9 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     project = read_project(test_project)
     keep = Set([target.uuid])
     union!(keep, values(project.deps))
-    record_project_hash(env)
+    # Sync sources and record hash
+    Types.sync_sources_from_manifest!(env)
+    Types.record_project_hash(env)
     # prune and return
     return prune_manifest(env.manifest, keep)
 end

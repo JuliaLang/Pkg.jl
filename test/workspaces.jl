@@ -130,7 +130,10 @@ temp_pkg_dir() do project_path
                 env = Pkg.Types.EnvCache()
                 hash_4 = Pkg.Types.workspace_resolve_hash(env)
 
-                @test hash_1 == hash_2 == hash_3 == hash_4
+                # hash_1, hash_2, hash_3 should be equal, but hash_4 differs because
+                # "test" has TestSpecificPackage in sources while "PrivatePackage/test" doesn't
+                @test hash_1 == hash_2 == hash_3
+                @test hash_4 != hash_3
 
                 # Test that the subprojects are working
                 depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")

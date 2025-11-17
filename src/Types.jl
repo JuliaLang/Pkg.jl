@@ -1385,12 +1385,8 @@ manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry, Nothing}
     return get(manifest, uuid, nothing)
 end
-function write_env(
-        env::EnvCache; update_undo = true,
-        skip_writing_project::Bool = false,
-        skip_readonly_check::Bool = false
-    )
-    # Verify that the generated manifest is consistent with `sources`
+function sync_sources_from_manifest!(env::EnvCache)
+    # Sync sources in the project with what's in the manifest
     for (pkg, uuid) in env.project.deps
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
@@ -1419,6 +1415,20 @@ function write_env(
             end
         end
     end
+end
+
+function record_project_hash(env::EnvCache)
+    return env.manifest.other["project_hash"] = workspace_resolve_hash(env)
+end
+
+function write_env(
+        env::EnvCache; update_undo = true,
+        skip_writing_project::Bool = false,
+        skip_readonly_check::Bool = false
+    )
+    # Sync sources from manifest and record hash before writing
+    sync_sources_from_manifest!(env)
+    record_project_hash(env)
 
     # Check if the environment is readonly before attempting to write
     if env.project.readonly && !skip_readonly_check
