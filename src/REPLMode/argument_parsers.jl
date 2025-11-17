@@ -80,8 +80,7 @@ end
 
 # Simple path detection
 function looks_like_path(str::String)
-    return contains(str, '/') || contains(str, '\\') || str == "." || str == ".." ||
-        (length(str) >= 2 && isletter(str[1]) && str[2] == ':')  # Windows drive letters
+    return contains(str, '/') || contains(str, '\\') || str == "." || str == ".." || is_windows_drive_colon(str)
 end
 
 # Check if a string looks like a complete URL
@@ -93,13 +92,14 @@ function looks_like_complete_url(str::String)
         (contains(str, '.') || contains(str, '/'))
 end
 
+is_windows_drive_colon(str::String) = occursin(r"^[a-zA-Z]:", str)
+
 # Check if a colon at given position is part of a Windows drive letter
 function is_windows_drive_colon(input::String, colon_pos::Int)
     # Windows drive letters are single letters followed by colon at beginning
     # Examples: "C:", "D:", etc.
     if colon_pos == 2 && length(input) >= 2
-        first_char = input[1]
-        return isletter(first_char) && input[2] == ':'
+        return is_windows_drive_colon(input)
     end
     return false
 end
