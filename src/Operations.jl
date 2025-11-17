@@ -1666,6 +1666,15 @@ function prune_deps(iterator, keep::Set{UUID})
     return
 end
 
+function record_project_hash(env::EnvCache)
+    return env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
+end
+
+function finalize_resolve!(env::EnvCache)
+    Types.sync_sources_from_manifest!(env)
+    return record_project_hash(env)
+end
+
 #########
 # Build #
 #########
@@ -2237,6 +2246,7 @@ function add(
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
 
+        finalize_resolve!(ctx.env)
         write_env(ctx.env)
         show_update(ctx.env, ctx.registries; io = ctx.io)
 
@@ -2259,11 +2269,13 @@ function add(
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
 
+        finalize_resolve!(ctx.env)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
         build_versions(ctx, union(new_apply, new_git))
         allow_autoprecomp && Pkg._auto_precompile(ctx, pkgs)
     else
+        finalize_resolve!(ctx.env)
         write_env(ctx.env)
         names_str = join(names, ", ")
         printpkgstyle(ctx.io, :Added, "$names_str to [$(target)]")
@@ -2288,6 +2300,7 @@ function develop(
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; platform = platform, julia_version = ctx.julia_version)
+    finalize_resolve!(ctx.env)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io)
     return build_versions(ctx, union(new_apply, new_git))
@@ -2442,6 +2455,7 @@ function up(
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx, julia_version = ctx.julia_version)
+    finalize_resolve!(ctx.env)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io, hidden_upgrades_info = true)
 
@@ -2516,6 +2530,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     new = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; julia_version = ctx.julia_version)
+    finalize_resolve!(ctx.env)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io)
     return build_versions(ctx, new)
@@ -2566,6 +2581,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
         new = download_source(ctx)
         fixups_from_projectfile!(ctx)
         download_artifacts(ctx)
+        finalize_resolve!(ctx.env)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
         build_versions(ctx, new)
@@ -2655,9 +2671,7 @@ function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::Stri
     project = read_project(test_project)
     keep = Set([target.uuid])
     union!(keep, values(project.deps))
-    # Sync sources and record hash
-    Types.sync_sources_from_manifest!(env)
-    Types.record_project_hash(env)
+    finalize_resolve!(env)
     # prune and return
     return prune_manifest(env.manifest, keep)
 end

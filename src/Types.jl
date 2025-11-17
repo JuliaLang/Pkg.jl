@@ -1418,19 +1418,11 @@ function sync_sources_from_manifest!(env::EnvCache)
     return
 end
 
-function record_project_hash(env::EnvCache)
-    return env.manifest.other["project_hash"] = workspace_resolve_hash(env)
-end
-
 function write_env(
         env::EnvCache; update_undo = true,
         skip_writing_project::Bool = false,
         skip_readonly_check::Bool = false
     )
-    # Sync sources from manifest and record hash before writing
-    sync_sources_from_manifest!(env)
-    record_project_hash(env)
-
     # Check if the environment is readonly before attempting to write
     if env.project.readonly && !skip_readonly_check
         pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
