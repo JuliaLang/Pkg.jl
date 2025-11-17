@@ -1610,8 +1610,8 @@ end
 ################################
 
 function prune_manifest(env::EnvCache)
-    # if project uses another manifest, only prune project entry in manifest
-    if isempty(env.workspace) && dirname(env.project_file) != dirname(env.manifest_file)
+    # if project uses another manifest (and we are not a portable script), only prune project entry in manifest
+    if isempty(env.workspace) && dirname(env.project_file) != dirname(env.manifest_file) && !endswith(env.project_file, ".jl")
         proj_entry = env.manifest[env.project.uuid]
         proj_entry.deps = env.project.deps
     else
@@ -3543,8 +3543,8 @@ function git_head_env(env, project_dir)
             git_path = LibGit2.path(repo)
             project_path = relpath(env.project_file, git_path)
             manifest_path = relpath(env.manifest_file, git_path)
-            new_env.project = read_project(GitTools.git_file_stream(repo, "HEAD:$project_path", fakeit = true))
-            new_env.manifest = read_manifest(GitTools.git_file_stream(repo, "HEAD:$manifest_path", fakeit = true))
+            new_env.project = read_project(GitTools.git_file_stream(repo, "HEAD:$project_path", fakeit = true); source_file = project_path)
+            new_env.manifest = read_manifest(GitTools.git_file_stream(repo, "HEAD:$manifest_path", fakeit = true); source_file = manifest_path)
             return new_env
         end
     catch err

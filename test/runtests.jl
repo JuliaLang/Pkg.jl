@@ -63,6 +63,8 @@ module PkgTestsInner
             "force_latest_compatible_version.jl",
             "manifests.jl",
             "project_manifest.jl",
+            "inline.jl",
+            "portable_scripts.jl",
             "sources.jl",
             "workspaces.jl",
             "apps.jl",

@@ -295,12 +295,31 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
     return validate_manifest(julia_version, project_hash, manifest_format, stage1, other, registries)
 end
 
-function read_manifest(f_or_io::Union{String, IO})
+function read_manifest(f_or_io::Union{String, IO}; source_file::Union{String, Nothing} = nothing)
     raw = try
         if f_or_io isa IO
-            TOML.parse(read(f_or_io, String))
-        else
-            isfile(f_or_io) ? parse_toml(f_or_io) : return Manifest()
+            # TODO Ugly
+            # If source_file indicates a .jl file, write to temp file and parse as inline
+            if source_file !== nothing && endswith(source_file, ".jl")
+                content = read(f_or_io, String)
+                temp_file = tempname() * ".jl"
+                try
+                    write(temp_file, content)
+                    parse_toml(temp_file, manifest=true)
+                finally
+                    rm(temp_file; force=true)
+                end
+            else
+                TOML.parse(read(f_or_io, String))
+            end
+        elseif f_or_io isa String
+            if !isfile(f_or_io)
+                return Manifest()
+            elseif endswith(f_or_io, ".jl")
+                parse_toml(f_or_io, manifest=true)
+            else
+                parse_toml(f_or_io)
+            end
         end
     catch e
         if e isa TOML.ParserError
@@ -315,7 +334,7 @@ function read_manifest(f_or_io::Union{String, IO})
             raw = convert_v1_format_manifest(raw)
         end
     end
-    return Manifest(raw, f_or_io)
+    return Manifest(raw, source_file !== nothing ? source_file : f_or_io)
 end
 
 function convert_v1_format_manifest(old_raw_manifest::Dict)
@@ -476,6 +495,11 @@ function write_manifest(io::IO, raw_manifest::Dict)
     return nothing
 end
 function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
+    if endswith(manifest_file, ".jl")
+        str = sprint(write_manifest, raw_manifest)
+        update_inline_manifest!(manifest_file, str)
+        return nothing
+    end
     str = sprint(write_manifest, raw_manifest)
     mkpath(dirname(manifest_file))
     return write(manifest_file, str)

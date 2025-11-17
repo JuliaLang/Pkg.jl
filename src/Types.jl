@@ -55,9 +55,12 @@ end
 # See loading.jl
 const TOML_CACHE = Base.TOMLCache(Base.TOML.Parser{Dates}())
 const TOML_LOCK = ReentrantLock()
+
 # Some functions mutate the returning Dict so return a copy of the cached value here
-parse_toml(toml_file::AbstractString) =
-    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
+function parse_toml(toml_file::AbstractString; manifest::Bool=false, project::Bool=!manifest)
+    dd = Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK; manifest=manifest, project=project)
+    return Base.invokelatest(deepcopy_toml, dd)::Dict{String, Any}
+end
 
 #################
 # Pkg Error #
@@ -67,6 +70,149 @@ struct PkgError <: Exception
 end
 pkgerror(msg::String...) = throw(PkgError(join(msg)))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
+
+#################################
+# Portable script functionality #
+#################################
+_inline_kind_str(kind::Symbol) = kind === :project ? "project" : "manifest"
+
+_detect_newline(source::String) = occursin("\r\n", source) ? "\r\n" : "\n"
+
+function _append_block(base::String, block::String, newline::String)
+    isempty(block) && return base
+    if isempty(base)
+        return block
+    elseif endswith(base, newline * newline)
+        return base * block
+    elseif endswith(base, newline)
+        return base * newline * block
+    else
+        return base * newline * newline * block
+    end
+end
+
+function _render_inline_block(kind::Symbol, toml::String, newline::String)
+    kind_str = _inline_kind_str(kind)
+    lines = split(toml, '\n'; keepempty = true)
+    if !isempty(lines) && isempty(lines[end])
+        pop!(lines)
+    end
+    body = [isempty(line) ? "#" : "# " * line for line in lines]
+    block = [
+        "#!" * kind_str * " begin",
+        body...,
+        "#!" * kind_str * " end",
+    ]
+    return join(block, newline) * newline
+end
+
+function _find_inline_section(source::String, kind::Symbol)
+    kind_str = _inline_kind_str(kind)
+    begin_marker = "#!$(kind_str) begin"
+    end_marker = "#!$(kind_str) end"
+
+    begin_range = findfirst(begin_marker, source)
+    begin_range === nothing && return nothing
+
+    line_start_idx = findprev(isequal('\n'), source, first(begin_range))
+    span_start = line_start_idx === nothing ? firstindex(source) : nextind(source, line_start_idx)
+
+    end_range = findnext(end_marker, source, last(begin_range))
+    end_range === nothing && return nothing
+
+    line_end_idx = findnext(isequal('\n'), source, last(end_range))
+    span_end = line_end_idx === nothing ? last(end_range) : line_end_idx
+
+    block = source[span_start:span_end]
+    newline = occursin("\r\n", block) ? "\r\n" : _detect_newline(source)
+    return (span = span_start:span_end, newline = newline)
+end
+
+function _rewrite_inline_section(source::String, kind::Symbol; toml::Union{Nothing, String} = nothing)
+    section = _find_inline_section(source, kind)
+    if toml === nothing
+        if section === nothing
+            return source
+        end
+        prefix = first(section.span) == firstindex(source) ? "" : source[firstindex(source):prevind(source, first(section.span))]
+        suffix = last(section.span) >= lastindex(source) ? "" : source[nextind(source, last(section.span)):lastindex(source)]
+        return prefix * suffix
+    end
+
+    newline = section === nothing ? _detect_newline(source) : section.newline
+    replacement = _render_inline_block(kind, toml, newline)
+
+    if section === nothing
+        if kind === :project
+            new_source = _append_block("", replacement, newline)
+            return _append_block(new_source, source, newline)
+        else
+            project_section = _find_inline_section(source, :project)
+            if project_section === nothing
+                project_block = _render_inline_block(:project, "", newline)
+                new_source = _append_block("", project_block, newline)
+                new_source = _append_block(new_source, source, newline)
+                return _append_block(new_source, replacement, newline)
+            else
+                return _append_block(source, replacement, newline)
+            end
+        end
+    end
+
+    prefix = first(section.span) == firstindex(source) ? "" : source[firstindex(source):prevind(source, first(section.span))]
+    suffix = last(section.span) >= lastindex(source) ? "" : source[nextind(source, last(section.span)):lastindex(source)]
+    separator = isempty(suffix) || startswith(suffix, newline) ? "" : newline
+    return prefix * replacement * separator * suffix
+end
+
+function _update_inline_section!(path::AbstractString, kind::Symbol, toml::String)
+    source = read(path, String)
+    new_source = _rewrite_inline_section(source, kind; toml = toml)
+    new_source === source && return nothing
+    open(path, "w") do io
+        write(io, new_source)
+    end
+    return nothing
+end
+
+function remove_inline_section!(path::AbstractString, kind::Symbol)
+    source = read(path, String)
+    new_source = _rewrite_inline_section(source, kind)
+    new_source === source && return nothing
+    open(path, "w") do io
+        write(io, new_source)
+    end
+    return nothing
+end
+
+_update_inline_section_in_memory(source::String, kind::Symbol, toml::String) =
+    _rewrite_inline_section(source, kind; toml = toml)
+
+function update_inline_project!(path::AbstractString, toml::String)
+    return _update_inline_section!(path, :project, toml)
+end
+
+function update_inline_manifest!(path::AbstractString, toml::String)
+    return _update_inline_section!(path, :manifest, toml)
+end
+
+function update_inline_project_and_manifest!(path::AbstractString, project_toml::String, manifest_toml::String)
+    # Atomically update both project and manifest sections in a .jl file
+    # This ensures that if either update fails, the file is not modified
+    source = read(path, String)
+
+    # Apply project update
+    source = _update_inline_section_in_memory(source, :project, project_toml)
+
+    # Apply manifest update
+    source = _update_inline_section_in_memory(source, :manifest, manifest_toml)
+
+    # Write once at the end
+    open(path, "w") do io
+        write(io, source)
+    end
+    return nothing
+end
 
 ###############
 # PackageSpec #
@@ -212,7 +358,9 @@ function find_project_file(env::Union{Nothing, String} = nothing)
         project_file = Base.load_path_expand(env)
         project_file === nothing && pkgerror("package environment does not exist: $env")
     elseif env isa String
-        if isdir(env)
+        if isfile(env)
+            project_file = abspath(env)
+        elseif isdir(env)
             isempty(readdir(env)) || pkgerror("environment is a package directory: $env")
             project_file = joinpath(env, Base.project_names[end])
         else
@@ -220,11 +368,11 @@ function find_project_file(env::Union{Nothing, String} = nothing)
                 abspath(env, Base.project_names[end])
         end
     end
-    if isfile(project_file) && !contains(basename(project_file), "Project")
+    if isfile(project_file) && !contains(basename(project_file), "Project") && !endswith(project_file, ".jl")
         pkgerror(
             """
             The active project has been set to a file that isn't a Project file: $project_file
-            The project path must be to a Project file or directory.
+            The project path must be to a Project file or directory or a julia file.
             """
         )
     end
@@ -445,9 +593,41 @@ function EnvCache(env::Union{Nothing, String} = nothing)
     end
 
     dir = abspath(project_dir)
-    manifest_file = manifest_file !== nothing ?
-        (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
-        manifestfile_path(dir)::String
+
+    # Save the original project before any modifications
+    original_project = deepcopy(project)
+
+    # For .jl files, handle inline_manifest flag and fix inconsistent states
+    if endswith(project_file, ".jl")
+        inline_manifest = get(project.other, "inline_manifest", true)::Bool
+
+        # Case 1: inline_manifest=false but no manifest path
+        # User wants external manifest but hasn't set it up yet
+        if !inline_manifest && project.manifest === nothing
+            script_name = splitext(basename(project_file))[1]
+            manifest_name = "$(script_name)-Manifest.toml"
+            manifest_file = abspath(dir, manifest_name)
+            project.manifest = manifest_name
+        # Case 2: inline_manifest=true (or default) but has manifest path
+        # User wants inline manifest but still has external path set
+        elseif inline_manifest && project.manifest !== nothing
+            # Load from external path for reading this time
+            manifest_file = isabspath(project.manifest) ? project.manifest : abspath(dir, project.manifest)
+            # But clear the path so it gets written inline later
+            # (We'll clean up the external file in write_env)
+        # Case 3: inline_manifest=false and has manifest path (consistent state)
+        elseif !inline_manifest && project.manifest !== nothing
+            manifest_file = isabspath(project.manifest) ? project.manifest : abspath(dir, project.manifest)
+        # Case 4: inline_manifest=true and no manifest path (consistent state, default)
+        else
+            manifest_file = project_file
+        end
+    else
+        # For regular .toml files, use standard logic
+        manifest_file = manifest_file !== nothing ?
+            (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
+            manifestfile_path(dir)::String
+    end
     write_env_usage(manifest_file, "manifest_usage.toml")
     manifest = read_manifest(manifest_file)
 
@@ -459,7 +639,7 @@ function EnvCache(env::Union{Nothing, String} = nothing)
         project,
         workspace,
         manifest,
-        deepcopy(project),
+        original_project,
         deepcopy(manifest),
     )
 
@@ -1413,12 +1593,62 @@ function write_env(
         pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
     end
 
-    if (env.project != env.original_project) && (!skip_writing_project)
-        write_project(env, skip_readonly_check)
+    # Handle transitions for portable scripts
+    transitioning_to_inline = false
+    if endswith(env.project_file, ".jl")
+        inline_manifest = get(env.project.other, "inline_manifest", true)::Bool
+
+        # If transitioning to inline and we had an external manifest, clean it up
+        if inline_manifest && env.project.manifest !== nothing
+            transitioning_to_inline = true
+            external_manifest_path = isabspath(env.project.manifest) ? env.project.manifest :
+                abspath(dirname(env.project_file), env.project.manifest)
+            # Clear the manifest path so it writes inline
+            env.project.manifest = nothing
+            # Update manifest_file to point to the script file for inline writing
+            env.manifest_file = env.project_file
+            # Clean up external manifest directory
+            isfile(external_manifest_path) && rm(external_manifest_path; force=true)
+        end
     end
-    if env.manifest != env.original_manifest
-        write_manifest(env)
+
+    # For .jl files with inline manifest, perform atomic updates
+    project_needs_update = (env.project != env.original_project) && (!skip_writing_project)
+    manifest_needs_update = env.manifest != env.original_manifest || transitioning_to_inline
+
+    if endswith(env.project_file, ".jl")
+        inline_manifest = get(env.project.other, "inline_manifest", true)::Bool
+
+        if inline_manifest
+            # Both project and manifest are in the same file - update atomically
+            if project_needs_update || manifest_needs_update
+                # Prepare both strings even if only one needs updating
+                project_str = sprint(write_project, destructure(env.project))
+                manifest_str = sprint(write_manifest, destructure(env.manifest))
+                # Atomically update both sections
+                update_inline_project_and_manifest!(env.project_file, project_str, manifest_str)
+            end
+        else
+            # External manifest - write separately
+            if project_needs_update
+                write_project(env, skip_readonly_check)
+            end
+            if manifest_needs_update
+                write_manifest(env)
+            end
+            # Remove the inline manifest section since we're using external
+            remove_inline_section!(env.project_file, :manifest)
+        end
+    else
+        # Regular TOML files - write separately
+        if project_needs_update
+            write_project(env, skip_readonly_check)
+        end
+        if manifest_needs_update
+            write_manifest(env)
+        end
     end
+
     return update_undo && Pkg.API.add_snapshot_to_undo(env)
 end
 
