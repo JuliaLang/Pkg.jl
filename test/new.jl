@@ -2855,8 +2855,11 @@ end
 @testset "Pkg.status" begin
     # other
     isolate(loaded_depot = true) do
+        # IO is necessary even if we're not looking at it, because we have a short-circuit for
+        # devnull (and also don't want to pollute the logs (if any))
+        io = PipeBuffer()
         @test_deprecated Pkg.status(Pkg.PKGMODE_MANIFEST)
-        @test_logs (:warn, r"diff option only available") match_mode = :any Pkg.status(diff = true)
+        @test_logs (:warn, r"diff option only available") match_mode = :any Pkg.status(diff = true; io)
     end
     # State changes
     isolate(loaded_depot = true) do
