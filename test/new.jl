@@ -3346,7 +3346,9 @@ end
             Pkg.Types.write_project(a, temp)
             b = Pkg.Types.read_project(temp)
             for property in propertynames(a)
-                @test getproperty(a, property) == getproperty(b, property)
+                @testset let property = property
+                    @test getproperty(a, property) == getproperty(b, property)
+                end
             end
             @test a == b
         end

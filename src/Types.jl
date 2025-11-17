@@ -258,6 +258,7 @@ Base.@kwdef mutable struct Project
     version::Union{VersionTypes, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
     entryfile::Union{String, Nothing} = nothing
+    julia_syntax_version::Union{VersionTypes, Nothing} = nothing
     # Sections
     deps::Dict{String, UUID} = Dict{String, UUID}()
     # deps that are also in weakdeps for backwards compat
@@ -292,6 +293,7 @@ Base.@kwdef mutable struct PackageEntry
     uuid::Union{Nothing, UUID} = nothing
     apps::Dict{String, AppInfo} = Dict{String, AppInfo}() # used by AppManifest.toml
     registries::Vector{String} = String[]
+    julia_syntax_version::Union{VersionTypes, Nothing} = nothing
     other::Union{Dict, Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -306,9 +308,10 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid &&
     t1.apps == t2.apps &&
+    t1.julia_syntax_version == t2.julia_syntax_version &&
     t1.registries == t2.registries
 # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.registries], init = h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.registries, x.julia_syntax_version], init = h)  # omits `other`
 
 """
     ManifestRegistryEntry

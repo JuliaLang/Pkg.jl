@@ -374,6 +374,43 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     return record_project_hash(env)
 end
 
+"""
+    get_project_syntax_version(p::Project) -> VersionNumber
+
+Extract the syntax version from a Project.
+
+This function determines which version of Julia syntax a package uses, following
+this precedence order:
+
+1. If `syntax.julia_version` is present in the Project.toml, use that value
+2. If `compat.julia` is specified, use the minimum version from the compat range
+3. Otherwise, default to the current Julia VERSION
+
+This information is used to populate the `syntax.julia_version` field in the
+Manifest.toml, allowing Base's loading system to parse each package with the
+correct syntax version.
+"""
+function get_project_syntax_version(p::Project)::VersionNumber
+    # First check syntax.julia_version entry in Project.other
+    if p.julia_syntax_version !== nothing
+        return VersionNumber(syntax_table["julia_version"])
+    end
+
+    # If not found, default to minimum(compat["julia"])
+    if haskey(p.compat, "julia")
+        julia_compat = p.compat["julia"]
+        # Get the minimum version from the first range
+        if !isempty(julia_compat.val.ranges)
+            first_range = first(julia_compat.val.ranges)
+            lower_bound = first_range.lower
+            return VersionNumber(lower_bound.t[1], lower_bound.t[2], lower_bound.t[3])
+        end
+    end
+
+    # Finally, if neither of those are set, default to the current Julia version
+    return VERSION
+end
+
 # This has to be done after the packages have been downloaded
 # since we need access to the Project file to read the information
 # about extensions
@@ -407,6 +444,8 @@ function fixups_from_projectfile!(ctx::Context)
                 pkg.weakdeps = p.weakdeps
                 pkg.exts = p.exts
                 pkg.entryfile = p.entryfile
+                pkg.julia_syntax_version = get_project_syntax_version(p)
+
                 for (name, _) in p.weakdeps
                     if !haskey(p.deps, name)
                         delete!(pkg.deps, name)

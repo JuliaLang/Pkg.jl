@@ -236,6 +236,8 @@ function Project(raw::Dict; file = nothing)
     project.workspace = read_project_workspace(get(raw, "workspace", nothing), project)
     project.apps = read_project_apps(get(raw, "apps", nothing), project)
     project.readonly = get(raw, "readonly", false)::Bool
+    syntax = get(raw, "syntax", nothing)::Union{Dict, Nothing}
+    project.julia_syntax_version = syntax === nothing ? nothing : read_project_version(get(syntax, "julia_version", nothing))
 
     # Handle deps in both [deps] and [weakdeps]
     project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
@@ -307,6 +309,10 @@ function destructure(project::Project)::Dict
     entry!("extras", project.extras)
     entry!("compat", Dict(name => x.str for (name, x) in project.compat))
     entry!("targets", project.targets)
+    entry!(
+        "syntax", project.julia_syntax_version === nothing ? nothing :
+            Dict("julia_version" => string(project.julia_syntax_version))
+    )
 
     # Only write readonly if it's true (not the default false)
     if project.readonly
