@@ -1,0 +1,7 @@
+name = "Foo"
+uuid = "128bfcea-dc33-4310-8fcf-6a5a6a7c0677"
+authors = ["Carsten Bauer <crstnbr@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+FooDep = "22d90790-ba35-49ef-9cc5-1d4fefcbe869"
