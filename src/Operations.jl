@@ -911,20 +911,6 @@ function maybe_print_preferred_loaded_note(io::IO, direct_names::Vector{String},
     return
 end
 
-function apply_preferred_versions_to_direct!(pkgs::Vector{PackageSpec}, preferred_versions::Dict{UUID, VersionNumber})
-    isempty(preferred_versions) && return
-    empty_spec = VersionSpec()
-    for pkg in pkgs
-        pkg.version == empty_spec || continue
-        uuid = pkg.uuid
-        uuid isa UUID || continue
-        pref_version = get(preferred_versions, uuid, nothing)
-        pref_version === nothing && continue
-        pkg.version = VersionSpec(pref_version)
-    end
-    return
-end
-
 get_or_make!(d::Dict{K, V}, k::K) where {K, V} = get!(d, k) do;
     V()
 end
@@ -2339,7 +2325,6 @@ function add(
 
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
-        apply_preferred_versions_to_direct!(pkgs, preferred_loaded_versions)
         man_pkgs, deps_map = _resolve(
             ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version;
             preferred_versions = preferred_loaded_versions
