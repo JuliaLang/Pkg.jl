@@ -431,13 +431,13 @@ end
         # Tests that Example@0.5.1 does not get installed
         temp_pkg_dir() do env
             Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
-            Pkg.add("Example"; prefer_loaded_versions = false)
+            Pkg.add("Example")
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             Pkg.update() # should not update Example
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             @test_throws Pkg.Resolve.ResolverError Pkg.add(PackageSpec(name = "Example", version = v"0.5.1"))
             Pkg.rm("Example")
-            Pkg.add("JSON"; prefer_loaded_versions = false) # depends on Example
+            Pkg.add("JSON") # depends on Example
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
             Pkg.update()
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
