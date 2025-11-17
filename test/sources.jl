@@ -4,6 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Test, Pkg
 using ..Utils
 using UUIDs
+using LibGit2
 
 temp_pkg_dir() do project_path
     @testset "test Project.toml [sources]" begin
@@ -261,19 +262,21 @@ temp_pkg_dir() do project_path
                         end
                         """
                     )
-                    run(`git init -q`)
-                    run(`git add .`)
-                    run(`git commit -q -m "Initial commit"`)
-                    first_commit = readchomp(`git rev-parse HEAD`)
-                    # Get tree hash by parsing git log
-                    first_tree_hash = match(r"tree ([0-9a-f]+)", readchomp(`git cat-file -p $first_commit`))[1]
+
+                    first_commit = string(git_init_and_commit(test_pkg_dir; msg = "Initial commit"))
+                    first_tree_hash = LibGit2.with(LibGit2.GitRepo(test_pkg_dir)) do repo
+                        string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.GitCommit(repo, first_commit))))
+                    end
 
                     # Make a second commit
                     write("README.md", "# TestPkg\n")
-                    run(`git add .`)
-                    run(`git commit -q -m "Add README"`)
-                    second_commit = readchomp(`git rev-parse HEAD`)
-                    second_tree_hash = match(r"tree ([0-9a-f]+)", readchomp(`git cat-file -p $second_commit`))[1]
+                    second_commit = LibGit2.with(LibGit2.GitRepo(test_pkg_dir)) do repo
+                        LibGit2.add!(repo, "README.md")
+                        string(LibGit2.commit(repo, "Add README"; author = TEST_SIG, committer = TEST_SIG))
+                    end
+                    second_tree_hash = LibGit2.with(LibGit2.GitRepo(test_pkg_dir)) do repo
+                        string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.GitCommit(repo, second_commit))))
+                    end
 
                     # Create consumer project
                     consumer_dir = joinpath(tmp, "consumer")

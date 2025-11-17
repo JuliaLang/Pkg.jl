@@ -1415,6 +1415,7 @@ function sync_sources_from_manifest!(env::EnvCache)
             end
         end
     end
+    return
 end
 
 function record_project_hash(env::EnvCache)
