@@ -903,9 +903,9 @@ function maybe_print_preferred_loaded_note(io::IO, direct_names::Vector{String},
     end
     joined = length(parts) == 2 ? string(parts[1], " and ", parts[2]) : parts[1]
     msg = if length(direct_names) + indirect_count > 1
-        "Preferring versions of $(joined) that are already loaded"
+        "was able to add the versions of $(joined) that are already loaded"
     else
-        "Preferring the version of $(joined) that is already loaded"
+        "was able to add the version of $(joined) that is already loaded"
     end
     printpkgstyle(io, :Resolve, msg; color = Base.info_color())
     return
@@ -2155,34 +2155,43 @@ function tiered_resolve(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
         try_all_installed::Bool; preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
     )
+    if !isempty(preferred_versions)
+        # first try maintaining any loaded versions of the new packages
+        try # do not modify existing subgraph
+            @debug "tiered_resolve: trying PRESERVE_ALL with any loaded versions of new packages"
+            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version; preferred_versions)
+        catch err
+            err isa Resolve.ResolverError || rethrow()
+        end
+    end
     if try_all_installed
         try # do not modify existing subgraph and only add installed versions of the new packages
             @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
-            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version; preferred_versions)
+            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version)
         catch err
             err isa Resolve.ResolverError || rethrow()
         end
     end
     try # do not modify existing subgraph
         @debug "tiered_resolve: trying PRESERVE_ALL"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version; preferred_versions)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
         @debug "tiered_resolve: trying PRESERVE_DIRECT"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version; preferred_versions)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try
         @debug "tiered_resolve: trying PRESERVE_SEMVER"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version; preferred_versions)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     @debug "tiered_resolve: trying PRESERVE_NONE"
-    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version; preferred_versions)
+    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
 end
 
 function targeted_resolve(

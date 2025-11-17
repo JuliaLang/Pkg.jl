@@ -1,7 +1,10 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 const DEFAULT_MAX_TIME = "300"
-const PREFERRED_VERSION_WEIGHT_BONUS = VersionWeight(typemax(Int32))
+# Prefer loaded versions, but not so strongly that it overrides compatibility constraints.
+# This bonus is added to the version weight of already-loaded packages, making them more
+# favorable than other versions but not creating hard requirements.
+const PREFERRED_VERSION_WEIGHT_BONUS = VersionWeight(100, 0, 0)
 
 # Some parameters to drive the decimation process
 mutable struct MaxSumParams

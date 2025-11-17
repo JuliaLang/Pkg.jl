@@ -3935,7 +3935,7 @@ end
         Pkg.activate(; temp = true)
         Pkg.add("Example", io = io) # v0.5.5 exists, but v0.5.4 is loaded
         add_output = String(take!(io))
-        @test occursin("Preferring the version of Example that is already loaded", add_output)
+        @test occursin("was able to add the version of Example that is already loaded", add_output)
         @test occursin("[7876af07] + Example v0.5.4", add_output)
         """
         cmd = addenv(
