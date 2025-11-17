@@ -12,6 +12,8 @@ module PkgTestsInner
     original_wd = pwd()
 
     import Pkg
+    import REPL # should precompile REPLExt before we disallow it below
+    @assert Base.get_extension(Pkg, :REPLExt) !== nothing
     using Test, Logging
     using Base.ScopedValues
 
