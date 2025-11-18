@@ -18,10 +18,10 @@ export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_I
 export Registry, RegistrySpec
 
 public activate, add, build, compat, develop, free, gc, generate, instantiate,
-       pin, precompile, redo, rm, resolve, status, test, undo, update, why
+    pin, precompile, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
-function depots1(depot_list::Union{String, Vector{String}}=depots())
+function depots1(depot_list::Union{String, Vector{String}} = depots())
     # Get the first depot from a list, with proper error handling
     if depot_list isa String
         return depot_list
@@ -45,15 +45,15 @@ const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
-const DEFAULT_IO = Ref{Union{IO,Nothing}}(nothing)
+const DEFAULT_IO = Ref{Union{IO, Nothing}}(nothing)
 
 # See discussion in https://github.com/JuliaLang/julia/pull/52249
 function unstableio(@nospecialize(io::IO))
     # Needed to prevent specialization https://github.com/JuliaLang/julia/pull/52249#discussion_r1401199265
     _io = Base.inferencebarrier(io)
-    IOContext{IO}(
+    return IOContext{IO}(
         _io,
-        get(_io,:color,false) ? Base.ImmutableDict{Symbol,Any}(:color, true) : Base.ImmutableDict{Symbol,Any}()
+        get(_io, :color, false) ? Base.ImmutableDict{Symbol, Any}(:color, true) : Base.ImmutableDict{Symbol, Any}()
     )
 end
 stderr_f() = something(DEFAULT_IO[], unstableio(stderr))
@@ -643,7 +643,7 @@ versions that are already downloaded in version resolution.
 To work in offline mode across Julia sessions you can set the environment
 variable `JULIA_PKG_OFFLINE` to `"true"` before starting Julia.
 """
-offline(b::Bool=true) = (OFFLINE_MODE[] = b; nothing)
+offline(b::Bool = true) = (OFFLINE_MODE[] = b; nothing)
 
 """
     Pkg.respect_sysimage_versions(b::Bool=true)
@@ -656,7 +656,7 @@ If this option is enabled, Pkg will only install packages that have been put int
 Also, trying to add a package at a URL or `develop` a package that is in the sysimage
 will error.
 """
-respect_sysimage_versions(b::Bool=true) = (RESPECT_SYSIMAGE_VERSIONS[] = b; nothing)
+respect_sysimage_versions(b::Bool = true) = (RESPECT_SYSIMAGE_VERSIONS[] = b; nothing)
 
 """
     PackageSpec(name::String, [uuid::UUID, version::VersionNumber])
@@ -717,7 +717,7 @@ Other choices for `protocol` are `"https"` or `"git"`.
 ```julia-repl
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "ssh")
 
-# Use HTTPS for GitHub (default, good for most users)  
+# Use HTTPS for GitHub (default, good for most users)
 julia> Pkg.setprotocol!(domain = "github.com", protocol = "https")
 
 # Reset to default (let package developer decide)
@@ -838,7 +838,7 @@ function installed()
 end
 
 function dir(pkg::String, paths::AbstractString...)
-    @warn "`Pkg.dir(pkgname, paths...)` is deprecated; instead, do `import $pkg; joinpath(dirname(pathof($pkg)), \"..\", paths...)`." maxlog=1
+    @warn "`Pkg.dir(pkgname, paths...)` is deprecated; instead, do `import $pkg; joinpath(dirname(pathof($pkg)), \"..\", paths...)`." maxlog = 1
     pkgid = Base.identify_package(pkg)
     pkgid === nothing && return nothing
     path = Base.locate_package(pkgid)
@@ -850,7 +850,7 @@ end
 # AUTO GC #
 ###########
 
-const DEPOT_ORPHANAGE_TIMESTAMPS = Dict{String,Float64}()
+const DEPOT_ORPHANAGE_TIMESTAMPS = Dict{String, Float64}()
 const _auto_gc_enabled = Ref{Bool}(true)
 function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     if !_auto_gc_enabled[]
@@ -869,13 +869,13 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
         DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = mtime(orphanage_path)
     end
 
-    if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
+    return if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
         printpkgstyle(ctx.io, :Info, "We haven't cleaned this depot up for a bit, running Pkg.gc()...", color = Base.info_color())
         try
             Pkg.gc(ctx; collect_delay)
             DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = curr_time
         catch ex
-            @error("GC failed", exception=ex)
+            @error("GC failed", exception = ex)
         end
     end
 end
@@ -885,9 +885,9 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec}=PackageSpec[]; warn_loaded = true, already_instantiated = false)
-    if should_autoprecompile()
-        Pkg.precompile(ctx, pkgs; internal_call=true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
+    return if should_autoprecompile()
+        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
 

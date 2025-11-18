@@ -17,7 +17,7 @@ if "pdf" in ARGS
 end
 
 # setup for doctesting
-DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Base.BinaryPlatforms); recursive=true)
+DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Base.BinaryPlatforms); recursive = true)
 
 # Run doctests first and disable them in makedocs
 Documenter.doctest(joinpath(@__DIR__, "src"), [Pkg])

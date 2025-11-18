@@ -1,6 +1,6 @@
 module FuzzySorting
 
-_displaysize(io::IO) = displaysize(io)::Tuple{Int,Int}
+_displaysize(io::IO) = displaysize(io)::Tuple{Int, Int}
 
 # Character confusion weights for fuzzy matching
 const CHARACTER_CONFUSIONS = Dict(
@@ -121,7 +121,7 @@ function subsequence_score(needle::AbstractString, haystack::AbstractString)
     # Bonus for matches at word boundaries
     boundary_bonus = 0.0
     for pos in matched_positions
-        if pos == 1 || haystack_chars[pos-1] in ['_', '-', '.']
+        if pos == 1 || haystack_chars[pos - 1] in ['_', '-', '.']
             boundary_bonus += 0.1
         end
     end
@@ -150,42 +150,42 @@ function weighted_edit_distance(s1::AbstractString, s2::AbstractString)
     m, n = length(a), length(b)
 
     # Initialize distance matrix
-    d = Matrix{Float64}(undef, m+1, n+1)
-    d[1:m+1, 1] = 0:m
-    d[1, 1:n+1] = 0:n
+    d = Matrix{Float64}(undef, m + 1, n + 1)
+    d[1:(m + 1), 1] = 0:m
+    d[1, 1:(n + 1)] = 0:n
 
-    for i = 1:m, j = 1:n
+    for i in 1:m, j in 1:n
         if a[i] == b[j]
-            d[i+1, j+1] = d[i, j]  # No cost for exact match
+            d[i + 1, j + 1] = d[i, j]  # No cost for exact match
         else
             # Standard operations
-            insert_cost = d[i, j+1] + 1.0
-            delete_cost = d[i+1, j] + 1.0
+            insert_cost = d[i, j + 1] + 1.0
+            delete_cost = d[i + 1, j] + 1.0
 
             # Check for repeated character deletion (common typo)
-            if i > 1 && a[i] == a[i-1] && a[i-1] == b[j]
-                delete_cost = d[i, j+1] + 0.3  # Low cost for deleting repeated char
+            if i > 1 && a[i] == a[i - 1] && a[i - 1] == b[j]
+                delete_cost = d[i, j + 1] + 0.3  # Low cost for deleting repeated char
             end
 
             # Check for repeated character insertion (common typo)
-            if j > 1 && b[j] == b[j-1] && a[i] == b[j-1]
-                insert_cost = d[i, j+1] + 0.3  # Low cost for inserting repeated char
+            if j > 1 && b[j] == b[j - 1] && a[i] == b[j - 1]
+                insert_cost = d[i, j + 1] + 0.3  # Low cost for inserting repeated char
             end
 
             # Substitution with confusion weighting
             confusion_key = (a[i], b[j])
             subst_cost = d[i, j] + get(CHARACTER_CONFUSIONS, confusion_key, 1.0)
 
-            d[i+1, j+1] = min(insert_cost, delete_cost, subst_cost)
+            d[i + 1, j + 1] = min(insert_cost, delete_cost, subst_cost)
 
             # Transposition
-            if i > 1 && j > 1 && a[i] == b[j-1] && a[i-1] == b[j]
-                d[i+1, j+1] = min(d[i+1, j+1], d[i-1, j-1] + 1.0)
+            if i > 1 && j > 1 && a[i] == b[j - 1] && a[i - 1] == b[j]
+                d[i + 1, j + 1] = min(d[i + 1, j + 1], d[i - 1, j - 1] + 1.0)
             end
         end
     end
 
-    return d[m+1, n+1]
+    return d[m + 1, n + 1]
 end
 
 # Case preservation bonus
@@ -236,7 +236,7 @@ function length_penalty_score(needle::AbstractString, haystack::AbstractString)
 end
 
 # Main sorting function with optional popularity weighting
-function fuzzysort(search::String, candidates::Vector{String}; popularity_weights::Dict{String,Float64} = Dict{String,Float64}())
+function fuzzysort(search::String, candidates::Vector{String}; popularity_weights::Dict{String, Float64} = Dict{String, Float64}())
     scores = map(candidates) do cand
         base_score = fuzzyscore(search, cand)
         weight = get(popularity_weights, cand, 1.0)
@@ -265,7 +265,7 @@ function matchinds(needle, haystack; acronym::Bool = false)
         end
         isempty(chars) && break
         if lowercase(char) == lowercase(chars[1]) &&
-           (!acronym || !isletter(lastc))
+                (!acronym || !isletter(lastc))
             push!(is, i)
             popfirst!(chars)
         end
@@ -277,18 +277,21 @@ end
 longer(x, y) = length(x) ≥ length(y) ? (x, true) : (y, false)
 
 bestmatch(needle, haystack) =
-    longer(matchinds(needle, haystack, acronym = true),
-           matchinds(needle, haystack))
+    longer(
+    matchinds(needle, haystack, acronym = true),
+    matchinds(needle, haystack)
+)
 
 function printmatch(io::IO, word, match)
     is, _ = bestmatch(word, match)
-    for (i, char) = enumerate(match)
+    for (i, char) in enumerate(match)
         if i in is
-            printstyled(io, char, bold=true)
+            printstyled(io, char, bold = true)
         else
             print(io, char)
         end
     end
+    return
 end
 
 const print_score_threshold = 0.25
@@ -302,6 +305,7 @@ function printmatches(io::IO, word, matches; cols::Int = _displaysize(io)[2])
         printmatch(io, word, match)
         total += length(match) + 1
     end
+    return
 end
 
 printmatches(args...; cols::Int = _displaysize(stdout)[2]) = printmatches(stdout, args..., cols = cols)

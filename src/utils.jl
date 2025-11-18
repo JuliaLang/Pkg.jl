@@ -1,10 +1,10 @@
 # "Precompiling" is the longest operation
 const pkgstyle_indent = textwidth(string(:Precompiling))
 
-function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool=false; color=:green)
+function printpkgstyle(io::IO, cmd::Symbol, text::String, ignore_indent::Bool = false; color = :green)
     indent = ignore_indent ? 0 : pkgstyle_indent
-    @lock io begin
-        printstyled(io, lpad(string(cmd), indent), color=color, bold=true)
+    return @lock io begin
+        printstyled(io, lpad(string(cmd), indent), color = color, bold = true)
         println(io, " ", text)
     end
 end
@@ -81,14 +81,16 @@ end
 
 # Windows sometimes throw on `isdir`...
 function isdir_nothrow(path::String)
-    try isdir(path)
+    return try
+        isdir(path)
     catch e
         false
     end
 end
 
 function isfile_nothrow(path::String)
-    try isfile(path)
+    return try
+        isfile(path)
     catch e
         false
     end
@@ -116,4 +118,5 @@ function discover_repo(path::AbstractString)
         parent == dir && return nothing
         dir = parent
     end
+    return
 end

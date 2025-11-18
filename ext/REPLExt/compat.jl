@@ -9,7 +9,7 @@ function compat(ctx::Context; io = nothing)
     compat_str = Operations.get_compat_str(ctx.env.project, "julia")
     push!(opt_strs, Operations.compat_line(io, "julia", nothing, compat_str, longest_dep_len, indent = ""))
     push!(opt_pkgs, "julia")
-    for (dep, uuid) in sort(collect(ctx.env.project.deps); by = x->x.first)
+    for (dep, uuid) in sort(collect(ctx.env.project.deps); by = x -> x.first)
         compat_str = Operations.get_compat_str(ctx.env.project, dep)
         push!(opt_strs, Operations.compat_line(io, dep, uuid, compat_str, longest_dep_len, indent = ""))
         push!(opt_pkgs, dep)
@@ -35,7 +35,7 @@ function compat(ctx::Context; io = nothing)
         start_pos = length(prompt) + 2
         move_start = "\e[$(start_pos)G"
         clear_to_end = "\e[0J"
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, true)
+        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), stdin.handle, true)
         while true
             print(io, move_start, clear_to_end, buffer, "\e[$(start_pos + cursor)G")
             inp = TerminalMenus._readkey(stdin)
@@ -65,9 +65,9 @@ function compat(ctx::Context; io = nothing)
                 if cursor == 1
                     buffer = buffer[2:end]
                 elseif cursor == length(buffer)
-                    buffer = buffer[1:end - 1]
+                    buffer = buffer[1:(end - 1)]
                 elseif cursor > 0
-                    buffer = buffer[1:(cursor-1)] * buffer[(cursor + 1):end]
+                    buffer = buffer[1:(cursor - 1)] * buffer[(cursor + 1):end]
                 else
                     continue
                 end
@@ -85,7 +85,7 @@ function compat(ctx::Context; io = nothing)
         end
         buffer
     finally
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid},Int32), stdin.handle, false)
+        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), stdin.handle, false)
     end
     new_entry = strip(resp)
     compat(ctx, dep, string(new_entry))

@@ -17,10 +17,12 @@ struct Subdir
     dir::String
 end
 
-const PackageToken = Union{PackageIdentifier,
-                           VersionToken,
-                           Rev,
-                           Subdir}
+const PackageToken = Union{
+    PackageIdentifier,
+    VersionToken,
+    Rev,
+    Subdir,
+}
 
 # Check if a string is a valid UUID
 function is_valid_uuid(str::String)
@@ -79,14 +81,16 @@ end
 # Simple path detection
 function looks_like_path(str::String)
     return contains(str, '/') || contains(str, '\\') || str == "." || str == ".." ||
-           (length(str) >= 2 && isletter(str[1]) && str[2] == ':')  # Windows drive letters
+        (length(str) >= 2 && isletter(str[1]) && str[2] == ':')  # Windows drive letters
 end
 
 # Check if a string looks like a complete URL
 function looks_like_complete_url(str::String)
-    return (startswith(str, "http://") || startswith(str, "https://") ||
-            startswith(str, "git@") || startswith(str, "ssh://")) &&
-           (contains(str, '.') || contains(str, '/'))
+    return (
+        startswith(str, "http://") || startswith(str, "https://") ||
+            startswith(str, "git@") || startswith(str, "ssh://")
+    ) &&
+        (contains(str, '.') || contains(str, '/'))
 end
 
 # Check if a colon at given position is part of a Windows drive letter
@@ -170,7 +174,7 @@ function is_url_structure_colon(input::String, colon_pos::Int)
     if colon_pos <= lastindex(input) - 2
         next_pos = nextind(input, colon_pos)
         if next_pos <= lastindex(input) - 1 &&
-           input[colon_pos:nextind(input, nextind(input, colon_pos))] == "://"
+                input[colon_pos:nextind(input, nextind(input, colon_pos))] == "://"
             return true
         end
     end
@@ -211,7 +215,7 @@ function extract_url_subdir(input::String)
 
     # Only treat as subdir if it looks like one and the part before looks like a URL
     if (contains(after_colon, '/') || (!contains(after_colon, '@') && !contains(after_colon, '#'))) &&
-       (contains(before_colon, "://") || contains(before_colon, ".git") || contains(before_colon, '@'))
+            (contains(before_colon, "://") || contains(before_colon, ".git") || contains(before_colon, '@'))
         return before_colon, after_colon
     end
 
@@ -320,8 +324,8 @@ end
 function parse_package_spec_new(input::String)
     # Handle quoted strings
     if (startswith(input, '"') && endswith(input, '"')) ||
-       (startswith(input, '\'') && endswith(input, '\''))
-        input = input[2:end-1]
+            (startswith(input, '\'') && endswith(input, '\''))
+        input = input[2:(end - 1)]
     end
 
     # Handle GitHub tree/commit URLs first (special case)
@@ -332,7 +336,7 @@ function parse_package_spec_new(input::String)
 
     # Handle name=uuid format
     if contains(input, '=')
-        parts = split(input, '=', limit=2)
+        parts = split(input, '=', limit = 2)
         if length(parts) == 2
             name = String(strip(parts[1]))
             uuid_str = String(strip(parts[2]))
@@ -352,7 +356,7 @@ function parse_package_spec_new(input::String)
     end
 end
 
-function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector{PackageSpec}
+function parse_package(args::Vector{QString}, options; add_or_dev = false)::Vector{PackageSpec}
     tokens = PackageToken[]
 
     i = 1
@@ -384,11 +388,11 @@ function parse_package(args::Vector{QString}, options; add_or_dev=false)::Vector
         i += 1
     end
 
-    return parse_package_args(tokens; add_or_dev=add_or_dev)
+    return parse_package_args(tokens; add_or_dev = add_or_dev)
 end
 
 
-function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vector{PackageSpec}
+function parse_package_args(args::Vector{PackageToken}; add_or_dev = false)::Vector{PackageSpec}
     # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
     function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
         (isempty(args) || args[1] isa PackageIdentifier) && return
@@ -423,20 +427,21 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
                 pkgerror("Package name/uuid must precede subdir specifier `$args`.")
             end
         end
+        return
     end
 
     pkgs = PackageSpec[]
     while !isempty(args)
         arg = popfirst!(args)
         if arg isa PackageIdentifier
-            pkg = parse_package_identifier(arg; add_or_develop=add_or_dev)
+            pkg = parse_package_identifier(arg; add_or_develop = add_or_dev)
             apply_modifier!(pkg, args)
             push!(pkgs, pkg)
-        # Modifiers without a corresponding package identifier -- this is a user error
+            # Modifiers without a corresponding package identifier -- this is a user error
         else
             arg isa VersionToken ?
                 pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
-            arg isa Rev ?
+                arg isa Rev ?
                 pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.") :
                 pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
         end
@@ -445,27 +450,27 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev=false)::Vecto
 end
 
 let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(?-i)",
-    name = raw"(\w+)(?:\.jl)?"
+        name = raw"(\w+)(?:\.jl)?"
     global const name_re = Regex("^$name\$")
     global const uuid_re = Regex("^$uuid\$")
     global const name_uuid_re = Regex("^$name\\s*=\\s*($uuid)\$")
 end
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
-function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop=false)::PackageSpec
+function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
         if occursin(name_re, word) && isdir(expanduser(word))
             @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
         end
         if isurl(word)
-            return PackageSpec(; url=word)
-        elseif any(occursin.(['\\','/'], word)) || word == "." || word == ".."
-            return PackageSpec(; path=normpath(expanduser(word)))
+            return PackageSpec(; url = word)
+        elseif any(occursin.(['\\', '/'], word)) || word == "." || word == ".."
+            return PackageSpec(; path = normpath(expanduser(word)))
         end
     end
     if occursin(uuid_re, word)
-        return PackageSpec(;uuid=UUID(word))
+        return PackageSpec(; uuid = UUID(word))
     elseif occursin(name_re, word)
         m = match(name_re, word)
         return PackageSpec(String(something(m.captures[1])))
@@ -480,15 +485,15 @@ end
 ################
 # RegistrySpec #
 ################
-function parse_registry(raw_args::Vector{QString}, options; add=false)
+function parse_registry(raw_args::Vector{QString}, options; add = false)
     regs = RegistrySpec[]
-    foreach(x -> push!(regs, parse_registry(x; add=add)), unwrap(raw_args))
+    foreach(x -> push!(regs, parse_registry(x; add = add)), unwrap(raw_args))
     return regs
 end
 
 # Registries can be identified through: uuid, name, or name+uuid
 # when updating/removing. When adding we can accept a local path or url.
-function parse_registry(word::AbstractString; add=false)::RegistrySpec
+function parse_registry(word::AbstractString; add = false)::RegistrySpec
     word = expanduser(word)
     registry = RegistrySpec()
     if add && isdir_nothrow(word)
@@ -519,9 +524,8 @@ end
 # # Apps
 #
 function parse_app_add(raw_args::Vector{QString}, options)
-    return parse_package(raw_args, options; add_or_dev=true)
+    return parse_package(raw_args, options; add_or_dev = true)
 end
-
 
 
 #
