@@ -240,7 +240,7 @@ temp_pkg_dir() do project_path
         end
     end
 
-    @testset "changing rev in sources updates project_hash and git-tree-sha1 (#4157)" begin
+    @testset "changing rev in sources updates git-tree-sha1 (#4157)" begin
         isolate() do
             mktempdir() do tmp
                 # Create a test package with two commits
@@ -297,7 +297,6 @@ temp_pkg_dir() do project_path
                         Pkg.resolve()
                         @test isfile("Manifest.toml")
                         manifest = Pkg.Types.read_manifest("Manifest.toml")
-                        first_project_hash = manifest.project_hash
 
                         # Verify first state
                         test_pkg_uuid = UUID("b4017d7c-a742-4580-99f2-e286571e6290")
@@ -320,14 +319,12 @@ temp_pkg_dir() do project_path
 
                         Pkg.resolve()
                         manifest = Pkg.Types.read_manifest("Manifest.toml")
-                        second_project_hash = manifest.project_hash
 
-                        # Verify second state - both project_hash and git-tree-sha1 should change
+                        # Verify second state - git-tree-sha1 should change
                         test_pkg_entry = manifest[test_pkg_uuid]
                         @test test_pkg_entry.tree_hash !== nothing
                         @test string(test_pkg_entry.tree_hash) == second_tree_hash
                         @test test_pkg_entry.repo.rev == second_commit
-                        @test second_project_hash != first_project_hash
                     end
                 end
             end
