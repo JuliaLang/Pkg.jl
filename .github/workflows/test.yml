@@ -1,15 +1,10 @@
 name: Run tests
 on:
   pull_request:
-    branches:
-      - 'master'
-      - 'release-*'
-      - 'backports-release-*'
   push:
     branches:
       - 'master'
       - 'release-*'
-      - 'backports-release-*'
     tags: '*'
 defaults:
   run:
