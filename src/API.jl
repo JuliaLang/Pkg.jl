@@ -146,7 +146,8 @@ end
 check_package_name(::Nothing, ::Any) = nothing
 
 function require_not_empty(pkgs, f::Symbol)
-    return isempty(pkgs) && pkgerror("$f requires at least one package")
+    isempty(pkgs) && pkgerror("$f requires at least one package")
+    return
 end
 
 # Provide some convenience calls
@@ -181,10 +182,10 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
                 kwargs = merge((; kwargs...), (:mode => mode,))
             end
             # Handle $f() case
-            return if all(isnothing, [name, uuid, version, url, rev, path, subdir])
-                $f(PackageSpec[]; kwargs...)
+            if all(isnothing, [name, uuid, version, url, rev, path, subdir])
+                return $f(PackageSpec[]; kwargs...)
             else
-                $f(pkg; kwargs...)
+                return $f(pkg; kwargs...)
             end
         end
         function $f(pkgs::Vector{<:NamedTuple}; kwargs...)
@@ -1163,7 +1164,8 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
 
         s = ndel == 1 ? "" : "s"
         bytes_saved_string = Base.format_bytes(freed)
-        return printpkgstyle(ctx.io, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
+        printpkgstyle(ctx.io, :Deleted, "$(ndel) $(name)$(s) ($bytes_saved_string)")
+        return
     end
     print_deleted(ndel_pkg, package_space_freed, "package installation")
     print_deleted(ndel_repo, repo_space_freed, "repo")
@@ -1192,7 +1194,8 @@ function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose = false, kwargs.
     project_resolve!(ctx.env, pkgs)
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
-    return Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
+    Operations.build(ctx, Set{UUID}(pkg.uuid for pkg in pkgs), verbose)
+    return
 end
 
 function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
@@ -1371,7 +1374,8 @@ function instantiate(
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose = verbose)
 
-    return allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+    allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+    return
 end
 
 
@@ -1419,12 +1423,13 @@ function _activate_dep(dep_name::AbstractString)
         return
     end
     uuid = get(ctx.env.project.deps, dep_name, nothing)
-    return if uuid !== nothing
+    if uuid !== nothing
         entry = manifest_info(ctx.env.manifest, uuid)
         if entry.path !== nothing
             return joinpath(dirname(ctx.env.manifest_file), entry.path::String)
         end
     end
+    return
 end
 function activate(path::AbstractString; shared::Bool = false, temp::Bool = false, io::IO = stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
@@ -1626,7 +1631,8 @@ function add_snapshot_to_undo(env = nothing)
     pushfirst!(state.entries, snapshot)
     state.idx = 1
 
-    return resize!(state.entries, min(length(state.entries), max_undo_limit))
+    resize!(state.entries, min(length(state.entries), max_undo_limit))
+    return
 end
 
 undo(ctx = Context()) = redo_undo(ctx, :undo, 1)
@@ -1641,7 +1647,8 @@ function redo_undo(ctx, mode::Symbol, direction::Int)
     snapshot = state.entries[state.idx]
     ctx.env.manifest, ctx.env.project = snapshot.manifest, snapshot.project
     write_env(ctx.env; update_undo = false)
-    return Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
+    Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
+    return
 end
 
 
@@ -1671,7 +1678,8 @@ function handle_package_input!(pkg::PackageSpec)
     if !(pkg.version isa VersionNumber)
         pkg.version = VersionSpec(pkg.version)
     end
-    return pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
+    pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
+    return
 end
 
 function upgrade_manifest(man_path::String)
@@ -1680,7 +1688,8 @@ function upgrade_manifest(man_path::String)
     Pkg.activate(dir) do
         Pkg.upgrade_manifest()
     end
-    return mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
+    mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
+    return
 end
 function upgrade_manifest(ctx::Context = Context())
     before_format = ctx.env.manifest.manifest_format

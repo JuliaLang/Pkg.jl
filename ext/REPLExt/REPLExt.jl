@@ -113,7 +113,8 @@ function on_done(s, buf, ok, repl)
     do_cmds(repl, input)
     REPL.prepare_next(repl)
     REPL.reset_state(s)
-    return s.current_mode.sticky || REPL.transition(s, main)
+    s.current_mode.sticky || REPL.transition(s, main)
+    return
 end
 
 # Set up the repl Pkg REPLMode
@@ -149,7 +150,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
     if shell_mode !== nothing
         let shell_mode = shell_mode
             repl_keymap[';'] = function (s, o...)
-                return if isempty(s) || position(LineEdit.buffer(s)) == 0
+                if isempty(s) || position(LineEdit.buffer(s)) == 0
                     buf = copy(LineEdit.buffer(s))
                     LineEdit.transition(s, shell_mode) do
                         LineEdit.state(s, shell_mode).input_buffer = buf
@@ -158,6 +159,7 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
                     LineEdit.edit_insert(s, ';')
                     LineEdit.check_show_hint(s)
                 end
+                return
             end
         end
     end
@@ -176,7 +178,7 @@ function repl_init(repl::REPL.LineEditREPL)
     push!(repl.interface.modes, pkg_mode)
     keymap = Dict{Any, Any}(
         ']' => function (s, args...)
-            return if isempty(s) || position(LineEdit.buffer(s)) == 0
+            if isempty(s) || position(LineEdit.buffer(s)) == 0
                 buf = copy(LineEdit.buffer(s))
                 LineEdit.transition(s, pkg_mode) do
                     LineEdit.state(s, pkg_mode).input_buffer = buf
@@ -185,6 +187,7 @@ function repl_init(repl::REPL.LineEditREPL)
                 LineEdit.edit_insert(s, ']')
                 LineEdit.check_show_hint(s)
             end
+            return
         end
     )
     main_mode.keymap_dict = LineEdit.keymap_merge(main_mode.keymap_dict, keymap)
@@ -327,9 +330,10 @@ function __init__()
             end
         end
     end
-    return if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
+    if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
         push!(REPL.install_packages_hooks, try_prompt_pkg_add)
     end
+    return
 end
 
 include("precompile.jl")

@@ -23,22 +23,24 @@ function validate_app_name(name::AbstractString)
     if !occursin(r"^[a-zA-Z][a-zA-Z0-9_-]*$", name)
         error("App name must start with a letter and contain only letters, numbers, underscores, and hyphens")
     end
-    return if occursin(r"\.\.", name) || occursin(r"[/\\]", name)
+    if occursin(r"\.\.", name) || occursin(r"[/\\]", name)
         error("App name cannot contain path traversal sequences or path separators")
     end
+    return
 end
 
 function validate_package_name(name::AbstractString)
     if isempty(name)
         error("Package name cannot be empty")
     end
-    return if !occursin(r"^[a-zA-Z][a-zA-Z0-9_]*$", name)
+    if !occursin(r"^[a-zA-Z][a-zA-Z0-9_]*$", name)
         error("Package name must start with a letter and contain only letters, numbers, and underscores")
     end
+    return
 end
 
 function validate_submodule_name(name::Union{AbstractString, Nothing})
-    return if name !== nothing
+    if name !== nothing
         if isempty(name)
             error("Submodule name cannot be empty")
         end
@@ -46,12 +48,14 @@ function validate_submodule_name(name::Union{AbstractString, Nothing})
             error("Submodule name must start with a letter and contain only letters, numbers, and underscores")
         end
     end
+    return
 end
 
 
 function rm_shim(name; kwargs...)
     validate_app_name(name)
-    return Base.rm(joinpath(julia_bin_path(), name * (Sys.iswindows() ? ".bat" : "")); kwargs...)
+    Base.rm(joinpath(julia_bin_path(), name * (Sys.iswindows() ? ".bat" : "")); kwargs...)
+    return
 end
 
 function get_project(sourcepath)
@@ -66,10 +70,11 @@ end
 
 
 function overwrite_file_if_different(file, content)
-    return if !isfile(file) || read(file, String) != content
+    if !isfile(file) || read(file, String) != content
         mkpath(dirname(file))
         write(file, content)
     end
+    return
 end
 
 function check_apps_in_path(apps)
@@ -170,7 +175,8 @@ function _resolve(manifest::Manifest, pkgname = nothing)
         # TODO: Julia path
         generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), joinpath(Sys.BINDIR, "julia"))
     end
-    return write_manifest(manifest, app_manifest_file())
+    write_manifest(manifest, app_manifest_file())
+    return
 end
 
 
@@ -223,7 +229,8 @@ function add(pkg::PackageSpec)
     precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
-    return check_apps_in_path(project.apps)
+    check_apps_in_path(project.apps)
+    return
 end
 
 function develop(pkg::Vector{PackageSpec})
@@ -262,7 +269,8 @@ function develop(pkg::PackageSpec)
     generate_shims_for_apps(pkg.name, project.apps, sourcepath, joinpath(Sys.BINDIR, "julia"))
 
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
-    return check_apps_in_path(project.apps)
+    check_apps_in_path(project.apps)
+    return
 end
 
 
@@ -314,7 +322,7 @@ function update(pkg::Union{PackageSpec, Nothing} = nothing)
 end
 
 function status(pkgs_or_apps::Vector)
-    return if isempty(pkgs_or_apps)
+    if isempty(pkgs_or_apps)
         status()
     else
         for pkg_or_app in pkgs_or_apps
@@ -324,6 +332,7 @@ function status(pkgs_or_apps::Vector)
             status(pkg_or_app)
         end
     end
+    return
 end
 
 function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing)
@@ -379,9 +388,10 @@ end
 
 
 function require_not_empty(pkgs, f::Symbol)
-    return if pkgs === nothing || isempty(pkgs)
+    if pkgs === nothing || isempty(pkgs)
         pkgerror("app $f requires at least one package")
     end
+    return
 end
 
 rm(pkgs_or_apps::String) = rm([pkgs_or_apps])
@@ -492,9 +502,10 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
         shell_shim(julia_escaped, module_spec_escaped, env, app.julia_flags)
     end
     overwrite_file_if_different(julia_bin_filename, content)
-    return if Sys.isunix()
+    if Sys.isunix()
         chmod(julia_bin_filename, 0o755)
     end
+    return
 end
 
 

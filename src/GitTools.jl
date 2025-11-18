@@ -47,7 +47,8 @@ function setprotocol!(;
     )
     domain = lowercase(domain)
     GIT_PROTOCOLS[domain] = protocol
-    return GIT_USERS[domain] = user
+    GIT_USERS[domain] = user
+    return
 end
 
 function normalize_url(url::AbstractString)

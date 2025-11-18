@@ -230,7 +230,8 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
         env.manifest[pkg.uuid] = entry
     end
     prune_manifest(env)
-    return record_project_hash(env)
+    record_project_hash(env)
+    return
 end
 
 # This has to be done after the packages have been downloaded

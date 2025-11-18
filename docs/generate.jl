@@ -4,7 +4,7 @@
 
 function generate(io, command)
     cmd_nospace = replace(command, " " => "-")
-    return println(
+    println(
         io, """
         ```@raw html
         <article class="docstring">
@@ -27,6 +27,7 @@ function generate(io, command)
         ```
         """
     )
+    return
 end
 function generate()
     io = IOBuffer()

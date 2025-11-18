@@ -368,7 +368,8 @@ function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
     if r.tree_info !== nothing
         println(io, "  git-tree-sha1: ", r.tree_info)
     end
-    return println(io, "  packages: ", length(r.pkgs))
+    println(io, "  packages: ", length(r.pkgs))
+    return
 end
 
 function uuids_from_name(r::RegistryInstance, name::String)
