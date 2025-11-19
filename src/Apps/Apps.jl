@@ -3,7 +3,7 @@ module Apps
 using Pkg
 using Pkg.Versions
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
-                 pkgerror, projectfile_path, manifestfile_path
+    pkgerror, projectfile_path, manifestfile_path
 using Pkg.Operations: print_single, source_path, update_package_add
 using Pkg.API: handle_package_input!
 using TOML, UUIDs
@@ -14,7 +14,7 @@ app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
 app_manifest_file() = joinpath(app_env_folder(), "AppManifest.toml")
 julia_bin_path() = joinpath(first(DEPOT_PATH), "bin")
 
-app_context() = Context(env=EnvCache(joinpath(app_env_folder(), "Project.toml")))
+app_context() = Context(env = EnvCache(joinpath(app_env_folder(), "Project.toml")))
 
 function validate_app_name(name::AbstractString)
     if isempty(name)
@@ -26,6 +26,7 @@ function validate_app_name(name::AbstractString)
     if occursin(r"\.\.", name) || occursin(r"[/\\]", name)
         error("App name cannot contain path traversal sequences or path separators")
     end
+    return
 end
 
 function validate_package_name(name::AbstractString)
@@ -35,9 +36,10 @@ function validate_package_name(name::AbstractString)
     if !occursin(r"^[a-zA-Z][a-zA-Z0-9_]*$", name)
         error("Package name must start with a letter and contain only letters, numbers, and underscores")
     end
+    return
 end
 
-function validate_submodule_name(name::Union{AbstractString,Nothing})
+function validate_submodule_name(name::Union{AbstractString, Nothing})
     if name !== nothing
         if isempty(name)
             error("Submodule name cannot be empty")
@@ -46,12 +48,14 @@ function validate_submodule_name(name::Union{AbstractString,Nothing})
             error("Submodule name must start with a letter and contain only letters, numbers, and underscores")
         end
     end
+    return
 end
 
 
 function rm_shim(name; kwargs...)
     validate_app_name(name)
     Base.rm(joinpath(julia_bin_path(), name * (Sys.iswindows() ? ".bat" : "")); kwargs...)
+    return
 end
 
 function get_project(sourcepath)
@@ -70,6 +74,7 @@ function overwrite_file_if_different(file, content)
         mkpath(dirname(file))
         write(file, content)
     end
+    return
 end
 
 function check_apps_in_path(apps)
@@ -79,7 +84,7 @@ function check_apps_in_path(apps)
             @warn """
             App '$app_name' was installed but is not available in PATH.
             Consider adding '$(julia_bin_path())' to your PATH environment variable.
-            """ maxlog=1
+            """ maxlog = 1
             break  # Only show warning once per installation
         else
             # Check for collisions
@@ -94,6 +99,7 @@ function check_apps_in_path(apps)
             end
         end
     end
+    return
 end
 
 function get_max_version_register(pkg::PackageSpec, regs)
@@ -129,7 +135,7 @@ end
 # Main Functions #
 ##################
 
-function _resolve(manifest::Manifest, pkgname=nothing)
+function _resolve(manifest::Manifest, pkgname = nothing)
     for (uuid, pkg) in manifest.deps
         if pkgname !== nothing && pkg.name !== pkgname
             continue
@@ -145,7 +151,7 @@ function _resolve(manifest::Manifest, pkgname=nothing)
         mkpath(dirname(projectfile))
 
         if isfile(original_project_file)
-            cp(original_project_file, projectfile; force=true)
+            cp(original_project_file, projectfile; force = true)
             chmod(projectfile, 0o644)  # Make the copied project file writable
 
             # Add entryfile stanza pointing to the package entry file
@@ -170,6 +176,7 @@ function _resolve(manifest::Manifest, pkgname=nothing)
         generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), joinpath(Sys.BINDIR, "julia"))
     end
     write_manifest(manifest, app_manifest_file())
+    return
 end
 
 
@@ -177,6 +184,7 @@ function add(pkg::Vector{PackageSpec})
     for p in pkg
         add(p)
     end
+    return
 end
 
 
@@ -198,7 +206,7 @@ function add(pkg::PackageSpec)
     else
         pkgs = [pkg]
         Pkg.Operations.registry_resolve!(ctx.registries, pkgs)
-        Pkg.Operations.ensure_resolved(ctx, manifest, pkgs, registry=true)
+        Pkg.Operations.ensure_resolved(ctx, manifest, pkgs, registry = true)
 
         pkg.version, pkg.tree_hash = get_max_version_register(pkg, ctx.registries)
 
@@ -207,11 +215,11 @@ function add(pkg::PackageSpec)
 
     # Run Pkg.build()?
 
-    Base.rm(joinpath(app_env_folder(), pkg.name); force=true, recursive=true)
+    Base.rm(joinpath(app_env_folder(), pkg.name); force = true, recursive = true)
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
     # TODO: Wrong if package itself has a sourcepath?
-    entry = PackageEntry(;apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid=pkg.uuid)
+    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
@@ -222,12 +230,14 @@ function add(pkg::PackageSpec)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
     check_apps_in_path(project.apps)
+    return
 end
 
 function develop(pkg::Vector{PackageSpec})
     for p in pkg
         develop(p)
     end
+    return
 end
 
 function develop(pkg::PackageSpec)
@@ -237,7 +247,7 @@ function develop(pkg::PackageSpec)
     handle_package_input!(pkg)
     ctx = app_context()
     handle_repo_develop!(ctx, pkg, #=shared =# true)
-    Base.rm(joinpath(app_env_folder(), pkg.name); force=true, recursive=true)
+    Base.rm(joinpath(app_env_folder(), pkg.name); force = true, recursive = true)
     sourcepath = abspath(source_path(ctx.env.manifest_file, pkg))
     project = get_project(sourcepath)
 
@@ -250,7 +260,7 @@ function develop(pkg::PackageSpec)
     end
 
 
-    entry = PackageEntry(;apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid=pkg.uuid)
+    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid = pkg.uuid)
     manifest = ctx.env.manifest
     manifest.deps[pkg.uuid] = entry
 
@@ -260,6 +270,7 @@ function develop(pkg::PackageSpec)
 
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
     check_apps_in_path(project.apps)
+    return
 end
 
 
@@ -271,10 +282,11 @@ function update(pkgs_or_apps::Vector)
         end
         update(pkg_or_app)
     end
+    return
 end
 
 # XXX: Is updating an app ever different from rm-ing and adding it from scratch?
-function update(pkg::Union{PackageSpec, Nothing}=nothing)
+function update(pkg::Union{PackageSpec, Nothing} = nothing)
     ctx = app_context()
     manifest = ctx.env.manifest
     deps = Pkg.Operations.load_manifest_deps(manifest)
@@ -298,8 +310,10 @@ function update(pkg::Union{PackageSpec, Nothing}=nothing)
         manifest_app = Pkg.Types.read_manifest(manifest_file)
         manifest_entry = manifest_app.deps[info.uuid]
 
-        entry = PackageEntry(;apps = project.apps, name = manifest_entry.name, version = manifest_entry.version, tree_hash = manifest_entry.tree_hash,
-                             path = manifest_entry.path, repo = manifest_entry.repo, uuid = manifest_entry.uuid)
+        entry = PackageEntry(;
+            apps = project.apps, name = manifest_entry.name, version = manifest_entry.version, tree_hash = manifest_entry.tree_hash,
+            path = manifest_entry.path, repo = manifest_entry.repo, uuid = manifest_entry.uuid
+        )
 
         manifest.deps[dep.uuid] = entry
         Pkg.Types.write_manifest(manifest, app_manifest_file())
@@ -318,9 +332,10 @@ function status(pkgs_or_apps::Vector)
             status(pkg_or_app)
         end
     end
+    return
 end
 
-function status(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
+function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing)
     # TODO: Sort.
     pkg_or_app = pkg_or_app === nothing ? nothing : pkg_or_app.name
     manifest = Pkg.Types.read_manifest(joinpath(app_env_folder(), "AppManifest.toml"))
@@ -347,13 +362,14 @@ function status(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
                 continue
             end
             julia_cmd = contractuser(appinfo.julia_command)
-            printstyled("  $(appname)", color=:green)
-            printstyled(" $(julia_cmd) \n", color=:gray)
+            printstyled("  $(appname)", color = :green)
+            printstyled(" $(julia_cmd) \n", color = :gray)
         end
     end
+    return
 end
 
-function precompile(pkg::Union{Nothing, String}=nothing)
+function precompile(pkg::Union{Nothing, String} = nothing)
     manifest = Pkg.Types.read_manifest(joinpath(app_env_folder(), "AppManifest.toml"))
     deps = Pkg.Operations.load_manifest_deps(manifest)
     for dep in deps
@@ -367,6 +383,7 @@ function precompile(pkg::Union{Nothing, String}=nothing)
             Pkg.precompile()
         end
     end
+    return
 end
 
 
@@ -374,6 +391,7 @@ function require_not_empty(pkgs, f::Symbol)
     if pkgs === nothing || isempty(pkgs)
         pkgerror("app $f requires at least one package")
     end
+    return
 end
 
 rm(pkgs_or_apps::String) = rm([pkgs_or_apps])
@@ -384,9 +402,10 @@ function rm(pkgs_or_apps::Vector)
         end
         rm(pkg_or_app)
     end
+    return
 end
 
-function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
+function rm(pkg_or_app::Union{PackageSpec, Nothing} = nothing)
     pkg_or_app = pkg_or_app === nothing ? nothing : pkg_or_app.name
 
     require_not_empty(pkg_or_app, :rm)
@@ -399,10 +418,10 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
         delete!(manifest.deps, dep.uuid)
         for (appname, appinfo) in dep.apps
             @info "Deleted $(appname)"
-            rm_shim(appname; force=true)
+            rm_shim(appname; force = true)
         end
         if dep.path === nothing
-            Base.rm(joinpath(app_env_folder(), dep.name); recursive=true)
+            Base.rm(joinpath(app_env_folder(), dep.name); recursive = true)
         end
     else
         for (uuid, pkg) in manifest.deps
@@ -411,11 +430,11 @@ function rm(pkg_or_app::Union{PackageSpec, Nothing}=nothing)
                 app = pkg.apps[app_idx]
                 @info "Deleted app $(app.name)"
                 delete!(pkg.apps, app.name)
-                rm_shim(app.name; force=true)
+                rm_shim(app.name; force = true)
             end
             if isempty(pkg.apps)
                 delete!(manifest.deps, uuid)
-                Base.rm(joinpath(app_env_folder(), pkg.name); recursive=true)
+                Base.rm(joinpath(app_env_folder(), pkg.name); recursive = true)
             end
         end
     end
@@ -427,19 +446,21 @@ end
 for f in (:develop, :add)
     @eval begin
         $f(pkg::Union{AbstractString, PackageSpec}; kwargs...) = $f([pkg]; kwargs...)
-        $f(pkgs::Vector{<:AbstractString}; kwargs...)          = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
-        function $f(; name::Union{Nothing,AbstractString}=nothing, uuid::Union{Nothing,String,UUID}=nothing,
-                      version::Union{VersionNumber, String, VersionSpec, Nothing}=nothing,
-                      url=nothing, rev=nothing, path=nothing, subdir=nothing, kwargs...)
+        $f(pkgs::Vector{<:AbstractString}; kwargs...) = $f([PackageSpec(pkg) for pkg in pkgs]; kwargs...)
+        function $f(;
+                name::Union{Nothing, AbstractString} = nothing, uuid::Union{Nothing, String, UUID} = nothing,
+                version::Union{VersionNumber, String, VersionSpec, Nothing} = nothing,
+                url = nothing, rev = nothing, path = nothing, subdir = nothing, kwargs...
+            )
             pkg = PackageSpec(; name, uuid, version, url, rev, path, subdir)
-            if all(isnothing, [name,uuid,version,url,rev,path,subdir])
+            return if all(isnothing, [name, uuid, version, url, rev, path, subdir])
                 $f(PackageSpec[]; kwargs...)
             else
                 $f(pkg; kwargs...)
             end
         end
         function $f(pkgs::Vector{<:NamedTuple}; kwargs...)
-            $f([PackageSpec(;pkg...) for pkg in pkgs]; kwargs...)
+            return $f([PackageSpec(; pkg...) for pkg in pkgs]; kwargs...)
         end
     end
 end
@@ -452,12 +473,13 @@ end
 const SHIM_COMMENT = Sys.iswindows() ? "REM " : "#"
 const SHIM_VERSION = 1.1
 const SHIM_HEADER = """$SHIM_COMMENT This file is generated by the Julia package manager.
-                       $SHIM_COMMENT Shim version: $SHIM_VERSION"""
+$SHIM_COMMENT Shim version: $SHIM_VERSION"""
 
 function generate_shims_for_apps(pkgname, apps, env, julia)
     for (_, app) in apps
         generate_shim(pkgname, app, env, julia)
     end
+    return
 end
 
 function generate_shim(pkgname, app::AppInfo, env, julia)
@@ -483,6 +505,7 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
     if Sys.isunix()
         chmod(julia_bin_filename, 0o755)
     end
+    return
 end
 
 

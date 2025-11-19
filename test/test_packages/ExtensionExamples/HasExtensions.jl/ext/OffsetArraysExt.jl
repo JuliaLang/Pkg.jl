@@ -8,7 +8,7 @@ function foo(::OffsetArray)
 end
 
 function __init__()
-    HasExtensions.offsetarrays_loaded = true
+    return HasExtensions.offsetarrays_loaded = true
 end
 
 end

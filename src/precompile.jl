@@ -150,8 +150,8 @@ let
             end
 
             Base.precompile(Tuple{typeof(Pkg.API.status)})
-            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat),Base.Dict{String,Any},Pkg.Types.Project,},)
-            Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval),Base.RegexMatch})
+            Base.precompile(Tuple{typeof(Pkg.Types.read_project_compat), Base.Dict{String, Any}, Pkg.Types.Project})
+            Base.precompile(Tuple{typeof(Pkg.Versions.semver_interval), Base.RegexMatch})
 
             Base.precompile(Tuple{typeof(Pkg.REPLMode.do_cmds), Array{Pkg.REPLMode.Command, 1}, Base.TTY})
 
@@ -172,10 +172,10 @@ let
             Base.precompile(Tuple{typeof(Base.map), Function, Array{Any, 1}})
             Base.precompile(Tuple{Type{Array{Dates.DateTime, 1}}, UndefInitializer, Tuple{Int64}})
             Base.precompile(Tuple{typeof(Base.maximum), Array{Dates.DateTime, 1}})
-            Base.precompile(Tuple{Type{Pair{A, B} where B where A}, String, Dates.DateTime})
+            Base.precompile(Tuple{Type{Pair{A, B} where {B} where {A}}, String, Dates.DateTime})
             Base.precompile(Tuple{typeof(Base.map), Function, Array{Base.Dict{String, Dates.DateTime}, 1}})
             Base.precompile(Tuple{typeof(TOML.Internals.Printer.is_array_of_tables), Array{Base.Dict{String, Dates.DateTime}, 1}})
-            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:indent, :sorted, :by, :inline_tables), Tuple{Int64, Bool, typeof(Base.identity), Base.IdSet{Base.Dict{String, V} where V}}}, typeof(TOML.Internals.Printer.print_table), Nothing, Base.IOStream, Base.Dict{String, Dates.DateTime}, Array{String, 1}})
+            Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:indent, :sorted, :by, :inline_tables), Tuple{Int64, Bool, typeof(Base.identity), Base.IdSet{Base.Dict{String, V} where {V}}}}, typeof(TOML.Internals.Printer.print_table), Nothing, Base.IOStream, Base.Dict{String, Dates.DateTime}, Array{String, 1}})
             Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Base.UUID}, Base.IdDict{Any, Any}})
             Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Union{Array{String, 1}, String}}, Base.IdDict{Any, Any}})
             Base.precompile(Tuple{typeof(Base.deepcopy_internal), Base.Dict{String, Array{String, 1}}, Base.IdDict{Any, Any}})
@@ -205,7 +205,7 @@ let
             Base.precompile(Tuple{typeof(Base.all), Base.Generator{Base.ValueIterator{Base.Dict{String, Array{Base.Dict{String, Any}, 1}}}, TOML.Internals.Printer.var"#5#6"}})
             Base.precompile(Tuple{typeof(TOML.Internals.Printer.is_array_of_tables), Array{Base.Dict{String, Any}, 1}})
             Base.precompile(Tuple{Type{Array{Dates.DateTime, 1}}, UndefInitializer, Tuple{Int64}})
-            Base.precompile(Tuple{Type{Pair{A, B} where B where A}, String, Dates.DateTime})
+            Base.precompile(Tuple{Type{Pair{A, B} where {B} where {A}}, String, Dates.DateTime})
             Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:internal_call, :strict, :warn_loaded, :timing, :_from_loading, :configs, :manifest, :io), Tuple{Bool, Bool, Bool, Bool, Bool, Pair{Base.Cmd, Base.CacheFlags}, Bool, Base.TTY}}, typeof(Base.Precompilation.precompilepkgs), Array{String, 1}})
             ################
         end

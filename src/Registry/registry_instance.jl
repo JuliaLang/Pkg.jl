@@ -24,7 +24,7 @@ function parsefile(in_memory_registry::Union{Dict, Nothing}, folder::AbstractStr
         return _parsefile(joinpath(folder, file))
     else
         content = in_memory_registry[to_tar_path_format(file)]
-        parser = Base.TOML.Parser{Dates}(content; filepath=file)
+        parser = Base.TOML.Parser{Dates}(content; filepath = file)
         return Base.TOML.parse(parser)
     end
 end
@@ -109,8 +109,8 @@ function initialize_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version_info
 
     sort!(versions)
 
-    uncompressed_compat      = uncompress(pkg.compat,      versions)
-    uncompressed_deps        = uncompress(pkg.deps,        versions)
+    uncompressed_compat = uncompress(pkg.compat, versions)
+    uncompressed_deps = uncompress(pkg.deps, versions)
 
     for v in versions
         vinfo = pkg.version_info[v]
@@ -137,7 +137,7 @@ function initialize_weak_uncompressed!(pkg::PkgInfo, versions = keys(pkg.version
     sort!(versions)
 
     weak_uncompressed_compat = uncompress(pkg.weak_compat, versions)
-    weak_uncompressed_deps   = uncompress(pkg.weak_deps,   versions)
+    weak_uncompressed_deps = uncompress(pkg.weak_deps, versions)
 
     for v in versions
         vinfo = pkg.version_info[v]
@@ -178,7 +178,7 @@ mutable struct PkgEntry
     # Version.toml / (Compat.toml / Deps.toml):
     info::PkgInfo # lazily initialized
 
-    PkgEntry(path, registry_path, name, uuid, in_memory_registry) = new(path, registry_path, name, uuid, in_memory_registry, #= undef =#)
+    PkgEntry(path, registry_path, name, uuid, in_memory_registry) = new(path, registry_path, name, uuid, in_memory_registry #= undef =#)
 end
 
 registry_info(pkg::PkgEntry) = init_package_info!(pkg)
@@ -197,8 +197,10 @@ function init_package_info!(pkg::PkgEntry)
     # Versions.toml
     d_v = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
         parsefile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
-    version_info = Dict{VersionNumber, VersionInfo}(VersionNumber(k) =>
-        VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v)
+    version_info = Dict{VersionNumber, VersionInfo}(
+        VersionNumber(k) =>
+            VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v
+    )
 
     # Compat.toml
     compat_data_toml = custom_isfile(pkg.in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Compat.toml")) ?
@@ -261,9 +263,9 @@ function uncompress_registry(tar_gz::AbstractString)
     buf = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE)
     io = IOBuffer()
     open(`$(exe7z()) x $tar_gz -so`) do tar
-        Tar.read_tarball(x->true, tar; buf=buf) do hdr, _
+        Tar.read_tarball(x -> true, tar; buf = buf) do hdr, _
             if hdr.type == :file
-                Tar.read_data(tar, io; size=hdr.size, buf=buf)
+                Tar.read_data(tar, io; size = hdr.size, buf = buf)
                 data[hdr.path] = String(take!(io))
             end
         end
@@ -367,6 +369,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::RegistryInstance)
         println(io, "  git-tree-sha1: ", r.tree_info)
     end
     println(io, "  packages: ", length(r.pkgs))
+    return
 end
 
 function uuids_from_name(r::RegistryInstance, name::String)
@@ -386,7 +389,7 @@ end
 function verify_compressed_registry_toml(path::String)
     d = TOML.tryparsefile(path)
     if d isa TOML.ParserError
-        @warn "Failed to parse registry TOML file at $(repr(path))" exception=d
+        @warn "Failed to parse registry TOML file at $(repr(path))" exception = d
         return false
     end
     for key in ("git-tree-sha1", "uuid", "path")
@@ -403,7 +406,7 @@ function verify_compressed_registry_toml(path::String)
     return true
 end
 
-function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT_PATH)
+function reachable_registries(; depots::Union{String, Vector{String}} = Base.DEPOT_PATH)
     # collect registries
     if depots isa String
         depots = [depots]
@@ -413,7 +416,7 @@ function reachable_registries(; depots::Union{String, Vector{String}}=Base.DEPOT
         isdir(d) || continue
         reg_dir = joinpath(d, "registries")
         isdir(reg_dir) || continue
-        reg_paths = readdir(reg_dir; join=true)
+        reg_paths = readdir(reg_dir; join = true)
         candidate_registries = String[]
         # All folders could be registries
         append!(candidate_registries, filter(isdir, reg_paths))

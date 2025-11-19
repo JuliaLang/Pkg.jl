@@ -23,7 +23,7 @@ include("compat.jl")
 
 struct PkgCompletionProvider <: LineEdit.CompletionProvider end
 
-function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool=false)
+function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool = false)
     partial = REPL.beforecursor(s.input_buffer)
     full = LineEdit.input_string(s)
     ret, range, should_complete = completions(full, lastindex(partial); hint)
@@ -114,15 +114,18 @@ function on_done(s, buf, ok, repl)
     REPL.prepare_next(repl)
     REPL.reset_state(s)
     s.current_mode.sticky || REPL.transition(s, main)
+    return
 end
 
 # Set up the repl Pkg REPLMode
 function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
-    pkg_mode = LineEdit.Prompt(promptf;
+    pkg_mode = LineEdit.Prompt(
+        promptf;
         prompt_prefix = repl.options.hascolor ? Base.text_colors[:blue] : "",
         prompt_suffix = "",
         complete = PkgCompletionProvider(),
-        sticky = true)
+        sticky = true
+    )
 
     pkg_mode.repl = repl
     hp = main.hist
@@ -145,8 +148,8 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
 
     repl_keymap = Dict()
     if shell_mode !== nothing
-        let shell_mode=shell_mode
-            repl_keymap[';'] = function (s,o...)
+        let shell_mode = shell_mode
+            repl_keymap[';'] = function (s, o...)
                 if isempty(s) || position(LineEdit.buffer(s)) == 0
                     buf = copy(LineEdit.buffer(s))
                     LineEdit.transition(s, shell_mode) do
@@ -156,13 +159,14 @@ function create_mode(repl::REPL.AbstractREPL, main::LineEdit.Prompt)
                     LineEdit.edit_insert(s, ';')
                     LineEdit.check_show_hint(s)
                 end
+                return
             end
         end
     end
 
-    b = Dict{Any,Any}[
+    b = Dict{Any, Any}[
         skeymap, repl_keymap, mk, prefix_keymap, LineEdit.history_keymap,
-        LineEdit.default_keymap, LineEdit.escape_defaults
+        LineEdit.default_keymap, LineEdit.escape_defaults,
     ]
     pkg_mode.keymap_dict = LineEdit.keymap(b)
     return pkg_mode
@@ -172,8 +176,8 @@ function repl_init(repl::REPL.LineEditREPL)
     main_mode = repl.interface.modes[1]
     pkg_mode = create_mode(repl, main_mode)
     push!(repl.interface.modes, pkg_mode)
-    keymap = Dict{Any,Any}(
-        ']' => function (s,args...)
+    keymap = Dict{Any, Any}(
+        ']' => function (s, args...)
             if isempty(s) || position(LineEdit.buffer(s)) == 0
                 buf = copy(LineEdit.buffer(s))
                 LineEdit.transition(s, pkg_mode) do
@@ -183,6 +187,7 @@ function repl_init(repl::REPL.LineEditREPL)
                 LineEdit.edit_insert(s, ']')
                 LineEdit.check_show_hint(s)
             end
+            return
         end
     )
     main_mode.keymap_dict = LineEdit.keymap_merge(main_mode.keymap_dict, keymap)
@@ -201,9 +206,9 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     end
     if isempty(ctx.registries)
         if !REG_WARNED[]
-            printstyled(ctx.io, " │ "; color=:green)
+            printstyled(ctx.io, " │ "; color = :green)
             printstyled(ctx.io, "Attempted to find missing packages in package registries but no registries are installed.\n")
-            printstyled(ctx.io, " └ "; color=:green)
+            printstyled(ctx.io, " └ "; color = :green)
             printstyled(ctx.io, "Use package mode to install a registry. `pkg> registry add` will install the default registries.\n\n")
             REG_WARNED[] = true
         end
@@ -223,22 +228,22 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         available_pkg_list = length(available_pkgs) == 1 ? String(available_pkgs[1]) : "[$(join(available_pkgs, ", "))]"
         msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from a registry."
         for line in linewrap(msg1, io = ctx.io, padding = length(" │ "))
-            printstyled(ctx.io, " │ "; color=:green)
+            printstyled(ctx.io, " │ "; color = :green)
             println(ctx.io, line)
         end
-        printstyled(ctx.io, " │ "; color=:green)
+        printstyled(ctx.io, " │ "; color = :green)
         println(ctx.io, "Install package$(plural4)?")
         msg2 = string("add ", join(available_pkgs, ' '))
         for (i, line) in pairs(linewrap(msg2; io = ctx.io, padding = length(string(" |   ", promptf()))))
-            printstyled(ctx.io, " │   "; color=:green)
+            printstyled(ctx.io, " │   "; color = :green)
             if i == 1
-                printstyled(ctx.io, promptf(); color=:blue)
+                printstyled(ctx.io, promptf(); color = :blue)
             else
                 print(ctx.io, " "^length(promptf()))
             end
             println(ctx.io, line)
         end
-        printstyled(ctx.io, " └ "; color=:green)
+        printstyled(ctx.io, " └ "; color = :green)
         Base.prompt(stdin, ctx.io, "(y/n/o)", default = "y")
     catch err
         if err isa InterruptException # if ^C is entered
@@ -254,7 +259,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     resp = strip(resp)
     lower_resp = lowercase(resp)
     if lower_resp in ["y", "yes"]
-        API.add(string.(available_pkgs); allow_autoprecomp=false)
+        API.add(string.(available_pkgs); allow_autoprecomp = false)
     elseif lower_resp in ["o"]
         editable_envs = filter(v -> v != "@stdlib", LOAD_PATH)
         option_list = String[]
@@ -280,9 +285,9 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
             1
         )
         print(ctx.io, "\e[1A\e[1G\e[0J") # go up one line, to the start, and clear it
-        printstyled(ctx.io, " └ "; color=:green)
+        printstyled(ctx.io, " └ "; color = :green)
         choice = try
-            TerminalMenus.request("Select environment:", menu, cursor=default)
+            TerminalMenus.request("Select environment:", menu, cursor = default)
         catch err
             if err isa InterruptException # if ^C is entered
                 println(ctx.io)
@@ -292,7 +297,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         end
         choice == -1 && return false
         API.activate(shown_envs[choice]) do
-            API.add(string.(available_pkgs); allow_autoprecomp=false)
+            API.add(string.(available_pkgs); allow_autoprecomp = false)
         end
     elseif (lower_resp in ["n"])
         return false
@@ -306,7 +311,6 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         return true
     end
 end
-
 
 
 function __init__()
@@ -329,6 +333,7 @@ function __init__()
     if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
         push!(REPL.install_packages_hooks, try_prompt_pkg_add)
     end
+    return
 end
 
 include("precompile.jl")

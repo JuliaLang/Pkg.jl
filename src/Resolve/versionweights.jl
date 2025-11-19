@@ -14,19 +14,19 @@ VersionWeight(vn::VersionNumber) = VersionWeight(vn.major, vn.minor, vn.patch)
 
 Base.zero(::Type{VersionWeight}) = VersionWeight()
 
-Base.typemin(::Type{VersionWeight}) = (x=typemin(Int64); VersionWeight(x, x, x))
+Base.typemin(::Type{VersionWeight}) = (x = typemin(Int64); VersionWeight(x, x, x))
 
 Base.:(-)(a::VersionWeight, b::VersionWeight) =
-    VersionWeight(a.major-b.major, a.minor-b.minor, a.patch-b.patch)
+    VersionWeight(a.major - b.major, a.minor - b.minor, a.patch - b.patch)
 
 Base.:(+)(a::VersionWeight, b::VersionWeight) =
-    VersionWeight(a.major+b.major, a.minor+b.minor, a.patch+b.patch)
+    VersionWeight(a.major + b.major, a.minor + b.minor, a.patch + b.patch)
 
 Base.:(-)(a::VersionWeight) =
     VersionWeight(-a.major, -a.minor, -a.patch)
 
 function Base.isless(a::VersionWeight, b::VersionWeight)
-    (a.major, a.minor, a.patch) < (b.major, b.minor, b.patch)
+    return (a.major, a.minor, a.patch) < (b.major, b.minor, b.patch)
 end
 
 Base.abs(a::VersionWeight) =
@@ -40,5 +40,5 @@ function Base.show(io::IO, a::VersionWeight)
     a == VersionWeight(a.major, a.minor) && @goto done
     print(io, ".", a.patch)
     @label done
-    print(io, ")")
+    return print(io, ")")
 end

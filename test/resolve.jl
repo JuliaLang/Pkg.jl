@@ -25,8 +25,8 @@ vlst = [
     v"1.0.0",
     v"1.0.1",
     v"1.1.0",
-    v"1.1.1"
-    ]
+    v"1.1.1",
+]
 
 for v1 in vlst, v2 in vlst
     vw1 = VersionWeight(v1)
@@ -44,28 +44,28 @@ end
         ["A", v"1", "B", "1-*"],
         ["A", v"2", "B", "2-*"],
         ["B", v"1"],
-        ["B", v"2"]
+        ["B", v"2"],
     ]
 
     @test sanity_tst(deps_data)
-    @test sanity_tst(deps_data, pkgs=["A", "B"])
-    @test sanity_tst(deps_data, pkgs=["B"])
-    @test sanity_tst(deps_data, pkgs=["A"])
+    @test sanity_tst(deps_data, pkgs = ["A", "B"])
+    @test sanity_tst(deps_data, pkgs = ["B"])
+    @test sanity_tst(deps_data, pkgs = ["A"])
 
     # require just B
     reqs_data = Any[
-        ["B", "*"]
+        ["B", "*"],
     ]
 
-    want_data = Dict("B"=>v"2")
+    want_data = Dict("B" => v"2")
     resolve_tst(deps_data, reqs_data, want_data)
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just A: must bring in B
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"2")
+    want_data = Dict("A" => v"2", "B" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
 
@@ -75,30 +75,30 @@ end
         ["A", v"1", "B", "2-*"],
         ["A", v"2", "B", "1-*"],
         ["B", v"1", "A", "2-*"],
-        ["B", v"2", "A", "1-*"]
+        ["B", v"2", "A", "1-*"],
     ]
 
     @test sanity_tst(deps_data)
 
     # require just A
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"2")
+    want_data = Dict("A" => v"2", "B" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just B, force lower version
     reqs_data = Any[
-        ["B", "1"]
+        ["B", "1"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"1")
+    want_data = Dict("A" => v"2", "B" => v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just A, force lower version
     reqs_data = Any[
-        ["A", "1"]
+        ["A", "1"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"2")
+    want_data = Dict("A" => v"1", "B" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
 
@@ -110,36 +110,36 @@ end
         ["B", v"1", "C", "2-*"],
         ["B", v"2", "C", "1"],
         ["C", v"1", "A", "1"],
-        ["C", v"2", "A", "2-*"]
+        ["C", v"2", "A", "2-*"],
     ]
 
     @test sanity_tst(deps_data)
 
     # require just A (must choose solution which has the highest version for A)
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"1", "C"=>v"2")
+    want_data = Dict("A" => v"2", "B" => v"1", "C" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just B (must choose solution which has the highest version for B)
     reqs_data = Any[
-        ["B", "*"]
+        ["B", "*"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"2", "C"=>v"1")
+    want_data = Dict("A" => v"1", "B" => v"2", "C" => v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just A, force lower version
     reqs_data = Any[
-        ["A", "1"]
+        ["A", "1"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"2", "C"=>v"1")
+    want_data = Dict("A" => v"1", "B" => v"2", "C" => v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require A and C, incompatible versions
     reqs_data = Any[
         ["A", "1"],
-        ["C", "2-*"]
+        ["C", "2-*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
@@ -148,22 +148,22 @@ end
     ## DEPENDENCY SCHEME 4: TWO PACKAGES, DAG, WITH TRIVIAL INCONSISTENCY
     deps_data = Any[
         ["A", v"1", "B", "2-*"],
-        ["B", v"1"]
+        ["B", v"1"],
     ]
 
     @test sanity_tst(deps_data, [("A", v"1")])
-    @test sanity_tst(deps_data, pkgs=["B"])
+    @test sanity_tst(deps_data, pkgs = ["B"])
 
     # require B (must not give errors)
     reqs_data = Any[
-        ["B", "*"]
+        ["B", "*"],
     ]
-    want_data = Dict("B"=>v"1")
+    want_data = Dict("B" => v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require A (must give an error)
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
@@ -178,23 +178,23 @@ end
         ["B", v"1", "C", "2-*"],
         ["B", v"2", "C", "2-*"],
         ["C", v"1"],
-        ["C", v"2"]
+        ["C", v"2"],
     ]
 
     @test sanity_tst(deps_data, [("A", v"2")])
-    @test sanity_tst(deps_data, pkgs=["B"])
-    @test sanity_tst(deps_data, pkgs=["C"])
+    @test sanity_tst(deps_data, pkgs = ["B"])
+    @test sanity_tst(deps_data, pkgs = ["C"])
 
     # require A, any version (must use the highest non-inconsistent)
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"2", "C"=>v"2")
+    want_data = Dict("A" => v"1", "B" => v"2", "C" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require A, force highest version (impossible)
     reqs_data = Any[
-        ["A", "2-*"]
+        ["A", "2-*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
@@ -205,21 +205,25 @@ end
         ["A", v"1", "B", "2-*"],
         ["A", v"2", "B", "1"],
         ["B", v"1", "A", "1"],
-        ["B", v"2", "A", "2-*"]
+        ["B", v"2", "A", "2-*"],
     ]
 
-    @test sanity_tst(deps_data, [("A", v"1"), ("A", v"2"),
-                                ("B", v"1"), ("B", v"2")])
+    @test sanity_tst(
+        deps_data, [
+            ("A", v"1"), ("A", v"2"),
+            ("B", v"1"), ("B", v"2"),
+        ]
+    )
 
     # require A (impossible)
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
     # require B (impossible)
     reqs_data = Any[
-        ["B", "*"]
+        ["B", "*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
@@ -235,26 +239,30 @@ end
         ["C", v"2", "A", "2-*"],
     ]
 
-    @test sanity_tst(deps_data, [("A", v"1"), ("B", v"1"),
-                                ("C", v"1")])
+    @test sanity_tst(
+        deps_data, [
+            ("A", v"1"), ("B", v"1"),
+            ("C", v"1"),
+        ]
+    )
 
     # require A
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"2", "C"=>v"2")
+    want_data = Dict("A" => v"2", "B" => v"2", "C" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require C
     reqs_data = Any[
-        ["C", "*"]
+        ["C", "*"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"2", "C"=>v"2")
+    want_data = Dict("A" => v"2", "B" => v"2", "C" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require C, lowest version (impossible)
     reqs_data = Any[
-        ["C", "1"]
+        ["C", "1"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
@@ -270,25 +278,29 @@ end
         ["C", v"2", "A", "1"],
     ]
 
-    @test sanity_tst(deps_data, [("A", v"1"), ("A", v"2"),
-                                ("B", v"1"), ("B", v"2"),
-                                ("C", v"1"), ("C", v"2")])
+    @test sanity_tst(
+        deps_data, [
+            ("A", v"1"), ("A", v"2"),
+            ("B", v"1"), ("B", v"2"),
+            ("C", v"1"), ("C", v"2"),
+        ]
+    )
 
     # require A (impossible)
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
     # require B (impossible)
     reqs_data = Any[
-        ["B", "*"]
+        ["B", "*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
     # require C (impossible)
     reqs_data = Any[
-        ["C", "*"]
+        ["C", "*"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
@@ -315,45 +327,55 @@ end
 
     # require just F
     reqs_data = Any[
-        ["F", "*"]
+        ["F", "*"],
     ]
-    want_data = Dict("A"=>v"3", "B"=>v"2", "C"=>v"2",
-                    "D"=>v"2", "E"=>v"1", "F"=>v"2")
+    want_data = Dict(
+        "A" => v"3", "B" => v"2", "C" => v"2",
+        "D" => v"2", "E" => v"1", "F" => v"2"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just F, lower version
     reqs_data = Any[
-        ["F", "1"]
+        ["F", "1"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"2", "D"=>v"2",
-                    "E"=>v"1", "F"=>v"1")
+    want_data = Dict(
+        "A" => v"2", "B" => v"2", "D" => v"2",
+        "E" => v"1", "F" => v"1"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require F and B; force lower B version -> must bring down F, A, and D versions too
     reqs_data = Any[
         ["F", "*"],
-        ["B", "1"]
+        ["B", "1"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"1", "D"=>v"1",
-                    "E"=>v"1", "F"=>v"1")
+    want_data = Dict(
+        "A" => v"1", "B" => v"1", "D" => v"1",
+        "E" => v"1", "F" => v"1"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require F and D; force lower D version -> must not bring down F version
     reqs_data = Any[
         ["F", "*"],
-        ["D", "1"]
+        ["D", "1"],
     ]
-    want_data = Dict("A"=>v"3", "B"=>v"2", "C"=>v"2",
-                    "D"=>v"1", "E"=>v"1", "F"=>v"2")
+    want_data = Dict(
+        "A" => v"3", "B" => v"2", "C" => v"2",
+        "D" => v"1", "E" => v"1", "F" => v"2"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require F and C; force lower C version -> must bring down F and A versions
     reqs_data = Any[
         ["F", "*"],
-        ["C", "1"]
+        ["C", "1"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"2", "C"=>v"1",
-                    "D"=>v"2", "E"=>v"1", "F"=>v"1")
+    want_data = Dict(
+        "A" => v"2", "B" => v"2", "C" => v"1",
+        "D" => v"2", "E" => v"1", "F" => v"1"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     VERBOSE && @info("SCHEME 10")
@@ -370,38 +392,37 @@ end
         ["D", v"1", "E", "1-*"],
         ["D", v"2", "E", "2-*"],
         ["E", v"1"],
-        ["E", v"2"]
+        ["E", v"2"],
     ]
 
     @test sanity_tst(deps_data, [("A", v"2")])
-    @test sanity_tst(deps_data, pkgs=["B"])
-    @test sanity_tst(deps_data, pkgs=["D"])
-    @test sanity_tst(deps_data, pkgs=["E"])
-    @test sanity_tst(deps_data, pkgs=["B", "D"])
+    @test sanity_tst(deps_data, pkgs = ["B"])
+    @test sanity_tst(deps_data, pkgs = ["D"])
+    @test sanity_tst(deps_data, pkgs = ["E"])
+    @test sanity_tst(deps_data, pkgs = ["B", "D"])
 
     # require A, any version (must use the highest non-inconsistent)
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"2", "C"=>v"2")
+    want_data = Dict("A" => v"1", "B" => v"2", "C" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just D: must bring in E
     reqs_data = Any[
-        ["D", "*"]
+        ["D", "*"],
     ]
-    want_data = Dict("D"=>v"2", "E"=>v"2")
+    want_data = Dict("D" => v"2", "E" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
 
     # require A and D, must be the merge of the previous two cases
     reqs_data = Any[
         ["A", "*"],
-        ["D", "*"]
+        ["D", "*"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"2", "C"=>v"2", "D"=>v"2", "E"=>v"2")
+    want_data = Dict("A" => v"1", "B" => v"2", "C" => v"2", "D" => v"2", "E" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
-
 
 
     VERBOSE && @info("SCHEME 11")
@@ -428,7 +449,7 @@ end
         ["A", "*"],
         ["B", "*"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"1", "C"=>v"1", "D"=>v"1")
+    want_data = Dict("A" => v"1", "B" => v"1", "C" => v"1", "D" => v"1")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
 
@@ -438,40 +459,40 @@ end
         ["A", v"1", "B", "1-*", :weak],
         ["A", v"2", "B", "2-*", :weak],
         ["B", v"1"],
-        ["B", v"2"]
+        ["B", v"2"],
     ]
 
     @test sanity_tst(deps_data)
-    @test sanity_tst(deps_data, pkgs=["A", "B"])
-    @test sanity_tst(deps_data, pkgs=["B"])
-    @test sanity_tst(deps_data, pkgs=["A"])
+    @test sanity_tst(deps_data, pkgs = ["A", "B"])
+    @test sanity_tst(deps_data, pkgs = ["B"])
+    @test sanity_tst(deps_data, pkgs = ["A"])
 
     # require just B
     reqs_data = Any[
-        ["B", "*"]
+        ["B", "*"],
     ]
-    want_data = Dict("B"=>v"2")
+    want_data = Dict("B" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just A
     reqs_data = Any[
-        ["A", "*"]
+        ["A", "*"],
     ]
-    want_data = Dict("A"=>v"2")
+    want_data = Dict("A" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require A and B
     reqs_data = Any[
         ["A", "*"],
-        ["B", "*"]
+        ["B", "*"],
     ]
-    want_data = Dict("A"=>v"2", "B"=>v"2")
+    want_data = Dict("A" => v"2", "B" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require A and B, invompatible versions
     reqs_data = Any[
         ["A", "2-*"],
-        ["B", "1"]
+        ["B", "1"],
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data, want_data)
 
@@ -499,45 +520,55 @@ end
 
     # require just F
     reqs_data = Any[
-        ["F", "*"]
+        ["F", "*"],
     ]
-    want_data = Dict("A"=>v"3", "C"=>v"2",
-                    "D"=>v"2", "E"=>v"1", "F"=>v"2")
+    want_data = Dict(
+        "A" => v"3", "C" => v"2",
+        "D" => v"2", "E" => v"1", "F" => v"2"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require just F, lower version
     reqs_data = Any[
-        ["F", "1"]
+        ["F", "1"],
     ]
-    want_data = Dict("A"=>v"2", "D"=>v"2",
-                    "E"=>v"1", "F"=>v"1")
+    want_data = Dict(
+        "A" => v"2", "D" => v"2",
+        "E" => v"1", "F" => v"1"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require F and B; force lower B version -> must bring down F, A, and D versions too
     reqs_data = Any[
         ["F", "*"],
-        ["B", "1"]
+        ["B", "1"],
     ]
-    want_data = Dict("A"=>v"1", "B"=>v"1", "D"=>v"1",
-                    "E"=>v"1", "F"=>v"1")
+    want_data = Dict(
+        "A" => v"1", "B" => v"1", "D" => v"1",
+        "E" => v"1", "F" => v"1"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require F and D; force lower D version -> must not bring down F version, and bring in B
     reqs_data = Any[
         ["F", "*"],
-        ["D", "1"]
+        ["D", "1"],
     ]
-    want_data = Dict("A"=>v"3", "B"=>v"2", "C"=>v"2",
-                    "D"=>v"1", "E"=>v"1", "F"=>v"2")
+    want_data = Dict(
+        "A" => v"3", "B" => v"2", "C" => v"2",
+        "D" => v"1", "E" => v"1", "F" => v"2"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
     # require F and C; force lower C version -> must bring down F and A versions
     reqs_data = Any[
         ["F", "*"],
-        ["C", "1"]
+        ["C", "1"],
     ]
-    want_data = Dict("A"=>v"2", "C"=>v"1",
-                    "D"=>v"2", "E"=>v"1", "F"=>v"1")
+    want_data = Dict(
+        "A" => v"2", "C" => v"1",
+        "D" => v"2", "E" => v"1", "F" => v"1"
+    )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
 
@@ -577,16 +608,16 @@ end
         ["D", "*"],
     ]
     want_data = Dict(
-        "A"=>v"1",
-        "B"=>v"2",
-        "C"=>v"2",
-        "D"=>v"2",
-        "Y"=>v"0.2.2",
-        "X"=>v"0.2",
-        "F"=>v"1",
-        "G"=>v"2",
-        "H"=>v"1",
-        "I"=>v"1",
+        "A" => v"1",
+        "B" => v"2",
+        "C" => v"2",
+        "D" => v"2",
+        "Y" => v"0.2.2",
+        "X" => v"0.2",
+        "F" => v"1",
+        "G" => v"2",
+        "H" => v"1",
+        "I" => v"1",
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
@@ -595,13 +626,13 @@ end
         ["D", "*"],
     ]
     want_data = Dict(
-        "B"=>v"2",
-        "C"=>v"2",
-        "D"=>v"2",
-        "F"=>v"1",
-        "G"=>v"2",
-        "H"=>v"1",
-        "I"=>v"1",
+        "B" => v"2",
+        "C" => v"2",
+        "D" => v"2",
+        "F" => v"1",
+        "G" => v"2",
+        "H" => v"1",
+        "I" => v"1",
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
@@ -610,9 +641,9 @@ end
         ["A", "*"],
     ]
     want_data = Dict(
-        "A"=>v"1",
-        "Y"=>v"0.2.2",
-        "X"=>v"0.2",
+        "A" => v"1",
+        "Y" => v"0.2.2",
+        "X" => v"0.2",
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
@@ -620,19 +651,19 @@ end
     reqs_data = Any[
         ["A", "*"],
         ["D", "*"],
-        ["Y", "0.2.1"]
+        ["Y", "0.2.1"],
     ]
     want_data = Dict(
-        "A"=>v"1",
-        "B"=>v"1",
-        "C"=>v"2",
-        "D"=>v"2",
-        "Y"=>v"0.2.1",
-        "X"=>v"0.2",
-        "F"=>v"1",
-        "G"=>v"2",
-        "H"=>v"1",
-        "I"=>v"1",
+        "A" => v"1",
+        "B" => v"1",
+        "C" => v"2",
+        "D" => v"2",
+        "Y" => v"0.2.1",
+        "X" => v"0.2",
+        "F" => v"1",
+        "G" => v"2",
+        "H" => v"1",
+        "I" => v"1",
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
@@ -673,7 +704,7 @@ end
 
 @testset "realistic" begin
     tmp = mktempdir()
-    Pkg.PlatformEngines.unpack(joinpath(@__DIR__, "resolvedata.tar.gz"), tmp; verbose=false)
+    Pkg.PlatformEngines.unpack(joinpath(@__DIR__, "resolvedata.tar.gz"), tmp; verbose = false)
 
     VERBOSE && @info("SCHEME REALISTIC 1")
     ## DEPENDENCY SCHEME 15: A REALISTIC EXAMPLE
@@ -710,12 +741,12 @@ end
     include(joinpath(tmp, "resolvedata4.jl"))
 
     @test sanity_tst(ResolveData4.deps_data, ResolveData4.problematic_data)
-    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>10) do
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME" => 10) do
         @test_throws ResolverError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data)
     end
-    withenv("JULIA_PKG_RESOLVE_MAX_TIME"=>1e-5) do
+    withenv("JULIA_PKG_RESOLVE_MAX_TIME" => 1.0e-5) do
         # this test may fail if graph preprocessing or the greedy solver get better
-        @test_throws ResolverTimeoutError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data; validate_versions=false)
+        @test_throws ResolverTimeoutError resolve_tst(ResolveData4.deps_data, ResolveData4.reqs_data, ResolveData4.want_data; validate_versions = false)
     end
 
 end
@@ -725,12 +756,12 @@ end
     ## DEPENDENCY SCHEME 19: A NASTY CASE
 
     include("NastyGenerator.jl")
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=true)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q = 20, d = 4, sat = true)
 
     @test sanity_tst(deps_data, problematic_data)
     @test resolve_tst(deps_data, reqs_data, want_data)
 
-    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q=20, d=4, sat=false)
+    deps_data, reqs_data, want_data, problematic_data = NastyGenerator.generate_nasty(5, 20, q = 20, d = 4, sat = false)
 
     @test sanity_tst(deps_data, problematic_data)
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
@@ -739,7 +770,7 @@ end
 @testset "Stdlib resolve smoketest" begin
     # All stdlibs should be installable and resolvable
     temp_pkg_dir() do dir
-        Pkg.activate(temp=true)
+        Pkg.activate(temp = true)
         Pkg.add(map(x -> x.name, values(Pkg.Types.load_stdlib())))    # add all stdlibs
         iob = IOBuffer()
         Pkg.resolve(io = iob)

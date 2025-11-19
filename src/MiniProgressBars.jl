@@ -5,12 +5,12 @@ export MiniProgressBar, start_progress, end_progress, show_progress, print_progr
 using Printf
 
 # Until Base.format_bytes supports sigdigits
-function pkg_format_bytes(bytes; binary=true, sigdigits::Integer=3)
+function pkg_format_bytes(bytes; binary = true, sigdigits::Integer = 3)
     units = binary ? Base._mem_units : Base._cnt_units
     factor = binary ? 1024 : 1000
     bytes, mb = Base.prettyprint_getunits(bytes, length(units), Int64(factor))
     if mb == 1
-        return string(Int(bytes), " ", Base._mem_units[mb], bytes==1 ? "" : "s")
+        return string(Int(bytes), " ", Base._mem_units[mb], bytes == 1 ? "" : "s")
     else
         return string(Base.Ryu.writefixed(Float64(bytes), sigdigits), binary ? " $(units[mb])" : "$(units[mb])B")
     end
@@ -37,10 +37,10 @@ const PROGRESS_BAR_PERCENTAGE_GRANULARITY = Ref(0.1)
 
 function start_progress(io::IO, _::MiniProgressBar)
     ansi_disablecursor = "\e[?25l"
-    print(io, ansi_disablecursor)
+    return print(io, ansi_disablecursor)
 end
 
-function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagereturn=true)
+function show_progress(io::IO, p::MiniProgressBar; termwidth = nothing, carriagereturn = true)
     if p.max == 0
         perc = 0.0
         prev_perc = 0.0
@@ -64,22 +64,22 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
     progress_text = if p.mode == :percentage
         @sprintf "%2.1f %%" perc
     elseif p.mode == :int
-        string(p.current, "/",  p.max)
+        string(p.current, "/", p.max)
     elseif p.mode == :data
-        lpad(string(pkg_format_bytes(p.current; sigdigits=1), "/", pkg_format_bytes(p.max; sigdigits=1)), 20)
+        lpad(string(pkg_format_bytes(p.current; sigdigits = 1), "/", pkg_format_bytes(p.max; sigdigits = 1)), 20)
     else
         error("Unknown mode $(p.mode)")
     end
     termwidth = @something termwidth displaysize(io)[2]
-    max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10 , p.width))
+    max_progress_width = max(0, min(termwidth - textwidth(p.header) - textwidth(progress_text) - 10, p.width))
     n_filled = floor(Int, max_progress_width * perc / 100)
     partial_filled = (max_progress_width * perc / 100) - n_filled
     n_left = max_progress_width - n_filled
     headers = split(p.header)
-    to_print = sprint(; context=io) do io
+    to_print = sprint(; context = io) do io
         print(io, " "^p.indent)
         if p.main
-            printstyled(io, headers[1], " "; color=:green, bold=true)
+            printstyled(io, headers[1], " "; color = :green, bold = true)
             length(headers) > 1 && printstyled(io, join(headers[2:end], ' '), " ")
         else
             print(io, p.header, " ")
@@ -88,31 +88,31 @@ function show_progress(io::IO, p::MiniProgressBar; termwidth=nothing, carriagere
             print(io, p.status)
         else
             hascolor = get(io, :color, false)::Bool
-            printstyled(io, "━"^n_filled; color=p.color)
+            printstyled(io, "━"^n_filled; color = p.color)
             if n_left > 0
                 if hascolor
                     if partial_filled > 0.5
-                        printstyled(io, "╸"; color=p.color) # More filled, use ╸
+                        printstyled(io, "╸"; color = p.color) # More filled, use ╸
                     else
-                        printstyled(io, "╺"; color=:light_black) # Less filled, use ╺
+                        printstyled(io, "╺"; color = :light_black) # Less filled, use ╺
                     end
                 end
                 c = hascolor ? "━" : " "
-                printstyled(io, c^(n_left-1+!hascolor); color=:light_black)
+                printstyled(io, c^(n_left - 1 + !hascolor); color = :light_black)
             end
-            printstyled(io, " "; color=:light_black)
+            printstyled(io, " "; color = :light_black)
             print(io, progress_text)
         end
         carriagereturn && print(io, "\r")
     end
     # Print everything in one call
-    print(io, to_print)
+    return print(io, to_print)
 end
 
 function end_progress(io, p::MiniProgressBar)
     ansi_enablecursor = "\e[?25h"
     ansi_clearline = "\e[2K"
-    print(io, ansi_enablecursor * ansi_clearline)
+    return print(io, ansi_enablecursor * ansi_clearline)
 end
 
 # Useful when writing a progress bar in the bottom
@@ -130,7 +130,7 @@ function print_progress_bottom(io::IO)
     ansi_clearline = "\e[2K"
     ansi_movecol1 = "\e[1G"
     ansi_moveup(n::Int) = string("\e[", n, "A")
-    print(io, "\e[S" * ansi_moveup(1) * ansi_clearline * ansi_movecol1)
+    return print(io, "\e[S" * ansi_moveup(1) * ansi_clearline * ansi_movecol1)
 end
 
 end
