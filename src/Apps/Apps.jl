@@ -10,6 +10,8 @@ using TOML, UUIDs
 using Dates
 import Pkg.Registry
 
+public add, rm, status, update, develop
+
 app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
 app_manifest_file() = joinpath(app_env_folder(), "AppManifest.toml")
 julia_bin_path() = joinpath(first(DEPOT_PATH), "bin")
