@@ -393,7 +393,7 @@ correct syntax version.
 function get_project_syntax_version(p::Project)::VersionNumber
     # First check syntax.julia_version entry in Project.other
     if p.julia_syntax_version !== nothing
-        return VersionNumber(syntax_table["julia_version"])
+        return VersionNumber(p.julia_syntax_version)
     end
 
     # If not found, default to minimum(compat["julia"])
