@@ -264,6 +264,10 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})
                     entry.exts = read_exts(get(info, "extensions", nothing))
+                    syntax = get(info, "syntax", nothing)::Union{Dict, Nothing}
+                    if syntax !== nothing
+                        entry.julia_syntax_version = read_field("julia_version", nothing, syntax, safe_version)
+                    end
                 catch
                     # TODO: Should probably not unconditionally log something
                     # @debug "Could not parse manifest entry for `$name`" f_or_io
@@ -395,6 +399,11 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "repo-url", repo_source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
         entry!(new_entry, "repo-subdir", entry.repo.subdir)
+        syntax_ver = entry.julia_syntax_version
+        if syntax_ver !== nothing
+            entry!(new_entry, "syntax", Dict("julia_version" => string(syntax_ver)))
+        end
+
         # Write registries as a vector (or nothing if empty)
         if !isempty(entry.registries)
             if length(entry.registries) == 1
