@@ -1250,7 +1250,8 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform = HostPl
                 # Despite the fact that we inherit the project, since the in-memory manifest
                 # has not been updated yet, if we try to load any dependencies, it may fail.
                 # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true)) --compile=min -t1 --startup-file=no $(triplet(platform))`)
+                # We only guarantee access to the `stdlib`, which is why we set `add_stdlib` here.
+                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true, add_stdlib=true)) --compile=min -t1 --startup-file=no $(triplet(platform))`)
                 meta_toml = String(read(select_cmd))
                 res = TOML.tryparse(meta_toml)
                 if res isa TOML.ParserError
@@ -1761,9 +1762,12 @@ function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID, 
     return order
 end
 
-function gen_build_code(build_file::String; inherit_project::Bool = false)
+function gen_build_code(build_file::String; inherit_project::Bool = false, add_stdlib::Bool = false)
     code = """
     $(Base.load_path_setup_code(false))
+    if $(add_stdlib)
+        push!(Base.LOAD_PATH, "@stdlib")
+    end
     cd($(repr(dirname(build_file))))
     include($(repr(build_file)))
     """
