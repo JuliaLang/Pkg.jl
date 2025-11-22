@@ -4,11 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Test
 using TOML
 using UUIDs
-if !isdefined(@__MODULE__, :Utils)
-    include("utils.jl")
-    using .Utils
-end
-
+using ..Utils
 
 temp_pkg_dir() do project_path
     cd(project_path) do;
@@ -155,32 +151,36 @@ temp_pkg_dir() do project_path
 end
 
 @testset "test resolve with tree hash" begin
-    mktempdir() do dir
-        path = copy_test_package(dir, "WorkspaceTestInstantiate")
-        cd(path) do
-            with_current_env() do
-                @test !isfile("Manifest.toml")
-                @test !isfile("test/Manifest.toml")
-                Pkg.test()
-                @test isfile("Manifest.toml")
-                @test !isfile("test/Manifest.toml")
-                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
-                Pkg.test()
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceTestInstantiate")
+            cd(path) do
+                with_current_env() do
+                    @test !isfile("Manifest.toml")
+                    @test !isfile("test/Manifest.toml")
+                    Pkg.test()
+                    @test isfile("Manifest.toml")
+                    @test !isfile("test/Manifest.toml")
+                    rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                    Pkg.test()
+                end
             end
         end
     end
 end
 
 @testset "workspace path resolution issue #4222" begin
-    mktempdir() do dir
-        path = copy_test_package(dir, "WorkspacePathResolution")
-        cd(path) do
-            with_current_env() do
-                # First resolve SubProjectB (non-root project) without existing Manifest
-                Pkg.activate("SubProjectB")
-                @test !isfile("Manifest.toml")
-                # Should be able to find SubProjectA and succeed
-                Pkg.update()
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspacePathResolution")
+            cd(path) do
+                with_current_env() do
+                    # First resolve SubProjectB (non-root project) without existing Manifest
+                    Pkg.activate("SubProjectB")
+                    @test !isfile("Manifest.toml")
+                    # Should be able to find SubProjectA and succeed
+                    Pkg.update()
+                end
             end
         end
     end

@@ -6,14 +6,8 @@ import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory,
 using TOML, Dates
 import Base: SHA1
 
-# Order-dependence in the tests, so we delay this until we need it
-if Base.find_package("Preferences") === nothing
-    @info "Installing Preferences for Pkg tests"
-    Pkg.add("Preferences") # Needed for sandbox and artifacts tests
-end
-using Preferences
-
 using ..Utils
+using Preferences
 
 # Helper function to create an artifact, then chmod() the whole thing to 0o644.  This is
 # important to keep hashes stable across platforms that have different umasks, changing

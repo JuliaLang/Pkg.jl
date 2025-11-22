@@ -57,10 +57,8 @@ module PkgTestsInner
                 "registry.jl",
                 "subdir.jl",
                 "extensions.jl",
-                "artifacts.jl",
                 "binaryplatforms.jl",
                 "platformengines.jl",
-                "sandbox.jl",
                 "resolve.jl",
                 "misc.jl",
                 "force_latest_compatible_version.jl",
@@ -80,6 +78,11 @@ module PkgTestsInner
             Aqua_pkgid = Base.PkgId(Base.UUID("4c88cf16-eb10-579e-8560-4a9242c79595"), "Aqua")
             if Base.locate_package(Aqua_pkgid) !== nothing
                 push!(test_files, "aqua.jl")
+            end
+            Preferences_pkgid = Base.PkgId(Base.UUID("21216c6a-2e73-6563-6e65-726566657250"), "Preferences")
+            if Base.locate_package(Preferences_pkgid) !== nothing
+                push!(test_files, "sandbox.jl")
+                push!(test_files, "artifacts.jl")
             end
 
             verbose = true

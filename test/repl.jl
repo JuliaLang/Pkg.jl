@@ -26,13 +26,15 @@ using ..Utils
 end
 
 @testset "accidental" begin
-    pkg"]?"
-    pkg"] ?"
-    pkg"]st"
-    pkg"] st"
-    pkg"]st -m"
-    pkg"] st -m"
-    pkg"]"  # noop
+    isolate() do
+        pkg"]?"
+        pkg"] ?"
+        pkg"]st"
+        pkg"] st"
+        pkg"]st -m"
+        pkg"] st -m"
+        pkg"]"  # noop
+    end
 end
 
 temp_pkg_dir() do project_path
