@@ -3879,8 +3879,8 @@ end
 
 # Test the readonly functionality
 @testset "Readonly Environment Tests" begin
-    mktempdir() do dir
-        cd(dir) do
+    isolate() do
+        cd_tempdir() do dir
             # Activate the environment
             Pkg.activate(".")
 
