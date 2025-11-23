@@ -1070,9 +1070,11 @@ end
 end
 
 @testset "Suggest `Pkg.develop` instead of `Pkg.add`" begin
-    mktempdir() do tmp_dir
-        touch(joinpath(tmp_dir, "Project.toml"))
-        @test_throws Pkg.Types.PkgError Pkg.add(; path = tmp_dir)
+    isolate() do
+        mktempdir() do tmp_dir
+            touch(joinpath(tmp_dir, "Project.toml"))
+            @test_throws Pkg.Types.PkgError Pkg.add(; path = tmp_dir)
+        end
     end
 end
 
@@ -1082,76 +1084,75 @@ end
 end
 
 @testset "Issue #3147" begin
-    prev_project = Base.active_project()
+    isolate() do
 
-    @testset "Pkg.add" begin
-        Pkg.activate(temp = true)
-        mktempdir() do tmp_dir
-            LibGit2.close(LibGit2.clone(TEST_PKG.url, tmp_dir))
-            Pkg.develop(path = tmp_dir)
+        @testset "Pkg.add" begin
+            Pkg.activate(temp = true)
+            mktempdir() do tmp_dir
+                LibGit2.close(LibGit2.clone(TEST_PKG.url, tmp_dir))
+                Pkg.develop(path = tmp_dir)
+                Pkg.pin("Example")
+                Pkg.add("Example")
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version > v"0.5.3"
+            end
+            Pkg.rm("Example")
+
+            Pkg.add(url = TEST_PKG.url, rev = "29aa1b4")
             Pkg.pin("Example")
             Pkg.add("Example")
             info = Pkg.dependencies()[TEST_PKG.uuid]
             @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version > v"0.5.3"
+            @test !info.is_tracking_path
+            @test info.is_tracking_repo
+            @test info.version == v"0.5.3"
+            Pkg.rm("Example")
         end
-        Pkg.rm("Example")
 
-        Pkg.add(url = TEST_PKG.url, rev = "29aa1b4")
-        Pkg.pin("Example")
-        Pkg.add("Example")
-        info = Pkg.dependencies()[TEST_PKG.uuid]
-        @test info.is_pinned
-        @test !info.is_tracking_path
-        @test info.is_tracking_repo
-        @test info.version == v"0.5.3"
-        Pkg.rm("Example")
-    end
+        @testset "Pkg.update" begin
+            Pkg.activate(temp = true)
+            mktempdir() do tmp_dir
+                ver = v"0.5.3"
+                repo = LibGit2.clone(TEST_PKG.url, tmp_dir)
+                tag = LibGit2.GitObject(repo, "v$ver")
+                hash = string(LibGit2.target(tag))
+                LibGit2.checkout!(repo, hash)
+                LibGit2.close(repo)
+                Pkg.develop(path = tmp_dir)
+                Pkg.pin("Example")
+                Pkg.update("Example")  # pkg should remain pinned
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == ver
 
-    @testset "Pkg.update" begin
-        Pkg.activate(temp = true)
-        mktempdir() do tmp_dir
-            ver = v"0.5.3"
-            repo = LibGit2.clone(TEST_PKG.url, tmp_dir)
-            tag = LibGit2.GitObject(repo, "v$ver")
-            hash = string(LibGit2.target(tag))
-            LibGit2.checkout!(repo, hash)
-            LibGit2.close(repo)
-            Pkg.develop(path = tmp_dir)
-            Pkg.pin("Example")
-            Pkg.update("Example")  # pkg should remain pinned
-            info = Pkg.dependencies()[TEST_PKG.uuid]
-            @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version == ver
+                # modify the pkg version manually, to mimic developing this pkg
+                dev_ver = VersionNumber(ver.major, ver.minor, ver.patch + 1)
+                fn = joinpath(tmp_dir, "Project.toml")
+                toml = TOML.parse(read(fn, String))
+                toml["version"] = string(dev_ver)
+                open(io -> TOML.print(io, toml), fn, "w")
+                Pkg.update("Example")  # noop since Pkg.is_fully_pinned(...) is true
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == ver
 
-            # modify the pkg version manually, to mimic developing this pkg
-            dev_ver = VersionNumber(ver.major, ver.minor, ver.patch + 1)
-            fn = joinpath(tmp_dir, "Project.toml")
-            toml = TOML.parse(read(fn, String))
-            toml["version"] = string(dev_ver)
-            open(io -> TOML.print(io, toml), fn, "w")
-            Pkg.update("Example")  # noop since Pkg.is_fully_pinned(...) is true
-            info = Pkg.dependencies()[TEST_PKG.uuid]
-            @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version == ver
-
-            Pkg.pin("Example")  # pinning a 2ⁿᵈ time updates versions in the manifest
-            info = Pkg.dependencies()[TEST_PKG.uuid]
-            @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version == dev_ver
+                Pkg.pin("Example")  # pinning a 2ⁿᵈ time updates versions in the manifest
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == dev_ver
+            end
+            Pkg.rm("Example")
         end
-        Pkg.rm("Example")
     end
-
-    Pkg.activate(prev_project)
 end
 
 @testset "check_registered error paths" begin
@@ -1188,52 +1189,54 @@ end
 
 # issue #2291: relative paths in manifests should be resolved relative to manifest location
 @testset "relative path resolution from different directories (issue #2291)" begin
-    mktempdir() do dir
-        # Create a local package with a git repo
-        pkg_path = joinpath(dir, "LocalPackage")
-        mkpath(joinpath(pkg_path, "src"))
-        write(
-            joinpath(pkg_path, "Project.toml"), """
-            name = "LocalPackage"
-            uuid = "00000000-0000-0000-0000-000000000001"
-            version = "0.1.0"
-            """
-        )
-        write(
-            joinpath(pkg_path, "src", "LocalPackage.jl"), """
-            module LocalPackage
-            greet() = "Hello from LocalPackage!"
+    isolate() do
+        mktempdir() do dir
+            # Create a local package with a git repo
+            pkg_path = joinpath(dir, "LocalPackage")
+            mkpath(joinpath(pkg_path, "src"))
+            write(
+                joinpath(pkg_path, "Project.toml"), """
+                name = "LocalPackage"
+                uuid = "00000000-0000-0000-0000-000000000001"
+                version = "0.1.0"
+                """
+            )
+            write(
+                joinpath(pkg_path, "src", "LocalPackage.jl"), """
+                module LocalPackage
+                greet() = "Hello from LocalPackage!"
+                end
+                """
+            )
+
+            # Initialize git repo
+            LibGit2.with(LibGit2.init(pkg_path)) do repo
+                LibGit2.add!(repo, "*")
+                LibGit2.commit(repo, "Initial commit"; author = TEST_SIG, committer = TEST_SIG)
             end
-            """
-        )
 
-        # Initialize git repo
-        LibGit2.with(LibGit2.init(pkg_path)) do repo
-            LibGit2.add!(repo, "*")
-            LibGit2.commit(repo, "Initial commit"; author = TEST_SIG, committer = TEST_SIG)
-        end
+            # Create a project in a subdirectory and add the package with relative path
+            project_path = joinpath(dir, "project")
+            mkpath(project_path)
+            cd(project_path) do
+                Pkg.activate(".")
+                Pkg.add(Pkg.PackageSpec(path = "../LocalPackage"))
 
-        # Create a project in a subdirectory and add the package with relative path
-        project_path = joinpath(dir, "project")
-        mkpath(project_path)
-        cd(project_path) do
-            Pkg.activate(".")
-            Pkg.add(Pkg.PackageSpec(path = "../LocalPackage"))
+                # Verify the package was added with relative path
+                manifest = read_manifest(joinpath(project_path, "Manifest.toml"))
+                pkg_entry = manifest[UUID("00000000-0000-0000-0000-000000000001")]
+                @test pkg_entry.repo.source == "../LocalPackage"
+            end
 
-            # Verify the package was added with relative path
-            manifest = read_manifest(joinpath(project_path, "Manifest.toml"))
-            pkg_entry = manifest[UUID("00000000-0000-0000-0000-000000000001")]
-            @test pkg_entry.repo.source == "../LocalPackage"
-        end
-
-        # Now change to parent directory and try to update - this should work
-        cd(dir) do
-            Pkg.activate("project")
-            Pkg.update()  # This should not fail
-            # Check the package is installed by looking it up in dependencies
-            pkg_info = Pkg.dependencies()[UUID("00000000-0000-0000-0000-000000000001")]
-            @test pkg_info.name == "LocalPackage"
-            @test isinstalled(PackageSpec(uuid = UUID("00000000-0000-0000-0000-000000000001"), name = "LocalPackage"))
+            # Now change to parent directory and try to update - this should work
+            cd(dir) do
+                Pkg.activate("project")
+                Pkg.update()  # This should not fail
+                # Check the package is installed by looking it up in dependencies
+                pkg_info = Pkg.dependencies()[UUID("00000000-0000-0000-0000-000000000001")]
+                @test pkg_info.name == "LocalPackage"
+                @test isinstalled(PackageSpec(uuid = UUID("00000000-0000-0000-0000-000000000001"), name = "LocalPackage"))
+            end
         end
     end
 end

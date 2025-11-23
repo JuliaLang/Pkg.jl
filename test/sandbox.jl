@@ -1,18 +1,13 @@
 module SandboxTests
 import ..Pkg # ensure we are using the correct Pkg
 
-# Order-dependence in the tests, so we delay this until we need it
-if Base.find_package("Preferences") === nothing
-    @info "Installing Preferences for Pkg tests"
-    Pkg.add("Preferences") # Needed for sandbox and artifacts tests
-end
+using ..Utils
+using Preferences
 
 using Test
 using UUIDs
 using Pkg
-using Preferences
 
-using ..Utils
 test_test(fn, name; kwargs...) = Pkg.test(name; test_fn = fn, kwargs...)
 test_test(fn; kwargs...) = Pkg.test(; test_fn = fn, kwargs...)
 
