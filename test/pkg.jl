@@ -700,20 +700,22 @@ end
 if isdefined(Base.Filesystem, :delayed_delete_ref)
     @testset "Pkg.gc for delayed deletes" begin
         mktempdir() do root
-            dir = joinpath(root, "julia_delayed_deletes")
-            mkdir(dir)
-            testfile = joinpath(dir, "testfile")
-            write(testfile, "foo bar")
-            delayed_delete_ref_path = Base.Filesystem.delayed_delete_ref()
-            mkpath(delayed_delete_ref_path)
-            ref = tempname(delayed_delete_ref_path; cleanup = false)
-            write(ref, testfile)
-            @test isfile(testfile)
-            Pkg.gc()
-            @test !ispath(testfile)
-            @test !ispath(dir)
-            @test !ispath(ref)
-            @test !ispath(delayed_delete_ref_path) || !isempty(readdir(delayed_delete_ref_path))
+            with_temp_env(root) do
+                dir = joinpath(root, "julia_delayed_deletes")
+                mkdir(dir)
+                testfile = joinpath(dir, "testfile")
+                write(testfile, "foo bar")
+                delayed_delete_ref_path = Base.Filesystem.delayed_delete_ref()
+                mkpath(delayed_delete_ref_path)
+                ref = tempname(delayed_delete_ref_path; cleanup = false)
+                write(ref, testfile)
+                @test isfile(testfile)
+                Pkg.gc()
+                @test !ispath(testfile)
+                @test !ispath(dir)
+                @test !ispath(ref)
+                @test !ispath(delayed_delete_ref_path) || !isempty(readdir(delayed_delete_ref_path))
+            end
         end
     end
 end
@@ -1077,8 +1079,10 @@ end
 end
 
 @testset "Issue #3069" begin
-    p = PackageSpec(; path = "test_packages/Example")
-    @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
+    with_temp_env() do
+        p = PackageSpec(; path = "test_packages/Example")
+        @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
+    end
 end
 
 @testset "Issue #3147" begin
