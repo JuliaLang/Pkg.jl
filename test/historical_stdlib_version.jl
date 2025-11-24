@@ -310,9 +310,8 @@ isolate(loaded_depot = true) do
 
             Pkg.activate(temp = true)
             # Stdlib add (julia_version == nothing)
-            # Note: this is currently known to be broken, we get the wrong GMP_jll!
             Pkg.add(; name = "GMP_jll", version = v"6.2.1+1", julia_version = nothing)
-            @test_broken Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
+            @test Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
         end
 
         @testset "julia_version = nothing" begin
