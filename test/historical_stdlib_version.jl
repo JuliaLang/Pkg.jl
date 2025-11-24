@@ -349,6 +349,26 @@ isolate(loaded_depot = true) do
                     end
                 end
             end
+
+            @testset "Artifacts stdlib never falls back to registry" begin
+                # Test that when resolving for Julia 1.10 (where Artifacts is a stdlib with version=nothing),
+                # Pkg never installs the external Artifacts v1.3.0 from the registry
+                Pkg.activate(temp = true)
+                # Add a package that depends on Artifacts with julia_version = v"1.10"
+                # Artifacts should remain a stdlib, not be resolved to v1.3.0 from registry
+                ctx = Pkg.Types.Context(; julia_version = v"1.10")
+                # GMP_jll for Julia 1.10 should bring in Artifacts as a dependency
+                Pkg.add(ctx, [PackageSpec(; name = "GMP_jll")])
+
+                # Check that Artifacts is not in the manifest as an external package
+                # (If it were incorrectly resolved from registry, it would appear with version v1.3.0)
+                artifacts_uuid = Base.UUID("56f22d72-fd6d-98f1-02f0-08ddc0907c33")
+                manifest_entry = get(ctx.env.manifest, artifacts_uuid, nothing)
+                if manifest_entry !== nothing
+                    # Artifacts should not have v1.3.0 (the registry version)
+                    @test manifest_entry.version != v"1.3.0"
+                end
+            end
         end
         HistoricalStdlibVersions.unregister!()
     end

@@ -763,7 +763,7 @@ function resolve_versions!(
 
     jll_fix = Dict{UUID, VersionNumber}()
     for pkg in pkgs
-        if !is_stdlib(pkg.uuid) && endswith(pkg.name, "_jll") && pkg.version isa VersionNumber
+        if !is_stdlib(pkg.uuid, julia_version) && endswith(pkg.name, "_jll") && pkg.version isa VersionNumber
             jll_fix[pkg.uuid] = pkg.version
         end
     end
@@ -814,7 +814,7 @@ function resolve_versions!(
     # Unless using the unbounded or historical resolver, always allow stdlibs to update. Helps if the previous resolve
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
-    reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
+    reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid, julia_version) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
     deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
     graph = Resolve.Graph(deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version)
     Resolve.simplify_graph!(graph)
@@ -945,6 +945,7 @@ function deps_graph(
             # unregistered stdlib we must special-case it here.  This is further
             # complicated by the fact that we can ask this question relative to
             # a Julia version.
+            # CRITICAL: Never resolve stdlibs from registry for target julia_version
             if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
                 # We use our historical stdlib versioning data to unpack the version, deps and weakdeps of this uuid
                 stdlib_info = stdlibs_for_julia_version[uuid]
@@ -2012,7 +2013,7 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
     if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
         return pkg # overwrite everything, nothing to copy over
     end
-    if is_stdlib(pkg.uuid)
+    if is_stdlib(pkg.uuid, ctx.julia_version)
         return pkg # stdlibs are not versioned like other packages
     elseif is_dep && (
             (isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
@@ -2511,18 +2512,19 @@ function up(
     return build_versions(ctx, union(new_apply, new_git))
 end
 
-function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
+function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
     if entry === nothing
         cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
         pkgerror("package $(err_rep(pkg)) not found in the manifest, run `$cmd` and retry.")
     end
+    registries = ctx.registries
 
     #if entry.pinned && pkg.version == VersionSpec()
     #    println(ctx.io, "package $(err_rep(pkg)) already pinned")
     #end
     # update pinned package
     pkg.pinned = true
-    if is_stdlib(pkg.uuid)
+    if is_stdlib(pkg.uuid, ctx.julia_version)
         return nothing # nothing left to do
     elseif pkg.version == VersionSpec()
         pkg.version = entry.version # pin at current version
@@ -2543,7 +2545,7 @@ end
 is_fully_pinned(ctx::Context) = !isempty(ctx.env.manifest.deps) && all(kv -> last(kv).pinned, ctx.env.manifest.deps)
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
-    foreach(pkg -> update_package_pin!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
+    foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx.env, pkgs)
 
     # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
