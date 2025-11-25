@@ -102,7 +102,11 @@ module PkgTestsInner
         end
 
         # Make sure that none of our tests have left temporary registries lying around
-        @test isdir(joinpath(Base.DEPOT_PATH[1], "registries")) == original_depot_had_registries
+        # Skip this check when running in Julia base CI where other tests (e.g. stdlib_dependencies)
+        # may install registries in the shared DEPOT_PATH before this check runs
+        if !Base.get_bool_env("BUILDKITE", false)
+            @test isdir(joinpath(Base.DEPOT_PATH[1], "registries")) == original_depot_had_registries
+        end
     end
 
     if haskey(ENV, "CI")
