@@ -495,6 +495,9 @@ Get the decompression command for a tarball by detecting format via magic bytes.
 """
 function get_extract_cmd(tarball_path::AbstractString)
     format = detect_archive_format(tarball_path)
+    # 7z appears to normalize paths internally, which can cause mis-resolution
+    # if symbolic links are present
+    tarball_path = realpath(tarball_path)
     if format == "zstd"
         return `$(exezstd()) -d -c $tarball_path`
     else
