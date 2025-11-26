@@ -49,6 +49,18 @@ temp_pkg_dir() do project_path
                     Pkg.test()
                 end
             end
+
+            @testset "Don't add paths or URLs to sources in v1.12" begin
+                # Test that we're not creating sources when dev-ing
+                Pkg.generate("A")
+                Pkg.generate("B")
+                Pkg.activate("A")
+                Pkg.develop(path="B")
+                @test isempty(Pkg.project().sources)
+
+                Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master")
+                @test isempty(Pkg.project().sources)
+            end
         end
     end
 end
