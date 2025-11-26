@@ -194,46 +194,25 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
     end
 end
 
+
 function update_source_if_set(env, pkg)
     project = env.project
     source = get(project.sources, pkg.name, nothing)
     if source !== nothing
-        if pkg.repo == GitRepo()
-            delete!(project.sources, pkg.name)
-        else
-            # This should probably not modify the dicts directly...
-            if pkg.repo.source !== nothing
-                source["url"] = pkg.repo.source
-                delete!(source, "path")
-            end
-            if pkg.repo.rev !== nothing
-                source["rev"] = pkg.repo.rev
-                delete!(source, "path")
-            end
-            if pkg.repo.subdir !== nothing
-                source["subdir"] = pkg.repo.subdir
-            end
-            if pkg.path !== nothing
-                source["path"] = pkg.path
-                delete!(source, "url")
-                delete!(source, "rev")
-            end
+        # This should probably not modify the dicts directly...
+        if pkg.repo.source !== nothing
+            source["url"] = pkg.repo.source
         end
-        if pkg.subdir !== nothing
-            source["subdir"] = pkg.subdir
+        if pkg.repo.rev !== nothing
+            source["rev"] = pkg.repo.rev
         end
+        if pkg.path !== nothing
+            source["path"] = pkg.path
+        end
+
         path, repo = get_path_repo(project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
             pkg.path = path
-        end
-        if repo.source !== nothing
-            pkg.repo.source = repo.source
-        end
-        if repo.rev !== nothing
-            pkg.repo.rev = repo.rev
-        end
-        if repo.subdir !== nothing
-            pkg.repo.subdir = repo.subdir
         end
     end
 
