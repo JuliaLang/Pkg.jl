@@ -55,10 +55,10 @@ temp_pkg_dir() do project_path
                 Pkg.generate("A")
                 Pkg.generate("B")
                 Pkg.activate("A")
-                Pkg.develop(path="B")
+                Pkg.develop(path = "B")
                 @test isempty(Pkg.project().sources)
 
-                Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master")
+                Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "master")
                 @test isempty(Pkg.project().sources)
             end
         end
