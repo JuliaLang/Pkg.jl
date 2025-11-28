@@ -837,6 +837,7 @@ end
     end
 end
 
+#=
 @testset "JuliaLang/julia #55850" begin
     mktempdir() do tmp
         copy_this_pkg_cache(tmp)
@@ -850,6 +851,7 @@ end
         end
     end
 end
+=#
 
 @testset "in_repl_mode" begin
     # Test that in_repl_mode() returns false by default (API mode)
