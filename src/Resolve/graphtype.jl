@@ -1083,6 +1083,12 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
         sources
 
     seen = copy(staged)
+    staged_next = Set{Int}()
+
+    # Pre-allocate workspace for added constraints
+    max_spp = maximum(spp, init = 0)
+    added_constr1 = BitVector(undef, max_spp)
+    old_gconstr1 = BitVector(undef, max_spp)
 
     # Pre-allocate workspace for added constraints
     max_spp = maximum(spp, init = 0)
