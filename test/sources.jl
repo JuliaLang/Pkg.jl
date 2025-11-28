@@ -21,7 +21,7 @@ temp_pkg_dir() do project_path
                     cp("Project.toml.bak", "Project.toml"; force = true)
                     cp("BadManifest.toml", "Manifest.toml"; force = true)
                     Pkg.resolve()
-                    @test Pkg.project().sources["Example"] == Dict("rev" => "master", "url" => "https://github.com/JuliaLang/Example.jl")
+                    @test Pkg.project().sources["Example"] == Dict("url" => "https://github.com/JuliaLang/Example.jl")
                     @test Pkg.project().sources["LocalPkg"] == Dict("path" => "LocalPkg")
                 end
             end
@@ -48,6 +48,18 @@ temp_pkg_dir() do project_path
                 with_current_env() do
                     Pkg.test()
                 end
+            end
+
+            @testset "Don't add paths or URLs to sources in v1.12" begin
+                # Test that we're not creating sources when dev-ing
+                Pkg.generate("A")
+                Pkg.generate("B")
+                Pkg.activate("A")
+                Pkg.develop(path = "B")
+                @test isempty(Pkg.project().sources)
+
+                Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "master")
+                @test isempty(Pkg.project().sources)
             end
         end
     end

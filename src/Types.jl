@@ -1299,19 +1299,6 @@ function write_env(
                 @assert entry.repo.subdir == repo.subdir
             end
         end
-        if entry !== nothing
-            if entry.path !== nothing
-                # Convert path from manifest-relative to project-relative before writing
-                project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
-                env.project.sources[pkg] = Dict("path" => project_relative_path)
-            elseif entry.repo != GitRepo()
-                d = Dict{String, String}()
-                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
-                entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
-                entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
-                env.project.sources[pkg] = d
-            end
-        end
     end
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
