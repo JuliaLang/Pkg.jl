@@ -648,4 +648,24 @@ end
     end
 end
 
+@testset "Syntax version clamping" begin
+    # Test that old compat/syntax declarations are clamped to v1.13 (NON_VERSIONED_SYNTAX)
+    test_cases = [
+        ("[compat]\njulia = \"1\"", v"1.13"),        # ancient compat clamped
+        ("[compat]\njulia = \"1.6\"", v"1.13"),      # old compat clamped
+        ("[compat]\njulia = \"1.14\"", v"1.14"),     # new compat not clamped
+        ("[syntax]\njulia_version = \"1.0\"", v"1.13"),  # explicit old clamped
+        ("[syntax]\njulia_version = \"1.14\"", v"1.14"), # explicit new not clamped
+    ]
+    mktempdir() do test_dir
+        for (i, (section, expected)) in enumerate(test_cases)
+            pkg_dir = joinpath(test_dir, "Pkg$i")
+            mkpath(pkg_dir)
+            write(joinpath(pkg_dir, "Project.toml"), "name = \"Pkg$i\"\nuuid = \"12345678-1234-1234-1234-12345678901$i\"\n$section\n")
+            project = Pkg.Types.read_project(joinpath(pkg_dir, "Project.toml"))
+            @test Pkg.Operations.get_project_syntax_version(project) == expected
+        end
+    end
+end
+
 end # module
