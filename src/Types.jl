@@ -1036,8 +1036,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 else
-                    # For commit hashes, fetch all branches
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
+                    # For commit hashes, fetch all branches including the older commits
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
                 end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
                 # If still not found, try with broader refspec as fallback
