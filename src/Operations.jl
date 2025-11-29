@@ -850,6 +850,10 @@ function resolve_versions!(
             push!(pkgs, PackageSpec(; name = name, uuid = uuid, version = ver))
         end
     end
+
+    # Collect all UUIDs that will be in the manifest
+    pkgs_uuids = Set{UUID}(pkg.uuid for pkg in pkgs)
+
     final_deps_map = Dict{UUID, Dict{String, UUID}}()
     for pkg in pkgs
         load_tree_hash!(registries, pkg, julia_version)
@@ -857,6 +861,8 @@ function resolve_versions!(
             if pkg.uuid in keys(fixed)
                 deps_fixed = Dict{String, UUID}()
                 for dep in keys(fixed[pkg.uuid].requires)
+                    # Only include deps that are actually in the manifest
+                    dep in pkgs_uuids || continue
                     deps_fixed[names[dep]] = dep
                 end
                 deps_fixed
@@ -871,6 +877,8 @@ function resolve_versions!(
                     pkg.uuid, pkg.version
                 )
                 for uuid in deps_for_version
+                    # Only include deps that are actually in the manifest
+                    uuid in pkgs_uuids || continue
                     d[names[uuid]] = uuid
                 end
                 d
