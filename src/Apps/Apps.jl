@@ -67,6 +67,11 @@ end
 
 
 function overwrite_file_if_different(file, content)
+    # Windows batch files require CRLF line endings for reliable label parsing
+    if endswith(file, ".bat")
+        content = replace(content, "\r\n" => "\n")  # normalize to LF first
+        content = replace(content, "\n" => "\r\n")  # then convert to CRLF
+    end
     return if !isfile(file) || read(file, String) != content
         mkpath(dirname(file))
         write(file, content)
