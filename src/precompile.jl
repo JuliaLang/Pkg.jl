@@ -1,6 +1,7 @@
 using LibGit2: LibGit2
 using Tar: Tar
 using Downloads
+using p7zip_jll
 
 # used by REPLExt too
 function _run_precompilation_script_setup()
@@ -9,6 +10,9 @@ function _run_precompilation_script_setup()
         empty!(DEPOT_PATH)
         pushfirst!(DEPOT_PATH, tmp)
         pushfirst!(LOAD_PATH, "@")
+        if isempty(p7zip_jll.artifact_dir)
+            p7zip_jll.__init__()
+        end
         write(
             "Project.toml",
             """
