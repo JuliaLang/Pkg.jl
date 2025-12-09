@@ -425,8 +425,8 @@ function fixups_from_projectfile!(ctx::Context)
             pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
             # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
             # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
-            for (name, _) in pkg.weakdeps
-                if !(name in p.deps)
+            for (name, uuid) in pkg.weakdeps
+                if !(uuid in p.deps)
                     delete!(pkg.deps, name)
                 end
             end
