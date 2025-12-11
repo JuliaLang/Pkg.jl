@@ -1501,9 +1501,9 @@ function find_urls(registries::Vector{Registry.RegistryInstance}, uuid::UUID)
 end
 
 
-download_source(ctx::Context; readonly = true) = download_source(ctx, values(ctx.env.manifest); readonly)
+download_source(ctx::Context; readonly::Bool = true) = download_source(ctx, collect(values(ctx.env.manifest)); readonly)
 
-function download_source(ctx::Context, pkgs; readonly = true)
+function download_source(ctx::Context, pkgs; readonly::Bool = true)
     pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
     for pkg in pkgs
@@ -1614,7 +1614,8 @@ function download_source(ctx::Context, pkgs; readonly = true)
                 if exc_or_success_or_nothing === nothing
                     continue # represents when another process did the install
                 end
-                success, (urls, path) = exc_or_success_or_nothing, bt_or_pathurls
+                success = exc_or_success_or_nothing::Bool
+                (urls, path) = bt_or_pathurls::Tuple{Set{String}, String}
                 success || push!(missed_packages, (; pkg, urls, path))
                 bar.current = i
                 str = sprint(; context = ctx.io) do io
@@ -1878,11 +1879,11 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_r
                 create_cachedir_tag(joinpath(depots1(), "scratchspaces"))
                 log_file = joinpath(scratch, "build.log")
                 # Associate the logfile with the package being built
-                dict = Dict{String, Any}(
-                    scratch => [
-                        Dict{String, Any}("time" => Dates.now(), "parent_projects" => [projectfile_path(source_path)]),
-                    ]
-                )
+                dict = Dict{String, Any}()
+                inner_dict = Dict{String, Any}()
+                inner_dict["time"] = Dates.now()
+                inner_dict["parent_projects"] = [projectfile_path(source_path)]
+                dict[scratch] = [inner_dict]
                 open(joinpath(depots1(), "logs", "scratch_usage.toml"), "a") do io
                     TOML.print(io, dict)
                 end
