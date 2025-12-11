@@ -265,8 +265,8 @@ isolate(loaded_depot = true) do
         end
 
         @testset "Old Pkg add regression" begin
-            Pkg.activate(temp=true)
-            Pkg.add(; name="Pkg", julia_version=v"1.11")
+            Pkg.activate(temp = true)
+            Pkg.add(; name = "Pkg", julia_version = v"1.11")
         end
 
         @testset "Stdlib add" begin
