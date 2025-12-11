@@ -1,0 +1,97 @@
+name: Backport Label Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - 'release-*'
+
+jobs:
+  remove-backport-labels:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Extract version from branch and remove backport labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const baseBranch = context.payload.pull_request.base.ref;
+            const match = baseBranch.match(/^release-(\d+\.\d+)$/);
+            if (!match) {
+              console.log(`Base branch ${baseBranch} does not match release-X.Y pattern`);
+              return;
+            }
+
+            const version = match[1];
+            const backportLabel = `backport-${version}`;
+            console.log(`Looking for PRs to remove label: ${backportLabel}`);
+
+            // Get all commits in this PR
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+
+            // Extract PR numbers from commit messages (cherry-pick format: (#1234))
+            // Map PR number to commit SHA
+            const prToCommit = new Map();
+            const prPattern = /\(#(\d+)\)/g;
+
+            for (const commit of commits) {
+              const message = commit.commit.message;
+              let match;
+              while ((match = prPattern.exec(message)) !== null) {
+                const prNum = parseInt(match[1], 10);
+                if (!prToCommit.has(prNum)) {
+                  prToCommit.set(prNum, commit.sha);
+                }
+              }
+            }
+
+            console.log(`Found cherry-picked PRs: ${[...prToCommit.keys()].join(', ')}`);
+
+            // Remove the backport label from each referenced PR
+            for (const [prNumber, commitSha] of prToCommit) {
+              try {
+                // Check if the PR has the label
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                });
+
+                const hasLabel = pr.labels.some(label => label.name === backportLabel);
+                if (!hasLabel) {
+                  console.log(`PR #${prNumber} does not have label ${backportLabel}`);
+                  continue;
+                }
+
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: backportLabel,
+                });
+                console.log(`Removed label ${backportLabel} from PR #${prNumber}`);
+
+                // Add a comment linking to the backport PR and commit
+                const backportPrNumber = context.payload.pull_request.number;
+                const commitUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${commitSha}`;
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: `This was backported to release-${version} in #${backportPrNumber} (commit ${commitSha.substring(0, 7)}: ${commitUrl})`,
+                });
+                console.log(`Added backport comment to PR #${prNumber}`);
+              } catch (error) {
+                if (error.status === 404) {
+                  console.log(`PR #${prNumber} not found or label not present`);
+                } else {
+                  console.error(`Error processing PR #${prNumber}: ${error.message}`);
+                }
+              }
+            }
