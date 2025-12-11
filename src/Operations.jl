@@ -224,7 +224,12 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
 
     for pkg in pkgs
         entry = PackageEntry(;
-            name = pkg.name, version = pkg.version, pinned = pkg.pinned,
+            name = pkg.name,
+            # PackageEntry requires version::Union{VersionNumber, Nothing}
+            # pkg.version may be a VersionSpec in some cases (e.g., when freeing a package)
+            # so we convert non-VersionNumber values to nothing
+            version = pkg.version isa VersionNumber ? pkg.version : nothing,
+            pinned = pkg.pinned,
             tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid
         )
         if is_stdlib(pkg.uuid, julia_version)
