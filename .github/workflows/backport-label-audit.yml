@@ -1,0 +1,170 @@
+name: Backport Label Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to audit (e.g., 1.13)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (only report, do not modify)'
+        required: true
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+        default: 'true'
+
+jobs:
+  audit-backport-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Audit backport labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ inputs.version }}';
+            const dryRun = '${{ inputs.dry_run }}' === 'true';
+
+            // Validate version format
+            if (!/^\d+\.\d+$/.test(version)) {
+              core.setFailed(`Invalid version format: ${version}. Expected X.Y (e.g., 1.13)`);
+              return;
+            }
+
+            const backportLabel = `backport-${version}`;
+            const releaseBranch = `release-${version}`;
+
+            console.log(`Auditing label: ${backportLabel}`);
+            console.log(`Release branch: ${releaseBranch}`);
+            console.log(`Dry run: ${dryRun}`);
+            console.log('');
+
+            // Check if the release branch exists
+            try {
+              await github.rest.repos.getBranch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                branch: releaseBranch,
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                core.setFailed(`Release branch ${releaseBranch} does not exist`);
+                return;
+              }
+              throw error;
+            }
+
+            // Get all commits on the release branch to extract cherry-picked PR numbers
+            console.log(`Fetching commits from ${releaseBranch}...`);
+            const commits = await github.paginate(github.rest.repos.listCommits, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: releaseBranch,
+              per_page: 100,
+            });
+
+            // Map PR number to commit SHA
+            const prToCommit = new Map();
+            const prPattern = /\(#(\d+)\)/g;
+
+            for (const commit of commits) {
+              const message = commit.commit.message;
+              let match;
+              while ((match = prPattern.exec(message)) !== null) {
+                const prNum = parseInt(match[1], 10);
+                if (!prToCommit.has(prNum)) {
+                  prToCommit.set(prNum, commit.sha);
+                }
+              }
+            }
+
+            console.log(`Found ${prToCommit.size} cherry-picked PRs in ${releaseBranch}`);
+            console.log('');
+
+            // Find all closed PRs with the backport label
+            const labeledPRs = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: backportLabel,
+              state: 'closed',
+              per_page: 100,
+            });
+
+            console.log(`Found ${labeledPRs.length} closed issues/PRs with label ${backportLabel}`);
+            console.log('');
+
+            const toRemove = [];
+            const toKeep = [];
+
+            for (const issue of labeledPRs) {
+              // Only process PRs (issues don't have pull_request property)
+              if (!issue.pull_request) {
+                continue;
+              }
+
+              if (prToCommit.has(issue.number)) {
+                toRemove.push({ issue, commitSha: prToCommit.get(issue.number) });
+              } else {
+                toKeep.push(issue);
+              }
+            }
+
+            console.log('=== PRs already backported (label should be removed) ===');
+            if (toRemove.length === 0) {
+              console.log('None');
+            } else {
+              for (const { issue, commitSha } of toRemove) {
+                console.log(`  #${issue.number}: ${issue.title} (${commitSha.substring(0, 7)})`);
+              }
+            }
+            console.log('');
+
+            console.log('=== PRs still needing backport (label should remain) ===');
+            if (toKeep.length === 0) {
+              console.log('None');
+            } else {
+              for (const pr of toKeep) {
+                console.log(`  #${pr.number}: ${pr.title}`);
+              }
+            }
+            console.log('');
+
+            if (dryRun) {
+              console.log('Dry run mode - no changes made');
+              if (toRemove.length > 0) {
+                console.log(`Would remove ${backportLabel} from ${toRemove.length} PR(s)`);
+              }
+              return;
+            }
+
+            // Remove labels and add comments
+            console.log('Removing labels...');
+            for (const { issue, commitSha } of toRemove) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: backportLabel,
+                });
+
+                const commitUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${commitSha}`;
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `This was backported to release-${version} (commit ${commitSha.substring(0, 7)}: ${commitUrl}) - detected by audit workflow`,
+                });
+
+                console.log(`  Removed label from #${issue.number}`);
+              } catch (error) {
+                console.error(`  Error processing #${issue.number}: ${error.message}`);
+              }
+            }
+
+            console.log('');
+            console.log(`Done. Removed ${backportLabel} from ${toRemove.length} PR(s)`);
