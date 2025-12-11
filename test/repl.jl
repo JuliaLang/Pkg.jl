@@ -395,6 +395,12 @@ temp_pkg_dir() do project_path
             @test "Example" in c
             pkg"free Example"
 
+            # Test for issue #59829 - completion with only trailing space should work
+            # When typing "rm <TAB>" with Example installed, should complete to "rm Example"
+            c, r = test_complete("rm ")
+            @test "Example" in c
+            @test apply_completion("rm ") == "rm Example"
+
             # help mode
             @test apply_completion("?ad") == "?add"
             @test apply_completion("?act") == "?activate"
@@ -806,6 +812,86 @@ end
     withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
         prompt = readchomp(`$(Base.julia_cmd()[1]) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
         @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+    end
+end
+
+@testset "compat REPL mode" begin
+    temp_pkg_dir() do project_path
+        with_pkg_env(project_path; change_dir = true) do
+
+            pkg"add Example JSON"
+
+            test_ctx = Pkg.Types.Context()
+            test_ctx.io = IOBuffer()
+
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "Example") === nothing
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "JSON") === nothing
+
+            input_io = Base.BufferStream()
+            # Send input to stdin before starting the compat function
+            # This simulates the user typing in the REPL
+            write(input_io, "\e[B") # Down arrow once to select Example
+            write(input_io, "\r") # Enter to confirm selection
+            # now editing Example compat
+            write(input_io, "0.4") # Set compat to 0.4
+            write(input_io, "\r") # Enter to confirm input
+            close(input_io)
+
+            Pkg.API.compat(test_ctx; input_io)
+
+            str = String(take!(test_ctx.io))
+            @test occursin("Example = \"0.4\"", str)
+            @test occursin("checking for compliance with the new compat rules..", str)
+            @test occursin("Error empty intersection between", str) # Latest Example is at least 0.5.5
+
+            # Test for issue #3828: Backspace on empty buffer should not cause BoundsError
+            test_ctx = Pkg.Types.Context()
+            test_ctx.io = IOBuffer()
+
+            input_io = Base.BufferStream()
+            write(input_io, "\r") # Select julia (first entry)
+            # Now editing julia compat entry which starts empty
+            write(input_io, "\x7f") # Backspace on empty buffer
+            write(input_io, "\x7f") # Another backspace
+            write(input_io, " ") # Space should not cause error
+            write(input_io, "\r") # Confirm empty input
+            close(input_io)
+
+            # Should not throw BoundsError
+            Pkg.API.compat(test_ctx; input_io)
+        end
+    end
+end
+
+@testset "compat REPL mode" begin
+    temp_pkg_dir() do project_path
+        with_pkg_env(project_path; change_dir = true) do
+
+            pkg"add Example JSON"
+
+            test_ctx = Pkg.Types.Context()
+            test_ctx.io = IOBuffer()
+
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "Example") === nothing
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "JSON") === nothing
+
+            input_io = Base.BufferStream()
+            # Send input to stdin before starting the _compat function
+            # This simulates the user typing in the REPL
+            write(input_io, "\e[B") # Down arrow once to select Example
+            write(input_io, "\r") # Enter to confirm selection
+            # now editing Example compat
+            write(input_io, "0.4") # Set compat to 0.4
+            write(input_io, "\r") # Enter to confirm input
+            close(input_io)
+
+            Pkg.API._compat(test_ctx; input_io)
+
+            str = String(take!(test_ctx.io))
+            @test occursin("Example = \"0.4\"", str)
+            @test occursin("checking for compliance with the new compat rules..", str)
+            @test occursin("Error empty intersection between", str) # Latest Example is at least 0.5.5
+        end
     end
 end
 

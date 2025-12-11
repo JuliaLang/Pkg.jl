@@ -1,7 +1,9 @@
 # TODO: Overload
-function compat(ctx::Context; io = nothing)
+function _compat(ctx::Context; io = nothing, input_io = stdin)
     io = something(io, ctx.io)
-    can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
+    if input_io isa Base.TTY # testing uses IOBuffer
+        can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
+    end
     printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
     longest_dep_len = max(5, length.(collect(keys(ctx.env.project.deps)))...)
     opt_strs = String[]
@@ -16,7 +18,7 @@ function compat(ctx::Context; io = nothing)
     end
     menu = TerminalMenus.RadioMenu(opt_strs; pagesize = length(opt_strs))
     choice = try
-        TerminalMenus.request("  Select an entry to edit:", menu)
+        TerminalMenus.request(TerminalMenus.default_terminal(in = input_io, out = io), "  Select an entry to edit:", menu)
     catch err
         if err isa InterruptException # if ^C is entered
             println(io)
@@ -35,10 +37,12 @@ function compat(ctx::Context; io = nothing)
         start_pos = length(prompt) + 2
         move_start = "\e[$(start_pos)G"
         clear_to_end = "\e[0J"
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), stdin.handle, true)
+        if input_io isa Base.TTY
+            ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), input_io.handle, true)
+        end
         while true
             print(io, move_start, clear_to_end, buffer, "\e[$(start_pos + cursor)G")
-            inp = TerminalMenus._readkey(stdin)
+            inp = TerminalMenus._readkey(input_io)
             if inp == '\r' # Carriage return
                 println(io)
                 break
@@ -54,7 +58,7 @@ function compat(ctx::Context; io = nothing)
             elseif inp == TerminalMenus.END_KEY
                 cursor = length(buffer)
             elseif inp == TerminalMenus.DEL_KEY
-                if cursor == 0
+                if cursor == 0 && !isempty(buffer)
                     buffer = buffer[2:end]
                 elseif cursor < length(buffer)
                     buffer = buffer[1:cursor] * buffer[(cursor + 2):end]
@@ -62,16 +66,18 @@ function compat(ctx::Context; io = nothing)
             elseif inp isa TerminalMenus.Key
                 # ignore all other escaped (multi-byte) keys
             elseif inp == '\x7f' # backspace
-                if cursor == 1
-                    buffer = buffer[2:end]
-                elseif cursor == length(buffer)
-                    buffer = buffer[1:(end - 1)]
-                elseif cursor > 0
-                    buffer = buffer[1:(cursor - 1)] * buffer[(cursor + 1):end]
+                if cursor > 0
+                    if cursor == 1
+                        buffer = buffer[2:end]
+                    elseif cursor == length(buffer)
+                        buffer = buffer[1:(end - 1)]
+                    else
+                        buffer = buffer[1:(cursor - 1)] * buffer[(cursor + 1):end]
+                    end
+                    cursor -= 1
                 else
                     continue
                 end
-                cursor -= 1
             else
                 if cursor == 0
                     buffer = inp * buffer
@@ -85,9 +91,11 @@ function compat(ctx::Context; io = nothing)
         end
         buffer
     finally
-        ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), stdin.handle, false)
+        if input_io isa Base.TTY
+            ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), input_io.handle, false)
+        end
     end
     new_entry = strip(resp)
-    compat(ctx, dep, string(new_entry))
+    API._compat(ctx, dep, string(new_entry))
     return
 end

@@ -1401,7 +1401,7 @@ end
         cd_tempdir() do dir
             # adding a nonexistent directory
             @test_throws PkgError(
-                "Path `$(normpath("some/really/random/Dir"))` does not exist."
+                "Path `$(abspath("some/really/random/Dir"))` does not exist."
             ) Pkg.pkg"add some/really/random/Dir"
             # warn if not explicit about adding directory
             mkdir("Example")

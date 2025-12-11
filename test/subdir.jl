@@ -65,16 +65,6 @@ function setup_packages_repository(dir)
     return package_tree_hash, dep_tree_hash
 end
 
-# Convert a path into a file URL.
-function make_file_url(path)
-    # Turn the slashes on Windows. In case the path starts with a
-    # drive letter, an extra slash will be needed in the file URL.
-    path = replace(path, "\\" => "/")
-    if !startswith(path, "/")
-        path = "/" * path
-    end
-    return "file://$(path)"
-end
 
 # Create a registry with the two packages `Package` and `Dep`.
 function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
