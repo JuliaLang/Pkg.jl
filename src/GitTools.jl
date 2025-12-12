@@ -201,7 +201,7 @@ function geturl(repo)
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = nothing, credentials = nothing, refspecs = [""], depth::Integer = 0, kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = nothing, credentials = nothing, refspecs::Vector{String} = [""], depth::Integer = 0, kwargs...)
     if remoteurl === nothing
         remoteurl = geturl(repo)
     end
