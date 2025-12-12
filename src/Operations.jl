@@ -900,6 +900,25 @@ get_or_make!(d::Dict{K, V}, k::K) where {K, V} = get!(d, k) do;
     V()
 end
 
+isyanked(pkg::PackageSpec) = isyanked(pkg.uuid, pkg.version)
+function isyanked(uuid::UUID, version::VersionNumber)
+    found = false
+    yanked = true
+    for reg in Registry.reachable_registries()
+        pkg = get(reg, uuid, nothing)
+        if pkg isa Registry.PkgEntry
+            found = true
+            info = Registry.registry_info(pkg)
+            if !Registry.isyanked(info, version)
+                yanked = false
+                continue
+            end
+        end
+    end
+    found || error("Could not find package with uuid $(repr(uuid)) in any registry")
+    return yanked
+end
+
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(
@@ -2809,6 +2828,20 @@ function sandbox(
                     target_name = target.name,
                     allow_earlier_backwards_compatible_versions,
                 )
+            end
+
+            yanked = ""
+            for (uuid, pkgentry) in temp_ctx.env.manifest.deps
+                if isyanked(uuid, pkgentry.version)
+                    yanked *= " - $(PkgId(pkg.uuid, pkg.name)) version $(pkg.version)\n"
+                end
+            end
+            if !isempty(yanked)
+                @warn """
+                The following package versions from the manifest have been yanked, which
+                means the current manifest cannot be resolved:
+                $yanked
+                """
             end
 
             try
