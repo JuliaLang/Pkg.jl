@@ -3,6 +3,9 @@ Pkg v1.13 Release Notes
 
 - `Pkg.test` now respects the `--check-bounds` setting from the parent Julia session instead of forcing `--check-bounds=yes`.
 
+- `Pkg.add` now prefers versions of packages that are already loaded in the current Julia session when resolving
+  dependencies. This helps maintain compatibility with code already running in your session. The behavior can be
+  disabled using `Pkg.add(pkg; prefer_loaded_versions=false)`. ([#4507])
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve
