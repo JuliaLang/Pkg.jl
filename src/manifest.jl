@@ -247,23 +247,18 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     entry.repo.subdir = read_field("repo-subdir", nothing, info, identity)
                     entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
                     entry.uuid = uuid
-                    # Read registries field (can be a single string for backwards compatibility or a vector)
-                    reg_field = get(info, "registries", nothing)
-                    if reg_field === nothing
-                        # Try reading old "registry" field for backwards compatibility
-                        reg_field = get(info, "registry", nothing)
-                        entry.registries = reg_field === nothing ? String[] : [String(reg_field)]
-                    elseif reg_field isa String
-                        entry.registries = [String(reg_field)]
-                    elseif reg_field isa Vector
-                        entry.registries = String[String(r) for r in reg_field]
-                    else
-                        pkgerror("Expected `registries` field to be a String or Vector{String}.")
+                    reg_field = get(info, "registries", nothing)::Union{Nothing, String, Vector{String}}
+                    if reg_field isa String
+                        entry.registries = [reg_field]
+                    elseif reg_field isa Vector{String}
+                        entry.registries = String[r for r in reg_field]
+                    elseif reg_field !== nothing
+                        pkgerror("Expected `registries` field to be a String or Vector{String}, got $(typeof(reg_field)).")
                     end
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})
-                    entry.exts = read_exts(get(info, "extensions", nothing))
+                    entry.exts = read_exts(get(info, "extensions", nothing)::Union{Nothing, Dict{String, Any}})
                 catch
                     # TODO: Should probably not unconditionally log something
                     # @debug "Could not parse manifest entry for `$name`" f_or_io
@@ -319,11 +314,10 @@ function read_manifest(f_or_io::Union{String, IO})
 end
 
 function convert_v1_format_manifest(old_raw_manifest::Dict)
-    new_raw_manifest = Dict{String, Any}(
-        "deps" => old_raw_manifest,
-        "manifest_format" => "1.0.0" # must be a string here to match raw dict
-        # don't set julia_version as it is unknown in old manifests
-    )
+    new_raw_manifest = Dict{String, Any}()
+    new_raw_manifest["deps"] = old_raw_manifest
+    new_raw_manifest["manifest_format"] = "1.0.0" # must be a string here to match raw dict
+    # don't set julia_version as it is unknown in old manifests
     return new_raw_manifest
 end
 

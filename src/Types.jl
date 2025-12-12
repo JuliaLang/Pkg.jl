@@ -670,10 +670,16 @@ end
 # only hash the deps and compat fields as they are the only fields that affect a resolve
 function workspace_resolve_hash(env::EnvCache)
     # Handle deps in both [deps] and [weakdeps]
-    deps = Dict(pkg.name => pkg.uuid for pkg in Pkg.Operations.load_direct_deps(env))
+    deps = Dict{String, UUID}()
+    for pkg in Pkg.Operations.load_direct_deps(env)
+        deps[pkg.name] = pkg.uuid
+    end
     weakdeps = load_workspace_weak_deps(env)
     alldeps = merge(deps, weakdeps)
-    compats = Dict(name => Pkg.Operations.get_compat_workspace(env, name) for (name, uuid) in alldeps)
+    compats = Dict{String, VersionSpec}()
+    for (name, uuid) in alldeps
+        compats[name] = Pkg.Operations.get_compat_workspace(env, name)
+    end
     iob = IOBuffer()
     for (name, uuid) in sort!(collect(deps); by = first)
         println(iob, name, "=", uuid)
@@ -986,16 +992,18 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 git_info_path = git_path
             end
             if !isdir(git_info_path)
-                msg = "Did not find a git repository at `$(repo_source)`"
+                local msg = "Did not find a git repository at `$(repo_source)`"
                 if isfile(joinpath(repo_source, "Project.toml")) || isfile(joinpath(repo_source, "JuliaProject.toml"))
                     msg *= ", perhaps you meant `Pkg.develop`?"
                 end
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(repo_source)) # check for valid git HEAD
-            LibGit2.with(LibGit2.GitRepo(repo_source)) do repo
-                if LibGit2.isdirty(repo)
-                    @warn "The repository at `$(repo_source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
+            let repo_source = repo_source
+                LibGit2.with(LibGit2.GitRepo(repo_source)) do repo
+                    if LibGit2.isdirty(repo)
+                        @warn "The repository at `$(repo_source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
+                    end
                 end
             end
             # Store the path: use the original path format (absolute vs relative) as the user provided
@@ -1010,7 +1018,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
     return let repo_source = repo_source
         # The type-assertions below are necessary presumably due to julia#36454
-        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing, String}), repo_source::Union{Nothing, String}; isbare = true, depth = 1)) do repo
+        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::String), repo_source::String; isbare = true, depth = 1)) do repo
             repo_source_typed = repo_source::Union{Nothing, String}
             GitTools.check_valid_HEAD(repo)
             create_cachedir_tag(dirname(add_repo_cache_path(repo_source)))
