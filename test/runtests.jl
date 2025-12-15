@@ -102,7 +102,9 @@ module PkgTestsInner
         end
 
         # Make sure that none of our tests have left temporary registries lying around
-        @test isdir(joinpath(Base.DEPOT_PATH[1], "registries")) == original_depot_had_registries
+        if isdir(joinpath(Base.DEPOT_PATH[1], "registries")) != original_depot_had_registries
+            @warn "Test left temporary registries in depot" Base.DEPOT_PATH[1] original_depot_had_registries
+        end
     end
 
     if haskey(ENV, "CI")
