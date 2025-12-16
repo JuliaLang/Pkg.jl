@@ -1284,22 +1284,6 @@ function write_env(
         env::EnvCache; update_undo = true,
         skip_writing_project::Bool = false
     )
-    # Verify that the generated manifest is consistent with `sources`
-    for (pkg, uuid) in env.project.deps
-        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
-        entry = manifest_info(env.manifest, uuid)
-        if path !== nothing
-            @assert normpath(entry.path) == normpath(path)
-        end
-        if repo != GitRepo()
-            if repo.rev !== nothing
-                @assert entry.repo.rev == repo.rev
-            end
-            if entry.repo.subdir !== nothing
-                @assert entry.repo.subdir == repo.subdir
-            end
-        end
-    end
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end
