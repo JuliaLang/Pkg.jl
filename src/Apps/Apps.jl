@@ -86,7 +86,8 @@ end
 
 function check_apps_in_path(apps)
     for app_name in keys(apps)
-        which_result = Sys.which(app_name)
+        which_name = app_name * (Sys.iswindows() ? ".bat" : "")
+        which_result = Sys.which(which_name)
         if which_result === nothing
             @warn """
             App '$app_name' was installed but is not available in PATH.
