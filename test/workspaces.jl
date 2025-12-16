@@ -186,4 +186,26 @@ end
     end
 end
 
+# Test that workspace child projects with [sources] pointing to parent work correctly
+# This was broken in 1.12.3 due to stale assertions after #4539
+@testset "workspace sources pointing to parent package" begin
+    mktempdir() do dir
+        path = copy_test_package(dir, "WorkspaceSourcesParent")
+        cd(path) do
+            with_current_env() do
+                # Activate the docs subproject which has [sources] WorkspaceSourcesParent = {path = ".."}
+                Pkg.activate("docs")
+                @test !isfile("Manifest.toml")
+                # This should succeed without AssertionError
+                Pkg.instantiate()
+                @test isfile("Manifest.toml")
+                # Verify the manifest has the correct path for the parent package
+                manifest = TOML.parsefile("Manifest.toml")
+                parent_entry = only(manifest["deps"]["WorkspaceSourcesParent"])
+                @test parent_entry["path"] == "."
+            end
+        end
+    end
+end
+
 end # module
