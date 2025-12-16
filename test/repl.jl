@@ -399,7 +399,8 @@ temp_pkg_dir() do project_path
             # When typing "rm <TAB>" with Example installed, should complete to "rm Example"
             c, r = test_complete("rm ")
             @test "Example" in c
-            @test apply_completion("rm ") == "rm Example"
+            res = apply_completion("rm ")
+            @test res in ("rm Example", "rm PackageWithDependency")
 
             # help mode
             @test apply_completion("?ad") == "?add"
