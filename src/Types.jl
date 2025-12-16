@@ -776,8 +776,17 @@ end
 function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     # First, check if we can compute the path easily (which requires a given local path or name)
     is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
+    # Preserve whether the original source was an absolute path - needed later to decide how to store the path
+    original_source_was_absolute = is_local_path && isabspath(pkg.repo.source)
+
     if is_local_path || pkg.name !== nothing
-        dev_path = is_local_path ? pkg.repo.source : devpath(ctx.env, pkg.name, shared)
+        # Resolve manifest-relative paths to absolute paths for file system operations
+        dev_path = if is_local_path
+            isabspath(pkg.repo.source) ? pkg.repo.source :
+                Pkg.manifest_rel_path(ctx.env, pkg.repo.source)
+        else
+            devpath(ctx.env, pkg.name, shared)
+        end
         if pkg.repo.subdir !== nothing
             dev_path = joinpath(dev_path, pkg.repo.subdir)
         end
@@ -793,7 +802,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             resolve_projectfile!(pkg, dev_path)
             error_if_in_sysimage(pkg)
             if is_local_path
-                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+                pkg.path = original_source_was_absolute ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             else
                 pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             end
@@ -822,7 +831,11 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     cloned = false
     package_path = pkg.repo.subdir === nothing ? repo_path : joinpath(repo_path, pkg.repo.subdir)
     if !has_name(pkg)
-        LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, pkg.repo.source))
+        # Resolve manifest-relative path to absolute before passing to git
+        repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+            Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
+            pkg.repo.source
+        LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, repo_source_resolved))
         cloned = true
         resolve_projectfile!(pkg, package_path)
     end
@@ -845,7 +858,11 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     else
         mkpath(dirname(dev_path))
         if !cloned
-            LibGit2.close(GitTools.ensure_clone(ctx.io, dev_path, pkg.repo.source))
+            # Resolve manifest-relative path to absolute before passing to git
+            repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+                Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
+                pkg.repo.source
+            LibGit2.close(GitTools.ensure_clone(ctx.io, dev_path, repo_source_resolved))
         else
             mv(repo_path, dev_path)
         end
@@ -855,7 +872,13 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir === nothing ? "" : pkg.repo.subdir))
     end
     error_if_in_sysimage(pkg)
-    pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+    # When an explicit local path was given, preserve whether it was absolute or relative
+    # Otherwise, use shared flag to determine if path should be absolute (shared) or relative (local)
+    if is_local_path
+        pkg.path = original_source_was_absolute ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+    else
+        pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+    end
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
     end
@@ -923,21 +946,40 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     @assert pkg.repo.source !== nothing
 
     # We now have the source of the package repo, check if it is a local path and if that exists
-    repo_source = pkg.repo.source
+    repo_source = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+        normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source)) :
+        pkg.repo.source
     if !isurl(pkg.repo.source)
-        if isdir(pkg.repo.source)
-            if !isdir(joinpath(pkg.repo.source, ".git"))
-                msg = "Did not find a git repository at `$(pkg.repo.source)`"
-                if isfile(joinpath(pkg.repo.source, "Project.toml")) || isfile(joinpath(pkg.repo.source, "JuliaProject.toml"))
+        if isdir(repo_source)
+            git_path = joinpath(repo_source, ".git")
+            if isfile(git_path)
+                # Git submodule: .git is a file containing path to actual git directory
+                git_ref_content = readline(git_path)
+                git_info_path = joinpath(dirname(git_path), last(split(git_ref_content)))
+            else
+                # Regular git repo: .git is a directory
+                git_info_path = git_path
+            end
+            if !isdir(git_info_path)
+                msg = "Did not find a git repository at `$(repo_source)`"
+                if isfile(joinpath(repo_source, "Project.toml")) || isfile(joinpath(repo_source, "JuliaProject.toml"))
                     msg *= ", perhaps you meant `Pkg.develop`?"
                 end
                 pkgerror(msg)
             end
-            LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
-            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.manifest_file, pkg.repo.source)
-            repo_source = normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source))
+            LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(repo_source)) # check for valid git HEAD
+            LibGit2.with(LibGit2.GitRepo(repo_source)) do repo
+                if LibGit2.isdirty(repo)
+                    @warn "The repository at `$(repo_source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
+                end
+            end
+            # Store the path: use the original path format (absolute vs relative) as the user provided
+            # Canonicalize repo_source for consistent hashing in cache paths
+            repo_source = safe_realpath(repo_source)
+            pkg.repo.source = isabspath(pkg.repo.source) ? repo_source : relative_project_path(ctx.env.manifest_file, repo_source)
         else
-            pkgerror("Path `$(pkg.repo.source)` does not exist.")
+            # For error messages, show the absolute path which is more informative than manifest-relative
+            pkgerror("Path `$(repo_source)` does not exist.")
         end
     end
 
@@ -987,6 +1029,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
                 end
             end
+            @assert pkg.path === nothing
             pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
@@ -1284,22 +1327,6 @@ function write_env(
         env::EnvCache; update_undo = true,
         skip_writing_project::Bool = false
     )
-    # Verify that the generated manifest is consistent with `sources`
-    for (pkg, uuid) in env.project.deps
-        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
-        entry = manifest_info(env.manifest, uuid)
-        if path !== nothing
-            @assert normpath(entry.path) == normpath(path)
-        end
-        if repo != GitRepo()
-            if repo.rev !== nothing
-                @assert entry.repo.rev == repo.rev
-            end
-            if entry.repo.subdir !== nothing
-                @assert entry.repo.subdir == repo.subdir
-            end
-        end
-    end
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env)
     end

@@ -195,9 +195,9 @@ end
         versions, deps = Pkg.Operations._resolve(
             ctx.io, ctx.env, ctx.registries, [
                 # This version of GMP only works on Julia v1.6
-                Pkg.Types.PackageSpec(name = "GMP_jll", uuid = Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d"), version = v"6.2.0"),
+                Pkg.Types.PackageSpec(name = "GMP_jll", uuid = Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d"), version = v"6.2.0+0"),
                 # This version of MPFR only works on Julia v1.5
-                Pkg.Types.PackageSpec(name = "MPFR_jll", uuid = Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3"), version = v"4.0.2"),
+                Pkg.Types.PackageSpec(name = "MPFR_jll", uuid = Base.UUID("3a97d323-0669-5f0c-9066-3539efd106a3"), version = v"4.0.2+0"),
             ], Pkg.Types.PRESERVE_TIERED, ctx.julia_version
         )
         gmp = find_by_name(versions, "GMP_jll")
@@ -264,6 +264,11 @@ isolate(loaded_depot = true) do
             end
         end
 
+        @testset "Old Pkg add regression" begin
+            Pkg.activate(temp = true)
+            Pkg.add(; name = "Pkg", julia_version = v"1.11")
+        end
+
         @testset "Stdlib add" begin
             Pkg.activate(temp = true)
             # Stdlib add (current julia version)
@@ -305,25 +310,64 @@ isolate(loaded_depot = true) do
 
             Pkg.activate(temp = true)
             # Stdlib add (julia_version == nothing)
-            # Note: this is currently known to be broken, we get the wrong GMP_jll!
             Pkg.add(; name = "GMP_jll", version = v"6.2.1+1", julia_version = nothing)
-            @test_broken Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
+            @test Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
         end
 
         @testset "julia_version = nothing" begin
-            Pkg.activate(temp = true)
-            # Stdlib add (impossible constraints due to julia version compat, so
-            # must pass `julia_version=nothing`). In this case, we always fully
-            # specify versions, but if we don't, it's okay to just give us whatever
-            # the resolver prefers
-            Pkg.add(
-                [
-                    PackageSpec(; name = "OpenBLAS_jll", version = v"0.3.13"),
-                    PackageSpec(; name = "libblastrampoline_jll", version = v"5.1.1"),
-                ]; julia_version = nothing
-            )
-            @test v"0.3.14" > Pkg.dependencies()[OpenBLAS_jll_UUID].version >= v"0.3.13"
-            @test v"5.1.2" > Pkg.dependencies()[libblastrampoline_jll_UUID].version >= v"5.1.1"
+            @testset "stdlib add" begin
+                Pkg.activate(temp = true)
+                # Stdlib add (impossible constraints due to julia version compat, so
+                # must pass `julia_version=nothing`). In this case, we always fully
+                # specify versions, but if we don't, it's okay to just give us whatever
+                # the resolver prefers
+                Pkg.add(
+                    [
+                        PackageSpec(; name = "OpenBLAS_jll", version = v"0.3.13+0"),
+                        PackageSpec(; name = "libblastrampoline_jll", version = v"5.1.1+0"),
+                    ]; julia_version = nothing
+                )
+                @test v"0.3.14" > Pkg.dependencies()[OpenBLAS_jll_UUID].version >= v"0.3.13"
+                @test v"5.1.2" > Pkg.dependencies()[libblastrampoline_jll_UUID].version >= v"5.1.1"
+            end
+            @testset "non-stdlib JLL add" begin
+                platform = Platform("x86_64", "linux"; libc = "musl")
+                # specific version vs. compat spec
+                @testset for version in (v"3.24.3+0", "3.24.3")
+                    dependencies = [PackageSpec(; name = "CMake_jll", version = version)]
+                    @testset "with context (using private Pkg.add method)" begin
+                        Pkg.activate(temp = true)
+                        ctx = Pkg.Types.Context(; julia_version = nothing)
+                        mydeps = deepcopy(dependencies)
+                        foreach(Pkg.API.handle_package_input!, mydeps)
+                        Pkg.add(ctx, mydeps; platform)
+                    end
+                    @testset "with julia_version" begin
+                        Pkg.activate(temp = true)
+                        Pkg.add(deepcopy(dependencies); platform, julia_version = nothing)
+                    end
+                end
+            end
+
+            @testset "Artifacts stdlib never falls back to registry" begin
+                # Test that when resolving for Julia 1.10 (where Artifacts is a stdlib with version=nothing),
+                # Pkg never installs the external Artifacts v1.3.0 from the registry
+                Pkg.activate(temp = true)
+                # Add a package that depends on Artifacts with julia_version = v"1.10"
+                # Artifacts should remain a stdlib, not be resolved to v1.3.0 from registry
+                ctx = Pkg.Types.Context(; julia_version = v"1.10")
+                # GMP_jll for Julia 1.10 should bring in Artifacts as a dependency
+                Pkg.add(ctx, [PackageSpec(; name = "GMP_jll")])
+
+                # Check that Artifacts is not in the manifest as an external package
+                # (If it were incorrectly resolved from registry, it would appear with version v1.3.0)
+                artifacts_uuid = Base.UUID("56f22d72-fd6d-98f1-02f0-08ddc0907c33")
+                manifest_entry = get(ctx.env.manifest, artifacts_uuid, nothing)
+                if manifest_entry !== nothing
+                    # Artifacts should not have v1.3.0 (the registry version)
+                    @test manifest_entry.version != v"1.3.0"
+                end
+            end
         end
         HistoricalStdlibVersions.unregister!()
     end

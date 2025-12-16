@@ -14,7 +14,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io, discover_repo
+import ...Pkg: usable_io, discover_repo, manifest_rel_path
 
 #########
 # Utils #
@@ -47,7 +47,7 @@ tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version
 
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
-        pkg.path !== nothing ? joinpath(dirname(manifest_file), pkg.path) :
+        pkg.path !== nothing ? normpath(joinpath(dirname(manifest_file), pkg.path)) :
         is_or_was_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
         nothing
 end
@@ -169,9 +169,14 @@ function load_all_deps(
     for pkg in pkgs
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
+            # Path from [sources] takes precedence - clear tree_hash and repo from manifest
+            pkg.tree_hash = nothing
+            pkg.repo = GitRepo()  # Clear any repo info
             pkg.path = path
         end
         if repo.source !== nothing
+            # Repo from [sources] takes precedence - clear path from manifest
+            pkg.path = nothing
             pkg.repo.source = repo.source
         end
         if repo.rev !== nothing
@@ -219,7 +224,12 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
 
     for pkg in pkgs
         entry = PackageEntry(;
-            name = pkg.name, version = pkg.version, pinned = pkg.pinned,
+            name = pkg.name,
+            # PackageEntry requires version::Union{VersionNumber, Nothing}
+            # pkg.version may be a VersionSpec in some cases (e.g., when freeing a package)
+            # so we convert non-VersionNumber values to nothing
+            version = pkg.version isa VersionNumber ? pkg.version : nothing,
+            pinned = pkg.pinned,
             tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid
         )
         if is_stdlib(pkg.uuid, julia_version)
@@ -248,8 +258,8 @@ function fixups_from_projectfile!(ctx::Context)
             pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
             # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
             # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
-            for (name, _) in pkg.weakdeps
-                if !haskey(p.deps, name)
+            for (name, uuid) in pkg.weakdeps
+                if !(uuid in p.deps)
                     delete!(pkg.deps, name)
                 end
             end
@@ -370,7 +380,7 @@ is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
-    source = project_rel_path(env, source_path(env.manifest_file, pkg))
+    source = source_path(env.manifest_file, pkg)
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
     for pkg in pkgs
@@ -383,10 +393,7 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
             # otherwise relative to manifest file....
             pkg.path = Types.relative_project_path(
                 env.manifest_file,
-                project_rel_path(
-                    source_env,
-                    source_path(source_env.manifest_file, pkg)
-                )
+                source_path(source_env.manifest_file, pkg)
             )
             push!(developed, pkg)
             collect_developed!(env, pkg, developed)
@@ -427,13 +434,13 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     for pkg in pkgs
         # add repo package if necessary
         source = source_path(env.manifest_file, pkg)
-        path = source === nothing ? nothing : project_rel_path(env, source)
+        path = source
         if (path === nothing || !isdir(path)) && (pkg.repo.rev !== nothing || pkg.repo.source !== nothing)
             # ensure revved package is installed
             # pkg.tree_hash is set in here
             Types.handle_repo_add!(Types.Context(env = env), pkg)
             # Recompute path
-            path = project_rel_path(env, source_path(env.manifest_file, pkg))
+            path = source_path(env.manifest_file, pkg)
         end
         if !isdir(path)
             pkgerror("expected package $(err_rep(pkg)) to exist at path `$path`")
@@ -500,7 +507,7 @@ function resolve_versions!(
 
     jll_fix = Dict{UUID, VersionNumber}()
     for pkg in pkgs
-        if !is_stdlib(pkg.uuid) && endswith(pkg.name, "_jll") && pkg.version isa VersionNumber
+        if !is_stdlib(pkg.uuid, julia_version) && endswith(pkg.name, "_jll") && pkg.version isa VersionNumber
             jll_fix[pkg.uuid] = pkg.version
         end
     end
@@ -546,7 +553,7 @@ function resolve_versions!(
     # Unless using the unbounded or historical resolver, always allow stdlibs to update. Helps if the previous resolve
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
-    reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
+    reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid, julia_version) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
     graph, compat_map = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
@@ -581,6 +588,10 @@ function resolve_versions!(
             push!(pkgs, PackageSpec(; name = name, uuid = uuid, version = ver))
         end
     end
+
+    # Collect all UUIDs that will be in the manifest
+    pkgs_uuids = Set{UUID}(pkg.uuid for pkg in pkgs)
+
     final_deps_map = Dict{UUID, Dict{String, UUID}}()
     for pkg in pkgs
         load_tree_hash!(registries, pkg, julia_version)
@@ -588,6 +599,8 @@ function resolve_versions!(
             if pkg.uuid in keys(fixed)
                 deps_fixed = Dict{String, UUID}()
                 for dep in keys(fixed[pkg.uuid].requires)
+                    # Only include deps that are actually in the manifest
+                    dep in pkgs_uuids || continue
                     deps_fixed[names[dep]] = dep
                 end
                 deps_fixed
@@ -598,6 +611,8 @@ function resolve_versions!(
                     pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
                 end
                 for (uuid, _) in compat_map[pkg.uuid][pkg.version]
+                    # Only include deps that are actually in the manifest
+                    uuid in pkgs_uuids || continue
                     d[names[uuid]] = uuid
                 end
                 d
@@ -653,6 +668,7 @@ function deps_graph(
             # unregistered stdlib we must special-case it here.  This is further
             # complicated by the fact that we can ask this question relative to
             # a Julia version.
+            # CRITICAL: Never resolve stdlibs from registry for target julia_version
             if (julia_version != VERSION && is_unregistered_stdlib(uuid)) || uuid_is_stdlib
                 # We use our historical stdlib versioning data to unpack the version, deps and weakdeps of this uuid
                 stdlib_info = stdlibs_for_julia_version[uuid]
@@ -1229,7 +1245,6 @@ end
 ################################
 # Manifest update and pruning #
 ################################
-project_rel_path(env::EnvCache, path::String) = normpath(joinpath(dirname(env.manifest_file), path))
 
 function prune_manifest(env::EnvCache)
     # if project uses another manifest, only prune project entry in manifest
@@ -1590,7 +1605,7 @@ function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry,
     if entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing
         return pkg # overwrite everything, nothing to copy over
     end
-    if is_stdlib(pkg.uuid)
+    if is_stdlib(pkg.uuid, ctx.julia_version)
         return pkg # stdlibs are not versioned like other packages
     elseif is_dep && (
             (isa(pkg.version, VersionNumber) && entry.version == pkg.version) ||
@@ -1850,7 +1865,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
         if pkg.path === nothing
             pkg.tree_hash = entry.tree_hash
         end
-    elseif entry.repo.source !== nothing || source_repo.source !== nothing # repo packages have a version but are treated specially
+    elseif source_path === nothing && pkg.path === nothing && (entry.repo.source !== nothing || source_repo.source !== nothing) # repo packages have a version but are treated specially
         if source_repo.source !== nothing
             pkg.repo = source_repo
         else
@@ -1883,10 +1898,12 @@ end
 up_load_manifest_info!(pkg::PackageSpec, ::Nothing) = nothing
 function up_load_manifest_info!(pkg::PackageSpec, entry::PackageEntry)
     pkg.name = entry.name # TODO check name is same
-    if pkg.repo == GitRepo()
+    # Only restore repo from manifest if we don't already have a path set
+    if pkg.repo == GitRepo() && pkg.path === nothing
         pkg.repo = entry.repo # TODO check that repo is same
     end
-    if pkg.path === nothing
+    # Only set path if tree_hash is not already set (to avoid invalid state where both are set)
+    if pkg.path === nothing && pkg.repo == GitRepo() && pkg.tree_hash === nothing
         pkg.path = entry.path
     end
     return pkg.pinned = entry.pinned
@@ -1988,17 +2005,18 @@ function up(
     return build_versions(ctx, union(new_apply, new_git))
 end
 
-function update_package_pin!(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
+function update_package_pin!(ctx::Context, pkg::PackageSpec, entry::Union{Nothing, PackageEntry})
     if entry === nothing
         pkgerror("package $(err_rep(pkg)) not found in the manifest, run `Pkg.resolve()` and retry.")
     end
+    registries = ctx.registries
 
     #if entry.pinned && pkg.version == VersionSpec()
     #    println(ctx.io, "package $(err_rep(pkg)) already pinned")
     #end
     # update pinned package
     pkg.pinned = true
-    if is_stdlib(pkg.uuid)
+    if is_stdlib(pkg.uuid, ctx.julia_version)
         return nothing # nothing left to do
     elseif pkg.version == VersionSpec()
         pkg.version = entry.version # pin at current version
@@ -2019,7 +2037,7 @@ end
 is_fully_pinned(ctx::Context) = !isempty(ctx.env.manifest.deps) && all(kv -> last(kv).pinned, ctx.env.manifest.deps)
 
 function pin(ctx::Context, pkgs::Vector{PackageSpec})
-    foreach(pkg -> update_package_pin!(ctx.registries, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
+    foreach(pkg -> update_package_pin!(ctx, pkg, manifest_info(ctx.env.manifest, pkg.uuid)), pkgs)
     pkgs = load_direct_deps(ctx.env, pkgs)
 
     # TODO: change pin to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
@@ -2174,7 +2192,7 @@ end
 function abspath!(env::EnvCache, manifest::Manifest)
     for (uuid, entry) in manifest
         if entry.path !== nothing
-            entry.path = project_rel_path(env, entry.path)
+            entry.path = manifest_rel_path(env, entry.path)
         end
     end
     return manifest
@@ -2393,7 +2411,7 @@ function test(
     missing_runtests = String[]
     source_paths = String[] # source_path is the package root (not /src)
     for pkg in pkgs
-        sourcepath = project_rel_path(ctx.env, source_path(ctx.env.manifest_file, pkg, ctx.julia_version)) # TODO
+        sourcepath = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         !isfile(testfile(sourcepath)) && push!(missing_runtests, pkg.name)
         push!(source_paths, sourcepath)
     end

@@ -30,8 +30,13 @@ function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool = false)
     # Convert to new completion interface format
     named_completions = map(LineEdit.NamedCompletion, ret)
     # Convert UnitRange to Region (Pair{Int,Int}) to match new completion interface
-    # range represents character positions in full string, convert to 0-based byte positions
-    if isempty(range)
+    # range represents character positions in partial string, convert to 0-based byte positions
+    if length(range) == 0 && first(range) > last(range)
+        # Empty backward range like 4:3 means insert at cursor position
+        # The cursor is at position last(range), so insert after it
+        pos = thisind(partial, last(range) + 1) - 1
+        region = pos => pos
+    elseif isempty(range)
         region = 0 => 0
     else
         # Convert 1-based character positions to 0-based byte positions
