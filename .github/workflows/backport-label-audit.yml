@@ -44,11 +44,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd backporter
-          ARGS="-r ${{ github.repository }}"
+          ARGS="--audit -r ${{ github.repository }}"
           if [ -n "${{ inputs.version }}" ]; then
             ARGS="$ARGS -v ${{ inputs.version }}"
           fi
           if [ "${{ inputs.dry_run }}" = "false" ]; then
             ARGS="$ARGS --apply"
           fi
-          julia --project label_audit.jl $ARGS
+          julia --project backporter.jl $ARGS
