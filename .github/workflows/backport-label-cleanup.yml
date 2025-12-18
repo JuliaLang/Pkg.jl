@@ -50,8 +50,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd backporter
-          julia --project label_audit.jl \
+          julia --project backporter.jl --audit \
             -v ${{ steps.extract.outputs.version }} \
             -r ${{ github.repository }} \
-            --cleanup-pr ${{ github.event.pull_request.number }} \
-            --apply
+            --cleanup-pr ${{ github.event.pull_request.number }}
