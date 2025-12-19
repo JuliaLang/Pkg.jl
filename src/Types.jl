@@ -1023,13 +1023,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             fetched = false
             if obj_branch === nothing
                 fetched = true
+                rev_or_hash_str = string(rev_or_hash)
                 # For pull requests, fetch the specific PR ref
-                if startswith(rev_or_hash, "pull/") && endswith(rev_or_hash, "/head")
-                    pr_number = rev_or_hash[6:(end - 5)]  # Extract number from "pull/X/head"
+                if startswith(rev_or_hash_str, "pull/") && endswith(rev_or_hash_str, "/head")
+                    pr_number = rev_or_hash_str[6:(end - 5)]  # Extract number from "pull/X/head"
                     pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs, depth = 1)
                     # For branch names, fetch only the specific branch
-                elseif !looks_like_commit_hash(string(rev_or_hash))
+                elseif !looks_like_commit_hash(rev_or_hash_str)
                     specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
                     GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 else

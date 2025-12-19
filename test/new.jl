@@ -2449,6 +2449,20 @@ end
             @test !haskey(Pkg.dependencies(), test_stdlib_uuid)
         end
     end
+    # resolve with repo-tracked package that has tree_hash in manifest (issue #4561)
+    # This tests that startswith/endswith correctly handle SHA1 tree_hash types
+    isolate(loaded_depot = true) do
+        Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "v0.5.3")
+        # Remove both clones and packages so resolve needs to re-clone
+        rm(joinpath(DEPOT_PATH[1], "clones"); force = true, recursive = true)
+        rm(joinpath(DEPOT_PATH[1], "packages"); force = true, recursive = true)
+        # This should not throw "MethodError: no method matching startswith(::Base.SHA1, ::String)"
+        Pkg.resolve()
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.name == "Example"
+            @test isdir(pkg.source)
+        end
+    end
 end
 
 #
