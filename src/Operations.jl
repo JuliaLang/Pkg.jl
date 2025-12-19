@@ -345,7 +345,12 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     # Build package entries
     for pkg in pkgs
         entry = PackageEntry(;
-            name = pkg.name, version = pkg.version, pinned = pkg.pinned,
+            name = pkg.name,
+            # PackageEntry requires version::Union{VersionNumber, Nothing}
+            # pkg.version may be a VersionSpec in some cases (e.g., when freeing a package)
+            # so we convert non-VersionNumber values to nothing
+            version = pkg.version isa VersionNumber ? pkg.version : nothing,
+            pinned = pkg.pinned,
             tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid
         )
         if is_stdlib(pkg.uuid, julia_version)
@@ -388,8 +393,8 @@ function fixups_from_projectfile!(ctx::Context)
             pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
             # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
             # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
-            for (name, _) in pkg.weakdeps
-                if !(name in p.deps)
+            for (name, uuid) in pkg.weakdeps
+                if !(uuid in p.deps)
                     delete!(pkg.deps, name)
                 end
             end
@@ -811,6 +816,10 @@ function resolve_versions!(
             push!(pkgs, PackageSpec(; name = name, uuid = uuid, version = ver))
         end
     end
+
+    # Collect all UUIDs that will be in the manifest
+    pkgs_uuids = Set{UUID}(pkg.uuid for pkg in pkgs)
+
     final_deps_map = Dict{UUID, Dict{String, UUID}}()
     for pkg in pkgs
         load_tree_hash!(registries, pkg, julia_version)
@@ -818,6 +827,8 @@ function resolve_versions!(
             if pkg.uuid in keys(fixed)
                 deps_fixed = Dict{String, UUID}()
                 for dep in keys(fixed[pkg.uuid].requires)
+                    # Only include deps that are actually in the manifest
+                    dep in pkgs_uuids || continue
                     deps_fixed[names[dep]] = dep
                 end
                 deps_fixed
@@ -832,6 +843,8 @@ function resolve_versions!(
                     pkg.uuid, pkg.version
                 )
                 for uuid in deps_for_version
+                    # Only include deps that are actually in the manifest
+                    uuid in pkgs_uuids || continue
                     d[names[uuid]] = uuid
                 end
                 d
@@ -1448,9 +1461,9 @@ function find_urls(registries::Vector{Registry.RegistryInstance}, uuid::UUID)
 end
 
 
-download_source(ctx::Context; readonly = true) = download_source(ctx, values(ctx.env.manifest); readonly)
+download_source(ctx::Context; readonly::Bool = true) = download_source(ctx, collect(values(ctx.env.manifest)); readonly)
 
-function download_source(ctx::Context, pkgs; readonly = true)
+function download_source(ctx::Context, pkgs; readonly::Bool = true)
     pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
     for pkg in pkgs
@@ -1561,7 +1574,8 @@ function download_source(ctx::Context, pkgs; readonly = true)
                 if exc_or_success_or_nothing === nothing
                     continue # represents when another process did the install
                 end
-                success, (urls, path) = exc_or_success_or_nothing, bt_or_pathurls
+                success = exc_or_success_or_nothing::Bool
+                (urls, path) = bt_or_pathurls::Tuple{Set{String}, String}
                 success || push!(missed_packages, (; pkg, urls, path))
                 bar.current = i
                 str = sprint(; context = ctx.io) do io
@@ -1822,11 +1836,11 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_r
                 create_cachedir_tag(joinpath(depots1(), "scratchspaces"))
                 log_file = joinpath(scratch, "build.log")
                 # Associate the logfile with the package being built
-                dict = Dict{String, Any}(
-                    scratch => [
-                        Dict{String, Any}("time" => Dates.now(), "parent_projects" => [projectfile_path(source_path)]),
-                    ]
-                )
+                dict = Dict{String, Any}()
+                inner_dict = Dict{String, Any}()
+                inner_dict["time"] = Dates.now()
+                inner_dict["parent_projects"] = [projectfile_path(source_path)]
+                dict[scratch] = [inner_dict]
                 open(joinpath(depots1(), "logs", "scratch_usage.toml"), "a") do io
                     TOML.print(io, dict)
                 end

@@ -82,7 +82,8 @@ end
 
 function check_apps_in_path(apps)
     for app_name in keys(apps)
-        which_result = Sys.which(app_name)
+        which_name = app_name * (Sys.iswindows() ? ".bat" : "")
+        which_result = Sys.which(which_name)
         if which_result === nothing
             @warn """
             App '$app_name' was installed but is not available in PATH.
@@ -219,7 +220,8 @@ function add(pkg::PackageSpec)
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
     # TODO: Wrong if package itself has a sourcepath?
-    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid)
+    # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be VersionSpec
+    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version isa VersionNumber ? project.version : nothing, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
@@ -258,8 +260,8 @@ function develop(pkg::PackageSpec)
         pkg.repo.source = nothing
     end
 
-
-    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid = pkg.uuid)
+    # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be VersionSpec
+    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version isa VersionNumber ? project.version : nothing, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid = pkg.uuid)
     manifest = ctx.env.manifest
     manifest.deps[pkg.uuid] = entry
 
