@@ -207,7 +207,10 @@ function update_source_if_set(env, pkg)
             source["rev"] = pkg.repo.rev
         end
         if pkg.path !== nothing
-            source["path"] = pkg.path
+            # pkg.path is manifest-relative, but sources store project-relative paths
+            source["path"] = Types.manifest_path_to_project_path(
+                env.project_file, env.manifest_file, pkg.path
+            )
         end
 
         path, repo = get_path_repo(project, env.project_file, env.manifest_file, pkg.name)
