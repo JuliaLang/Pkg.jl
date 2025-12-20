@@ -203,6 +203,10 @@ end
                 manifest = TOML.parsefile("Manifest.toml")
                 parent_entry = only(manifest["deps"]["WorkspaceSourcesParent"])
                 @test parent_entry["path"] == "."
+                # Verify the Project.toml sources path was NOT corrupted (issue #4575)
+                # The path should remain ".." (project-relative), not "." (manifest-relative)
+                project = TOML.parsefile("docs/Project.toml")
+                @test project["sources"]["WorkspaceSourcesParent"]["path"] == ".."
             end
         end
     end
