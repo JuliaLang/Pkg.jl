@@ -2817,9 +2817,12 @@ function sandbox(
             catch err # TODO
                 err isa Resolve.ResolverError || rethrow()
                 allow_reresolve || rethrow()
-                @debug err
+                resolver_err_str = sprint(show, err; context = ctx.io)
+                ind = " "^(Pkg.pkgstyle_indent)
+                resolver_err_str_indented = ind * replace(resolver_err_str, "\n" => "\n" * ind)
+                printpkgstyle(ctx.io, :Resolve, "Attempted resolve with fixed versions:\n$(resolver_err_str_indented)", color = Base.warn_color())
                 msg = string(
-                    "Could not use exact versions of packages in manifest, re-resolving. ",
+                    "Could not use exact versions of packages in manifest, re-resolving while allowing changes.\n",
                     "Note: if you do not check your manifest file into source control, ",
                     "then you can probably ignore this message. ",
                     "However, if you do check your manifest file into source control, ",
