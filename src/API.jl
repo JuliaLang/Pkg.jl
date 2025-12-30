@@ -1218,17 +1218,17 @@ function precompile(
         return
     end
 
+    io = ctx.io
+    if io isa IOContext{IO} && !isa(io.io, Base.PipeEndpoint)
+        # precompile does quite a bit of output and using the IOContext{IO} can cause
+        # some slowdowns, the important part here is to not specialize the whole
+        # precompile function on the io.
+        # But don't unwrap the IOContext if it is a PipeEndpoint, as that would
+        # cause the output to lose color.
+        io = io.io
+    end
+
     return activate(dirname(ctx.env.project_file)) do
-        io = if ctx.io isa IOContext{IO} && !isa(ctx.io.io, Base.PipeEndpoint)
-            # precompile does quite a bit of output and using the IOContext{IO} can cause
-            # some slowdowns, the important part here is to not specialize the whole
-            # precompile function on the io.
-            # But don't unwrap the IOContext if it is a PipeEndpoint, as that would
-            # cause the output to lose color.
-            ctx.io.io
-        else
-            ctx.io
-        end
         pkgs_name = String[pkg.name for pkg in pkgs]
         return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
     end
@@ -1599,23 +1599,6 @@ set_current_compat(; kwargs...) = set_current_compat(Context(); kwargs...)
 # why #
 #######
 
-function why_find_paths!(final_paths, incoming, project_deps, current, path)
-    push!(path, current)
-    current in project_deps && push!(final_paths, path) # record once we've traversed to a project dep
-    haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
-    for p in incoming[current]
-        if p in path
-            # detected dependency cycle and none of the dependencies in the cycle
-            # are in the project could happen when manually modifying
-            # the project and running this function function before a
-            # resolve
-            continue
-        end
-        why_find_paths!(final_paths, incoming, project_deps, p, copy(path))
-    end
-    return
-end
-
 function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = false, kwargs...)
     require_not_empty(pkgs, :why)
 
@@ -1640,12 +1623,29 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = 
         end
     end
 
+    function find_paths!(final_paths, current, path = UUID[])
+        push!(path, current)
+        current in project_deps && push!(final_paths, path) # record once we've traversed to a project dep
+        haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
+        for p in incoming[current]
+            if p in path
+                # detected dependency cycle and none of the dependencies in the cycle
+                # are in the project could happen when manually modifying
+                # the project and running this function function before a
+                # resolve
+                continue
+            end
+            find_paths!(final_paths, p, copy(path))
+        end
+        return
+    end
+
     first = true
     for pkg in pkgs
         !first && println(io)
         first = false
         final_paths = Set{Vector{UUID}}()
-        why_find_paths!(final_paths, incoming, project_deps, pkg.uuid, UUID[])
+        find_paths!(final_paths, pkg.uuid)
         foreach(reverse!, final_paths)
         final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], collect(final_paths))
         sort!(final_paths_names, by = x -> (x, length(x)))
