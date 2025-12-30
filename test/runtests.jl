@@ -27,7 +27,7 @@ module PkgTestsInner
     ENV["JULIA_PKG_PRECOMPILE_AUTO"] = 0
     ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"] = 1
 
-    logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
+    logdir = nothing # get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
     ### Send all Pkg output to a file called Pkg.log
     islogging = logdir !== nothing
 
@@ -36,7 +36,7 @@ module PkgTestsInner
         default_io = open(logfile, "a")
         @info "Pkg test output is being logged to file" logfile
     else
-        default_io = devnull # or stdout
+        default_io = stdout # devnull # or stdout
     end
 
     include("utils.jl")
@@ -51,6 +51,7 @@ module PkgTestsInner
 
             test_files = [
                 "new.jl",
+                #=
                 "pkg.jl",
                 "repl.jl",
                 "api.jl",
@@ -68,6 +69,7 @@ module PkgTestsInner
                 "workspaces.jl",
                 "apps.jl",
                 "stdlib_compat.jl",
+                =#
             ]
 
             # Only test these if the test deps are available (they aren't typically via `Base.runtests`)

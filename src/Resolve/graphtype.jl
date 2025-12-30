@@ -1036,19 +1036,20 @@ function showlog(io::IO, rlog::ResolveLog, p::UUID; view::Symbol = :tree)
         _show(io, rlog, entry, _logindent, IdDict{Any, Any}(entry => true), true)
     else
         entries = ResolveLogEntry[entry]
-        function getentries(entry)
-            for (other_entry, _) in entry.events
-                (other_entry ≡ nothing || other_entry ∈ entries) && continue
-                push!(entries, other_entry)
-                getentries(other_entry)
-            end
-            return
-        end
-        getentries(entry)
+        collect_log_entries!(entries, entry)
         for entry in entries
             _show(io, rlog, entry, _logindent, IdDict(), false)
         end
     end
+end
+
+function collect_log_entries!(entries::Vector{ResolveLogEntry}, entry::ResolveLogEntry)
+    for (other_entry, _) in entry.events
+        (other_entry ≡ nothing || other_entry ∈ entries) && continue
+        push!(entries, other_entry)
+        collect_log_entries!(entries, other_entry)
+    end
+    return
 end
 
 # Show a recursive tree with requirements applied to a package, either directly or indirectly

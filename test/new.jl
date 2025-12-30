@@ -1970,6 +1970,18 @@ end
             Pkg.develop(path = simple_package_path)
             Pkg.develop(path = unregistered_example_path)
             rm(Pkg.project().path)
+            env = Pkg.Types.EnvCache()
+            @info "active_project" Base.active_project()
+            @info "project_file" env.project_file isfile(env.project_file)
+            @info "manifest_file" env.manifest_file isfile(env.manifest_file)
+            @info "manifest_names" Base.manifest_names
+            if isfile(env.manifest_file)
+                @info "manifest pkg names:"
+                m = Pkg.Types.read_manifest(env.manifest_file)
+                for (_, pkg) in m
+                    println("  ", pkg.name, " ", pkg.uuid)
+                end
+            end
             @test_throws PkgError Pkg.instantiate()
         end
     end
