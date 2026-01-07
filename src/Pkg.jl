@@ -364,12 +364,16 @@ const update = API.up
   - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
+  - `testsets::Union{Nothing, AbstractVector}=nothing`: patterns to match against testset names for selective test execution.
 
 !!! compat "Julia 1.9"
     `allow_reresolve` requires at least Julia 1.9.
 
 !!! compat "Julia 1.9"
     Passing a string to `coverage` requires at least Julia 1.9.
+
+!!! compat "Julia 1.14"
+    The `testsets` keyword argument requires at least Julia 1.14.
 
 Run the tests for the given package(s), or for the current project if no positional argument is given to `Pkg.test`
 (the current project would need to be a package). The package is tested by running its `test/runtests.jl` file.
@@ -413,6 +417,24 @@ which could be enabled by testing with
 ```julia
 Pkg.test("foo"; test_args=["--extended"])
 ```
+
+The `testsets` keyword argument allows selective execution of testsets based on pattern matching:
+```julia
+# Run testsets with exact name "network" (case-sensitive)
+Pkg.test("foo"; testsets=["network"])
+
+# Run testsets matching multiple exact patterns
+Pkg.test("foo"; testsets=["network", "database"])
+
+# Use regex for flexible pattern matching
+using Test
+Pkg.test("foo"; testsets=[r"network.*test"])
+
+# Use case-insensitive regex matching
+Pkg.test("foo"; testsets=[r"network"i])
+```
+When testsets are specified, only the matching testsets and their parent/child testsets will be executed.
+String patterns use exact matching (case-sensitive), while regex patterns use flexible substring matching.
 """
 const test = API.test
 
