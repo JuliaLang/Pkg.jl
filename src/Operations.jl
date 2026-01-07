@@ -1356,7 +1356,7 @@ function download_artifacts(
             t_print = Threads.@spawn begin
                 try
                     print(io, ansi_disablecursor)
-                    first = true
+                    first = Ref(true)
                     timer = Timer(0, interval = 1 / 10)
                     # TODO: Implement as a new MiniMultiProgressBar
                     main_bar = MiniProgressBar(; indent = 2, header = "Installing artifacts", color = :green, mode = :int, always_reprint = true)
@@ -1364,7 +1364,7 @@ function download_artifacts(
                     while !is_done[]
                         main_bar.current = count(x -> x.state == :done, values(download_states))
                         local str = sprint(context = io) do iostr
-                            first || print(iostr, ansi_cleartoend)
+                            first[] || print(iostr, ansi_cleartoend)
                             n_printed = 1
                             show_progress(iostr, main_bar; carriagereturn = false)
                             println(iostr)
@@ -1381,7 +1381,7 @@ function download_artifacts(
                                 n_printed += 1
                             end
                             is_done[] || print(iostr, ansi_moveup(n_printed), ansi_movecol1)
-                            first = false
+                            first[] = false
                         end
                         print(io, str)
                         wait(timer)
@@ -1713,27 +1713,35 @@ function build(ctx::Context, uuids::Set{UUID}, verbose::Bool; allow_reresolve::B
     return build_versions(ctx, all_uuids; verbose, allow_reresolve)
 end
 
+function dependency_order_visit!(
+        order::Dict{UUID, Int}, seen::Vector{UUID}, counter::Base.RefValue{Int},
+        env::EnvCache, uuid::UUID
+    )
+    uuid in seen && return @warn("Dependency graph not a DAG, linearizing anyway")
+    haskey(order, uuid) && return
+    push!(seen, uuid)
+    deps = if Types.is_project_uuid(env, uuid)
+        values(env.project.deps)
+    else
+        entry = manifest_info(env.manifest, uuid)
+        values(entry.deps)
+    end
+    for dep in deps
+        dependency_order_visit!(order, seen, counter, env, dep)
+    end
+    pop!(seen)
+    counter[] += 1
+    order[uuid] = counter[]
+    return
+end
+
 function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID, Int}
     order = Dict{UUID, Int}()
     seen = UUID[]
-    k::Int = 0
-    function visit(uuid::UUID)
-        uuid in seen &&
-            return @warn("Dependency graph not a DAG, linearizing anyway")
-        haskey(order, uuid) && return
-        push!(seen, uuid)
-        if Types.is_project_uuid(env, uuid)
-            deps = values(env.project.deps)
-        else
-            entry = manifest_info(env.manifest, uuid)
-            deps = values(entry.deps)
-        end
-        foreach(visit, deps)
-        pop!(seen)
-        return order[uuid] = k += 1
+    counter = Ref(0)
+    for uuid in uuids
+        dependency_order_visit!(order, seen, counter, env, uuid)
     end
-    visit(uuid::String) = visit(UUID(uuid))
-    foreach(visit, uuids)
     return order
 end
 
@@ -1813,16 +1821,16 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_r
             pkg = PackageSpec(; uuid = uuid, name = name, version = version)
             build_file = buildfile(source_path)
             # compatibility shim
-            local build_project_override, build_project_preferences
-            if isfile(projectfile_path(builddir(source_path)))
+            local build_project_override
+            build_project_preferences = if isfile(projectfile_path(builddir(source_path)))
                 build_project_override = nothing
                 with_load_path([builddir(source_path), Base.LOAD_PATH...]) do
-                    build_project_preferences = Base.get_preferences()
+                    Base.get_preferences()
                 end
             else
                 build_project_override = gen_target_project(ctx, pkg, source_path, "build")
                 with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
-                    build_project_preferences = Base.get_preferences()
+                    Base.get_preferences()
                 end
             end
 
@@ -2689,10 +2697,62 @@ function abspath!(env::EnvCache, project::Project)
     return project
 end
 
+function sandbox_with_temp_env(
+        fn::Function, ctx::Context, target::PackageSpec, tmp::String,
+        has_sandbox_project::Bool, sandbox_env::EnvCache;
+        force_latest_compatible_version::Bool,
+        allow_earlier_backwards_compatible_versions::Bool,
+        allow_reresolve::Bool
+    )
+    return with_temp_env(tmp) do
+        temp_ctx = Context()
+        if has_sandbox_project
+            abspath!(sandbox_env, temp_ctx.env.project)
+        end
+        temp_ctx.env.project.deps[target.name] = target.uuid
+
+        if force_latest_compatible_version
+            apply_force_latest_compatible_version!(
+                temp_ctx;
+                target_name = target.name,
+                allow_earlier_backwards_compatible_versions,
+            )
+        end
+
+        try
+            Pkg.resolve(temp_ctx; io = devnull, skip_writing_project = true)
+            @debug "Using _parent_ dep graph"
+        catch err # TODO
+            err isa Resolve.ResolverError || rethrow()
+            allow_reresolve || rethrow()
+            @debug err
+            msg = string(
+                "Could not use exact versions of packages in manifest, re-resolving. ",
+                "Note: if you do not check your manifest file into source control, ",
+                "then you can probably ignore this message. ",
+                "However, if you do check your manifest file into source control, ",
+                "then you probably want to pass the `allow_reresolve = false` kwarg ",
+                "when calling the `Pkg.test` function.",
+            )
+            printpkgstyle(ctx.io, :Test, msg, color = Base.warn_color())
+            Pkg.update(temp_ctx; skip_writing_project = true, update_registry = false, io = ctx.io)
+            printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
+            @debug "Using _clean_ dep graph"
+        end
+
+        reset_all_compat!(temp_ctx.env.project)
+        write_env(temp_ctx.env, update_undo = false)
+
+        # Run sandboxed code
+        path_sep = Sys.iswindows() ? ';' : ':'
+        withenv(fn, "JULIA_LOAD_PATH" => "@$(path_sep)$(tmp)", "JULIA_PROJECT" => nothing)
+    end
+end
+
 # ctx + pkg used to compute parent dep graph
 function sandbox(
         fn::Function, ctx::Context, target::PackageSpec,
-        sandbox_path::String, sandbox_project_override;
+        sandbox_path::String, sandbox_project_override_in;
         preferences::Union{Nothing, Dict{String, Any}} = nothing,
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
@@ -2701,24 +2761,25 @@ function sandbox(
     sandbox_project = projectfile_path(sandbox_path)
 
     return mktempdir() do tmp
+        sandbox_project_override_local = sandbox_project_override_in
         tmp_project = projectfile_path(tmp)
         tmp_manifest = manifestfile_path(tmp)
         tmp_preferences = joinpath(tmp, first(Base.preferences_names))
 
         # Copy env info over to temp env
         has_sandbox_project = false
-        if sandbox_project_override === nothing
+        if sandbox_project_override_local === nothing
             if isfile(sandbox_project)
-                sandbox_project_override = read_project(sandbox_project)
+                sandbox_project_override_local = read_project(sandbox_project)
                 has_sandbox_project = true
             else
-                sandbox_project_override = Project()
+                sandbox_project_override_local = Project()
             end
         end
         if !has_sandbox_project
-            abspath!(ctx.env, sandbox_project_override)
+            abspath!(ctx.env, sandbox_project_override_local)
         end
-        Types.write_project(sandbox_project_override, tmp_project)
+        Types.write_project(sandbox_project_override_local, tmp_project)
 
         # create merged manifest
         # - copy over active subgraph
@@ -2753,49 +2814,12 @@ function sandbox(
         end
 
         # sandbox
-        with_temp_env(tmp) do
-            temp_ctx = Context()
-            if has_sandbox_project
-                abspath!(sandbox_env, temp_ctx.env.project)
-            end
-            temp_ctx.env.project.deps[target.name] = target.uuid
-
-            if force_latest_compatible_version
-                apply_force_latest_compatible_version!(
-                    temp_ctx;
-                    target_name = target.name,
-                    allow_earlier_backwards_compatible_versions,
-                )
-            end
-
-            try
-                Pkg.resolve(temp_ctx; io = devnull, skip_writing_project = true)
-                @debug "Using _parent_ dep graph"
-            catch err # TODO
-                err isa Resolve.ResolverError || rethrow()
-                allow_reresolve || rethrow()
-                @debug err
-                msg = string(
-                    "Could not use exact versions of packages in manifest, re-resolving. ",
-                    "Note: if you do not check your manifest file into source control, ",
-                    "then you can probably ignore this message. ",
-                    "However, if you do check your manifest file into source control, ",
-                    "then you probably want to pass the `allow_reresolve = false` kwarg ",
-                    "when calling the `Pkg.test` function.",
-                )
-                printpkgstyle(ctx.io, :Test, msg, color = Base.warn_color())
-                Pkg.update(temp_ctx; skip_writing_project = true, update_registry = false, io = ctx.io)
-                printpkgstyle(ctx.io, :Test, "Successfully re-resolved")
-                @debug "Using _clean_ dep graph"
-            end
-
-            reset_all_compat!(temp_ctx.env.project)
-            write_env(temp_ctx.env, update_undo = false)
-
-            # Run sandboxed code
-            path_sep = Sys.iswindows() ? ';' : ':'
-            withenv(fn, "JULIA_LOAD_PATH" => "@$(path_sep)$(tmp)", "JULIA_PROJECT" => nothing)
-        end
+        sandbox_with_temp_env(
+            fn, ctx, target, tmp, has_sandbox_project, sandbox_env;
+            force_latest_compatible_version,
+            allow_earlier_backwards_compatible_versions,
+            allow_reresolve,
+        )
     end
 end
 
@@ -2870,6 +2894,53 @@ end
 
 testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
+
+function run_test_subprocess(io::IO, flags::Cmd, source_path::String, test_args::Cmd; with_threads::Bool)
+    code = gen_test_code(source_path; test_args)
+    threads_arg = with_threads ? `--threads=$(get_threads_spec())` : ``
+    cmd = `$(Base.julia_cmd()) $threads_arg $(flags) --eval $code`
+    return subprocess_handler(cmd, io, "Tests interrupted. Exiting the test process")
+end
+
+function run_test_subprocess_in_env(io::IO, flags::Cmd, source_path::String, test_args::Cmd)
+    path_sep = Sys.iswindows() ? ';' : ':'
+    return withenv("JULIA_LOAD_PATH" => "@$(path_sep)$(testdir(source_path))", "JULIA_PROJECT" => nothing) do
+        run_test_subprocess(io, flags, source_path, test_args; with_threads = false)
+    end
+end
+
+function run_sandboxed_tests!(
+        ctx::Context, pkg::PackageSpec, source_path::String, test_args::Cmd,
+        coverage::Union{Bool, AbstractString}, julia_args::Cmd, test_fn,
+        pkgs_errored::Vector{Tuple{String, Base.Process}}
+    )
+    test_fn !== nothing && test_fn()
+    sandbox_ctx = Context(; io = ctx.io)
+    status(
+        sandbox_ctx.env, sandbox_ctx.registries;
+        mode = PKGMODE_COMBINED,
+        io = sandbox_ctx.io,
+        ignore_indent = false,
+        show_usagetips = false,
+    )
+    flags = gen_subprocess_flags(source_path; coverage, julia_args)
+
+    if should_autoprecompile()
+        cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
+        Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
+    end
+
+    printpkgstyle(ctx.io, :Testing, "Running tests...")
+    flush(ctx.io)
+    p, interrupted = run_test_subprocess(ctx.io, flags, source_path, test_args; with_threads = true)
+    if success(p)
+        printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
+    elseif !interrupted
+        push!(pkgs_errored, (pkg.name, p))
+    end
+    return
+end
+
 function test(
         ctx::Context, pkgs::Vector{PackageSpec};
         coverage = false, julia_args::Cmd = ``, test_args::Cmd = ``,
@@ -2934,13 +3005,7 @@ function test(
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) $(flags) --eval $code`
-
-            path_sep = Sys.iswindows() ? ';' : ':'
-            p, interrupted = withenv("JULIA_LOAD_PATH" => "@$(path_sep)$(testdir(source_path))", "JULIA_PROJECT" => nothing) do
-                subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
-            end
+            p, interrupted = run_test_subprocess_in_env(ctx.io, flags, source_path, test_args)
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
             elseif !interrupted
@@ -2950,41 +3015,31 @@ function test(
         end
 
         # compatibility shim between "targets" and "test/Project.toml"
-        local test_project_preferences, test_project_override
-        if isfile(projectfile_path(testdir(source_path)))
+        local test_project_override
+        test_project_preferences = if isfile(projectfile_path(testdir(source_path)))
             test_project_override = nothing
             with_load_path([testdir(source_path), Base.LOAD_PATH...]) do
-                test_project_preferences = Base.get_preferences()
+                Base.get_preferences()
             end
         else
             test_project_override = gen_target_project(ctx, pkg, source_path, "test")
             with_load_path([something(projectfile_path(source_path)), Base.LOAD_PATH...]) do
-                test_project_preferences = Base.get_preferences()
+                Base.get_preferences()
             end
         end
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(ctx, pkg, testdir(source_path), test_project_override; preferences = test_project_preferences, force_latest_compatible_version, allow_earlier_backwards_compatible_versions, allow_reresolve) do
-            test_fn !== nothing && test_fn()
-            sandbox_ctx = Context(; io = ctx.io)
-            status(sandbox_ctx.env, sandbox_ctx.registries; mode = PKGMODE_COMBINED, io = sandbox_ctx.io, ignore_indent = false, show_usagetips = false)
-            flags = gen_subprocess_flags(source_path; coverage, julia_args)
-
-            if should_autoprecompile()
-                cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
-                Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
-            end
-
-            printpkgstyle(ctx.io, :Testing, "Running tests...")
-            flush(ctx.io)
-            code = gen_test_code(source_path; test_args)
-            cmd = `$(Base.julia_cmd()) --threads=$(get_threads_spec()) $(flags) --eval $code`
-            p, interrupted = subprocess_handler(cmd, ctx.io, "Tests interrupted. Exiting the test process")
-            if success(p)
-                printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
-            elseif !interrupted
-                push!(pkgs_errored, (pkg.name, p))
-            end
+        sandbox(
+            ctx, pkg, testdir(source_path), test_project_override;
+            preferences = test_project_preferences,
+            force_latest_compatible_version,
+            allow_earlier_backwards_compatible_versions,
+            allow_reresolve,
+        ) do
+            run_sandboxed_tests!(
+                ctx, pkg, source_path, test_args,
+                coverage, julia_args, test_fn, pkgs_errored,
+            )
         end
     end
 
@@ -3402,8 +3457,8 @@ function print_status(
     end
 
     for pkg in package_statuses
-        pad = 0
-        print_padding(x) = (print(io, x); pad += 1)
+        pad = Ref(0)
+        print_padding(x) = (print(io, x); pad[] += 1)
 
         if !pkg.downloaded
             print_padding(not_installed_indicator)
@@ -3417,7 +3472,7 @@ function print_status(
         end
 
         # Fill the remaining padding with spaces
-        while pad < lpadding
+        while pad[] < lpadding
             print_padding(" ")
         end
 
