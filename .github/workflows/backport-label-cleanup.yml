@@ -38,6 +38,12 @@ jobs:
         with:
           version: '1'
 
+      - name: Cache Julia packages
+        if: steps.extract.outputs.version != ''
+        uses: julia-actions/cache@v2
+        with:
+          cache-name: backporter
+
       - name: Install dependencies
         if: steps.extract.outputs.version != ''
         run: |
