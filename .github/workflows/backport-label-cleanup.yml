@@ -1,4 +1,6 @@
 name: Backport Label Cleanup
+# Runs automatically when a pull request to a release branch is merged
+# to remove backport labels from the merged PRs
 
 on:
   pull_request:

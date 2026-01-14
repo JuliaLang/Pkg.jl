@@ -1,4 +1,7 @@
 name: Backport Label Audit
+# Run this workflow manually to audit backport labels on pull requests
+# and remove labels from PRs that have already been backported.
+# Optionally specify a release version to limit the audit to that version
 
 on:
   workflow_dispatch:
