@@ -93,6 +93,7 @@ jobs:
         with:
           # version: '1.6'
           version: 'nightly'
+      - uses: julia-actions/cache@v2
       - name: Generate docs
         run: |
           julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
