@@ -1,0 +1,54 @@
+name: Backport Label Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to audit (e.g., 1.13). Leave empty to audit all versions.'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (only report, do not modify)'
+        required: true
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+        default: 'true'
+
+jobs:
+  audit-backport-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout Backporter
+        uses: actions/checkout@v4
+        with:
+          repository: KristofferC/Backporter
+          ref: master
+          path: backporter
+
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      - name: Install dependencies
+        run: |
+          cd backporter
+          julia --project -e 'using Pkg; Pkg.instantiate()'
+
+      - name: Run backport label audit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd backporter
+          ARGS="--audit -r ${{ github.repository }}"
+          if [ -n "${{ inputs.version }}" ]; then
+            ARGS="$ARGS -v ${{ inputs.version }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "false" ]; then
+            ARGS="$ARGS --apply"
+          fi
+          julia --project backporter.jl $ARGS
