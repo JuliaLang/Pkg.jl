@@ -1,4 +1,7 @@
 name: Backport Label Audit
+# Run this workflow manually to audit backport labels on pull requests
+# and remove labels from PRs that have already been backported.
+# Optionally specify a release version to limit the audit to that version
 
 on:
   workflow_dispatch:
@@ -34,6 +37,11 @@ jobs:
         with:
           version: '1'
 
+      - name: Cache Julia packages
+        uses: julia-actions/cache@v2
+        with:
+          cache-name: backporter
+
       - name: Install dependencies
         run: |
           cd backporter
@@ -48,7 +56,7 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             ARGS="$ARGS -v ${{ inputs.version }}"
           fi
-          if [ "${{ inputs.dry_run }}" = "false" ]; then
-            ARGS="$ARGS --apply"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
           fi
           julia --project backporter.jl $ARGS
