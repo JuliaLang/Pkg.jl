@@ -3942,4 +3942,28 @@ end
     end
 end
 
+@testset "Pkg.add prefers loaded dependency versions" begin
+    isolate(loaded_depot = true) do
+        script = """
+        using Pkg, Test
+        Pkg.activate(; temp = true)
+        io = IOBuffer()
+        Pkg.add(name = "Example", version = v"0.5.4", io = io)
+        add_output = String(take!(io))
+        @test occursin("[7876af07] + Example v0.5.4", add_output)
+        using Example
+        Pkg.activate(; temp = true)
+        Pkg.add("Example", io = io) # v0.5.5 exists, but v0.5.4 is loaded
+        add_output = String(take!(io))
+        @test occursin("was able to add the version of Example that is already loaded", add_output)
+        @test occursin("[7876af07] + Example v0.5.4", add_output)
+        """
+        cmd = addenv(
+            `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
+            "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+        )
+        @test Utils.show_output_if_command_errors(cmd)
+    end
+end
+
 end #module
