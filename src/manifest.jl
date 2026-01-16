@@ -319,14 +319,14 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "git-tree-sha1", entry.tree_hash)
         entry!(new_entry, "pinned", entry.pinned; default = false)
         path = entry.path
-        if path !== nothing && Sys.iswindows() && !isabspath(path)
-            path = join(splitpath(path), "/")
+        if path !== nothing
+            path = normalize_path_for_toml(path)
         end
         entry!(new_entry, "path", path)
         entry!(new_entry, "entryfile", entry.entryfile)
         repo_source = entry.repo.source
-        if repo_source !== nothing && Sys.iswindows() && !isabspath(repo_source) && !isurl(repo_source)
-            repo_source = join(splitpath(repo_source), "/")
+        if repo_source !== nothing && !isurl(repo_source)
+            repo_source = normalize_path_for_toml(repo_source)
         end
         entry!(new_entry, "repo-url", repo_source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
