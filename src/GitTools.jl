@@ -312,7 +312,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, 
             if debug_out !== nothing
                 indent_str = "| "^indent
                 println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
-                print(debug_out, String(take!(child_stream)))
+                print(debug_out, String(take!(child_stream::IOBuffer)))
                 println(debug_out, indent_str)
             end
         else
