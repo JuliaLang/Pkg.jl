@@ -526,7 +526,7 @@ is_project_uuid(env::EnvCache, uuid::UUID) = project_uuid(env) == uuid
 # Context #
 ###########
 
-const UPGRADABLE_STDLIBS = ["DelimitedFiles", "Statistics"]
+const UPGRADABLE_STDLIBS = ["DelimitedFiles", "Statistics", "Distributed"]
 const UPGRADABLE_STDLIBS_UUIDS = Set{UUID}()
 const STDLIB = Ref{Union{DictStdLibs, Nothing}}(nothing)
 function load_stdlib()
