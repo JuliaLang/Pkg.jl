@@ -283,6 +283,9 @@ This structure is particularly beneficial for developers using a monorepo approa
 Workspace can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
+!!! compat
+    Workspaces require Julia 1.12+.
+
 ### The `[extras]` section (legacy)
 
 !!! warning
