@@ -1278,9 +1278,7 @@ function instantiate(
     end
 
     # Check for empty environment early
-    project_empty = !isfile(ctx.env.project_file) || isempty(ctx.env.project.deps)
-    manifest_empty = !isfile(ctx.env.manifest_file) || isempty(ctx.env.manifest)
-    if project_empty && manifest_empty
+    if isempty(ctx.env.project.deps) && isempty(ctx.env.manifest)
         env_path = isfile(ctx.env.project_file) ? dirname(ctx.env.project_file) : dirname(ctx.env.manifest_file)
         printpkgstyle(ctx.io, :Instantiate, "called on an empty environment: $(pathrepr(env_path))", color = Base.warn_color())
         return
