@@ -96,6 +96,19 @@ function should_autoprecompile()
     end
 end
 
+# Background precompilation state
+mutable struct BackgroundPrecompileState
+    task::Union{Nothing, Task}
+    stop_requested::Bool
+    cancel_requested::Bool
+    output_buffer::IOBuffer
+    completed_at::Union{Nothing, Float64}
+    result::Union{Nothing, String}
+    lock::ReentrantLock
+end
+
+const BACKGROUND_PRECOMPILE = BackgroundPrecompileState(nothing, false, false, IOBuffer(), nothing, nothing, ReentrantLock())
+
 """
     in_repl_mode()
 
@@ -1006,10 +1019,238 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
-    return if should_autoprecompile()
-        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+function is_precompiling_in_background()
+    return lock(BACKGROUND_PRECOMPILE.lock) do
+        return BACKGROUND_PRECOMPILE.task !== nothing && !istaskdone(BACKGROUND_PRECOMPILE.task)
     end
+end
+
+function stop_background_precompile(; graceful::Bool = true)
+    return lock(BACKGROUND_PRECOMPILE.lock) do
+        if BACKGROUND_PRECOMPILE.task !== nothing && !istaskdone(BACKGROUND_PRECOMPILE.task)
+            if graceful
+                BACKGROUND_PRECOMPILE.stop_requested = true
+            else
+                BACKGROUND_PRECOMPILE.cancel_requested = true
+                # Schedule interrupt on the task
+                schedule(BACKGROUND_PRECOMPILE.task, InterruptException(); error = true)
+            end
+            return true
+        end
+        return false
+    end
+end
+
+function monitor_background_precompile(io::IO = stderr_f())
+    local task
+    local completed_at
+    local result_msg
+    local output_buf
+
+    lock(BACKGROUND_PRECOMPILE.lock) do
+        task = BACKGROUND_PRECOMPILE.task
+        completed_at = BACKGROUND_PRECOMPILE.completed_at
+        result_msg = BACKGROUND_PRECOMPILE.result
+        output_buf = BACKGROUND_PRECOMPILE.output_buffer
+    end
+
+    if task === nothing || istaskdone(task)
+        if completed_at !== nothing
+            elapsed = time() - completed_at
+            # Always show the previous run information first
+            time_str = if elapsed < 60
+                "$(round(Int, elapsed)) seconds ago"
+            elseif elapsed < 3600
+                "$(round(Int, elapsed / 60)) minutes ago"
+            elseif elapsed < 86400
+                "$(round(Int, elapsed / 3600)) hours ago"
+            else
+                "$(round(Int, elapsed / 86400)) days ago"
+            end
+            printpkgstyle(io, :Info, "Background precompilation completed $time_str", color = Base.info_color())
+            # Print the entire buffer contents
+            lock(BACKGROUND_PRECOMPILE.lock) do
+                content = String(take!(copy(output_buf)))
+                if !isempty(content)
+                    print(io, content)
+                end
+            end
+        else
+            printpkgstyle(io, :Info, "No background precompilation is running or has been run in this session", color = Base.info_color())
+        end
+        return
+    end
+
+    printpkgstyle(io, :Info, "Monitoring precompilation that started in the background... (press 'd' to detach)", color = Base.info_color())
+
+    # Track how much we've already shown
+    last_pos = 0
+
+    # Channel to signal early exit
+    exit_requested = Ref(false)
+
+    # Start a task to listen for keypresses
+    key_task = if isinteractive() && stdin isa Base.TTY
+        @async try
+            term = Base.Terminals.TTYTerminal(get(ENV, "TERM", "dumb"), stdin, stdout, stderr)
+            Base.Terminals.raw!(term, true)
+
+            try
+                while !istaskdone(task) && !exit_requested[]
+                    # Just read directly - this blocks until a key is pressed
+                    c = read(stdin, Char)
+                    if c == 'd' || c == 'D'
+                        exit_requested[] = true
+                        println(io)  # newline after keypress
+                        break
+                    elseif c == '\x03'  # Ctrl-C
+                        Base.Terminals.raw!(term, false)
+                        throw(InterruptException())
+                    end
+                    # Any other key is ignored
+                end
+            finally
+                Base.Terminals.raw!(term, false)
+            end
+        catch err
+            err isa InterruptException && rethrow()
+            # Silently fail for other errors
+        end
+    else
+        nothing
+    end
+
+    # Wait for completion while periodically showing new output
+    return try
+        while !istaskdone(task) && !exit_requested[]
+            sleep(0.1)
+            lock(BACKGROUND_PRECOMPILE.lock) do
+                current_size = output_buf.size
+                if current_size > last_pos
+                    # Read and show new content
+                    seek(output_buf, last_pos)
+                    new_content = read(output_buf, current_size - last_pos)
+                    write(io, new_content)
+                    flush(io)
+                    last_pos = current_size
+                end
+            end
+        end
+
+        # If user requested exit, clean up and return
+        if exit_requested[]
+            key_task !== nothing && wait(key_task)
+            # Clear to end of screen to remove any partial output
+            print(io, "\e[J")
+            printpkgstyle(io, :Info, "Detached from monitoring (precompilation will continue in the background)\e[J", color = Base.info_color())
+            return
+        end
+
+        # Clean up key listener
+        key_task !== nothing && wait(key_task)
+
+        # Show any final output
+        lock(BACKGROUND_PRECOMPILE.lock) do
+            current_size = output_buf.size
+            if current_size > last_pos
+                seek(output_buf, last_pos)
+                new_content = read(output_buf, current_size - last_pos)
+                write(io, new_content)
+                flush(io)
+            end
+        end
+        wait(task)
+    catch e
+        # Clean up key listener on error
+        if key_task !== nothing
+            exit_requested[] = true
+            wait(key_task)
+        end
+        if e isa InterruptException
+            printpkgstyle(io, :Info, "Returning to prompt (precompilation will continue in the background)", color = Base.info_color())
+        else
+            rethrow()
+        end
+    end
+end
+
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false, background::Bool = true)
+    return if should_autoprecompile()
+        # Only use background mode in interactive sessions
+        if background && isinteractive() && Base.get_bool_env("JULIA_PKG_PRECOMPILE_BACKGROUND", true)
+            _launch_background_precompile(ctx, pkgs; warn_loaded, already_instantiated)
+        else
+            Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        end
+    end
+end
+
+function _launch_background_precompile(ctx::Types.Context, pkgs::Vector{Types.PackageSpec}; warn_loaded = true, already_instantiated = false)
+    # Stop any existing background precompilation
+    lock(BACKGROUND_PRECOMPILE.lock) do
+        if BACKGROUND_PRECOMPILE.task !== nothing && !istaskdone(BACKGROUND_PRECOMPILE.task)
+            BACKGROUND_PRECOMPILE.stop_requested = true
+            # Wait a short time for it to stop gracefully
+            for _ in 1:10
+                istaskdone(BACKGROUND_PRECOMPILE.task) && break
+                sleep(0.1)
+            end
+        end
+        BACKGROUND_PRECOMPILE.stop_requested = false
+        BACKGROUND_PRECOMPILE.cancel_requested = false
+        # Clear previous output and result
+        truncate(BACKGROUND_PRECOMPILE.output_buffer, 0)
+        BACKGROUND_PRECOMPILE.completed_at = nothing
+        BACKGROUND_PRECOMPILE.result = nothing
+    end
+
+    # Capture necessary context for background task
+    # We need to copy the project file path and package info, not the IO handles
+    project_file = ctx.env.project_file
+    pkg_names = String[pkg.name for pkg in pkgs]
+
+    # Launch new background precompilation
+    lock(BACKGROUND_PRECOMPILE.lock) do
+        BACKGROUND_PRECOMPILE.task = @async begin
+            local result_msg = nothing
+            try
+                # Create a new context using the shared output buffer for background execution
+                bg_ctx = Types.Context()
+                # Use :force_fancyprint to enable fancy printing regardless of TTY status
+                bg_ctx.io = IOContext(BACKGROUND_PRECOMPILE.output_buffer, :color => true, :force_fancyprint => true)
+
+                # Convert package names back to PackageSpec
+                bg_pkgs = [Types.PackageSpec(name = name) for name in pkg_names]
+
+                Pkg.precompile(bg_ctx, bg_pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+
+                result_msg = "Background precompilation completed successfully"
+            catch e
+                if e isa InterruptException
+                    result_msg = "Background precompilation was interrupted"
+                else
+                    result_msg = "Background precompilation failed: $(sprint(showerror, e))"
+                    @error "Background precompilation failed" exception = (e, catch_backtrace())
+                end
+            finally
+                lock(BACKGROUND_PRECOMPILE.lock) do
+                    BACKGROUND_PRECOMPILE.task = nothing
+                    BACKGROUND_PRECOMPILE.stop_requested = false
+                    BACKGROUND_PRECOMPILE.cancel_requested = false
+                    BACKGROUND_PRECOMPILE.completed_at = time()
+                    BACKGROUND_PRECOMPILE.result = result_msg
+                end
+            end
+        end
+    end
+
+    # Print message to user
+    io = ctx.io
+    if usable_io(io)
+        printpkgstyle(io, :Info, "Precompiling in the background. Use `pkg> precompile --monitor` to monitor, `--stop` to stop.", color = Base.info_color())
+    end
+
+    return nothing
 end
 
 include("precompile.jl")
