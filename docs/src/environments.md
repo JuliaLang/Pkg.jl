@@ -213,6 +213,26 @@ indicate the status of that package's precompilation.
 - `?` A question mark character indicates that a `PrecompilableError` was thrown, indicating that precompilation was disallowed, i.e. `__precompile__(false)` in that package.
 - `✗` A cross indicates that the package failed to precompile.
 
+#### Keyboard Controls and Background Precompilation
+
+!!! compat "Julia 1.14"
+    Keyboard controls and background detach during precompilation are available in Julia 1.14 and later.
+
+In interactive sessions, precompilation displays live progress with keyboard controls available:
+
+- **`d`/`q`/`]`** — Detach. Returns to the REPL while precompilation continues silently in the background.
+- **`c`** — Cancel. Kills all subprocesses; prompts for Enter to confirm.
+- **`i`** — Info. Sends a profiling signal to subprocesses for a profile peek without interrupting compilation.
+- **`v`** — Toggle verbose mode. Shows timing, worker PID, CPU%, and memory per compiling package.
+- **`?`/`h`** — Show keyboard shortcut help.
+- **Ctrl-C** — Interrupt. Sends SIGINT to subprocesses and displays their output.
+
+After pressing `d` to detach, you can manage the background precompilation using:
+
+- `pkg> precompile --monitor`: Reattach to see live progress. Press `d` again to detach.
+- `pkg> precompile --stop`: Gracefully stop background precompilation (waits for active jobs to finish).
+- `pkg> precompile --cancel`: Immediately cancel background precompilation (interrupts active jobs).
+
 #### Controlling Auto-precompilation
 
 Auto-precompilation can be controlled in several ways:
