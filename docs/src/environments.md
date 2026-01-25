@@ -213,6 +213,51 @@ indicate the status of that package's precompilation.
 - `?` A question mark character indicates that a `PrecompilableError` was thrown, indicating that precompilation was disallowed, i.e. `__precompile__(false)` in that package.
 - `✗` A cross indicates that the package failed to precompile.
 
+#### Background Precompilation
+
+!!! compat "Julia 1.14"
+    Background precompilation is available in Julia 1.14 and later.
+
+In interactive sessions, automatic precompilation after package operations (add, update, remove, etc.) runs in the
+background by default, allowing you to continue working immediately in the REPL:
+
+```julia-repl
+(@v1.14) pkg> add Example
+   Resolving package versions...
+    Updating `~/.julia/environments/v1.14/Project.toml`
+  [7876af07] + Example v0.5.3
+    Updating `~/.julia/environments/v1.14/Manifest.toml`
+  [7876af07] + Example v0.5.3
+  Info: Precompiling in the background. Use `pkg> precompile --monitor` to monitor, `--stop` to stop.
+
+(@v1.14) pkg> # Continue working immediately
+```
+
+You can monitor, control, or interact with background precompilation using:
+
+- `pkg> precompile --monitor`: Attach to the running background precompilation to see live progress. Press `d` to detach and return to the prompt while precompilation continues.
+- `pkg> precompile --stop`: Gracefully stop background precompilation (waits for active jobs to finish).
+- `pkg> precompile --cancel`: Immediately cancel background precompilation (interrupts active jobs).
+- `pkg> precompile --detach` or `pkg> precompile -d`: Explicitly run precompilation in the background.
+
+Explicit `pkg> precompile` commands without flags remain foreground/blocking as expected, ensuring predictable behavior in scripts.
+
+##### Keyboard Controls
+
+While precompilation progress is displayed, the following keyboard controls are available:
+
+- **`c`** — Cancel. Kills all subprocesses and suppresses output.
+- **`d`** — Detach. Returns to the REPL while precompilation continues in the background (only during automatic or `--detach` precompilation).
+- **`i`** — Info. Sends a profiling signal to subprocesses for a profile peek without interrupting compilation.
+- **Ctrl-C** — Interrupt. Sends SIGINT to subprocesses and displays their output.
+
+Background precompilation is controlled by the `JULIA_PKG_PRECOMPILE_BACKGROUND` environment variable. Set it to `0`
+to disable background mode and return to the traditional blocking behavior:
+
+```julia-repl
+julia> ENV["JULIA_PKG_PRECOMPILE_BACKGROUND"] = "0"
+```
+
 #### Controlling Auto-precompilation
 
 Auto-precompilation can be controlled in several ways:

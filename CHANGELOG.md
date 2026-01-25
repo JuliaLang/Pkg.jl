@@ -3,6 +3,13 @@ Pkg v1.13 Release Notes
 
 - `Pkg.test` now respects the `--check-bounds` setting from the parent Julia session instead of forcing `--check-bounds=yes`.
 
+- Automatic precompilation after package operations now runs in the background in interactive sessions, allowing you
+  to continue working immediately. Background precompilation can be monitored with `pkg> precompile --monitor` (press
+  `d` to detach), stopped with `--stop`, or canceled with `--cancel`. Keyboard controls (`c` to cancel, `d` to
+  detach, `i` for profile peek, `Ctrl-C` to interrupt) are available during precompilation progress. Explicit
+  `pkg> precompile` calls remain
+  foreground by default unless `--detach/-d` is specified. Control via `JULIA_PKG_PRECOMPILE_BACKGROUND` environment
+  variable. ([#4602])
 - Project.toml environments now support a `readonly` field to mark environments as read-only, preventing modifications.
   ([#4284])
 - `Pkg.build` now supports an `allow_reresolve` keyword argument to control whether the build process can re-resolve
