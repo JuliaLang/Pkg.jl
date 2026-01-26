@@ -266,6 +266,9 @@ julia = "1.1"
 
 ### [The `[workspace]` section](@id Workspaces)
 
+!!! compat
+    Workspaces require Julia 1.12+.
+
 A project file can define a workspace by giving a set of projects that is part of that workspace.
 Each project in a workspace can include their own dependencies, compatibility information, and even function as full packages.
 
