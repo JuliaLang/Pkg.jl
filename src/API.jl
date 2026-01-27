@@ -1204,20 +1204,15 @@ function precompile(
         ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool = false,
         strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
         _from_loading::Bool = false, configs::Union{Base.Precompilation.Config, Vector{Base.Precompilation.Config}} = (`` => Base.CacheFlags()),
-        workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false, detach::Bool = false, kwargs...
+        workspace::Bool = false, mode::Symbol = :foreground, monitor::Bool = false, stop::Bool = false, cancel::Bool = false, kwargs...
     )
-    # Handle background precompilation control options
-    if detach
-        # Launch precompilation in the background
-        Pkg._launch_background_precompile(ctx, pkgs; warn_loaded, already_instantiated)
-        return
-    end
+    # Handle background precompilation control options via Base
     if monitor
-        Pkg.monitor_background_precompile(ctx.io)
+        Base.Precompilation.monitor_background_precompile(ctx.io)
         return
     end
     if stop
-        if Pkg.stop_background_precompile(graceful = true)
+        if Base.Precompilation.stop_background_precompile(graceful = true)
             printpkgstyle(ctx.io, :Info, "Stopping background precompilation...")
         else
             printpkgstyle(ctx.io, :Info, "No background precompilation is running")
@@ -1225,7 +1220,7 @@ function precompile(
         return
     end
     if cancel
-        if Pkg.stop_background_precompile(graceful = false)
+        if Base.Precompilation.stop_background_precompile(graceful = false)
             printpkgstyle(ctx.io, :Info, "Canceling background precompilation...")
         else
             printpkgstyle(ctx.io, :Info, "No background precompilation is running")
@@ -1257,7 +1252,7 @@ function precompile(
             ctx.io
         end
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, mode)
     end
 end
 
