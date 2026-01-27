@@ -339,7 +339,7 @@ const why = API.why
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
-If no positional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
+If no positional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST`, and only packages explicitly listed in the project if `mode` is `PKGMODE_PROJECT`.
 If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
 
 If packages are given as positional arguments, the `preserve` argument can be used to control what other packages are allowed to update:
