@@ -466,8 +466,7 @@ function is_local_package_folder_case_sensitive(word::AbstractString)
     # check case-sensitive match
     for entry in readdir(parent)
         if entry == name && isdir(joinpath(parent, entry))
-            #check if its a julia package folder
-            return isfile(joinpath(parent, entry, "Project.toml"))
+            return true
         end
     end
     return false
