@@ -1499,9 +1499,11 @@ end
             @test_throws PkgError(
                 "Path `$(abspath("some/really/random/Dir"))` does not exist."
             ) Pkg.pkg"add some/really/random/Dir"
-            # warn if not explicit about adding directory
+            # warn only if needed (no info log anymore)
             mkdir("Example")
-            @test_logs (:info, r"Use `./Example` to add or develop the local directory at `.*`.") match_mode = :any Pkg.pkg"add Example"
+            @test_logs min_level=Logging.Warn begin
+                Pkg.@pkg_str "add Example"
+            end
         end
     end
 end
