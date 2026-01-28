@@ -1204,7 +1204,7 @@ function precompile(
         ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool = false,
         strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
         _from_loading::Bool = false, configs::Union{Base.Precompilation.Config, Vector{Base.Precompilation.Config}} = (`` => Base.CacheFlags()),
-        workspace::Bool = false, mode::Symbol = :foreground, monitor::Bool = false, stop::Bool = false, cancel::Bool = false, kwargs...
+        workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false, kwargs...
     )
     # Handle background precompilation control options via Base
     if monitor
@@ -1252,7 +1252,7 @@ function precompile(
             ctx.io
         end
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, mode)
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
     end
 end
 

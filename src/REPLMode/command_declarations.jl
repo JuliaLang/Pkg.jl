@@ -414,7 +414,6 @@ compound_declarations = [
                 PSA[:name => "monitor", :api => :monitor => true],
                 PSA[:name => "stop", :api => :stop => true],
                 PSA[:name => "cancel", :api => :cancel => true],
-                PSA[:name => "detach", :short_name => "d", :api => :mode => :background],
             ],
             :help => md"""
                     precompile [--workspace] [--detach/-d]
