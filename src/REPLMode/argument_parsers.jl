@@ -469,9 +469,9 @@ function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = fa
             # case-sensitive directory check
             if isdir(parent) && any(entry -> entry == name && isdir(joinpath(parent, entry)), readdir(parent))
                # only warn if it's a Julia package folder
-               if isfile(joinpath(path, "Project.toml"))
-                   @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
-               end
+                if isfile(joinpath(path, "Project.toml"))
+                    @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
+                end
             end
         end
 
