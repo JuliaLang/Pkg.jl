@@ -1499,12 +1499,19 @@ end
             @test_throws PkgError(
                 "Path `$(abspath("some/really/random/Dir"))` does not exist."
             ) Pkg.pkg"add some/really/random/Dir"
-            # warn only if needed (no info log anymore)
-            mkdir("Example")
+
+            # directory WITHOUT Project.toml => no info log
+            mkdir("NotAPackage")
             @test_logs (:info, nothing) begin
-                Pkg.@pkg_str "add Example"
+                Pkg.@pkg_str "add NotAPackage"
             end
 
+            # directory WITH Project.toml => info log SHOULD appear
+            mkdir("MyPackage")
+            touch("MyPackage/Project.toml")
+            @test_logs (:info, r"Use `./MyPackage` to add or develop the local directory at .*") begin
+                Pkg.@pkg_str "add MyPackage"
+            end
         end
     end
 end
