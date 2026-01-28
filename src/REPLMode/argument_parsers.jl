@@ -462,7 +462,7 @@ end
 function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
-        if occursin(name_re, word)
+        if any(occursin.(['\\','/'], word)) || word == "." || word == ".."
             path = expanduser(word)
             parent = dirname(path)
             name = basename(path)
@@ -473,16 +473,15 @@ function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = fa
                     @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
                 end
             end
+            return PackageSpec(; path = normpath(path))
         end
-
+        # check for URLs
         if isurl(word)
             return PackageSpec(; url = word)
-        elseif any(occursin.(['\\', '/'], word)) || word == "." || word == ".."
-            return PackageSpec(; path = normpath(expanduser(word)))
         end
     end
 
-    if occursin(uuid_re, word) && (occursin('/', word) || occursin('\\', word))
+    if occursin(uuid_re, word)
         return PackageSpec(; uuid = UUID(word))
     elseif occursin(name_re, word)
         m = match(name_re, word)
