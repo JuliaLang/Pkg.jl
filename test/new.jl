@@ -1501,9 +1501,10 @@ end
             ) Pkg.pkg"add some/really/random/Dir"
             # warn only if needed (no info log anymore)
             mkdir("Example")
-            @test_logs min_level=Logging.Warn begin
+            @test_logs (:info, nothing) begin
                 Pkg.@pkg_str "add Example"
             end
+
         end
     end
 end

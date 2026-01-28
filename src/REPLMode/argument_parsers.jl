@@ -392,6 +392,7 @@ function parse_package(args::Vector{QString}, options; add_or_dev = false)::Vect
     return parse_package_args(tokens; add_or_dev = add_or_dev)
 end
 
+
 function parse_package_args(args::Vector{PackageToken}; add_or_dev = false)::Vector{PackageSpec}
     # check for and apply PackageSpec modifier (e.g. `#foo` or `@v1.0.2`)
     function apply_modifier!(pkg::PackageSpec, args::Vector{PackageToken})
@@ -456,36 +457,29 @@ let uuid = raw"(?i)[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}(
     global const name_uuid_re = Regex("^$name\\s*=\\s*($uuid)\$")
 end
 
-function is_local_package_folder_case_sensitive(word::AbstractString)
-    path = expanduser(word)
-    parent = dirname(path)
-    name = basename(path)
-    if !isdir(parent)
-        return false
-    end
-    # check case-sensitive match
-    for entry in readdir(parent)
-        if entry == name && isdir(joinpath(parent, entry))
-            return true
-        end
-    end
-    return false
-end
-
 # packages can be identified through: uuid, name, or name+uuid
 # additionally valid for add/develop are: local path, url
 function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
-        if occursin(name_re, word) && is_local_package_folder_case_sensitive(word)
-            @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+        if occursin(name_re, word)
+            path = expanduser(word)
+            parent = dirname(path)
+            name = basename(path)
+
+            if isdir(parent) &&
+               any(entry -> entry == name && isdir(joinpath(parent, entry)), readdir(parent))
+                @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
+            end
         end
+
         if isurl(word)
             return PackageSpec(; url = word)
         elseif any(occursin.(['\\', '/'], word)) || word == "." || word == ".."
             return PackageSpec(; path = normpath(expanduser(word)))
         end
     end
+
     if occursin(uuid_re, word)
         return PackageSpec(; uuid = UUID(word))
     elseif occursin(name_re, word)
@@ -543,6 +537,7 @@ end
 function parse_app_add(raw_args::Vector{QString}, options)
     return parse_package(raw_args, options; add_or_dev = true)
 end
+
 
 #
 # # Other
