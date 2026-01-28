@@ -1510,7 +1510,7 @@ end
             mkdir("MyPackage")
             touch("MyPackage/Project.toml")
             @test_logs (:info, r"Use `./MyPackage` to add or develop the local directory at .*") begin
-                Pkg.@pkg_str "add MyPackage"
+                Pkg.@pkg_str "add ./MyPackage"
             end
         end
     end
