@@ -38,6 +38,20 @@ function pathrepr(path::String)
     return "`" * Base.contractuser(path) * "`"
 end
 
+"""
+    normalize_path_for_toml(path::String)
+
+Normalize a path for writing to TOML files (Project.toml/Manifest.toml).
+On Windows, converts relative paths to use forward slashes for cross-platform compatibility.
+Absolute paths are left unchanged as they are platform-specific by nature.
+"""
+function normalize_path_for_toml(path::String)
+    if Sys.iswindows() && !isabspath(path)
+        return join(splitpath(path), "/")
+    end
+    return path
+end
+
 function set_readonly(path)
     for (root, dirs, files) in walkdir(path)
         for file in files
