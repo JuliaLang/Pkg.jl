@@ -462,25 +462,21 @@ end
 function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
-        if any(occursin.(['\\','/'], word)) || word == "." || word == ".."
+        if isurl(word)
+            return PackageSpec(; url = word)
+        elseif any(occursin.(['\\', '/'], word)) || word == "." || word == ".."
             path = expanduser(word)
             parent = dirname(path)
             name = basename(path)
             # case-sensitive directory check
             if isdir(parent) && any(entry -> entry == name && isdir(joinpath(parent, entry)), readdir(parent))
-                # only warn if it's a Julia package folder
                 if isfile(joinpath(path, "Project.toml"))
                     @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
                 end
             end
             return PackageSpec(; path = normpath(path))
         end
-        # check for URLs
-        if isurl(word)
-            return PackageSpec(; url = word)
-        end
     end
-
     if occursin(uuid_re, word)
         return PackageSpec(; uuid = UUID(word))
     elseif occursin(name_re, word)
