@@ -483,7 +483,7 @@ function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = fa
         end
     end
 
-    if occursin(uuid_re, word)
+    if occursin(uuid_re, word) && (occursin('/', word) || occursin('\\', word))
         return PackageSpec(; uuid = UUID(word))
     elseif occursin(name_re, word)
         m = match(name_re, word)
