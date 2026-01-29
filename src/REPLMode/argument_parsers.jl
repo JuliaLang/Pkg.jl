@@ -467,35 +467,45 @@ function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = fa
         if occursin(url_pattern, word) || occursin(ssh_pattern, word)
             return PackageSpec(; url = word)
         end
+        # local path detection (case-sensitive)
         if word in (".", "..") || any(occursin.(['\\', '/'], word))
             path = expanduser(word)
             parent = dirname(path)
-            name = basename(path)
-            # warn only if folder exists and has Project.toml
-            if isdir(path) && isfile(joinpath(path, "Project.toml"))
-                @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
+            name = basename(path)            
+            # case-sensitive check for existing folder
+            if isdir(parent) && any(entry -> entry == name && isdir(joinpath(parent, entry)), readdir(parent))
+                # warn only if Project.toml exists
+                if isfile(joinpath(path, "Project.toml"))
+                    @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
+                end
             end
             return PackageSpec(; path = normpath(path))
         end
     end
+
+    # UUID only
     if occursin(uuid_re, word)
         return PackageSpec(; uuid = UUID(word))
-    end           
+    end
+    # name only
     if occursin(name_re, word)
         m = match(name_re, word)
         return PackageSpec(String(something(m.captures[1])))
     end
-    
-   if occursin(name_uuid_re, word)
+    # name + UUID
+    if occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
         return PackageSpec(String(something(m.captures[1])), UUID(something(m.captures[2])))
     end
+    # Name#UUID
     if occursin(r"^(.+)#([0-9a-fA-F-]{36})$", word)
         m = match(r"^(.+)#([0-9a-fA-F-]{36})$", word)
         return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
-    end 
+    end
+
     pkgerror("Unable to parse `$word` as a package.")
 end
+
 
 ################
 # RegistrySpec #
