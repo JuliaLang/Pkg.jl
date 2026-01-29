@@ -462,32 +462,39 @@ end
 function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
-        if isurl(word)
+        url_pattern = r"^(https?|ssh)://"
+        ssh_pattern = r"^git@"
+        if occursin(url_pattern, word) || occursin(ssh_pattern, word)
             return PackageSpec(; url = word)
-        elseif any(occursin.(['\\', '/'], word)) || word == "." || word == ".."
+        end
+        if word in (".", "..") || any(occursin.(['\\', '/'], word))
             path = expanduser(word)
             parent = dirname(path)
             name = basename(path)
-            # case-sensitive directory check
-            if isdir(parent) && any(entry -> entry == name && isdir(joinpath(parent, entry)), readdir(parent))
-                if isfile(joinpath(path, "Project.toml"))
-                    @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
-                end
+            # warn only if folder exists and has Project.toml
+            if isdir(path) && isfile(joinpath(path, "Project.toml"))
+                @info "Use './$word' to add or develop the local directory at '$(Base.contractuser(abspath(word)))'."
             end
             return PackageSpec(; path = normpath(path))
         end
     end
     if occursin(uuid_re, word)
         return PackageSpec(; uuid = UUID(word))
-    elseif occursin(name_re, word)
+    end           
+    if occursin(name_re, word)
         m = match(name_re, word)
         return PackageSpec(String(something(m.captures[1])))
-    elseif occursin(name_uuid_re, word)
+    end
+    
+   if occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
         return PackageSpec(String(something(m.captures[1])), UUID(something(m.captures[2])))
-    else
-        pkgerror("Unable to parse `$word` as a package.")
     end
+    if occursin(r"^(.+)#([0-9a-fA-F-]{36})$", word)
+        m = match(r"^(.+)#([0-9a-fA-F-]{36})$", word)
+        return PackageSpec(String(m.captures[1]), UUID(m.captures[2]))
+    end 
+    pkgerror("Unable to parse `$word` as a package.")
 end
 
 ################
