@@ -147,8 +147,8 @@ struct Stage1
     weakdeps::Union{Vector{String}, Dict{String, UUID}}
 end
 
-normalize_deps(name, uuid, deps, manifest; isext = false) = deps
-function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String, Vector{Stage1}}; isext = false)
+normalize_deps(name, uuid, deps, manifest, manifest_path; isext = false) = deps
+function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String, Vector{Stage1}}, manifest_path; isext = false)
     if length(deps) != length(unique(deps))
         pkgerror("Duplicate entry in `$name=$uuid`'s `deps` field.")
     end
@@ -159,14 +159,14 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
             if infos === nothing
                 pkgerror(
                     "`$name=$uuid` depends on `$dep`, ",
-                    "but no such entry exists in the manifest."
+                    "but no such entry exists in the manifest at `$manifest_path`."
                 )
             end
         end
         # should have used dict format instead of vector format
         if isnothing(infos) || length(infos) != 1
             pkgerror(
-                "Invalid manifest format. ",
+                "Invalid manifest format at `$manifest_path`. ",
                 "`$name=$uuid`'s dependency on `$dep` is ambiguous."
             )
         end
@@ -175,13 +175,17 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
     return final
 end
 
-function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any}, registries::Dict{String, ManifestRegistryEntry})
+manifest_path_str(f_or_io::IO) = "streamed manifest"
+manifest_path_str(path::String) = path
+
+function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any}, registries::Dict{String, ManifestRegistryEntry}, f_or_io)
+    manifest_path = manifest_path_str(f_or_io)
     # expand vector format deps
     for (name, infos) in stage1, info in infos
-        info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
+        info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1, manifest_path)
     end
     for (name, infos) in stage1, info in infos
-        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1; isext = true)
+        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1, manifest_path; isext = true)
     end
     # invariant: all dependencies are now normalized to Dict{String,UUID}
     deps = Dict{UUID, PackageEntry}()
@@ -197,13 +201,13 @@ function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project
                     if dep_entry === nothing
                         pkgerror(
                             "`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
-                            "but no such entry exists in the manifest."
+                            "but no such entry exists in the manifest at `$manifest_path`."
                         )
                     end
                     if dep_entry.name != name
                         pkgerror(
                             "`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
-                            "but entry with UUID `$uuid` has name `$(dep_entry.name)`."
+                            "but entry with UUID `$uuid` has name `$(dep_entry.name)` in the manifest at `$manifest_path`."
                         )
                     end
                 end
@@ -291,7 +295,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
         end
         other[k] = v
     end
-    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other, registries)
+    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other, registries, f_or_io)
 end
 
 function read_manifest(f_or_io::Union{String, IO})
