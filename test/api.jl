@@ -310,20 +310,25 @@ import .FakeTerminals.FakeTerminal
             Pkg.resolve()
 
             ## Tests when circularity is in dependencies
-            @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+            iob = IOBuffer()
+            Pkg.precompile(io = iob)
+            @test occursin("Circular dependency detected", String(take!(iob)))
 
             ## Tests when circularity goes through the active project
             Pkg.activate("CircularDep1")
             Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
-            @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+            Pkg.precompile(io = iob)
+            @test occursin("Circular dependency detected", String(take!(iob)))
             Pkg.activate(".")
             Pkg.activate("CircularDep2")
             Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
-            @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+            Pkg.precompile(io = iob)
+            @test occursin("Circular dependency detected", String(take!(iob)))
             Pkg.activate(".")
             Pkg.activate("CircularDep3")
             Pkg.resolve() # necessary because resolving in `Pkg.precompile` has been removed
-            @test_logs (:warn, r"Circular dependency detected") Pkg.precompile()
+            Pkg.precompile(io = iob)
+            @test occursin("Circular dependency detected", String(take!(iob)))
 
             Pkg.activate(temp = true)
             Pkg.precompile() # precompile an empty env should be a no-op
