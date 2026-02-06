@@ -122,6 +122,11 @@ using Test
         end
     end
 
+    isolate(loaded_depot = true) do
+        Pkg.Registry.add("General")
+        Pkg.Apps.add(name = "Runic", version = "1.5.1")
+        Pkg.Apps.update("Runic")
+    end
 end
 
 end # module
