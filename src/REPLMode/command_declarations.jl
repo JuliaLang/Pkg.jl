@@ -77,13 +77,12 @@ compound_declarations = [
                 PSA[:name => "project", :short_name => "p", :api => :mode => PKGMODE_PROJECT],
                 PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
                 PSA[:name => "all", :api => :all_pkgs => true],
-                PSA[:name => "workspace", :api => :workspace => true],
             ],
             :completions => :complete_installed_packages,
             :description => "remove packages from project or manifest",
             :help => md"""
-                    [rm|remove] [-p|--project] [--workspace] pkg[=uuid] ...
-                    [rm|remove] [-p|--project] [--workspace] [--all]
+                    [rm|remove] [-p|--project] pkg[=uuid] ...
+                    [rm|remove] [-p|--project] [--all]
 
                 Remove package `pkg` from the project file. Since the name `pkg` can only
                 refer to one package in a project this is unambiguous, but you can specify
@@ -93,11 +92,9 @@ compound_declarations = [
                 the project. Project mode operation is the default, so passing `-p` or
                 `--project` is optional unless it is preceded by the `-m` or `--manifest`
                 options at some earlier point. All packages can be removed by passing `--all`.
-                The `--workspace` option includes packages from all projects in the workspace
-                when used with `--all`.
 
-                    [rm|remove] [-m|--manifest] [--workspace] pkg[=uuid] ...
-                    [rm|remove] [-m|--manifest] [--workspace] [--all]
+                    [rm|remove] [-m|--manifest] pkg[=uuid] ...
+                    [rm|remove] [-m|--manifest] [--all]
 
                 Remove package `pkg` from the manifest file. If the name `pkg` refers to
                 multiple packages in the manifest, `uuid` disambiguates it. Removing a package

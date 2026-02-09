@@ -309,15 +309,12 @@ See also [`Pkg.precompile`](@ref).
 autoprecompilation_enabled
 
 """
-    Pkg.rm(pkg::Union{String, Vector{String}}; mode::PackageMode = PKGMODE_PROJECT, workspace::Bool = false)
-    Pkg.rm(pkg::Union{PackageSpec, Vector{PackageSpec}}; mode::PackageMode = PKGMODE_PROJECT, workspace::Bool = false)
+    Pkg.rm(pkg::Union{String, Vector{String}}; mode::PackageMode = PKGMODE_PROJECT)
+    Pkg.rm(pkg::Union{PackageSpec, Vector{PackageSpec}}; mode::PackageMode = PKGMODE_PROJECT)
 
 Remove a package from the current project. If `mode` is equal to
 `PKGMODE_MANIFEST` also remove it from the manifest including all
 recursive dependencies of `pkg`.
-
-If `workspace` is `true` and `all_pkgs` is `true`, packages from all projects in the workspace
-will be included.
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
 """

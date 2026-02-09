@@ -380,13 +380,13 @@ function add(
     return
 end
 
-function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all_pkgs::Bool = false, workspace::Bool = false, kwargs...)
+function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, mode; workspace)
+        append_all_pkgs!(pkgs, ctx, mode)
     else
         require_not_empty(pkgs, :rm)
     end
