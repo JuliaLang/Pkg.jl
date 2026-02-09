@@ -112,7 +112,7 @@ the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 ### The `readonly` field
 
 !!! compat
-    The `readonly` field requires Julia 1.12+.
+    The `readonly` field requires Julia 1.13+.
 
 The `readonly` field is a boolean that, when set to `true`, marks the environment as read-only. This prevents any modifications to the environment, including adding, removing, or updating packages. For example:
 
@@ -290,9 +290,6 @@ Workspace can be nested: a project that itself defines a workspace can also be p
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ### The `[extras]` section (legacy)
-
-!!! compat
-    Extras require Julia < 1.13; for Julia 1.13+ use [workspaces](@ref Workspaces).
 
 !!! warning
     The `[extras]` section is a legacy feature maintained for compatibility. For Julia 1.13+,
