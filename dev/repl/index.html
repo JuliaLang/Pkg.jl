@@ -94,9 +94,10 @@ pkg&gt; develop --local Example</code></pre>    </section>
         —
         <span class="docstring-category">REPL command</span>
     </header>
-    <section><pre><code class="nohighlight hljs">free pkg[=uuid] ...
-free [--all]</code></pre><p>Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see <code>help develop</code>) then this command
-makes the package no longer being checked out. Specifying <code>--all</code> will free all dependencies (direct and indirect).</p>    </section>
+    <section><pre><code class="nohighlight hljs">free [--workspace] pkg[=uuid] ...
+free [--workspace] [--all]</code></pre><p>Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see <code>help develop</code>) then this command
+makes the package no longer being checked out. Specifying <code>--all</code> will free all dependencies (direct and indirect).
+The <code>--workspace</code> option includes packages from all projects in the workspace when used with <code>--all</code>.</p>    </section>
 </article><article class="docstring">
     <header>
         <a class="docstring-binding" id="repl-generate" href="#repl-generate">
@@ -114,9 +115,10 @@ makes the package no longer being checked out. Specifying <code>--all</code> wil
         —
         <span class="docstring-category">REPL command</span>
     </header>
-    <section><pre><code class="nohighlight hljs">pin pkg[=uuid] ...
-pin [--all]</code></pre><p>Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-A pinned package has the symbol <code>⚲</code> next to its version in the status list.. Specifying <code>--all</code> will pin all dependencies (direct and indirect).</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; pin Example
+    <section><pre><code class="nohighlight hljs">pin [--workspace] pkg[=uuid] ...
+pin [--workspace] [--all]</code></pre><p>Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
+A pinned package has the symbol <code>⚲</code> next to its version in the status list. Specifying <code>--all</code> will pin all dependencies (direct and indirect).
+The <code>--workspace</code> option includes packages from all projects in the workspace when used with <code>--all</code>.</p><p><strong>Examples</strong></p><pre><code class="nohighlight hljs">pkg&gt; pin Example
 pkg&gt; pin Example@0.5.0
 pkg&gt; pin Example=7876af07-990d-54b4-ab0e-23690620f79a@0.5.0
 pkg&gt; pin --all</code></pre>    </section>
@@ -163,8 +165,8 @@ julia is started with <code>--startup-file=yes</code>.</p>    </section>
         —
         <span class="docstring-category">REPL command</span>
     </header>
-    <section><pre><code class="nohighlight hljs">[up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
-[up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
+    <section><pre><code class="nohighlight hljs">[up|update] [-p|--project]  [--workspace] [opts] pkg[=uuid] [@version] ...
+[up|update] [-m|--manifest] [--workspace] [opts] pkg[=uuid] [@version] ...
 
 opts: --major | --minor | --patch | --fixed
       --preserve=&lt;all/direct/none&gt;</code></pre><p>Update <code>pkg</code> within the constraints of the indicated version
@@ -174,7 +176,9 @@ In <code>--project</code> mode, package specifications only match project packag
 in <code>--manifest</code> mode they match any manifest package. Bound level options force
 the following packages to be upgraded only within the current major, minor,
 patch version; if the <code>--fixed</code> upgrade level is given, then the following
-packages will not be upgraded at all.</p><p>After any package updates the project will be precompiled. For more information see <code>pkg&gt; ?precompile</code>.</p>    </section>
+packages will not be upgraded at all.
+The <code>--workspace</code> option includes packages from all projects in the workspace
+when no packages are specified.</p><p>After any package updates the project will be precompiled. For more information see <code>pkg&gt; ?precompile</code>.</p>    </section>
 </article><h2 id="registry-commands"><a class="docs-heading-anchor" href="#registry-commands"><code>registry</code> commands</a><a id="registry-commands-1"></a><a class="docs-heading-anchor-permalink" href="#registry-commands" title="Permalink"></a></h2><article class="docstring">
     <header>
         <a class="docstring-binding" id="repl-registry-add" href="#repl-registry-add">
@@ -329,4 +333,4 @@ the output to the difference as compared to the last git commit.
 The <code>--compat</code> option alone shows project compat entries.
 The <code>--workspace</code> option shows the (merged) status of packages in the workspace.</p><div class="admonition is-compat" id="Julia-1.8-2ed8e94c8399fcdc"><header class="admonition-header">Julia 1.8<a class="admonition-anchor" href="#Julia-1.8-2ed8e94c8399fcdc" title="Permalink"></a></header><div class="admonition-body"><p>The <code>⌃</code> and <code>⌅</code> indicators were added in Julia 1.8.
 The <code>--outdated</code> and <code>--compat</code> options require at least Julia 1.8.</p></div></div>    </section>
-</article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../toml-files/">« <strong>11.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></a><a class="docs-footer-nextpage" href="../api/"><strong>13.</strong> API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 6 February 2026 10:05">Friday 6 February 2026</span>. Using Julia version 1.14.0-DEV.1689.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+</article></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../toml-files/">« <strong>11.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></a><a class="docs-footer-nextpage" href="../api/"><strong>13.</strong> API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Monday 9 February 2026 16:08">Monday 9 February 2026</span>. Using Julia version 1.14.0-DEV.1695.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
