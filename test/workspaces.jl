@@ -128,6 +128,25 @@ temp_pkg_dir() do project_path
 
                 @test hash_1 == hash_2 == hash_3 == hash_4
 
+                # Test workspace option for update, pin, free
+                Pkg.activate(".")
+                # Chairmarks is only a dep of the PrivatePackage subproject, not the root
+                all_deps = Pkg.dependencies()
+                chairmarks_uuid = only([uuid for (uuid, info) in all_deps if info.name == "Chairmarks"])
+                @test all_deps[chairmarks_uuid].version == v"1.1.2"
+
+                # update without workspace should not touch Chairmarks (not a root dep)
+                Pkg.update()
+                Pkg.dependencies(chairmarks_uuid) do pkg
+                    @test pkg.version == v"1.1.2"
+                end
+
+                # update with workspace=true should update Chairmarks from the subproject
+                Pkg.update(; workspace = true)
+                Pkg.dependencies(chairmarks_uuid) do pkg
+                    @test pkg.version > v"1.1.2"
+                end
+
                 # Test that the subprojects are working
                 depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
                 withenv("JULIA_DEPOT_PATH" => depot_path_string) do
