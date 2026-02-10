@@ -22,6 +22,8 @@ module PkgTestsInner
         error("The wrong Pkg is being tested")
     end
 
+    @test isempty(Test.detect_closure_boxes(Pkg))
+
     const original_depot_had_registries = isdir(joinpath(Base.DEPOT_PATH[1], "registries"))
 
     ENV["JULIA_PKG_PRECOMPILE_AUTO"] = 0
