@@ -3,6 +3,8 @@
 module Resolve
 
 using ..Versions
+using ..Registry
+using ..Types
 import ..stdout_f, ..stderr_f
 
 using Printf
@@ -157,6 +159,13 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int}, Nothing}, previo
     end
 end
 
+struct SanitySortKey{G, P}
+    gadj::G
+    pdict::P
+end
+
+(key::SanitySortKey)(pv) = -length(key.gadj[key.pdict[pv[1]]])
+
 """
 Scan the graph for (explicit or implicit) contradictions. Returns a list of problematic
 (package,version) combinations.
@@ -199,7 +208,7 @@ function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::B
     np == 0 && return problematic
 
     vers = [(pkgs[p0], pvers[p0][v0]) for p0 in 1:np for v0 in 1:(spp[p0] - 1)]
-    sort!(vers, by = pv -> (-length(gadj[pdict[pv[1]]])))
+    sort!(vers, by = SanitySortKey(gadj, pdict))
 
     nv = length(vers)
 

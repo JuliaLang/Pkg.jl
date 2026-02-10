@@ -99,6 +99,39 @@ are the following files: `Compat.toml`, `Deps.toml`, `Package.toml`,
 and `Versions.toml`.
 The formats of these files are described below.
 
+### Registry Package.toml
+
+The `Package.toml` file contains basic metadata about the package, such as its name, UUID, repository URL, and optional metadata.
+
+#### Package metadata
+
+The `[metadata]` table in `Package.toml` provides a location for metadata about the package that doesn't fit into the other registry files. This is an extensible framework for adding package-level metadata.
+
+#### Deprecated packages
+
+One use of the `[metadata]` table is to mark packages as deprecated using `[metadata.deprecated]`. Deprecated packages will:
+- Show as `[deprecated]` in package status output
+- Be excluded from tab-completion suggestions
+- Still be installable and usable
+
+The `[metadata.deprecated]` table can contain arbitrary metadata fields. Two special fields are recognized by Pkg and displayed when using `pkg> status --deprecated`:
+- `reason`: A string explaining why the package is deprecated
+- `alternative`: A string suggesting a replacement package
+
+Example:
+
+```toml
+name = "MyPackage"
+uuid = "..."
+repo = "..."
+
+[metadata.deprecated]
+reason = "This package is no longer maintained"
+alternative = "ReplacementPackage"
+```
+
+Other fields can be added to `[metadata.deprecated]` for use by registries or other tools.
+
 ### Registry Compat.toml
 
 The `Compat.toml` file has a series of blocks specifying version
@@ -126,6 +159,55 @@ together in these blocks. The interpretation of these ranges is given by the com
 
 So for this package, versions `[0.8.0, 0.8.3]` depend on versions `[0.4.0, 0.6.0)` of `DependencyA` and version `[0.3.0, 0.6.0)` of `DependencyB`.
 Meanwhile, it is also true that versions `[0.8.2, 0.8.5]` require specific versions of `DependencyC` (so that all three are required for versions `0.8.2` and `0.8.3`).
+
+### Registry formats
+
+!!! compat "Julia 1.7"
+    Compressed registry formats are available starting with Julia 1.7.
+
+Registries can be installed in several different formats, each with different tradeoffs:
+
+#### Compressed registries (preferred)
+
+When using a package server (the default), registries are downloaded as compressed tarballs. This is the preferred format for the General registry because it is:
+- **Fast for the initial download**: Only a single compressed file needs to be transferred
+- **Fast to use**: Pkg reads data directly from the packed tarball, avoiding many small filesystem reads
+- **Low disk usage**: The registry can be read directly from the compressed file without extraction
+
+You can check if a registry is compressed by running `Pkg.Registry.status()`, which will describe it as a "packed registry" when it remains in its tarball and an "unpacked registry" when the files have been extracted to disk.
+
+#### Git registries
+
+Registries can also be installed as git clones. This format:
+- **Provides immediate updates**: Running `Pkg.Registry.update()` fetches the latest changes directly from the git repository
+- **Uses more disk space**: The full git history is stored locally
+- **May be slower**: Cloning and updating can take longer than downloading a compressed tarball
+- **Integrates with local tooling**: All registry files are present on disk, so you can inspect or customize them using familiar editors and git workflows
+
+To install a registry as a git clone, use:
+
+```julia
+Pkg.Registry.add(url = "https://github.com/JuliaRegistries/General.git")
+```
+
+#### Converting between formats
+
+To convert an existing registry from git to compressed (or vice versa), remove and re-add it:
+
+```julia-repl
+# Convert to compressed (uses package server if available)
+pkg> registry rm General
+
+pkg> registry add General
+
+# Convert to git
+pkg> registry rm General
+
+pkg> registry add https://github.com/JuliaRegistries/General.git
+```
+
+!!! note
+    The environment variable `JULIA_PKG_SERVER` controls whether package servers are used. Setting it to an empty string (`JULIA_PKG_SERVER=""`) disables package server usage and forces git clones. To force unpacking even when using a package server, set `JULIA_PKG_UNPACK_REGISTRY=true`.
 
 ### Registry flavors
 

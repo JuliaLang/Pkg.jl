@@ -80,6 +80,13 @@ The `uuid` field is mandatory for packages.
 !!! note
     It is recommended that `UUIDs.uuid4()` is used to generate random UUIDs.
 
+#### Why UUIDs are important
+
+UUIDs serve several critical purposes in the Julia package ecosystem:
+
+- **Unique identification**: UUIDs uniquely identify packages across all registries and repositories, preventing naming conflicts. Two different packages can have the same name (e.g., in different registries), but their UUIDs will always be different.
+- **Multiple registries**: UUIDs enable the use of multiple package registries (including private registries) without conflicts, as each package is uniquely identified by its UUID regardless of which registry it comes from.
+
 
 ### The `version` field
 
@@ -113,6 +120,21 @@ readonly = true
 When an environment is marked as readonly, Pkg will throw an error if any operation that would modify the environment is attempted.
 If the `readonly` field is not present or set to `false` (the default), the environment can be modified normally.
 
+You can also programmatically check and modify the readonly state using the [`Pkg.readonly`](@ref) function:
+
+```julia
+# Check if current environment is readonly
+is_readonly = Pkg.readonly()
+
+# Enable readonly mode
+previous_state = Pkg.readonly(true)
+
+# Disable readonly mode
+Pkg.readonly(false)
+```
+
+When readonly mode is enabled, the status display will show `(readonly)` next to the project name to indicate the environment is protected from modifications.
+
 
 ### The `[deps]` section
 
@@ -128,7 +150,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Typically it is not needed to manually add entries to the `[deps]` section; this is instead
 handled by Pkg operations such as `add`.
 
-### The `[sources]` section
+### [The `[sources]` section](@id sources-section)
 
 Specifying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
@@ -139,7 +161,7 @@ Each entry in the `[sources]` section supports the following keys:
 - **`url`**: The URL of the Git repository. Cannot be used with `path`.
 - **`rev`**: The Git revision (branch name, tag, or commit hash) to use. Only valid with `url`.
 - **`subdir`**: A subdirectory within the repository containing the package.
-- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`.
+- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`. This will `dev` the package.
 
 This might in practice look something like:
 
@@ -150,12 +172,79 @@ WithinMonorepo = {url = "https://github.org/author/BigProject", subdir = "SubPac
 SomeDependency = {path = "deps/SomeDependency.jl"}
 ```
 
-Note that this information is only used when this environment is active, i.e. it is not used if this project is a package that is being used as a dependency.
+#### When `[sources]` entries are used
+
+Sources are read and applied in the following situations:
+
+1. **Active environment**: When resolving dependencies for the currently active environment, sources from the environment's `Project.toml` override registry information for direct dependencies.
+
+2. **Automatic addition**: When you add a package by URL (e.g., `pkg> add https://github.com/...`) or develop a package (e.g., `pkg> dev Example`), Pkg automatically adds an entry to `[sources]` for that package in your active environment's `Project.toml`.
+
+3. **Recursive collection**: When a package is added by URL or path, Pkg recursively collects `[sources]` entries from that package's dependencies. This allows private dependency chains to resolve without registry metadata. For example:
+   - If you `add` Package A by URL, and Package A has a `[sources]` entry for Package B
+   - And Package B (also specified by URL in A's sources) has a `[sources]` entry for Package C
+   - Then all three packages' source information will be collected and used during resolution
+
+This recursive behavior is particularly useful for managing chains of unregistered or private packages.
+
+!!! note "Scope of sources"
+    Sources are only used when the environment containing them is the active environment being resolved. If a package is used as a dependency in another project, its `[sources]` section is **not** consulted (except when that package itself was added by URL or path, in which case recursive collection applies as described above).
+
+!!! tip "Test-specific dependencies"
+    A use case for `[sources]` with `path` is in `test/Project.toml` to reference the parent package using `path = ".."`. This allows test dependencies to be managed independently with their own manifest file. See [Test-specific dependencies](@ref) for more details on this and other approaches.
+
+!!! compat
+    Specifying sources requires Julia 1.11+.
+
+### The `[weakdeps]` section
+
+Weak dependencies are optional dependencies that will not automatically install when the package is installed,
+but for which you can still specify compatibility constraints. Weak dependencies are typically used in conjunction
+with package extensions (see [`[extensions]`](@ref extensions-section) below), which allow conditional loading of code
+when the weak dependency is available in the environment.
+
+Example:
+```toml
+[weakdeps]
+SomePackage = "b3785f31-9d33-4cdf-bc73-f646780f1739"
+
+[compat]
+SomePackage = "1.2"
+```
+
+For more details on using weak dependencies and extensions, see the
+[Weak dependencies](@ref Weak-dependencies) section in the Creating Packages guide.
+
+!!! compat
+    Weak dependencies require Julia 1.9+.
+
+### [The `[extensions]` section](@id extensions-section)
+
+Extensions allow packages to provide optional functionality that is only loaded when certain other packages
+(typically listed in `[weakdeps]`) are available. Each entry in the `[extensions]` section maps an extension
+name to one or more package dependencies required to load that extension.
+
+Example:
+```toml
+[weakdeps]
+Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
+
+[extensions]
+ContourExt = "Contour"
+```
+
+The extension code itself should be placed in an `ext/` directory at the package root, with the file name
+matching the extension name (e.g., `ext/ContourExt.jl`). For more details on creating and using extensions,
+see the [Conditional loading of code in packages (Extensions)](@ref Conditional-loading-of-code-in-packages-(Extensions)) section in the Creating Packages guide.
+
+!!! compat
+    Extensions require Julia 1.9+.
 
 ### The `[compat]` section
 
-Compatibility constraints for the dependencies listed under `[deps]` can be listed in the
-`[compat]` section.
+Compatibility constraints for dependencies can be listed in the `[compat]` section. This applies to
+packages listed under `[deps]`, `[weakdeps]`, and `[extras]`.
+
 Example:
 
 ```toml
@@ -175,7 +264,7 @@ constraints in detail. It is also possible to list constraints on `julia` itself
 julia = "1.1"
 ```
 
-### The `[workspace]` section
+### [The `[workspace]` section](@id Workspaces)
 
 A project file can define a workspace by giving a set of projects that is part of that workspace.
 Each project in a workspace can include their own dependencies, compatibility information, and even function as full packages.
@@ -189,10 +278,53 @@ A workspace is defined in the base project by giving a list of the projects in i
 projects = ["test", "docs", "benchmarks", "PrivatePackage"]
 ```
 
-This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding documentation or benchmarks to a package by including additional dependencies beyond those of the package itself.
+This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding test-specific dependencies to a package by including a `test` project in the workspace (see [Test-specific dependencies](@ref adding-tests-to-packages)), or for adding documentation or benchmarks with their own dependencies.
 
 Workspace can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
+
+### The `[extras]` section (legacy)
+
+!!! warning
+    The `[extras]` section is a legacy feature maintained for compatibility. For Julia 1.13+,
+    using [workspaces](@ref Workspaces) is the recommended approach for managing test-specific
+    and other optional dependencies.
+
+The `[extras]` section lists additional dependencies that are not regular dependencies of the package,
+but may be used in specific contexts like testing. These are typically used in conjunction with the
+`[targets]` section.
+
+Example:
+```toml
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+```
+
+For more information, see the [Test-specific dependencies](@ref adding-tests-to-packages) section.
+
+### The `[targets]` section (legacy)
+
+!!! warning
+    The `[targets]` section is a legacy feature maintained for compatibility. For Julia 1.13+,
+    using [workspaces](@ref Workspaces) is the recommended approach for managing test-specific
+    and build dependencies.
+
+The `[targets]` section specifies which packages from `[extras]` should be available in specific
+contexts. The only supported targets are `test` (for test dependencies) and `build` (for build-time
+dependencies used by `deps/build.jl` scripts).
+
+Example:
+```toml
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
+
+[targets]
+test = ["Test", "Markdown"]
+```
+
+For more information, see the [Test-specific dependencies](@ref adding-tests-to-packages) section.
 
 ## `Manifest.toml`
 
@@ -232,6 +364,39 @@ This shows the Julia version the manifest was created on, the "format" of the ma
 and a hash of the project file, so that it is possible to see when the manifest is stale
 compared to the project file.
 
+#### Manifest format versions
+
+The `manifest_format` field indicates the structure version of the manifest file:
+- `"2.0"`: The standard format for Julia 1.7+
+- `"2.1"`: The current format (requires Julia 1.13+). This format introduced registry tracking in the `[registries]` section.
+
+### The `[registries]` section
+
+!!! compat
+    Registry tracking in manifests requires Julia 1.13+ and manifest format `"2.1"`.
+
+Starting with manifest format `2.1`, the manifest can include a `[registries]` section that tracks
+metadata about the registries from which packages were obtained. This ensures that the exact source
+of each package version can be identified, which is particularly important when using multiple
+registries or private registries.
+
+Each registry entry in the manifest looks like this:
+
+```toml
+[registries.General]
+uuid = "23338594-aafe-5451-b93e-139f81909106"
+url = "https://github.com/JuliaRegistries/General.git"
+```
+
+The registry entries include:
+* **`uuid`** (required): The unique identifier for the registry.
+* **`url`** (optional): The URL where the registry can be found. This enables automatic installation
+  of registries when instantiating an environment on a new machine.
+
+The section key (e.g., `General` in the example above) is the registry name.
+
+### Package entries
+
 Each dependency has its own section in the manifest file, and its content varies depending
 on how the dependency was added to the environment. Every
 dependency section includes a combination of the following entries:
@@ -248,6 +413,11 @@ dependency section includes a combination of the following entries:
   or a commit `repo-rev = "66607a62a83cb07ab18c0b35c038fcd62987c9b1"`.
 * `git-tree-sha1`: a content hash of the source tree, for example
   `git-tree-sha1 = "ca3820cc4e66f473467d912c4b2b3ae5dc968444"`.
+* `registries`: a reference to the registry IDs from which this package version was obtained. This can be either
+  a single string (e.g., `registries = "General"`) or a vector of strings if the package is available in multiple
+  registries (e.g., `registries = ["General", "MyRegistry"]`). All registries containing this package version
+  are recorded. This field is only present in manifest format `2.1` or later, and only for packages that were
+  added from a registry (not for developed or git-tracked packages).
 
 
 #### Added package
@@ -262,10 +432,12 @@ deps = ["DependencyA", "DependencyB"]
 git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
 version = "1.2.3"
+registries = "General"
 ```
 
 Note, in particular, that no `repo-url` is present, since that information is included in
-the registry where this package was found.
+the registry where this package was found. The `registries` field (present in manifest format `2.1`+)
+references an entry in the `[registries]` section that contains the registry metadata.
 
 #### Added package by branch
 

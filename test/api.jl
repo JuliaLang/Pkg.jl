@@ -50,7 +50,7 @@ import .FakeTerminals.FakeTerminal
 
 @testset "Pkg.precompile" begin
     # sequential precompile, depth-first
-    isolate() do;
+    isolate(loaded_depot = true) do;
         cd_tempdir() do tmp
             Pkg.activate(".")
             cd(mkdir("packages")) do
@@ -250,7 +250,7 @@ import .FakeTerminals.FakeTerminal
                 Pkg.precompile(io = iob)
                 str = String(take!(iob))
                 @test occursin("Precompiling", str)
-                @test occursin("Waiting for background task / IO / timer.", str)
+                @test occursin("waiting for IO to finish", str) || occursin("Waiting for background task / IO / timer.", str)
             end
 
             @testset "pidlocked precompile" begin
@@ -261,7 +261,8 @@ import .FakeTerminals.FakeTerminal
                 Pkg.activate(\"$(escape_string(proj))\")
                 Pkg.precompile()
             "`,
-                    "JULIA_PKG_PRECOMPILE_AUTO" => "0"
+                    "JULIA_PKG_PRECOMPILE_AUTO" => "0",
+                    "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                 )
                 iob1 = IOBuffer()
                 iob2 = IOBuffer()
@@ -382,8 +383,8 @@ end
         mktempdir() do tempdir
             pathf = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarFuture"))
             pathp = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "FarPast"))
-            @test_throws "julia version requirement from Project.toml's compat section not satisfied for package" Pkg.add(path = pathf)
-            @test_throws "julia version requirement from Project.toml's compat section not satisfied for package" Pkg.add(path = pathp)
+            @test_throws "julia version requirement for package" Pkg.add(path = pathf)
+            @test_throws "julia version requirement for package" Pkg.add(path = pathp)
         end
     end
 end

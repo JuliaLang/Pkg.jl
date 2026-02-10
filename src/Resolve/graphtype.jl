@@ -113,19 +113,20 @@ mutable struct GraphData
     rlog::ResolveLog
 
     function GraphData(
-            compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
+            compat_compressed::Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}},
+            pkg_versions::Dict{UUID, Vector{VersionNumber}},
             uuid_to_name::Dict{UUID, String},
             verbose::Bool = false
         )
         # generate pkgs
-        pkgs = sort!(collect(keys(compat)))
+        pkgs = sort!(collect(keys(pkg_versions)))
         np = length(pkgs)
 
         # generate pdict
         pdict = Dict{UUID, Int}(pkgs[p0] => p0 for p0 in 1:np)
 
-        # generate spp and pvers
-        pvers = [sort!(collect(keys(compat[pkgs[p0]]))) for p0 in 1:np]
+        # generate spp and pvers from provided version lists
+        pvers = [pkg_versions[pkgs[p0]] for p0 in 1:np]
         spp = length.(pvers) .+ 1
 
         # generate vdict
@@ -143,7 +144,7 @@ mutable struct GraphData
             d = Dict{InstState, Set{InstState}}()
             for v0 in 1:spp[p0]
                 let p0 = p0 # Due to https://github.com/JuliaLang/julia/issues/15276
-                    d[eq_vn(v0, p0)] = Set([eq_vn(v0, p0)])
+                    d[eq_vn(v0, p0)] = Set{InstState}((eq_vn(v0, p0),))
                 end
             end
             eq_classes[pkgs[p0]] = d
@@ -235,8 +236,12 @@ mutable struct Graph
     cavfld::Vector{FieldValue}
 
     function Graph(
-            compat::Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}},
-            compat_weak::Dict{UUID, Dict{VersionNumber, Set{UUID}}},
+            deps_compressed::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
+            compat_compressed::Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}},
+            weak_deps_compressed::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
+            weak_compat_compressed::Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}},
+            pkg_versions::Dict{UUID, Vector{VersionNumber}},
+            pkg_versions_per_registry::Dict{UUID, Vector{Set{VersionNumber}}},
             uuid_to_name::Dict{UUID, String},
             reqs::Requires,
             fixed::Dict{UUID, Fixed},
@@ -248,49 +253,93 @@ mutable struct Graph
         uuid_to_name[uuid_julia] = "julia"
         if julia_version !== nothing
             fixed[uuid_julia] = Fixed(julia_version)
-            compat[uuid_julia] = Dict(julia_version => Dict{VersionNumber, Dict{UUID, VersionSpec}}())
+            deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            weak_deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            weak_compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            pkg_versions[uuid_julia] = [julia_version]
+            pkg_versions_per_registry[uuid_julia] = [Set([julia_version])]
         else
-            compat[uuid_julia] = Dict{VersionNumber, Dict{UUID, VersionSpec}}()
+            deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            weak_deps_compressed[uuid_julia] = [Dict{VersionRange, Set{UUID}}()]
+            weak_compat_compressed[uuid_julia] = [Dict{VersionRange, Dict{UUID, VersionSpec}}()]
+            pkg_versions[uuid_julia] = VersionNumber[]
+            pkg_versions_per_registry[uuid_julia] = [Set{VersionNumber}()]
         end
 
-        data = GraphData(compat, uuid_to_name, verbose)
+        data = GraphData(compat_compressed, pkg_versions, uuid_to_name, verbose)
         pkgs, np, spp, pdict, pvers, vdict, rlog = data.pkgs, data.np, data.spp, data.pdict, data.pvers, data.vdict, data.rlog
         extended_deps = let spp = spp # Due to https://github.com/JuliaLang/julia/issues/15276
             [Vector{Dict{Int, BitVector}}(undef, spp[p0] - 1) for p0 in 1:np]
         end
-        for p0 in 1:np, v0 in 1:(spp[p0] - 1)
-            vn = pvers[p0][v0]
-            req = Dict{Int, VersionSpec}()
+        vnmap = Dict{UUID, VersionSpec}()
+        reg_result = Dict{UUID, VersionSpec}()
+        req = Dict{Int, VersionSpec}()
+        for p0 in 1:np
             uuid0 = pkgs[p0]
-            vnmap = get(Dict{UUID, VersionSpec}, compat[uuid0], vn)
-            for (uuid1, vs) in vnmap
-                p1 = pdict[uuid1]
-                p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
-                # check conflicts instead of intersecting?
-                # (intersecting is used by fixed packages though...)
-                req_p1 = get(req, p1, nothing)
-                if req_p1 == nothing
-                    req[p1] = vs
-                else
-                    req[p1] = req_p1 ∩ vs
+
+            # Query compressed deps and compat data for this version (including weak deps)
+            # We have a vector of per-registry dictionaries, need to query across all
+            uuid0_deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, deps_compressed, uuid0)
+            uuid0_compat_list = get(Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}, compat_compressed, uuid0)
+            uuid0_weak_deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, weak_deps_compressed, uuid0)
+            uuid0_weak_compat_list = get(Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}, weak_compat_compressed, uuid0)
+            uuid0_versions_per_reg = get(Vector{Set{VersionNumber}}, pkg_versions_per_registry, uuid0)
+
+            for v0 in 1:(spp[p0] - 1)
+                vn = pvers[p0][v0]
+                empty!(req)
+                Registry.query_compat_for_version_multi_registry!(vnmap, reg_result, uuid0_deps_list, uuid0_compat_list, uuid0_weak_deps_list, uuid0_weak_compat_list, uuid0_versions_per_reg, vn)
+
+                # Filter out incompatible stdlib compat entries from registry dependencies
+                for (dep_uuid, dep_compat) in vnmap
+                    if Types.is_stdlib(dep_uuid) && !(dep_uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+                        stdlib_ver = Types.stdlib_version(dep_uuid, julia_version)
+                        if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
+                            @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat package = uuid_to_name[uuid0] version = vn
+                            delete!(vnmap, dep_uuid)
+                        end
+                    end
                 end
-            end
-            # Translate the requirements into bit masks
-            # Hot code, measure performance before changing
-            req_msk = Dict{Int, BitVector}()
-            sizehint!(req_msk, length(req))
-            maybe_weak = haskey(compat_weak, uuid0) && haskey(compat_weak[uuid0], vn)
-            for (p1, vs) in req
-                pv = pvers[p1]
-                req_msk_p1 = BitVector(undef, spp[p1])
-                @inbounds for i in 1:(spp[p1] - 1)
-                    req_msk_p1[i] = pv[i] ∈ vs
+
+                for (uuid1, vs) in vnmap
+                    p1 = pdict[uuid1]
+                    p1 == p0 && error("Package $(pkgID(pkgs[p0], uuid_to_name)) version $vn has a dependency with itself")
+                    # check conflicts instead of intersecting?
+                    # (intersecting is used by fixed packages though...)
+                    req_p1 = get(req, p1, nothing)
+                    if req_p1 == nothing
+                        req[p1] = vs
+                    else
+                        req[p1] = req_p1 ∩ vs
+                    end
                 end
-                weak = maybe_weak && (pkgs[p1] ∈ compat_weak[uuid0][vn])
-                req_msk_p1[end] = weak
-                req_msk[p1] = req_msk_p1
+
+                # Translate the requirements into bit masks
+                # Hot code, measure performance before changing
+                req_msk = Dict{Int, BitVector}()
+                sizehint!(req_msk, length(req))
+
+                for (p1, vs) in req
+                    pv = pvers[p1]
+                    # Allocate BitVector with space for weak dep flag
+                    req_msk_p1 = BitVector(undef, spp[p1])
+                    # Use optimized batch version check (fills indices 1 through spp[p1]-1)
+                    Versions.matches_spec_range!(req_msk_p1, pv, vs, spp[p1] - 1)
+                    # Check if this is a weak dep across all registries
+                    weak = false
+                    for weak_deps_dict in uuid0_weak_deps_list
+                        if Registry.is_weak_dep(weak_deps_dict, vn, pkgs[p1])
+                            weak = true
+                            break
+                        end
+                    end
+                    req_msk_p1[end] = weak
+                    req_msk[p1] = req_msk_p1
+                end
+                extended_deps[p0][v0] = req_msk
             end
-            extended_deps[p0][v0] = req_msk
         end
 
         gadj = [Int[] for p0 in 1:np]
@@ -327,7 +376,7 @@ mutable struct Graph
                 bmt = gmsk[p1][j1]
             end
 
-            for v1 in 1:spp[p1]
+            @inbounds for v1 in 1:spp[p1]
                 rmsk1[v1] && continue
                 bm[v1, v0] = false
                 bmt[v0, v1] = false
@@ -987,19 +1036,20 @@ function showlog(io::IO, rlog::ResolveLog, p::UUID; view::Symbol = :tree)
         _show(io, rlog, entry, _logindent, IdDict{Any, Any}(entry => true), true)
     else
         entries = ResolveLogEntry[entry]
-        function getentries(entry)
-            for (other_entry, _) in entry.events
-                (other_entry ≡ nothing || other_entry ∈ entries) && continue
-                push!(entries, other_entry)
-                getentries(other_entry)
-            end
-            return
-        end
-        getentries(entry)
+        collect_log_entries!(entries, entry)
         for entry in entries
             _show(io, rlog, entry, _logindent, IdDict(), false)
         end
     end
+end
+
+function collect_log_entries!(entries::Vector{ResolveLogEntry}, entry::ResolveLogEntry)
+    for (other_entry, _) in entry.events
+        (other_entry ≡ nothing || other_entry ∈ entries) && continue
+        push!(entries, other_entry)
+        collect_log_entries!(entries, other_entry)
+    end
+    return
 end
 
 # Show a recursive tree with requirements applied to a package, either directly or indirectly
@@ -1083,6 +1133,12 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
         sources
 
     seen = copy(staged)
+    staged_next = Set{Int}()
+
+    # Pre-allocate workspace for added constraints
+    max_spp = maximum(spp, init = 0)
+    added_constr1 = BitVector(undef, max_spp)
+    old_gconstr1 = BitVector(undef, max_spp)
 
     while !isempty(staged)
         staged_next = Set{Int}()
@@ -1097,16 +1153,28 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
                 pkgs[p1] == uuid_julia && continue
 
                 msk = gmsk[p0][j1]
-                # consider the sub-mask with only allowed versions of p0
-                sub_msk = msk[:, gconstr0]
                 # if an entire row of the sub-mask is false, that version of p1
                 # is effectively forbidden
                 # (this is just like calling `any` row-wise)
-                added_constr1 = any!(BitVector(undef, spp[p1]), sub_msk)
+                # sub_msk = msk[:, gconstr0]
+                # added_constr1 = any!(BitVector(undef, spp[p1]), sub_msk)
+                # The code below is equivalent to the shorter code above, but avoids allocating
+                spp1 = spp[p1]
+                resize!(added_constr1, spp1)
+                fill!(added_constr1, false)
+                for v1 in 1:spp1
+                    for v0 in 1:spp[p0]
+                        if gconstr0[v0] && msk[v1, v0]
+                            added_constr1[v1] = true
+                            break
+                        end
+                    end
+                end
+
                 # apply the new constraints, checking for contradictions
                 # (keep the old ones for comparison)
                 gconstr1 = gconstr[p1]
-                old_gconstr1 = copy(gconstr1)
+                copy!(old_gconstr1, gconstr1)
                 gconstr1 .&= added_constr1
                 # if the new constraints are more restrictive than the
                 # previous ones, record it and propagate them next
@@ -1285,8 +1353,15 @@ function compute_eq_classes!(graph::Graph)
 
     np = graph.np
     sumspp = sum(graph.spp)
+
+    # Preallocate workspace matrix - make it large enough for worst case
+    max_rows = maximum(1 + sum(size(m, 1) for m in graph.gmsk[p0]; init = 0) for p0 in 1:np; init = 1)
+    max_cols = maximum(graph.spp; init = 1)
+    cmat_workspace = BitMatrix(undef, max_rows, max_cols)
+    cvecs_workspace = [BitVector(undef, max_rows) for _ in 1:max_cols]
+
     for p0 in 1:np
-        build_eq_classes1!(graph, p0)
+        build_eq_classes1!(graph, p0, cmat_workspace, cvecs_workspace)
     end
 
     log_event_global!(graph, "computed version equivalence classes, stats (total n. of states): before = $(sumspp) after = $(sum(graph.spp))")
@@ -1296,7 +1371,7 @@ function compute_eq_classes!(graph::Graph)
     return graph
 end
 
-function build_eq_classes1!(graph::Graph, p0::Int)
+function build_eq_classes1!(graph::Graph, p0::Int, cmat_workspace::BitMatrix, cvecs_workspace::Vector{BitVector})
     np = graph.np
     spp = graph.spp
     gadj = graph.gadj
@@ -1312,8 +1387,24 @@ function build_eq_classes1!(graph::Graph, p0::Int)
 
     # concatenate all the constraints; the columns of the
     # result encode the behavior of each version
-    cmat = vcat(BitMatrix(permutedims(gconstr[p0])), gmsk[p0]...)
-    cvecs = [cmat[:, v0] for v0 in 1:spp[p0]]
+    # cmat = vcat(BitMatrix(permutedims(gconstr[p0])), gmsk[p0]...)
+    ncols = spp[p0]
+    cmat_workspace[1, 1:ncols] = gconstr[p0]
+    row_idx = 2
+    for j1 in 1:length(gmsk[p0])
+        msk = gmsk[p0][j1]
+        nrows_msk = size(msk, 1)
+        cmat_workspace[row_idx:(row_idx + nrows_msk - 1), 1:ncols] = msk
+        row_idx += nrows_msk
+    end
+
+    # cvecs = [cmat[:, v0] for v0 in 1:spp[p0]]
+    nrows = row_idx - 1
+    cvecs = view(cvecs_workspace, 1:ncols)
+    for v0 in 1:ncols
+        resize!(cvecs[v0], nrows)
+        copy!(cvecs[v0], view(cmat_workspace, 1:nrows, v0))
+    end
 
     # find unique behaviors
     repr_vecs = unique(cvecs)

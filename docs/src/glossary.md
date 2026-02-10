@@ -29,6 +29,15 @@ identify the package in projects that depend on it.
     to load a package without a project file or UUID from a project with them. Once
     you've loaded from a project file, everything needs a project file and UUID.
 
+!!! note
+    **Packages vs. Modules:** A *package* is a source tree with a `Project.toml` file
+    and other components that Pkg can install and manage. A *module* is a Julia language
+    construct (created with the `module` keyword) that provides a namespace for code.
+    Typically, a package contains a module of the same name (e.g., the `DataFrames` package
+    contains a `DataFrames` module), but they are distinct concepts: the package is the
+    distributable unit that Pkg manages, while the module is the namespace that your code
+    interacts with using `import` or `using`.
+
 **Application:** a project which provides standalone functionality not intended
 to be reused by other Julia projects. For example a web application or a
 command-line utility, or simulation/analytics code accompanying a scientific paper.
@@ -107,7 +116,7 @@ Julia's code loading mechanisms, look for registries, installed packages, named
 environments, repo clones, cached compiled package images, and configuration
 files. The depot path is controlled by the Julia `DEPOT_PATH` global variable
 which is populated at startup based on the value of the `JULIA_DEPOT_PATH`
-environment variable. The first entry is the “user depot” and should be writable
+environment variable. The first entry is the "user depot" and should be writable
 by and owned by the current user. The user depot is where: registries are
 cloned, new package versions are installed, named environments are created and
 updated, package repositories are cloned, newly compiled package image files are saved,
@@ -115,3 +124,15 @@ log files are written, development packages are checked out by default, and
 global configuration data is saved. Later entries in the depot path are treated
 as read-only and are appropriate for registries, packages, etc. installed and
 managed by system administrators.
+
+**Materialize:** the process of installing all packages and dependencies specified
+in a manifest file to recreate an exact environment state. When you
+`instantiate` a project, Pkg materializes its environment by downloading and
+installing all the exact package versions recorded in the `Manifest.toml` file.
+This ensures reproducibility across different machines and users.
+
+**Canonical:** refers to a single, authoritative location for each specific
+version of a package. When the same package version is used by multiple
+environments, Pkg stores it in one canonical location and all environments
+reference that same location, rather than duplicating the package files. This
+saves disk space and ensures consistency.

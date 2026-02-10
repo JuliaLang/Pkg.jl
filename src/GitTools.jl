@@ -13,6 +13,45 @@ using Printf
 use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
 const RESOLVING_DELTAS_HEADER = "Resolving Deltas:"
 
+# Check if LibGit2 supports shallow clones (requires LibGit2 >= 1.7.0)
+# We check both the LibGit2 version and the existence of `isshallow` to ensure
+# the shallow clone functionality is available
+function supports_shallow_clone()
+    # This seems buggy on Windows? Get some weird CI errors with it.
+    if Sys.iswindows()
+        return false
+    end
+    has_version = @static if isdefined(LibGit2, :VERSION)
+        LibGit2.VERSION >= v"1.7.0"
+    else
+        false
+    end
+    has_isshallow = isdefined(LibGit2, :isshallow)
+    return has_version && has_isshallow
+end
+
+# Check if a URL is a local path or file:// URL
+# Shallow clones are only supported for network protocols (HTTP, HTTPS, Git, SSH)
+function is_local_repo(url::AbstractString)
+    # Check if it's a local filesystem path
+    ispath(url) && return true
+    # Check if it uses file:// protocol
+    startswith(url, "file://") && return true
+    return false
+end
+
+# Check if a repository is a shallow clone
+function isshallow(repo::LibGit2.GitRepo)
+    if supports_shallow_clone() && isdefined(LibGit2, :isshallow)
+        return LibGit2.isshallow(repo)
+    else
+        # Fallback: check for .git/shallow file
+        repo_path = LibGit2.path(repo)
+        shallow_file = joinpath(repo_path, "shallow")
+        return isfile(shallow_file)
+    end
+end
+
 function transfer_progress(progress::Ptr{LibGit2.TransferProgress}, p::Any)
     progress = unsafe_load(progress)
     @assert haskey(p, :transfer_progress)
@@ -89,11 +128,17 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
     end
 end
 
-function clone(io::IO, url, source_path; header = nothing, credentials = nothing, isbare = false, kwargs...)
+function clone(io::IO, url, source_path; header = nothing, credentials = nothing, isbare = false, depth::Integer = 0, kwargs...)
     url = String(url)::String
     source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
     url = normalize_url(url)
+
+    # Disable shallow clones for local repos (not supported) or if LibGit2 doesn't support it
+    if depth > 0 && (is_local_repo(url) || !supports_shallow_clone())
+        depth = 0
+    end
+
     printpkgstyle(io, :Cloning, header === nothing ? "git-repo `$url`" : header)
     bar = MiniProgressBar(header = "Cloning:", color = Base.info_color())
     fancyprint = can_fancyprint(io)
@@ -103,8 +148,10 @@ function clone(io::IO, url, source_path; header = nothing, credentials = nothing
     end
     return try
         if use_cli_git()
-            args = ["--quiet", url, source_path]
-            isbare && pushfirst!(args, "--bare")
+            args = ["--quiet"]
+            depth > 0 && push!(args, "--depth=$depth")
+            isbare && push!(args, "--bare")
+            push!(args, url, source_path)
             cmd = `git clone $args`
             try
                 run(pipeline(cmd; stdout = devnull))
@@ -124,7 +171,12 @@ function clone(io::IO, url, source_path; header = nothing, credentials = nothing
                 LibGit2.Callbacks()
             end
             mkpath(source_path)
-            return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
+            # Only pass depth if shallow clones are supported and depth > 0
+            if depth > 0
+                return LibGit2.clone(url, source_path; callbacks, credentials, isbare, depth, kwargs...)
+            else
+                return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
+            end
         end
     catch err
         rm(source_path; force = true, recursive = true)
@@ -133,9 +185,9 @@ function clone(io::IO, url, source_path; header = nothing, credentials = nothing
             Pkg.Types.pkgerror("git clone of `$url` interrupted")
         elseif (err.class == LibGit2.Error.Net && err.code == LibGit2.Error.EINVALIDSPEC) ||
                 (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
-            Pkg.Types.pkgerror("git repository not found at `$(url)`")
+            Pkg.Types.pkgerror("git repository not found at `$(url)`: ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to clone from $(url), error: $err")
+            Pkg.Types.pkgerror("failed to clone from $(url): ($(err.msg))")
         end
     finally
         Base.shred!(credentials)
@@ -149,10 +201,16 @@ function geturl(repo)
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = nothing, credentials = nothing, refspecs = [""], kwargs...)
+function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = nothing, credentials = nothing, refspecs::Vector{String} = [""], depth::Integer = 0, kwargs...)
     if remoteurl === nothing
         remoteurl = geturl(repo)
     end
+
+    # Disable shallow fetches for local repos (not supported) or if LibGit2 doesn't support it
+    if depth > 0 && (is_local_repo(remoteurl) || !supports_shallow_clone())
+        depth = 0
+    end
+
     fancyprint = can_fancyprint(io)
     remoteurl = normalize_url(remoteurl)
     printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
@@ -174,7 +232,10 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
     return try
         if use_cli_git()
             let remoteurl = remoteurl
-                cmd = `git -C $(LibGit2.path(repo)) fetch -q $remoteurl $(only(refspecs))`
+                args = ["-C", LibGit2.path(repo), "fetch", "-q"]
+                depth > 0 && push!(args, "--depth=$depth")
+                push!(args, remoteurl, only(refspecs))
+                cmd = `git $args`
                 try
                     run(pipeline(cmd; stdout = devnull))
                 catch err
@@ -182,14 +243,19 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
                 end
             end
         else
-            return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
+            # Only pass depth if shallow clones are supported and depth > 0
+            if depth > 0
+                return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, depth, kwargs...)
+            else
+                return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
+            end
         end
     catch err
         err isa LibGit2.GitError || rethrow()
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
-            Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)'")
+            Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)': ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to fetch from $(remoteurl), error: $err")
+            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($(err.msg))")
         end
     finally
         Base.shred!(credentials)
@@ -313,7 +379,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, 
             if debug_out !== nothing
                 indent_str = "| "^indent
                 println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
-                print(debug_out, String(take!(child_stream)))
+                print(debug_out, String(take!(child_stream::IOBuffer)))
                 println(debug_out, indent_str)
             end
         else

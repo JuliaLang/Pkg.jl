@@ -4,11 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Test
 using TOML
 using UUIDs
-if !isdefined(@__MODULE__, :Utils)
-    include("utils.jl")
-    using .Utils
-end
-
+using ..Utils
 
 temp_pkg_dir() do project_path
     cd(project_path) do;
@@ -26,8 +22,7 @@ temp_pkg_dir() do project_path
                 Pkg.develop(path = "PrivatePackage")
                 d = TOML.parsefile("Project.toml")
                 d["workspace"] = Dict("projects" => ["test", "docs", "benchmarks", "PrivatePackage"])
-                abs_path = abspath("PrivatePackage") # TODO: Make relative after #3842 is fixed
-                d["sources"] = Dict("PrivatePackage" => Dict("path" => abs_path))
+                d["sources"] = Dict("PrivatePackage" => Dict("path" => "PrivatePackage"))
                 Pkg.Types.write_project(d, "Project.toml")
                 write(
                     "src/MonorepoSub.jl", """
@@ -105,8 +100,7 @@ temp_pkg_dir() do project_path
                 Pkg.generate("TestSpecificPackage")
                 Pkg.develop(path = "TestSpecificPackage")
                 d = TOML.parsefile("test/Project.toml")
-                abs_pkg = abspath("TestSpecificPackage") # TODO: Make relative after #3842 is fixed
-                d["sources"] = Dict("TestSpecificPackage" => Dict("path" => abs_pkg))
+                d["sources"] = Dict("TestSpecificPackage" => Dict("path" => "../TestSpecificPackage"))
                 Pkg.Types.write_project(d, "test/Project.toml")
 
                 @test !isfile("test/Manifest.toml")
@@ -134,6 +128,25 @@ temp_pkg_dir() do project_path
 
                 @test hash_1 == hash_2 == hash_3 == hash_4
 
+                # Test workspace option for update, pin, free
+                Pkg.activate(".")
+                # Chairmarks is only a dep of the PrivatePackage subproject, not the root
+                all_deps = Pkg.dependencies()
+                chairmarks_uuid = only([uuid for (uuid, info) in all_deps if info.name == "Chairmarks"])
+                @test all_deps[chairmarks_uuid].version == v"1.1.2"
+
+                # update without workspace should not touch Chairmarks (not a root dep)
+                Pkg.update()
+                Pkg.dependencies(chairmarks_uuid) do pkg
+                    @test pkg.version == v"1.1.2"
+                end
+
+                # update with workspace=true should update Chairmarks from the subproject
+                Pkg.update(; workspace = true)
+                Pkg.dependencies(chairmarks_uuid) do pkg
+                    @test pkg.version > v"1.1.2"
+                end
+
                 # Test that the subprojects are working
                 depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
                 withenv("JULIA_DEPOT_PATH" => depot_path_string) do
@@ -157,32 +170,62 @@ temp_pkg_dir() do project_path
 end
 
 @testset "test resolve with tree hash" begin
-    mktempdir() do dir
-        path = copy_test_package(dir, "WorkspaceTestInstantiate")
-        cd(path) do
-            with_current_env() do
-                @test !isfile("Manifest.toml")
-                @test !isfile("test/Manifest.toml")
-                Pkg.test()
-                @test isfile("Manifest.toml")
-                @test !isfile("test/Manifest.toml")
-                rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
-                Pkg.test()
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceTestInstantiate")
+            cd(path) do
+                with_current_env() do
+                    @test !isfile("Manifest.toml")
+                    @test !isfile("test/Manifest.toml")
+                    Pkg.test()
+                    @test isfile("Manifest.toml")
+                    @test !isfile("test/Manifest.toml")
+                    rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                    Pkg.test()
+                end
             end
         end
     end
 end
 
 @testset "workspace path resolution issue #4222" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspacePathResolution")
+            cd(path) do
+                with_current_env() do
+                    # First resolve SubProjectB (non-root project) without existing Manifest
+                    Pkg.activate("SubProjectB")
+                    @test !isfile("Manifest.toml")
+                    # Should be able to find SubProjectA and succeed
+                    Pkg.update()
+                end
+            end
+        end
+    end
+end
+
+# Test that workspace child projects with [sources] pointing to parent work correctly
+# This was broken in 1.12.3 due to stale assertions after #4539
+@testset "workspace sources pointing to parent package" begin
     mktempdir() do dir
-        path = copy_test_package(dir, "WorkspacePathResolution")
+        path = copy_test_package(dir, "WorkspaceSourcesParent")
         cd(path) do
             with_current_env() do
-                # First resolve SubProjectB (non-root project) without existing Manifest
-                Pkg.activate("SubProjectB")
+                # Activate the docs subproject which has [sources] WorkspaceSourcesParent = {path = ".."}
+                Pkg.activate("docs")
                 @test !isfile("Manifest.toml")
-                # Should be able to find SubProjectA and succeed
-                Pkg.update()
+                # This should succeed without AssertionError
+                Pkg.instantiate()
+                @test isfile("Manifest.toml")
+                # Verify the manifest has the correct path for the parent package
+                manifest = TOML.parsefile("Manifest.toml")
+                parent_entry = only(manifest["deps"]["WorkspaceSourcesParent"])
+                @test parent_entry["path"] == "."
+                # Verify the Project.toml sources path was NOT corrupted (issue #4575)
+                # The path should remain ".." (project-relative), not "." (manifest-relative)
+                project = TOML.parsefile("docs/Project.toml")
+                @test project["sources"]["WorkspaceSourcesParent"]["path"] == ".."
             end
         end
     end

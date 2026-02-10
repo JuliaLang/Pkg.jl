@@ -67,6 +67,27 @@ function safe_path(path::String)
     return path
 end
 
+function read_registry_entry(id::String, info::Dict{String, Any})
+    uuid_val = get(info, "uuid", nothing)
+    uuid_val isa String || pkgerror("Registry entry `$id` is missing a string `uuid` field.")
+    uuid = safe_uuid(uuid_val)
+    url_val = get(info, "url", nothing)
+    url_val === nothing || url_val isa String || pkgerror("Field `url` for registry `$id` must be a String.")
+
+    return ManifestRegistryEntry(
+        id = id,
+        uuid = uuid,
+        url = url_val === nothing ? nothing : String(url_val),
+    )
+end
+
+function registry_entry_toml(entry::ManifestRegistryEntry)
+    d = Dict{String, Any}()
+    d["uuid"] = string(entry.uuid)
+    entry.url === nothing || (d["url"] = entry.url)
+    return d
+end
+
 read_deps(::Nothing) = Dict{String, UUID}()
 read_deps(deps) = pkgerror("Expected `deps` field to be either a list or a table.")
 function read_deps(deps::AbstractVector)
@@ -126,8 +147,8 @@ struct Stage1
     weakdeps::Union{Vector{String}, Dict{String, UUID}}
 end
 
-normalize_deps(name, uuid, deps, manifest; isext = false) = deps
-function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String, Vector{Stage1}}; isext = false)
+normalize_deps(name, uuid, deps, manifest, manifest_path; isext = false) = deps
+function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String, Vector{Stage1}}, manifest_path; isext = false)
     if length(deps) != length(unique(deps))
         pkgerror("Duplicate entry in `$name=$uuid`'s `deps` field.")
     end
@@ -138,14 +159,14 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
             if infos === nothing
                 pkgerror(
                     "`$name=$uuid` depends on `$dep`, ",
-                    "but no such entry exists in the manifest."
+                    "but no such entry exists in the manifest at `$manifest_path`."
                 )
             end
         end
         # should have used dict format instead of vector format
         if isnothing(infos) || length(infos) != 1
             pkgerror(
-                "Invalid manifest format. ",
+                "Invalid manifest format at `$manifest_path`. ",
                 "`$name=$uuid`'s dependency on `$dep` is ambiguous."
             )
         end
@@ -154,13 +175,17 @@ function normalize_deps(name, uuid, deps::Vector{String}, manifest::Dict{String,
     return final
 end
 
-function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any})
+manifest_path_str(f_or_io::IO) = "streamed manifest"
+manifest_path_str(path::String) = path
+
+function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any}, registries::Dict{String, ManifestRegistryEntry}, f_or_io)
+    manifest_path = manifest_path_str(f_or_io)
     # expand vector format deps
     for (name, infos) in stage1, info in infos
-        info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1)
+        info.entry.deps = normalize_deps(name, info.uuid, info.deps, stage1, manifest_path)
     end
     for (name, infos) in stage1, info in infos
-        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1; isext = true)
+        info.entry.weakdeps = normalize_deps(name, info.uuid, info.weakdeps, stage1, manifest_path; isext = true)
     end
     # invariant: all dependencies are now normalized to Dict{String,UUID}
     deps = Dict{UUID, PackageEntry}()
@@ -176,20 +201,20 @@ function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project
                     if dep_entry === nothing
                         pkgerror(
                             "`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
-                            "but no such entry exists in the manifest."
+                            "but no such entry exists in the manifest at `$manifest_path`."
                         )
                     end
                     if dep_entry.name != name
                         pkgerror(
                             "`$(entry.name)=$(entry_uuid)` depends on `$name=$uuid`, ",
-                            "but entry with UUID `$uuid` has name `$(dep_entry.name)`."
+                            "but entry with UUID `$uuid` has name `$(dep_entry.name)` in the manifest at `$manifest_path`."
                         )
                     end
                 end
             end
         end
     end
-    return Manifest(; julia_version, project_hash, manifest_format, deps, other)
+    return Manifest(; julia_version, project_hash, manifest_format, deps, registries, other)
 end
 
 function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
@@ -226,10 +251,22 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     entry.repo.subdir = read_field("repo-subdir", nothing, info, identity)
                     entry.tree_hash = read_field("git-tree-sha1", nothing, info, safe_SHA1)
                     entry.uuid = uuid
+                    reg_field = get(info, "registries", nothing)::Union{Nothing, String, Vector{String}}
+                    if reg_field isa String
+                        entry.registries = [reg_field]
+                    elseif reg_field isa Vector{String}
+                        entry.registries = String[r for r in reg_field]
+                    elseif reg_field !== nothing
+                        pkgerror("Expected `registries` field to be a String or Vector{String}, got $(typeof(reg_field)).")
+                    end
                     deps = read_deps(get(info::Dict, "deps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     weakdeps = read_deps(get(info::Dict, "weakdeps", nothing)::Union{Nothing, Dict{String, Any}, Vector{String}})
                     entry.apps = read_apps(get(info::Dict, "apps", nothing)::Union{Nothing, Dict{String, Any}})
-                    entry.exts = read_exts(get(info, "extensions", nothing))
+                    entry.exts = read_exts(get(info, "extensions", nothing)::Union{Nothing, Dict{String, Any}})
+                    syntax = get(info, "syntax", nothing)::Union{Dict{String, Any}, Nothing}
+                    if syntax !== nothing
+                        entry.julia_syntax_version = read_field("julia_version", nothing, syntax, safe_version)
+                    end
                 catch
                     # TODO: Should probably not unconditionally log something
                     # @debug "Could not parse manifest entry for `$name`" f_or_io
@@ -242,14 +279,23 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
         # by this point, all the fields of the `PackageEntry`s have been type casted
         # but we have *not* verified the _graph_ structure of the manifest
     end
+    registries = Dict{String, ManifestRegistryEntry}()
+    if haskey(raw, "registries")
+        regs_raw = raw["registries"]::Dict{String, Any}
+        for (reg_id, info_any) in regs_raw
+            info = info_any::Dict{String, Any}
+            registries[reg_id] = read_registry_entry(reg_id, info)
+        end
+    end
+
     other = Dict{String, Any}()
     for (k, v) in raw
-        if k in ("julia_version", "deps", "manifest_format")
+        if k in ("julia_version", "deps", "manifest_format", "registries")
             continue
         end
         other[k] = v
     end
-    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other)
+    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other, registries, f_or_io)
 end
 
 function read_manifest(f_or_io::Union{String, IO})
@@ -276,11 +322,10 @@ function read_manifest(f_or_io::Union{String, IO})
 end
 
 function convert_v1_format_manifest(old_raw_manifest::Dict)
-    new_raw_manifest = Dict{String, Any}(
-        "deps" => old_raw_manifest,
-        "manifest_format" => "1.0.0" # must be a string here to match raw dict
-        # don't set julia_version as it is unknown in old manifests
-    )
+    new_raw_manifest = Dict{String, Any}()
+    new_raw_manifest["deps"] = old_raw_manifest
+    new_raw_manifest["manifest_format"] = "1.0.0" # must be a string here to match raw dict
+    # don't set julia_version as it is unknown in old manifests
     return new_raw_manifest
 end
 
@@ -294,6 +339,10 @@ function destructure(manifest::Manifest)::Dict
         else
             entry[key] = value
         end
+    end
+
+    if !isempty(manifest.registries) && manifest.manifest_format < v"2.1.0"
+        manifest.manifest_format = v"2.1.0"
     end
 
     unique_name = Dict{String, Bool}()
@@ -317,6 +366,13 @@ function destructure(manifest::Manifest)::Dict
         for (k, v) in manifest.other
             raw[k] = v
         end
+        if !isempty(manifest.registries)
+            regs = Dict{String, Any}()
+            for (id, entry) in manifest.registries
+                regs[id] = registry_entry_toml(entry)
+            end
+            raw["registries"] = regs
+        end
     end
 
     for (uuid, entry) in manifest
@@ -329,18 +385,35 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "git-tree-sha1", entry.tree_hash)
         entry!(new_entry, "pinned", entry.pinned; default = false)
         path = entry.path
-        if path !== nothing && Sys.iswindows() && !isabspath(path)
-            path = join(splitpath(path), "/")
+        if path !== nothing
+            path = normalize_path_for_toml(path)
         end
         entry!(new_entry, "path", path)
         entry!(new_entry, "entryfile", entry.entryfile)
         repo_source = entry.repo.source
-        if repo_source !== nothing && Sys.iswindows() && !isabspath(repo_source) && !isurl(repo_source)
-            repo_source = join(splitpath(repo_source), "/")
+        if repo_source !== nothing && !isurl(repo_source)
+            repo_source = normalize_path_for_toml(repo_source)
         end
         entry!(new_entry, "repo-url", repo_source)
         entry!(new_entry, "repo-rev", entry.repo.rev)
         entry!(new_entry, "repo-subdir", entry.repo.subdir)
+        syntax_ver = entry.julia_syntax_version
+        if syntax_ver !== nothing
+            entry!(new_entry, "syntax", Dict("julia_version" => string(syntax_ver)))
+        end
+
+        # Write registries as a vector (or nothing if empty)
+        if !isempty(entry.registries)
+            if length(entry.registries) == 1
+                # For backwards compatibility, write a single registry as a string
+                entry!(new_entry, "registries", entry.registries[1])
+            else
+                entry!(new_entry, "registries", entry.registries)
+            end
+        else
+            delete!(new_entry, "registries")
+            delete!(new_entry, "registry") # Remove old field if present
+        end
         for (deptype, depname) in [(entry.deps, "deps"), (entry.weakdeps, "weakdeps")]
             if isempty(deptype)
                 delete!(new_entry, depname)
@@ -393,9 +466,8 @@ function write_manifest(env::EnvCache)
 end
 function write_manifest(manifest::Manifest, manifest_file::AbstractString)
     if manifest.manifest_format.major == 1
-        @warn """The active manifest file at `$(manifest_file)` has an old format that is being maintained.
-        To update to the new format, which is supported by Julia versions ≥ 1.6.2, run `import Pkg; Pkg.upgrade_manifest()` which will upgrade the format without re-resolving.
-        To then record the julia version re-resolve with `Pkg.resolve()` and if there are resolve conflicts consider `Pkg.update()`.""" maxlog = 1 _id = Symbol(manifest_file)
+        @warn """The active manifest file at `$(manifest_file)` has an old format.
+        Any package operation (add, remove, update, etc.) will automatically upgrade it to format v2.1.""" maxlog = 1 _id = Symbol(manifest_file)
     end
     return write_manifest(destructure(manifest), manifest_file)
 end

@@ -12,9 +12,9 @@ import FileWatching
 
 import Base: StaleCacheKey
 
-import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped
+import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped, ..manifest_rel_path
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write, ..safe_realpath
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -64,7 +64,7 @@ end
 function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
         isurl(pkg.repo.source::String) ? pkg.repo.source::String :
-        Operations.project_rel_path(env, pkg.repo.source::String)
+        safe_realpath(manifest_rel_path(env, pkg.repo.source::String))
     _source_path = Operations.source_path(env.manifest_file, pkg)
     if _source_path === nothing
         @debug "Manifest file $(env.manifest_file) contents:\n$(read(env.manifest_file, String))"
@@ -81,7 +81,7 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
         is_tracking_registry = Operations.is_tracking_registry(pkg),
         git_revision = pkg.repo.rev,
         git_source = git_source,
-        source = Operations.project_rel_path(env, _source_path),
+        source = _source_path,
         dependencies = copy(entry.deps), #TODO is copy needed?
     )
     return info
@@ -147,6 +147,10 @@ check_package_name(::Nothing, ::Any) = nothing
 
 function require_not_empty(pkgs, f::Symbol)
     return isempty(pkgs) && pkgerror("$f requires at least one package")
+end
+
+function check_readonly(ctx::Context)
+    return ctx.env.project.readonly && pkgerror("Cannot modify a readonly environment. The project at $(ctx.env.project_file) is marked as readonly.")
 end
 
 # Provide some convenience calls
@@ -221,7 +225,7 @@ function update_source_if_set(env, pkg)
         if pkg.subdir !== nothing
             source["subdir"] = pkg.subdir
         end
-        path, repo = get_path_repo(project, pkg.name)
+        path, repo = get_path_repo(project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
             pkg.path = path
         end
@@ -246,12 +250,27 @@ function update_source_if_set(env, pkg)
     return
 end
 
+# Normalize relative paths from user input (pwd-relative) to internal representation (manifest-relative)
+# This ensures all relative paths in Pkg are consistently relative to the manifest file
+function normalize_package_paths!(ctx::Context, pkgs::Vector{PackageSpec})
+    for pkg in pkgs
+        if pkg.repo.source !== nothing && !isurl(pkg.repo.source) && !isabspath(pkg.repo.source)
+            # User provided a relative path (relative to pwd), convert to manifest-relative
+            absolute_path = abspath(pkg.repo.source)
+            pkg.repo.source = Types.relative_project_path(ctx.env.manifest_file, absolute_path)
+        end
+    end
+    return
+end
+
 function develop(
         ctx::Context, pkgs::Vector{PackageSpec}; shared::Bool = true,
         preserve::PreserveLevel = Operations.default_preserve(), platform::AbstractPlatform = HostPlatform(), kwargs...
     )
     require_not_empty(pkgs, :develop)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
+    check_readonly(ctx)
 
     for pkg in pkgs
         check_package_name(pkg.name, "develop")
@@ -279,6 +298,8 @@ function develop(
         end
     end
 
+    normalize_package_paths!(ctx, pkgs)
+
     new_git = handle_repos_develop!(ctx, pkgs, shared)
 
     Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
@@ -303,6 +324,8 @@ function add(
     )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
+    check_readonly(ctx)
 
     for pkg in pkgs
         check_package_name(pkg.name, "add")
@@ -328,6 +351,8 @@ function add(
             pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
         end
     end
+
+    normalize_package_paths!(ctx, pkgs)
 
     repo_pkgs = PackageSpec[pkg for pkg in pkgs if (pkg.repo.source !== nothing || pkg.repo.rev !== nothing)]
     new_git = handle_repos_add!(ctx, repo_pkgs)
@@ -357,6 +382,8 @@ end
 
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all_pkgs::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
+    check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, mode)
@@ -387,16 +414,29 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all
 end
 
 
-function append_all_pkgs!(pkgs, ctx, mode)
+function append_all_pkgs!(pkgs, ctx, mode; workspace::Bool = false)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
-            path, repo = get_path_repo(ctx.env.project, name)
+            path, repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, name)
             push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
+        end
+        if workspace
+            for (project_file, project) in ctx.env.workspace
+                for (name::String, uuid::UUID) in project.deps
+                    path, repo = get_path_repo(project, project_file, ctx.env.manifest_file, name)
+                    existing = findfirst(p -> p.uuid == uuid, pkgs)
+                    if existing !== nothing
+                        Operations.merge_pkg_source!(pkgs[existing], path, repo)
+                        continue
+                    end
+                    push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
+                end
+            end
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         for (uuid, entry) in ctx.env.manifest
-            path, repo = get_path_repo(ctx.env.project, entry.name)
+            path, repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, entry.name)
             push!(pkgs, PackageSpec(name = entry.name, uuid = uuid, path = path, repo = repo))
         end
     end
@@ -409,9 +449,12 @@ function up(
         preserve::Union{Nothing, PreserveLevel} = isempty(pkgs) ? nothing : PRESERVE_ALL,
         update_registry::Bool = true,
         skip_writing_project::Bool = false,
+        workspace::Bool = false,
         kwargs...
     )
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
+    check_readonly(ctx)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
         return
@@ -422,7 +465,7 @@ function up(
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
-        append_all_pkgs!(pkgs, ctx, mode)
+        append_all_pkgs!(pkgs, ctx, mode; workspace)
     else
         mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
         mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
@@ -443,11 +486,13 @@ function resolve(ctx::Context; skip_writing_project::Bool = false, kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, workspace::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
+    check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST; workspace)
     else
         require_not_empty(pkgs, :pin)
     end
@@ -483,11 +528,13 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kw
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, workspace::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
+    check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST; workspace)
     else
         require_not_empty(pkgs, :free)
     end
@@ -525,6 +572,7 @@ function test(
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
 
     if isempty(pkgs)
         ctx.env.pkg === nothing && pkgerror("The Project.toml of the package being tested must have a name and a UUID entry") #TODO Allow this?
@@ -563,14 +611,12 @@ const UsageDict = Dict{String, DateTime}
 const UsageByDepotDict = Dict{String, UsageDict}
 
 """
-    gc(ctx::Context=Context(); collect_delay::Period=Day(7), verbose=false, kwargs...)
+    gc(ctx::Context=Context(); verbose=false, force=false, kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
-finding artifacts and packages that are thereafter not used by any other projects,
-marking them as "orphaned".  This method will only remove orphaned objects (package
-versions, artifacts, and scratch spaces) that have been continually un-used for a period
-of `collect_delay`; which defaults to seven days.
+finding artifacts and packages that are thereafter not used by any other projects.
+Unused packages, artifacts, repos, and scratch spaces are immediately deleted.
 
 Garbage collection is only applied to the "user depot", e.g. the first entry in the
 depot path. If you want to run `gc` on all depots set `force=true` (this might require
@@ -578,8 +624,11 @@ admin privileges depending on the setup).
 
 Use verbose mode (`verbose=true`) for detailed output.
 """
-function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = false, force = false, kwargs...)
+function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = nothing, verbose = false, force = false, kwargs...)
     Context!(ctx; kwargs...)
+    if collect_delay !== nothing
+        @warn "The `collect_delay` parameter is no longer used. Packages are now deleted immediately when they become unreachable."
+    end
     env = ctx.env
 
     # Only look at user-depot unless force=true
@@ -764,7 +813,15 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
         end
 
         # Collect the locations of every repo referred to in this manifest
-        return [Types.add_repo_cache_path(e.repo.source) for (u, e) in manifest if e.repo.source !== nothing]
+        return [
+            Types.add_repo_cache_path(
+                    isurl(e.repo.source) ? e.repo.source :
+                    safe_realpath(
+                        isabspath(e.repo.source) ? e.repo.source :
+                        normpath(joinpath(dirname(path), e.repo.source))
+                    )
+                ) for (u, e) in manifest if e.repo.source !== nothing
+        ]
     end
 
     function process_artifacts_toml(path, pkgs_to_delete)
@@ -848,33 +905,6 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
         return Set(marked_paths)
     end
 
-    gc_time = now()
-    function merge_orphanages!(new_orphanage, paths, deletion_list, old_orphanage = UsageDict())
-        for path in paths
-            free_time = something(
-                get(old_orphanage, path, nothing),
-                gc_time,
-            )
-
-            # No matter what, store the free time in the new orphanage. This allows
-            # something terrible to go wrong while trying to delete the artifact/
-            # package and it will still try to be deleted next time.  The only time
-            # something is removed from an orphanage is when it didn't exist before
-            # we even started the `gc` run.
-            new_orphanage[path] = free_time
-
-            # If this path was orphaned long enough ago, add it to the deletion list.
-            # Otherwise, we continue to propagate its orphaning date but don't delete
-            # it.  It will get cleaned up at some future `gc`, or it will be used
-            # again during a future `gc` in which case it will not persist within the
-            # orphanage list.
-            if gc_time - free_time >= collect_delay
-                push!(deletion_list, path)
-            end
-        end
-        return
-    end
-
 
     # Scan manifests, parse them, read in all UUIDs listed and mark those as active
     # printpkgstyle(ctx.io, :Active, "manifests:")
@@ -883,64 +913,28 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
         verbose = verbose, file_str = "manifest files"
     )
 
-    # Do an initial scan of our depots to get a preliminary `packages_to_delete`.
-    packages_to_delete = String[]
-    for depot in gc_depots
-        depot_orphaned_packages = String[]
-        packagedir = abspath(depot, "packages")
-        if isdir(packagedir)
-            for name in readdir(packagedir)
-                !isdir(joinpath(packagedir, name)) && continue
 
-                for slug in readdir(joinpath(packagedir, name))
-                    pkg_dir = joinpath(packagedir, name, slug)
-                    !isdir(pkg_dir) && continue
-
-                    if !(pkg_dir in packages_to_keep)
-                        push!(depot_orphaned_packages, pkg_dir)
-                    end
-                end
-            end
-        end
-        merge_orphanages!(UsageDict(), depot_orphaned_packages, packages_to_delete)
-    end
-
-
-    # Next, do the same for artifacts.  Note that we MUST do this after calculating
-    # `packages_to_delete`, as `process_artifacts_toml()` uses it internally to discount
-    # `Artifacts.toml` files that will be deleted by the future culling operation.
+    # Next, do the same for artifacts.
     # printpkgstyle(ctx.io, :Active, "artifacts:")
-    artifacts_to_keep = let packages_to_delete = packages_to_delete
-        mark(
-            x -> process_artifacts_toml(x, packages_to_delete),
-            all_artifact_tomls, ctx; verbose = verbose, file_str = "artifact files"
-        )
-    end
+    artifacts_to_keep = mark(
+        x -> process_artifacts_toml(x, String[]),
+        all_artifact_tomls, ctx; verbose = verbose, file_str = "artifact files"
+    )
     repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print = false)
     # printpkgstyle(ctx.io, :Active, "scratchspaces:")
-    spaces_to_keep = let packages_to_delete = packages_to_delete
-        mark(
-            x -> process_scratchspace(x, packages_to_delete),
-            all_scratch_dirs, ctx; verbose = verbose, file_str = "scratchspaces"
-        )
-    end
+    spaces_to_keep = mark(
+        x -> process_scratchspace(x, String[]),
+        all_scratch_dirs, ctx; verbose = verbose, file_str = "scratchspaces"
+    )
 
-    # Collect all orphaned paths (packages, artifacts and repos that are not reachable).  These
-    # are implicitly defined in that we walk all packages/artifacts installed, then if
-    # they were not marked in the above steps, we reap them.
+    # Collect all unreachable paths (packages, artifacts and repos that are not reachable)
+    # and immediately delete them.
     packages_to_delete = String[]
     artifacts_to_delete = String[]
     repos_to_delete = String[]
     spaces_to_delete = String[]
 
     for depot in gc_depots
-        # We track orphaned objects on a per-depot basis, writing out our `orphaned.toml`
-        # tracking file immediately, only pushing onto the overall `*_to_delete` lists if
-        # the package has been orphaned for at least a period of `collect_delay`
-        depot_orphaned_packages = String[]
-        depot_orphaned_artifacts = String[]
-        depot_orphaned_repos = String[]
-        depot_orphaned_scratchspaces = String[]
 
         packagedir = abspath(depot, "packages")
         if isdir(packagedir)
@@ -952,7 +946,7 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                     !isdir(pkg_dir) && continue
 
                     if !(pkg_dir in packages_to_keep)
-                        push!(depot_orphaned_packages, pkg_dir)
+                        push!(packages_to_delete, pkg_dir)
                     end
                 end
             end
@@ -964,7 +958,7 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                 repo_dir = joinpath(reposdir, repo)
                 !isdir(repo_dir) && continue
                 if !(repo_dir in repos_to_keep)
-                    push!(depot_orphaned_repos, repo_dir)
+                    push!(repos_to_delete, repo_dir)
                 end
             end
         end
@@ -976,7 +970,7 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                 !isdir(artifact_path) && continue
 
                 if !(artifact_path in artifacts_to_keep)
-                    push!(depot_orphaned_artifacts, artifact_path)
+                    push!(artifacts_to_delete, artifact_path)
                 end
             end
         end
@@ -990,13 +984,13 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
                     space_dir_or_file = joinpath(uuid_dir, space)
                     if isdir(space_dir_or_file)
                         if !(space_dir_or_file in spaces_to_keep)
-                            push!(depot_orphaned_scratchspaces, space_dir_or_file)
+                            push!(spaces_to_delete, space_dir_or_file)
                         end
                     elseif uuid == Operations.PkgUUID && isfile(space_dir_or_file)
                         # special cleanup for the precompile cache files that Pkg saves
                         if any(prefix -> startswith(basename(space_dir_or_file), prefix), ("suspend_cache_", "pending_cache_"))
                             if mtime(space_dir_or_file) < (time() - (24 * 60 * 60))
-                                push!(depot_orphaned_scratchspaces, space_dir_or_file)
+                                push!(spaces_to_delete, space_dir_or_file)
                             end
                         end
                     end
@@ -1004,25 +998,6 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
             end
         end
 
-        # Read in this depot's `orphaned.toml` file:
-        orphanage_file = joinpath(logdir(depot), "orphaned.toml")
-        new_orphanage = UsageDict()
-        old_orphanage = try
-            TOML.parse(String(read(orphanage_file)))
-        catch
-            UsageDict()
-        end
-
-        # Update the package and artifact lists of things to delete, and
-        # create the `new_orphanage` list for this depot.
-        merge_orphanages!(new_orphanage, depot_orphaned_packages, packages_to_delete, old_orphanage)
-        merge_orphanages!(new_orphanage, depot_orphaned_artifacts, artifacts_to_delete, old_orphanage)
-        merge_orphanages!(new_orphanage, depot_orphaned_repos, repos_to_delete, old_orphanage)
-        merge_orphanages!(new_orphanage, depot_orphaned_scratchspaces, spaces_to_delete, old_orphanage)
-
-        # Write out the `new_orphanage` for this depot
-        mkpath(dirname(orphanage_file))
-        atomic_toml_write(orphanage_file, new_orphanage, sorted = true)
     end
 
     function recursive_dir_size(path)
@@ -1117,17 +1092,32 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
         end
     end
 
-    # Delete any files that could not be rm-ed and were specially moved to the delayed delete directory.
-    # Do this silently because it's out of scope for Pkg.gc() but it's helpful to use this opportunity to do it
-    if isdefined(Base.Filesystem, :delayed_delete_dir)
-        if isdir(Base.Filesystem.delayed_delete_dir())
-            for p in readdir(Base.Filesystem.delayed_delete_dir(), join = true)
+    # Delete anything that could not be rm-ed and was specially recorded in the delayed delete reference folder.
+    # Do this silently because it's out of scope for Pkg.gc() but it's helpful to use this opportunity to do it.
+    if isdefined(Base.Filesystem, :delayed_delete_ref)
+        delayed_delete_ref_path = Base.Filesystem.delayed_delete_ref()
+        if isdir(delayed_delete_ref_path)
+            delayed_delete_dirs = Set{String}()
+            for f in readdir(delayed_delete_ref_path; join = true)
                 try
+                    p = readline(f)
+                    push!(delayed_delete_dirs, dirname(p))
                     Base.Filesystem.prepare_for_deletion(p)
                     Base.rm(p; recursive = true, force = true, allow_delayed_delete = false)
+                    Base.rm(f)
                 catch e
                     @debug "Failed to delete $p" exception = e
                 end
+            end
+            for dir in delayed_delete_dirs
+                if basename(dir) == "julia_delayed_deletes" && isempty(readdir(dir))
+                    Base.Filesystem.prepare_for_deletion(dir)
+                    Base.rm(dir; recursive = true)
+                end
+            end
+            if isempty(readdir(delayed_delete_ref_path))
+                Base.Filesystem.prepare_for_deletion(delayed_delete_ref_path)
+                Base.rm(delayed_delete_ref_path; recursive = true)
             end
         end
     end
@@ -1155,11 +1145,40 @@ function gc(ctx::Context = Context(); collect_delay::Period = Day(7), verbose = 
         printpkgstyle(ctx.io, :Deleted, "no artifacts, repos, packages or scratchspaces")
     end
 
+    # Run git gc on registries if git is available
+    if Sys.which("git") !== nothing
+        for depot in gc_depots
+            reg_dir = joinpath(depot, "registries")
+            isdir(reg_dir) || continue
+
+            for reg_name in readdir(reg_dir)
+                reg_path = joinpath(reg_dir, reg_name)
+                isdir(reg_path) || continue
+                git_dir = joinpath(reg_path, ".git")
+                isdir(git_dir) || continue
+
+                try
+                    if verbose
+                        printpkgstyle(ctx.io, :GC, "running git gc on registry $(reg_name)")
+                    end
+                    # Run git gc quietly, don't error if it fails
+                    run(`git -C $reg_path gc --quiet`)
+                catch e
+                    # Silently ignore errors from git gc
+                    if verbose
+                        @warn "git gc failed for registry $(reg_name)" exception = e
+                    end
+                end
+            end
+        end
+    end
+
     return
 end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose = false, allow_reresolve::Bool = true, kwargs...)
     Context!(ctx; kwargs...)
+    Operations.ensure_manifest_registries!(ctx)
 
     if isempty(pkgs)
         if ctx.env.pkg !== nothing
@@ -1213,17 +1232,17 @@ function precompile(
         return
     end
 
-    io = ctx.io
-    if io isa IOContext{IO} && !isa(io.io, Base.PipeEndpoint)
-        # precompile does quite a bit of output and using the IOContext{IO} can cause
-        # some slowdowns, the important part here is to not specialize the whole
-        # precompile function on the io.
-        # But don't unwrap the IOContext if it is a PipeEndpoint, as that would
-        # cause the output to lose color.
-        io = io.io
-    end
-
     return activate(dirname(ctx.env.project_file)) do
+        io = if ctx.io isa IOContext{IO} && !isa(ctx.io.io, Base.PipeEndpoint)
+            # precompile does quite a bit of output and using the IOContext{IO} can cause
+            # some slowdowns, the important part here is to not specialize the whole
+            # precompile function on the io.
+            # But don't unwrap the IOContext if it is a PipeEndpoint, as that would
+            # cause the output to lose color.
+            ctx.io.io
+        else
+            ctx.io
+        end
         pkgs_name = String[pkg.name for pkg in pkgs]
         return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
     end
@@ -1256,6 +1275,7 @@ function instantiate(
     if Registry.download_default_registries(ctx.io)
         copy!(ctx.registries, Registry.reachable_registries())
     end
+    Operations.ensure_manifest_registries!(ctx)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         Types.check_manifest_julia_version_compat(_manifest, ctx.env.manifest_file; julia_version_strict)
@@ -1333,18 +1353,18 @@ function instantiate(
         ## Download repo at tree hash
         # determine canonical form of repo source
         if !isurl(repo_source)
-            repo_source = normpath(joinpath(dirname(ctx.env.project_file), repo_source))
+            repo_source = manifest_rel_path(ctx.env, repo_source)
         end
         if !isurl(repo_source) && !isdir(repo_source)
             pkgerror("Did not find path `$(repo_source)` for $(err_rep(pkg))")
         end
         repo_path = Types.add_repo_cache_path(repo_source)
         let repo_source = repo_source
-            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare = true)) do repo
+            LibGit2.with(GitTools.ensure_clone(ctx.io, repo_path, repo_source; isbare = true, depth = 1)) do repo
                 # We only update the clone if the tree hash can't be found
                 tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
                 if tree_hash_object === nothing
-                    GitTools.fetch(ctx.io, repo, repo_source; refspecs = Types.refspecs)
+                    GitTools.fetch(ctx.io, repo, repo_source; refspecs = Types.refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
                     tree_hash_object = tree_hash(repo, string(pkg.tree_hash))
                 end
                 if tree_hash_object === nothing
@@ -1370,14 +1390,15 @@ end
 
 @deprecate status(mode::PackageMode) status(mode = mode)
 
-function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mode = PKGMODE_PROJECT, workspace::Bool = false, outdated::Bool = false, compat::Bool = false, extensions::Bool = false, io::IO = stdout_f())
+function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mode = PKGMODE_PROJECT, workspace::Bool = false, outdated::Bool = false, deprecated::Bool = false, compat::Bool = false, extensions::Bool = false, io::IO = stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
         outdated && pkgerror("Compat status has no `outdated` mode")
+        deprecated && pkgerror("Compat status has no `deprecated` mode")
         extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, extensions, workspace)
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, deprecated, extensions, workspace)
     end
     return nothing
 end
@@ -1592,6 +1613,23 @@ set_current_compat(; kwargs...) = set_current_compat(Context(); kwargs...)
 # why #
 #######
 
+function why_find_paths!(final_paths, incoming, project_deps, current, path)
+    push!(path, current)
+    current in project_deps && push!(final_paths, path) # record once we've traversed to a project dep
+    haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
+    for p in incoming[current]
+        if p in path
+            # detected dependency cycle and none of the dependencies in the cycle
+            # are in the project could happen when manually modifying
+            # the project and running this function function before a
+            # resolve
+            continue
+        end
+        why_find_paths!(final_paths, incoming, project_deps, p, copy(path))
+    end
+    return
+end
+
 function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = false, kwargs...)
     require_not_empty(pkgs, :why)
 
@@ -1616,29 +1654,12 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = 
         end
     end
 
-    function find_paths!(final_paths, current, path = UUID[])
-        push!(path, current)
-        current in project_deps && push!(final_paths, path) # record once we've traversed to a project dep
-        haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
-        for p in incoming[current]
-            if p in path
-                # detected dependency cycle and none of the dependencies in the cycle
-                # are in the project could happen when manually modifying
-                # the project and running this function function before a
-                # resolve
-                continue
-            end
-            find_paths!(final_paths, p, copy(path))
-        end
-        return
-    end
-
     first = true
     for pkg in pkgs
         !first && println(io)
         first = false
         final_paths = Set{Vector{UUID}}()
-        find_paths!(final_paths, pkg.uuid)
+        why_find_paths!(final_paths, incoming, project_deps, pkg.uuid, UUID[])
         foreach(reverse!, final_paths)
         final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], collect(final_paths))
         sort!(final_paths_names, by = x -> (x, length(x)))
@@ -1742,27 +1763,6 @@ function handle_package_input!(pkg::PackageSpec)
     return pkg.uuid = pkg.uuid isa String ? UUID(pkg.uuid) : pkg.uuid
 end
 
-function upgrade_manifest(man_path::String)
-    dir = mktempdir()
-    cp(man_path, joinpath(dir, "Manifest.toml"))
-    Pkg.activate(dir) do
-        Pkg.upgrade_manifest()
-    end
-    return mv(joinpath(dir, "Manifest.toml"), man_path, force = true)
-end
-function upgrade_manifest(ctx::Context = Context())
-    before_format = ctx.env.manifest.manifest_format
-    if before_format == v"2.0"
-        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` already up to date: manifest_format == $(before_format)")
-    elseif before_format != v"1.0"
-        pkgerror("Format of manifest file at `$(ctx.env.manifest_file)` version is unrecognized: manifest_format == $(before_format)")
-    end
-    ctx.env.manifest.manifest_format = v"2.0"
-    Types.write_manifest(ctx.env)
-    printpkgstyle(ctx.io, :Updated, "Format of manifest file at `$(ctx.env.manifest_file)` updated from v$(before_format.major).$(before_format.minor) to v2.0")
-    return nothing
-end
-
 """
     auto_gc(on::Bool)
 
@@ -1774,6 +1774,32 @@ function auto_gc(on::Bool)
     _auto_gc_enabled[] = on
 
     return pstate
+end
+
+"""
+    readonly()
+
+Return whether the current environment is readonly.
+"""
+function readonly(ctx::Context = Context())
+    return ctx.env.project.readonly
+end
+
+"""
+    readonly(on::Bool)
+
+Enable or disable readonly mode for the current environment.
+Return the previous state.
+"""
+function readonly(on::Bool, ctx::Context = Context())
+    previous_state = ctx.env.project.readonly
+    ctx.env.project.readonly = on
+    Types.write_env(ctx.env; skip_readonly_check = true)
+
+    mode_str = on ? "enabled" : "disabled"
+    printpkgstyle(ctx.io, :Updated, "Readonly mode $mode_str for project at $(ctx.env.project_file)")
+
+    return previous_state
 end
 
 end # module

@@ -4,15 +4,17 @@
 
 module PlatformEngines
 
-using SHA, Downloads, Tar
+using SHA, Downloads, Tar, Dates, Printf
 import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f, atomic_toml_write
 using ..MiniProgressBars
-using Base.BinaryPlatforms, p7zip_jll
+using Base.BinaryPlatforms, p7zip_jll, Zstd_jll
 
-export verify, unpack, package, download_verify_unpack
+export verify, unpack, package, download_verify_unpack, get_extract_cmd, detect_archive_format
 
 const EXE7Z_LOCK = ReentrantLock()
 const EXE7Z = Ref{String}()
+const EXEZSTD_LOCK = ReentrantLock()
+const EXEZSTD = Ref{String}()
 
 function exe7z()
     # If the JLL is available, use the wrapper function defined in there
@@ -28,6 +30,20 @@ function exe7z()
     end
 end
 
+function exezstd()
+    # If the JLL is available, use the wrapper function defined in there
+    if Zstd_jll.is_available()
+        return Zstd_jll.zstd()
+    end
+
+    return lock(EXEZSTD_LOCK) do
+        if !isassigned(EXEZSTD)
+            EXEZSTD[] = findzstd()
+        end
+        return Cmd([EXEZSTD[]])
+    end
+end
+
 function find7z()
     name = "7z"
     Sys.iswindows() && (name = "$name.exe")
@@ -38,6 +54,18 @@ function find7z()
     path = Sys.which(name)
     path !== nothing && return path
     error("7z binary not found")
+end
+
+function findzstd()
+    name = "zstd"
+    Sys.iswindows() && (name = "$name.exe")
+    for dir in (joinpath("..", "libexec"), ".")
+        path = normpath(Sys.BINDIR::String, dir, name)
+        isfile(path) && return path
+    end
+    path = Sys.which(name)
+    path !== nothing && return path
+    error("zstd binary not found")
 end
 
 is_secure_url(url::AbstractString) =
@@ -232,6 +260,19 @@ function get_metadata_headers(url::AbstractString)
     end
     push!(headers, "Julia-CI-Variables" => join(ci_info, ';'))
     push!(headers, "Julia-Interactive" => string(isinteractive()))
+
+    # Add Accept-Encoding header only for compressed archive resources
+    # (registries, packages, artifacts - not for metadata endpoints like /registries or /meta)
+    # Don't use zstd for registries on Windows due to backwards compatibility with older Julia versions
+    # (7z can't decompress zstd until v17.6, older Julia versions on Windows only have 7z available)
+    if occursin(r"/(registry|package|artifact)/", url)
+        if Sys.iswindows() && occursin(r"/registry/", url)
+            # Skip zstd for registries on Windows
+        else
+            push!(headers, "Accept-Encoding" => "zstd, gzip")
+        end
+    end
+
     for (key, val) in ENV
         m = match(r"^JULIA_PKG_SERVER_([A-Z0-9_]+)$"i, key)
         m === nothing && continue
@@ -403,22 +444,92 @@ function copy_symlinks()
         lowercase(var) in ("false", "f", "no", "n", "0") ? false : nothing
 end
 
+"""
+    detect_archive_format(tarball_path::AbstractString)
+
+Detect compression format by reading file magic bytes.
+Returns one of: "zstd", "gzip", "bzip2", "xz", "lz4", "tar", or "unknown".
+
+Note: This is used both for determining file extensions after download
+and for selecting the appropriate decompression tool.
+"""
+function detect_archive_format(tarball_path::AbstractString)
+    file_size = filesize(tarball_path)
+
+    if file_size == 0
+        error("cannot detect compression format: $tarball_path is empty")
+    end
+
+    magic = open(tarball_path, "r") do io
+        read(io, min(6, file_size))
+    end
+
+    # Check magic bytes for various formats
+    # Zstd: 0x28 0xB5 0x2F 0xFD (4 bytes)
+    if length(magic) >= 4 && magic[1:4] == [0x28, 0xB5, 0x2F, 0xFD]
+        return "zstd"
+    end
+    # Gzip: 0x1F 0x8B (2 bytes)
+    if length(magic) >= 2 && magic[1:2] == [0x1F, 0x8B]
+        return "gzip"
+    end
+    # Bzip2: 0x42 0x5A 0x68 (BZh) (3 bytes)
+    if length(magic) >= 3 && magic[1:3] == [0x42, 0x5A, 0x68]
+        return "bzip2"
+    end
+    # XZ: 0xFD 0x37 0x7A 0x58 0x5A 0x00 (6 bytes)
+    if length(magic) >= 6 && magic[1:6] == [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]
+        return "xz"
+    end
+    # LZ4: 0x04 0x22 0x4D 0x18 (4 bytes)
+    if length(magic) >= 4 && magic[1:4] == [0x04, 0x22, 0x4D, 0x18]
+        return "lz4"
+    end
+    return "unknown"
+end
+
+"""
+    get_extract_cmd(tarball_path::AbstractString)
+
+Get the decompression command for a tarball by detecting format via magic bytes.
+"""
+function get_extract_cmd(tarball_path::AbstractString)
+    format = detect_archive_format(tarball_path)
+    # 7z appears to normalize paths internally, which can cause mis-resolution
+    # if symbolic links are present
+    tarball_path = realpath(tarball_path)
+    if format == "zstd"
+        return `$(exezstd()) -d -c $tarball_path`
+    else
+        return `$(exe7z()) x $tarball_path -so`
+    end
+end
+
 function unpack(
         tarball_path::AbstractString,
         dest::AbstractString;
         verbose::Bool = false,
     )
-    return Tar.extract(`$(exe7z()) x $tarball_path -so`, dest, copy_symlinks = copy_symlinks())
+    return Tar.extract(get_extract_cmd(tarball_path), dest, copy_symlinks = copy_symlinks())
 end
 
 """
     package(src_dir::AbstractString, tarball_path::AbstractString)
 
 Compress `src_dir` into a tarball located at `tarball_path`.
+Supports both gzip and zstd compression based on file extension.
 """
 function package(src_dir::AbstractString, tarball_path::AbstractString; io = stderr_f())
     rm(tarball_path, force = true)
-    cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
+    # Choose compression based on file extension (case-insensitive)
+    tarball_lower = lowercase(tarball_path)
+    if endswith(tarball_lower, ".zst") || endswith(tarball_lower, ".tar.zst")
+        # Use zstd compression (level 19 for good compression)
+        cmd = `$(exezstd()) -19 -c -T -o $tarball_path`
+    else
+        # Use gzip compression (default)
+        cmd = `$(exe7z()) a -si -tgzip -mx9 $tarball_path`
+    end
     return open(pipeline(cmd, stdout = devnull, stderr = io), write = true) do io
         Tar.create(src_dir, io)
     end
@@ -497,7 +608,7 @@ function download_verify_unpack(
 
         # If extension of url contains a recognized extension, use it, otherwise use ".gz"
         ext = url_ext(url)
-        if !(ext in ["tar", "gz", "tgz", "bz2", "xz"])
+        if !(ext in ["tar", "gz", "tgz", "bz2", "xz", "zst"])
             ext = "gz"
         end
 
@@ -538,7 +649,7 @@ function download_verify_unpack(
             @info("Unpacking $(tarball_path) into $(dest)...")
         end
         isnothing(progress) || progress(10000, 10000; status = "unpacking")
-        open(`$(exe7z()) x $tarball_path -so`) do io
+        open(get_extract_cmd(tarball_path)) do io
             Tar.extract(io, dest, copy_symlinks = copy_symlinks())
         end
     finally
@@ -685,12 +796,12 @@ function verify(
 end
 
 # Verify the git-tree-sha1 hash of a compressed archive.
-function verify_archive_tree_hash(tar_gz::AbstractString, expected_hash::Base.SHA1)
+function verify_archive_tree_hash(compressed_tar::AbstractString, expected_hash::Base.SHA1)
     # This can fail because unlike sha256 verification of the downloaded
     # tarball, tree hash verification requires that the file can i) be
     # decompressed and ii) is a proper archive.
     calc_hash = try
-        Base.SHA1(open(Tar.tree_hash, `$(exe7z()) x $tar_gz -so`))
+        Base.SHA1(open(Tar.tree_hash, get_extract_cmd(compressed_tar)))
     catch err
         @warn "unable to decompress and read archive" exception = err
         return false

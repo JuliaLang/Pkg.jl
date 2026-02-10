@@ -10,7 +10,7 @@ import Base.string
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_dir, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, create_cachedir_tag, normalize_path_for_toml
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
@@ -19,7 +19,7 @@ import Base: SHA1
 using SHA
 
 export UUID, SHA1, VersionRange, VersionSpec,
-    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, Project, err_rep,
+    PackageSpec, PackageEntry, EnvCache, Context, GitRepo, Context!, Manifest, ManifestRegistryEntry, Project, err_rep,
     PkgError, pkgerror,
     has_name, has_uuid, is_stdlib, is_or_was_stdlib, stdlib_version, is_unregistered_stdlib, stdlibs, stdlib_infos, write_env, write_env_usage, parse_toml,
     project_resolve!, project_deps_resolve!, manifest_resolve!, registry_resolve!, stdlib_resolve!, handle_repos_develop!, handle_repos_add!, ensure_resolved,
@@ -100,7 +100,6 @@ mutable struct PackageSpec
     url::Union{Nothing, String}
     rev::Union{Nothing, String}
     subdir::Union{Nothing, String}
-
 end
 function PackageSpec(;
         name::Union{Nothing, AbstractString} = nothing,
@@ -112,7 +111,7 @@ function PackageSpec(;
         pinned::Bool = false,
         url = nothing,
         rev = nothing,
-        subdir = nothing
+        subdir = nothing,
     )
     uuid = uuid === nothing ? nothing : UUID(uuid)
     return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
@@ -259,6 +258,7 @@ Base.@kwdef mutable struct Project
     version::Union{VersionTypes, Nothing} = nothing
     manifest::Union{String, Nothing} = nothing
     entryfile::Union{String, Nothing} = nothing
+    julia_syntax_version::Union{VersionTypes, Nothing} = nothing
     # Sections
     deps::Dict{String, UUID} = Dict{String, UUID}()
     # deps that are also in weakdeps for backwards compat
@@ -292,6 +292,8 @@ Base.@kwdef mutable struct PackageEntry
     exts::Dict{String, Union{Vector{String}, String}} = Dict{String, String}()
     uuid::Union{Nothing, UUID} = nothing
     apps::Dict{String, AppInfo} = Dict{String, AppInfo}() # used by AppManifest.toml
+    registries::Vector{String} = String[]
+    julia_syntax_version::Union{VersionTypes, Nothing} = nothing
     other::Union{Dict, Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
@@ -305,15 +307,38 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.weakdeps == t2.weakdeps &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid &&
-    t1.apps == t2.apps
+    t1.apps == t2.apps &&
+    t1.julia_syntax_version == t2.julia_syntax_version &&
+    t1.registries == t2.registries
 # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid], init = h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.registries, x.julia_syntax_version], init = h)  # omits `other`
+
+"""
+    ManifestRegistryEntry
+
+Metadata about a registry referenced from a manifest. `id` is the stable key written
+to the manifest (typically the registry name, falling back to UUID on collision).
+Only `uuid` and `url` are written to the manifest file.
+"""
+Base.@kwdef mutable struct ManifestRegistryEntry
+    id::String
+    uuid::UUID
+    url::Union{Nothing, String} = nothing
+end
+Base.:(==)(t1::ManifestRegistryEntry, t2::ManifestRegistryEntry) =
+    t1.id == t2.id &&
+    t1.uuid == t2.uuid &&
+    t1.url == t2.url
+Base.hash(x::ManifestRegistryEntry, h::UInt) =
+    foldr(hash, (x.id, x.uuid, x.url), init = h)
+
 
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing, VersionNumber} = nothing # only set to VERSION when resolving
     project_hash::Union{Nothing, SHA1} = nothing
     manifest_format::VersionNumber = v"2.0.0"
     deps::Dict{UUID, PackageEntry} = Dict{UUID, PackageEntry}()
+    registries::Dict{String, ManifestRegistryEntry} = Dict{String, ManifestRegistryEntry}()
     other::Dict{String, Any} = Dict{String, Any}()
 end
 Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
@@ -329,6 +354,7 @@ Base.values(m::Manifest) = values(m.deps)
 Base.keys(m::Manifest) = keys(m.deps)
 Base.haskey(m::Manifest, key) = haskey(m.deps, key)
 
+
 function Base.show(io::IO, pkg::PackageEntry)
     f = []
     pkg.name !== nothing && push!(f, "name" => pkg.name)
@@ -339,6 +365,7 @@ function Base.show(io::IO, pkg::PackageEntry)
     pkg.repo.source !== nothing && push!(f, "url/path" => "`$(pkg.repo.source)`")
     pkg.repo.rev !== nothing && push!(f, "rev" => pkg.repo.rev)
     pkg.repo.subdir !== nothing && push!(f, "subdir" => pkg.repo.subdir)
+    !isempty(pkg.registries) && push!(f, "registries" => pkg.registries)
     print(io, "PackageEntry(\n")
     for (field, value) in f
         print(io, "  ", field, " = ", value, "\n")
@@ -442,6 +469,22 @@ function EnvCache(env::Union{Nothing, String} = nothing)
     return env′
 end
 
+# Convert a path from project-relative to manifest-relative
+# If path is absolute, returns it as-is
+function project_path_to_manifest_path(project_file::String, manifest_file::String, path::String)
+    isabspath(path) && return path
+    abs_path = Pkg.safe_realpath(joinpath(dirname(project_file), path))
+    return relpath(abs_path, Pkg.safe_realpath(dirname(manifest_file)))
+end
+
+# Convert a path from manifest-relative to project-relative
+# If path is absolute, returns it as-is
+function manifest_path_to_project_path(project_file::String, manifest_file::String, path::String)
+    isabspath(path) && return path
+    abs_path = Pkg.safe_realpath(joinpath(dirname(manifest_file), path))
+    return relpath(abs_path, Pkg.safe_realpath(dirname(project_file)))
+end
+
 include("project.jl")
 include("manifest.jl")
 
@@ -488,7 +531,7 @@ const UPGRADABLE_STDLIBS_UUIDS = Set{UUID}()
 const STDLIB = Ref{Union{DictStdLibs, Nothing}}(nothing)
 function load_stdlib()
     stdlib = DictStdLibs()
-    for name in readdir(stdlib_dir())
+    for name in readdir(Sys.STDLIB)
         projfile = projectfile_path(stdlib_path(name); strict = true)
         nothing === projfile && continue
         project = parse_toml(projfile)
@@ -541,12 +584,23 @@ function get_last_stdlibs(julia_version::VersionNumber; use_historical_for_curre
     end
     historical_stdlibs_check()
     last_stdlibs = UNREGISTERED_STDLIBS
+    last_version = nothing
+
     for (version, stdlibs) in STDLIBS_BY_VERSION
+        if !isnothing(last_version) && last_version > version
+            pkgerror("STDLIBS_BY_VERSION must be sorted by version number")
+        end
         if VersionNumber(julia_version.major, julia_version.minor, julia_version.patch) < version
             break
         end
         last_stdlibs = stdlibs
+        last_version = version
     end
+    # Serving different patches is safe-ish, but different majors or minors is most likely not.
+    if last_version !== nothing && (last_version.major != julia_version.major || last_version.minor != julia_version.minor)
+        pkgerror("Could not find a julia version in STDLIBS_BY_VERSION that matches the major & minor version of requested julia_version v$(julia_version)")
+    end
+
     return last_stdlibs
 end
 # If `julia_version` is set to `nothing`, that means (essentially) treat all registered
@@ -619,10 +673,16 @@ end
 # only hash the deps and compat fields as they are the only fields that affect a resolve
 function workspace_resolve_hash(env::EnvCache)
     # Handle deps in both [deps] and [weakdeps]
-    deps = Dict(pkg.name => pkg.uuid for pkg in Pkg.Operations.load_direct_deps(env))
+    deps = Dict{String, UUID}()
+    for pkg in Pkg.Operations.load_direct_deps(env)
+        deps[pkg.name] = pkg.uuid
+    end
     weakdeps = load_workspace_weak_deps(env)
     alldeps = merge(deps, weakdeps)
-    compats = Dict(name => Pkg.Operations.get_compat_workspace(env, name) for (name, uuid) in alldeps)
+    compats = Dict{String, VersionSpec}()
+    for (name, uuid) in alldeps
+        compats[name] = Pkg.Operations.get_compat_workspace(env, name)
+    end
     iob = IOBuffer()
     for (name, uuid) in sort!(collect(deps); by = first)
         println(iob, name, "=", uuid)
@@ -712,7 +772,13 @@ function read_package(path::String)
     return project
 end
 
-const refspecs = ["+refs/heads/*:refs/remotes/cache/heads/*"]
+const refspecs = ["+refs/heads/*:refs/cache/heads/*"]
+const refspecs_fallback = ["+refs/*:refs/cache/*"]
+
+function looks_like_commit_hash(rev::AbstractString)
+    # Commit hashes are 7-40 hex characters
+    return occursin(r"^[0-9a-f]{7,40}$"i, rev)
+end
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
@@ -744,8 +810,17 @@ end
 function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     # First, check if we can compute the path easily (which requires a given local path or name)
     is_local_path = pkg.repo.source !== nothing && !isurl(pkg.repo.source)
+    # Preserve whether the original source was an absolute path - needed later to decide how to store the path
+    original_source_was_absolute = is_local_path && isabspath(pkg.repo.source)
+
     if is_local_path || pkg.name !== nothing
-        dev_path = is_local_path ? pkg.repo.source : devpath(ctx.env, pkg.name, shared)
+        # Resolve manifest-relative paths to absolute paths for file system operations
+        dev_path = if is_local_path
+            isabspath(pkg.repo.source) ? pkg.repo.source :
+                Pkg.manifest_rel_path(ctx.env, pkg.repo.source)
+        else
+            devpath(ctx.env, pkg.name, shared)
+        end
         if pkg.repo.subdir !== nothing
             dev_path = joinpath(dev_path, pkg.repo.subdir)
         end
@@ -761,7 +836,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             resolve_projectfile!(pkg, dev_path)
             error_if_in_sysimage(pkg)
             if is_local_path
-                pkg.path = isabspath(dev_path) ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+                pkg.path = original_source_was_absolute ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             else
                 pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
             end
@@ -790,7 +865,11 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     cloned = false
     package_path = pkg.repo.subdir === nothing ? repo_path : joinpath(repo_path, pkg.repo.subdir)
     if !has_name(pkg)
-        LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, pkg.repo.source))
+        # Resolve manifest-relative path to absolute before passing to git
+        repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+            Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
+            pkg.repo.source
+        LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, repo_source_resolved))
         cloned = true
         resolve_projectfile!(pkg, package_path)
     end
@@ -813,7 +892,11 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     else
         mkpath(dirname(dev_path))
         if !cloned
-            LibGit2.close(GitTools.ensure_clone(ctx.io, dev_path, pkg.repo.source))
+            # Resolve manifest-relative path to absolute before passing to git
+            repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+                Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
+                pkg.repo.source
+            LibGit2.close(GitTools.ensure_clone(ctx.io, dev_path, repo_source_resolved))
         else
             mv(repo_path, dev_path)
         end
@@ -823,7 +906,13 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
         resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir === nothing ? "" : pkg.repo.subdir))
     end
     error_if_in_sysimage(pkg)
-    pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+    # When an explicit local path was given, preserve whether it was absolute or relative
+    # Otherwise, use shared flag to determine if path should be absolute (shared) or relative (local)
+    if is_local_path
+        pkg.path = original_source_was_absolute ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+    else
+        pkg.path = shared ? dev_path : relative_project_path(ctx.env.manifest_file, dev_path)
+    end
     if pkg.repo.subdir !== nothing
         pkg.path = joinpath(pkg.path, pkg.repo.subdir)
     end
@@ -857,7 +946,7 @@ function set_repo_source_from_registry!(ctx, pkg)
     for reg in ctx.registries
         regpkg = get(reg, pkg.uuid, nothing)
         regpkg === nothing && continue
-        info = Pkg.Registry.registry_info(regpkg)
+        info = Pkg.Registry.registry_info(reg, regpkg)
         url = info.repo
         url === nothing && continue
         pkg.repo.source = url
@@ -891,10 +980,12 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
     @assert pkg.repo.source !== nothing
 
     # We now have the source of the package repo, check if it is a local path and if that exists
-    repo_source = pkg.repo.source
+    repo_source = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+        normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source)) :
+        pkg.repo.source
     if !isurl(pkg.repo.source)
-        if isdir(pkg.repo.source)
-            git_path = joinpath(pkg.repo.source, ".git")
+        if isdir(repo_source)
+            git_path = joinpath(repo_source, ".git")
             if isfile(git_path)
                 # Git submodule: .git is a file containing path to actual git directory
                 git_ref_content = readline(git_path)
@@ -904,31 +995,36 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 git_info_path = git_path
             end
             if !isdir(git_info_path)
-                msg = "Did not find a git repository at `$(pkg.repo.source)`"
-                if isfile(joinpath(pkg.repo.source, "Project.toml")) || isfile(joinpath(pkg.repo.source, "JuliaProject.toml"))
+                local msg = "Did not find a git repository at `$(repo_source)`"
+                if isfile(joinpath(repo_source, "Project.toml")) || isfile(joinpath(repo_source, "JuliaProject.toml"))
                     msg *= ", perhaps you meant `Pkg.develop`?"
                 end
                 pkgerror(msg)
             end
-            LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(pkg.repo.source)) # check for valid git HEAD
-            LibGit2.with(LibGit2.GitRepo(pkg.repo.source)) do repo
-                if LibGit2.isdirty(repo)
-                    @warn "The repository at `$(pkg.repo.source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
+            LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(repo_source)) # check for valid git HEAD
+            let repo_source = repo_source
+                LibGit2.with(LibGit2.GitRepo(repo_source)) do repo
+                    if LibGit2.isdirty(repo)
+                        @warn "The repository at `$(repo_source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
+                    end
                 end
             end
-            pkg.repo.source = isabspath(pkg.repo.source) ? safe_realpath(pkg.repo.source) : relative_project_path(ctx.env.manifest_file, pkg.repo.source)
-            repo_source = normpath(joinpath(dirname(ctx.env.manifest_file), pkg.repo.source))
+            # Store the path: use the original path format (absolute vs relative) as the user provided
+            # Canonicalize repo_source for consistent hashing in cache paths
+            repo_source = safe_realpath(repo_source)
+            pkg.repo.source = isabspath(pkg.repo.source) ? repo_source : relative_project_path(ctx.env.manifest_file, repo_source)
         else
-            pkgerror("Path `$(pkg.repo.source)` does not exist.")
+            # For error messages, show the absolute path which is more informative than manifest-relative
+            pkgerror("Path `$(repo_source)` does not exist.")
         end
     end
 
     return let repo_source = repo_source
         # The type-assertions below are necessary presumably due to julia#36454
-        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::Union{Nothing, String}), repo_source::Union{Nothing, String}; isbare = true)) do repo
+        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::String), repo_source::String; isbare = true, depth = 1)) do repo
             repo_source_typed = repo_source::Union{Nothing, String}
             GitTools.check_valid_HEAD(repo)
-
+            create_cachedir_tag(dirname(add_repo_cache_path(repo_source)))
             # If the user didn't specify rev, assume they want the default (master) branch if on a branch, otherwise the current commit
             if pkg.repo.rev === nothing
                 pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
@@ -938,15 +1034,26 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             fetched = false
             if obj_branch === nothing
                 fetched = true
+                rev_or_hash_str = string(rev_or_hash)
                 # For pull requests, fetch the specific PR ref
-                if startswith(rev_or_hash, "pull/") && endswith(rev_or_hash, "/head")
-                    pr_number = rev_or_hash[6:(end - 5)]  # Extract number from "pull/X/head"
-                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/remotes/cache/pull/$(pr_number)/head"]
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs)
+                if startswith(rev_or_hash_str, "pull/") && endswith(rev_or_hash_str, "/head")
+                    pr_number = rev_or_hash_str[6:(end - 5)]  # Extract number from "pull/X/head"
+                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs, depth = 1)
+                    # For branch names, fetch only the specific branch
+                elseif !looks_like_commit_hash(rev_or_hash_str)
+                    specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 else
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
+                    # For commit hashes, fetch all branches including the older commits
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
                 end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
+                # If still not found, try with broader refspec as fallback
+                if obj_branch === nothing
+                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs_fallback)
+                    obj_branch = get_object_or_branch(repo, rev_or_hash)
+                end
                 if obj_branch === nothing
                     pkgerror("Did not find rev $(rev_or_hash) in repository")
                 end
@@ -957,7 +1064,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             innerentry = manifest_info(ctx.env.manifest, pkg.uuid)
             ispinned = innerentry !== nothing && innerentry.pinned
             if isbranch && !fetched && !ispinned
-                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs)
+                # Fetch only the specific branch being tracked
+                specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
+                GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 gitobject, isbranch = get_object_or_branch(repo, rev_or_hash)
             end
 
@@ -971,6 +1080,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
                 end
             end
+            @assert pkg.path === nothing
             pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
             # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
@@ -993,6 +1103,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             # Otherwise, move the temporary path into its correct place and set read only
             mkpath(version_path)
             mv(temp_path, version_path; force = true)
+            create_cachedir_tag(dirname(dirname(version_path)))
             set_readonly(version_path)
             return true
         end
@@ -1037,7 +1148,7 @@ function get_object_or_branch(repo, rev)
     # Handle pull request references
     if startswith(rev, "pull/") && endswith(rev, "/head")
         try
-            gitobject = LibGit2.GitObject(repo, "remotes/cache/" * rev)
+            gitobject = LibGit2.GitObject(repo, "cache/" * rev)
             return gitobject, true
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
@@ -1045,7 +1156,7 @@ function get_object_or_branch(repo, rev)
     end
 
     try
-        gitobject = LibGit2.GitObject(repo, "remotes/cache/heads/" * rev)
+        gitobject = LibGit2.GitObject(repo, "cache/heads/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
@@ -1244,7 +1355,7 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
         for reg in registries
             pkg = get(reg, uuid, nothing)
             pkg === nothing && continue
-            info = Pkg.Registry.registry_info(pkg)
+            info = Pkg.Registry.registry_info(reg, pkg)
             repo = info.repo
             repo === nothing && continue
             push!(repo_infos, (reg.name, repo, uuid))
@@ -1276,11 +1387,12 @@ function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry, Noth
 end
 function write_env(
         env::EnvCache; update_undo = true,
-        skip_writing_project::Bool = false
+        skip_writing_project::Bool = false,
+        skip_readonly_check::Bool = false
     )
     # Verify that the generated manifest is consistent with `sources`
     for (pkg, uuid) in env.project.deps
-        path, repo = get_path_repo(env.project, pkg)
+        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
             @assert normpath(entry.path) == normpath(path)
@@ -1295,7 +1407,9 @@ function write_env(
         end
         if entry !== nothing
             if entry.path !== nothing
-                env.project.sources[pkg] = Dict("path" => entry.path)
+                # Convert path from manifest-relative to project-relative before writing
+                project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
+                env.project.sources[pkg] = Dict("path" => project_relative_path)
             elseif entry.repo != GitRepo()
                 d = Dict{String, String}()
                 entry.repo.source !== nothing && (d["url"] = entry.repo.source)
@@ -1307,12 +1421,12 @@ function write_env(
     end
 
     # Check if the environment is readonly before attempting to write
-    if env.project.readonly
+    if env.project.readonly && !skip_readonly_check
         pkgerror("Cannot modify a readonly environment. The project at $(env.project_file) is marked as readonly.")
     end
 
     if (env.project != env.original_project) && (!skip_writing_project)
-        write_project(env)
+        write_project(env, skip_readonly_check)
     end
     if env.manifest != env.original_manifest
         write_manifest(env)

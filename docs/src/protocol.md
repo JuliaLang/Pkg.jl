@@ -136,6 +136,19 @@ The client can make GET or HEAD requests to the following resources:
 
 Only the `/registries` changes - all other resources can be cached forever and the server will indicate this with the appropriate HTTP headers.
 
+### Compression Negotiation
+
+The Pkg protocol supports multiple compression formats.
+
+- **Zstd compression** (current): Modern clients send `Accept-Encoding: zstd, gzip` to request Zstandard-compressed resources with gzip as a fallback.
+- **Gzip compression** (legacy): Older clients that only support gzip send `Accept-Encoding: gzip` or omit the header entirely.
+
+Clients verify the actual compression format by reading file magic bytes after download:
+
+- **Zstd format**: Magic bytes `0x28 0xB5 0x2F 0xFD` (4 bytes) - decompressed with `zstd` (significantly faster)
+- **Gzip format**: Magic bytes `0x1F 0x8B` (2 bytes) - decompressed with 7z
+
+
 ### Reference Implementation
 
 A reference implementation of the Pkg Server protocol is available at [PkgServer.jl](https://github.com/JuliaPackaging/PkgServer.jl).

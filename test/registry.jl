@@ -5,6 +5,8 @@ using Pkg, UUIDs, LibGit2, Test
 using Pkg: depots1
 using Pkg.REPLMode: pkgstr
 using Pkg.Types: PkgError, manifest_info, PackageSpec, EnvCache
+using Pkg.Operations: get_pkg_deprecation_info
+
 using Dates: Second
 
 using ..Utils
@@ -41,8 +43,6 @@ function setup_test_registries(dir = pwd())
         )
         write(
             joinpath(regpath, "Example", "Deps.toml"), """
-            ["0.5"]
-            julia = "0.6-1.0"
             """
         )
         write(
@@ -343,6 +343,89 @@ end
         end
     end
 
+    @testset "deprecated package" begin
+        temp_pkg_dir() do depot
+            # Set up test registries with an extra deprecated package
+            regdir = mktempdir()
+            setup_test_registries(regdir)
+
+            # Add a deprecated package to the first registry
+            regpath = joinpath(regdir, "RegistryFoo1")
+            mkpath(joinpath(regpath, "DeprecatedExample"))
+
+            # Add the deprecated package to Registry.toml
+            registry_toml = read(joinpath(regpath, "Registry.toml"), String)
+            registry_toml = replace(
+                registry_toml,
+                "[packages]" =>
+                    "[packages]\n11111111-1111-1111-1111-111111111111 = { name = \"DeprecatedExample\", path = \"DeprecatedExample\" }"
+            )
+            write(joinpath(regpath, "Registry.toml"), registry_toml)
+
+            # Create deprecated package with [metadata.deprecated] table
+            write(
+                joinpath(regpath, "DeprecatedExample", "Package.toml"), """
+                name = "DeprecatedExample"
+                uuid = "11111111-1111-1111-1111-111111111111"
+                repo = "https://github.com/test/DeprecatedExample.jl.git"
+
+                [metadata.deprecated]
+                reason = "This package is no longer maintained"
+                alternative = "Example"
+                """
+            )
+
+            write(
+                joinpath(regpath, "DeprecatedExample", "Versions.toml"), """
+                ["1.0.0"]
+                git-tree-sha1 = "1234567890abcdef1234567890abcdef12345678"
+                """
+            )
+
+            git_init_and_commit(regpath)
+
+            # Add the test registry
+            Pkg.Registry.add(url = regpath)
+
+            # Test that the package is marked as deprecated
+            registries = Pkg.Registry.reachable_registries()
+            reg_idx = findfirst(r -> r.name == "RegistryFoo", registries)
+            @test reg_idx !== nothing
+
+            reg = registries[reg_idx]
+            pkg_uuid = UUID("11111111-1111-1111-1111-111111111111")
+            @test haskey(reg, pkg_uuid)
+
+            pkg_entry = reg[pkg_uuid]
+            pkg_info = Pkg.Registry.registry_info(reg, pkg_entry)
+
+            # Test that deprecated info is loaded correctly
+            @test Pkg.Registry.isdeprecated(pkg_info)
+            @test pkg_info.deprecated !== nothing
+            @test pkg_info.deprecated["reason"] == "This package is no longer maintained"
+            @test pkg_info.deprecated["alternative"] == "Example"
+
+            # Test that non-deprecated package is not marked as deprecated
+            example1_uuid = UUID("c5f1542f-b8aa-45da-ab42-05303d706c66")
+            example1_entry = reg[example1_uuid]
+            example1_info = Pkg.Registry.registry_info(reg, example1_entry)
+            @test !Pkg.Registry.isdeprecated(example1_info)
+            @test example1_info.deprecated === nothing
+
+            # Test get_pkg_deprecation_info function
+            deprecated_pkg_spec = Pkg.Types.PackageSpec(name = "DeprecatedExample", uuid = pkg_uuid)
+            normal_pkg_spec = Pkg.Types.PackageSpec(name = "Example1", uuid = example1_uuid)
+
+            dep_info = get_pkg_deprecation_info(deprecated_pkg_spec, registries)
+            @test dep_info !== nothing
+            @test dep_info["reason"] == "This package is no longer maintained"
+            @test dep_info["alternative"] == "Example"
+
+            normal_info = get_pkg_deprecation_info(normal_pkg_spec, registries)
+            @test normal_info === nothing
+        end
+    end
+
     @testset "yanking" begin
         uuid = Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
         # Tests that Example@0.5.1 does not get installed
@@ -443,9 +526,53 @@ if Pkg.Registry.registry_use_pkg_server()
                     end
                     Pkg.update()
                     Pkg.Registry.rm(name = "General")
-                    @test isempty(readdir(joinpath(DEPOT_PATH[1], "registries")))
+                    @test isempty(filter(x -> x != "CACHEDIR.TAG", readdir(joinpath(DEPOT_PATH[1], "registries"))))
                 end
             end
+        end
+    end
+end
+
+@testset "gc runs git gc on registries" begin
+    # Only run this test if git is available
+    if Sys.which("git") !== nothing
+        temp_pkg_dir() do depot
+            # Set up a test registry that is a git repository
+            regdir = mktempdir()
+            regpath = joinpath(regdir, "TestReg")
+            mkpath(joinpath(regpath, "TestPkg"))
+            write(
+                joinpath(regpath, "Registry.toml"), """
+                name = "TestReg"
+                uuid = "$(uuid4())"
+                repo = "https://github.com/test/test.git"
+                """
+            )
+            write(
+                joinpath(regpath, "TestPkg", "Package.toml"), """
+                name = "TestPkg"
+                uuid = "$(uuid4())"
+                repo = "https://github.com/test/TestPkg.git"
+                """
+            )
+            git_init_and_commit(regpath)
+
+            # Install the registry
+            target_reg_path = joinpath(depot, "registries", "TestReg")
+            mkpath(dirname(target_reg_path))
+            cp(regpath, target_reg_path)
+
+            # Verify the registry is a git repository
+            @test isdir(joinpath(target_reg_path, ".git"))
+
+            # Run Pkg.gc() - it should run git gc on the registry without errors
+            # We can't easily verify that git gc was run, but we can verify
+            # that Pkg.gc() completes without errors
+            @test_nowarn Pkg.gc(verbose = false)
+
+            # The registry should still exist after gc
+            @test isdir(target_reg_path)
+            @test isdir(joinpath(target_reg_path, ".git"))
         end
     end
 end

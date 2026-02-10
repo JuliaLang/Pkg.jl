@@ -26,13 +26,15 @@ using ..Utils
 end
 
 @testset "accidental" begin
-    pkg"]?"
-    pkg"] ?"
-    pkg"]st"
-    pkg"] st"
-    pkg"]st -m"
-    pkg"] st -m"
-    pkg"]"  # noop
+    isolate() do
+        pkg"]?"
+        pkg"] ?"
+        pkg"]st"
+        pkg"] st"
+        pkg"]st -m"
+        pkg"] st -m"
+        pkg"]"  # noop
+    end
 end
 
 temp_pkg_dir() do project_path
@@ -42,6 +44,8 @@ temp_pkg_dir() do project_path
         cd("HelloWorld")
 
         @test_throws PkgError pkg"dev Example#blergh"
+
+        @test_throws PkgError pkg"add ÖÖÖ"
 
         @test_throws PkgError pkg"generate 2019Julia"
         pkg"generate Foo"
@@ -403,6 +407,30 @@ temp_pkg_dir() do project_path
             @test "Example" in c
             pkg"free Example"
 
+            # Test for issue #59829 - completion with only trailing space should work
+            # When typing "rm <TAB>" with Example installed, should complete to "rm Example"
+            c, r = test_complete("rm ")
+            @test "Example" in c
+            @test apply_completion("rm ") == "rm Example"
+
+            # Test deduplication of already-specified packages (issue #4098)
+            # After typing "rm Example ", typing "E" should not suggest Example again
+            c, r = test_complete("rm Example E")
+            @test !("Example" in c) # Example already specified, should not suggest again
+
+            # Test with package@version syntax - should still deduplicate
+            c, r = test_complete("rm Example@0.5 Exam")
+            @test !("Example" in c) # Example already specified with version
+
+            # Test with multiple packages already specified
+            c, r = test_complete("rm Example PackageWithDependency E")
+            @test !("Example" in c) # Both already specified
+            @test !("PackageWithDependency" in c)
+
+            # Test deduplication works for add as well
+            c, r = test_complete("add Example E")
+            @test !("Example" in c) # Example already specified for add command
+
             # help mode
             @test apply_completion("?ad") == "?add"
             @test apply_completion("?act") == "?activate"
@@ -521,6 +549,12 @@ temp_pkg_dir() do project_path
             )
             completions_empty, region_empty, should_complete_empty = @invokelatest REPL.LineEdit.complete_line(provider, mock_state_empty)
             @test region_empty isa Pair{Int, Int}
+
+            # Test for issue #4121 - completion after semicolon should not crash
+            # When typing "a;" and hitting tab, partial can be nothing causing startswith crash
+            c, r = test_complete("a;")
+            @test c isa Vector{String}  # Should not crash, return empty or valid completions
+            @test r isa UnitRange{Int}
         end # testset
     end
 end
@@ -724,27 +758,31 @@ end
 
 @testset "status" begin
     temp_pkg_dir() do project_path
-        pkg"""
-        add Example Random
-        status
-        status -m
-        status Example
-        status Example=7876af07-990d-54b4-ab0e-23690620f79a
-        status 7876af07-990d-54b4-ab0e-23690620f79a
-        status Example Random
-        status -m Example
-        status --outdated
-        status --compat
-        """
-        # --diff option
-        @test_logs (:warn, r"diff option only available") pkg"status --diff"
-        @test_logs (:warn, r"diff option only available") pkg"status -d"
-        git_init_and_commit(project_path)
-        @test_logs () pkg"status --diff"
-        @test_logs () pkg"status -d"
+        # Pkg.status earlyouts if `io` is `devnull`, so override for this test
+        io = PipeBuffer()
+        @Base.ScopedValues.with Pkg.DEFAULT_IO => io begin
+            pkg"""
+            add Example Random
+            status
+            status -m
+            status Example
+            status Example=7876af07-990d-54b4-ab0e-23690620f79a
+            status 7876af07-990d-54b4-ab0e-23690620f79a
+            status Example Random
+            status -m Example
+            status --outdated
+            status --compat
+            """
+            # --diff option
+            @test_logs (:warn, r"diff option only available") pkg"status --diff"
+            @test_logs (:warn, r"diff option only available") pkg"status -d"
+            git_init_and_commit(project_path)
+            @test_logs () pkg"status --diff"
+            @test_logs () pkg"status -d"
 
-        # comma-separated packages get parsed
-        pkg"status Example, Random"
+            # comma-separated packages get parsed
+            pkg"status Example, Random"
+        end
     end
 end
 
@@ -806,16 +844,9 @@ end
 end
 
 @testset "JuliaLang/julia #55850" begin
-    mktempdir() do tmp
-        copy_this_pkg_cache(tmp)
-        tmp_sym_link = joinpath(tmp, "sym")
-        symlink(tmp, tmp_sym_link; dir_target = true)
-        depot_path = tmp_sym_link * (Sys.iswindows() ? ";" : ":")
-        # include the symlink in the depot path and include the regular default depot so we don't precompile this Pkg again
-        withenv("JULIA_DEPOT_PATH" => depot_path, "JULIA_LOAD_PATH" => nothing) do
-            prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
-            @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
-        end
+    isolate(loaded_depot = true) do
+        prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+        @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
     end
 end
 
@@ -873,6 +904,22 @@ end
             @test occursin("Example = \"0.4\"", str)
             @test occursin("checking for compliance with the new compat rules..", str)
             @test occursin("Error empty intersection between", str) # Latest Example is at least 0.5.5
+
+            # Test for issue #3828: Backspace on empty buffer should not cause BoundsError
+            test_ctx = Pkg.Types.Context()
+            test_ctx.io = IOBuffer()
+
+            input_io = Base.BufferStream()
+            write(input_io, "\r") # Select julia (first entry)
+            # Now editing julia compat entry which starts empty
+            write(input_io, "\x7f") # Backspace on empty buffer
+            write(input_io, "\x7f") # Another backspace
+            write(input_io, " ") # Space should not cause error
+            write(input_io, "\r") # Confirm empty input
+            close(input_io)
+
+            # Should not throw BoundsError
+            Pkg.API._compat(test_ctx; input_io)
         end
     end
 end

@@ -4,7 +4,7 @@
 listed_deps(project::Project; include_weak::Bool) =
     vcat(collect(keys(project.deps)), collect(keys(project.extras)), include_weak ? collect(keys(project.weakdeps)) : String[])
 
-function get_path_repo(project::Project, name::String)
+function get_path_repo(project::Project, project_file::String, manifest_file::String, name::String)
     source = get(project.sources, name, nothing)
     if source === nothing
         return nothing, GitRepo()
@@ -17,6 +17,10 @@ function get_path_repo(project::Project, name::String)
         pkgerror("`path` and `url` are conflicting specifications")
     end
     repo = GitRepo(url, rev, subdir)
+    # Convert path from project-relative to manifest-relative
+    if path !== nothing
+        path = project_path_to_manifest_path(project_file, manifest_file, path)
+    end
     return path, repo
 end
 
@@ -232,6 +236,8 @@ function Project(raw::Dict; file = nothing)
     project.workspace = read_project_workspace(get(raw, "workspace", nothing), project)
     project.apps = read_project_apps(get(raw, "apps", nothing), project)
     project.readonly = get(raw, "readonly", false)::Bool
+    syntax = get(raw, "syntax", nothing)::Union{Dict, Nothing}
+    project.julia_syntax_version = syntax === nothing ? nothing : read_project_version(get(syntax, "julia_version", nothing))
 
     # Handle deps in both [deps] and [weakdeps]
     project._deps_weak = Dict(intersect(project.deps, project.weakdeps))
@@ -285,10 +291,28 @@ function destructure(project::Project)::Dict
     entry!("entryfile", project.entryfile)
     entry!("deps", merge(project.deps, project._deps_weak))
     entry!("weakdeps", project.weakdeps)
-    entry!("sources", project.sources)
+
+    # Normalize paths in sources to use forward slashes on Windows (matching Manifest.toml behavior)
+    normalized_sources = project.sources
+    if !isempty(project.sources)
+        normalized_sources = Dict{String, Dict{String, String}}()
+        for (name, source) in project.sources
+            normalized_source = copy(source)
+            path = get(source, "path", nothing)
+            if path !== nothing
+                normalized_source["path"] = normalize_path_for_toml(path)
+            end
+            normalized_sources[name] = normalized_source
+        end
+    end
+    entry!("sources", normalized_sources)
     entry!("extras", project.extras)
     entry!("compat", Dict(name => x.str for (name, x) in project.compat))
     entry!("targets", project.targets)
+    entry!(
+        "syntax", project.julia_syntax_version === nothing ? nothing :
+            Dict("julia_version" => string(project.julia_syntax_version))
+    )
 
     # Only write readonly if it's true (not the default false)
     if project.readonly
@@ -304,8 +328,8 @@ const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "vers
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 
-function write_project(env::EnvCache)
-    if env.project.readonly
+function write_project(env::EnvCache, skip_readonly_check::Bool = false)
+    if env.project.readonly && !skip_readonly_check
         pkgerror("Cannot write to readonly project file at $(env.project_file)")
     end
     return write_project(env.project, env.project_file)

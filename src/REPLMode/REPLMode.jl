@@ -246,14 +246,10 @@ end
 function core_parse(words::Vector{QString}; only_cmd = false)
     statement = Statement()
     word::Union{Nothing, QString} = nothing
-    function next_word!()
-        isempty(words) && return false
-        word = popfirst!(words)
-        return true
-    end
 
     # begin parsing
-    next_word!() || return statement, ((word === nothing) ? nothing : word.raw)
+    isempty(words) && return statement, ((word === nothing) ? nothing : word.raw)
+    word = popfirst!(words)
     # handle `?` alias for help
     # It is special in that it requires no space between command and args
     if word.raw[1] == '?' && !word.isquoted
@@ -264,7 +260,8 @@ function core_parse(words::Vector{QString}; only_cmd = false)
     super = get(SPECS, word.raw, nothing)
     if super !== nothing # explicit
         statement.super = word.raw
-        next_word!() || return statement, word.raw
+        isempty(words) && return statement, word.raw
+        word = popfirst!(words)
         command = get(super, word.raw, nothing)
         command !== nothing || return statement, word.raw
     else # try implicit package
@@ -276,12 +273,14 @@ function core_parse(words::Vector{QString}; only_cmd = false)
 
     only_cmd && return statement, word.raw # hack to hook in `help` command
 
-    next_word!() || return statement, word.raw
+    isempty(words) && return statement, word.raw
+    word = popfirst!(words)
 
     # full option parsing is delayed so that the completions parser can use the raw string
     while is_opt(word.raw)
         push!(statement.options, word.raw)
-        next_word!() || return statement, word.raw
+        isempty(words) && return statement, word.raw
+        word = popfirst!(words)
     end
 
     pushfirst!(words, word)

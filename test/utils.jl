@@ -11,7 +11,7 @@ using UUIDs
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache
+    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url
 
 const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
 
@@ -88,7 +88,8 @@ function isolate(fn::Function; loaded_depot = false, linked_reg = true)
         withenv(
             "JULIA_PROJECT" => nothing,
             "JULIA_LOAD_PATH" => nothing,
-            "JULIA_PKG_DEVDIR" => nothing
+            "JULIA_PKG_DEVDIR" => nothing,
+            "JULIA_DEPOT_PATH" => nothing
         ) do
             target_depot = realpath(mktempdir())
             push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
@@ -166,7 +167,8 @@ function temp_pkg_dir(fn::Function; rm = true, linked_reg = true)
         withenv(
             "JULIA_PROJECT" => nothing,
             "JULIA_LOAD_PATH" => nothing,
-            "JULIA_PKG_DEVDIR" => nothing
+            "JULIA_PKG_DEVDIR" => nothing,
+            "JULIA_DEPOT_PATH" => nothing
         ) do
             env_dir = realpath(mktempdir())
             depot_dir = realpath(mktempdir())
@@ -348,11 +350,13 @@ end
 
 function show_output_if_command_errors(cmd::Cmd)
     out = IOBuffer()
-    proc = run(pipeline(cmd; stdout = out); wait = false)
+    err = IOBuffer()
+    proc = run(pipeline(cmd; stdout = out, stderr = err); wait = false)
     wait(proc)
     if !success(proc)
-        seekstart(out)
+        seekstart(out); seekstart(err)
         println(read(out, String))
+        println(read(err, String))
         Base.pipeline_error(proc)
     end
     return true
@@ -365,6 +369,17 @@ function recursive_rm_cov_files(rootdir::String)
         end
     end
     return
+end
+
+# Convert a path into a file URL.
+function make_file_url(path)
+    # Turn the slashes on Windows. In case the path starts with a
+    # drive letter, an extra slash will be needed in the file URL.
+    path = replace(path, "\\" => "/")
+    if !startswith(path, "/")
+        path = "/" * path
+    end
+    return "file://$(path)"
 end
 
 end

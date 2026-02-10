@@ -31,9 +31,12 @@ using .Utils
     @test is_stdlib(pkg_uuid)
     @test is_stdlib(pkg_uuid, v"1.0")
     @test is_stdlib(pkg_uuid, v"1.6")
-    @test is_stdlib(pkg_uuid, v"999.999.999")
     @test is_stdlib(pkg_uuid, v"0.7")
     @test is_stdlib(pkg_uuid, nothing)
+
+    # We can't serve information for unknown major.minor versions (patches can not match)
+    @test_throws Pkg.Types.PkgError is_stdlib(pkg_uuid, v"999.999.999")
+    @test is_stdlib(pkg_uuid, v"1.10.999")
 
     # MbedTLS_jll stopped being a stdlib in 1.12
     @test !is_stdlib(mbedtls_jll_uuid)
@@ -307,9 +310,8 @@ isolate(loaded_depot = true) do
 
             Pkg.activate(temp = true)
             # Stdlib add (julia_version == nothing)
-            # Note: this is currently known to be broken, we get the wrong GMP_jll!
             Pkg.add(; name = "GMP_jll", version = v"6.2.1+1", julia_version = nothing)
-            @test_broken Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
+            @test Pkg.dependencies()[GMP_jll_UUID].version === v"6.2.1+1"
         end
 
         @testset "julia_version = nothing" begin
@@ -344,6 +346,26 @@ isolate(loaded_depot = true) do
                         Pkg.activate(temp = true)
                         Pkg.add(deepcopy(dependencies); platform, julia_version = nothing)
                     end
+                end
+            end
+
+            @testset "Artifacts stdlib never falls back to registry" begin
+                # Test that when resolving for Julia 1.10 (where Artifacts is a stdlib with version=nothing),
+                # Pkg never installs the external Artifacts v1.3.0 from the registry
+                Pkg.activate(temp = true)
+                # Add a package that depends on Artifacts with julia_version = v"1.10"
+                # Artifacts should remain a stdlib, not be resolved to v1.3.0 from registry
+                ctx = Pkg.Types.Context(; julia_version = v"1.10")
+                # GMP_jll for Julia 1.10 should bring in Artifacts as a dependency
+                Pkg.add(ctx, [PackageSpec(; name = "GMP_jll")])
+
+                # Check that Artifacts is not in the manifest as an external package
+                # (If it were incorrectly resolved from registry, it would appear with version v1.3.0)
+                artifacts_uuid = Base.UUID("56f22d72-fd6d-98f1-02f0-08ddc0907c33")
+                manifest_entry = get(ctx.env.manifest, artifacts_uuid, nothing)
+                if manifest_entry !== nothing
+                    # Artifacts should not have v1.3.0 (the registry version)
+                    @test manifest_entry.version != v"1.3.0"
                 end
             end
         end

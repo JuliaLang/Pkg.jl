@@ -20,10 +20,10 @@ export PackageSpec
 export PackageMode, PKGMODE_MANIFEST, PKGMODE_PROJECT
 export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
-export Registry, RegistrySpec
+export Registry, RegistrySpec, Apps
 
 public activate, add, build, compat, develop, free, gc, generate, instantiate,
-    pin, precompile, redo, rm, resolve, status, test, undo, update, why
+    pin, precompile, readonly, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
 function depots1(depot_list::Union{String, Vector{String}} = depots())
@@ -46,11 +46,22 @@ end
 logdir(depot = depots1()) = joinpath(depot, "logs")
 devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depot, "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
+
+function create_cachedir_tag(cache_dir::AbstractString)
+    return try
+        tag_file = joinpath(cache_dir, "CACHEDIR.TAG")
+        if !isfile(tag_file)
+            write(tag_file, "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by Julia Pkg.\n# See https://bford.info/cachedir/\n")
+        end
+    catch
+        # Ignore errors to avoid failing operations on read-only filesystems
+    end
+end
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
 # For globally overriding in e.g. tests
-const DEFAULT_IO = Ref{Union{IO, Nothing}}(nothing)
+const DEFAULT_IO = Base.ScopedValues.ScopedValue{IO}()
 
 # ScopedValue to track whether we're currently in REPL mode
 const IN_REPL_MODE = Base.ScopedValues.ScopedValue{Bool}()
@@ -64,8 +75,8 @@ function unstableio(@nospecialize(io::IO))
         get(_io, :color, false) ? Base.ImmutableDict{Symbol, Any}(:color, true) : Base.ImmutableDict{Symbol, Any}()
     )
 end
-stderr_f() = something(DEFAULT_IO[], unstableio(stderr))
-stdout_f() = something(DEFAULT_IO[], unstableio(stdout))
+stderr_f() = something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stderr))
+stdout_f() = something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
@@ -99,8 +110,8 @@ include("GitTools.jl")
 include("PlatformEngines.jl")
 include("Versions.jl")
 include("Registry/Registry.jl")
-include("Resolve/Resolve.jl")
 include("Types.jl")
+include("Resolve/Resolve.jl")
 include("BinaryPlatformsCompat.jl")
 include("Artifacts.jl")
 const Artifacts = PkgArtifacts
@@ -207,7 +218,7 @@ Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
 Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master") # From url to remote gitrepo
 Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local gitrepo
-Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl)") # With subdir
+Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl") # With subdir
 ```
 
 After the installation of new packages the project will be precompiled. See more at [Environment Precompilation](@ref).
@@ -324,7 +335,7 @@ If `workspace` is true, this will consider all projects in the workspace and not
 const why = API.why
 
 """
-    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel)
+    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false)
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
@@ -335,6 +346,8 @@ If packages are given as positional arguments, the `preserve` argument can be us
 - `PRESERVE_ALL` (default): Only allow `pkg` to update.
 - `PRESERVE_DIRECT`: Only allow `pkg` and indirect dependencies that are not a direct dependency in the project to update.
 - `PRESERVE_NONE`: Allow `pkg` and all its indirect dependencies to update.
+
+If `workspace` is `true`, packages from all projects in the workspace will be included when no packages are specified.
 
 After any package updates the project will be precompiled. See more at [Environment Precompilation](@ref).
 
@@ -379,7 +392,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Test"]
 ```
 
-The tests are executed in a new process with `check-bounds=yes` and by default `startup-file=no`.
+The tests are executed in a new process with the same `check-bounds` setting as the current Julia session and by default `startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
 
 Inlining of functions during testing can be disabled (for better coverage accuracy)
@@ -446,13 +459,16 @@ If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never automatically updated: if `pkg` is tracking a path,
 or a repository, those remain tracked but will not update.
 To get updates from the origin path or remote repository the package must first be freed.
+
+If `workspace` is `true` and `all_pkgs` is `true`, packages from all projects in the workspace
+will be included.
 
 !!! compat "Julia 1.7"
     The `all_pkgs` kwarg was introduced in julia 1.7.
@@ -472,12 +488,15 @@ Pkg.pin(all_pkgs = true)
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
 
 If `pkg` is pinned, remove the pin.
 If `pkg` is tracking a path, e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
 To free all dependencies set `all_pkgs=true`.
+
+If `workspace` is `true` and `all_pkgs` is `true`, packages from all projects in the workspace
+will be included.
 
 !!! compat "Julia 1.7"
     The `all_pkgs` kwarg was introduced in julia 1.7.
@@ -687,9 +706,21 @@ const compat = API.compat
     Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
     Pkg.activate(; temp::Bool=false, shared::Bool=false, io::IO=stderr)
 
-Activate the environment at `s`. The active environment is the environment
-that is modified by executing package commands.
-The logic for what path is activated is as follows:
+Activate the environment at `s`, or return to the default environment if no argument is given.
+The active environment is the environment that is modified by executing package commands.
+Activating an environment only affects the current Julia session and does not persist when
+you restart Julia (unless you use the `--project` startup flag).
+
+# Returning to the default environment
+
+If no argument is given to `activate`, this returns you to the default shared environment
+(typically `@v#.#` in `~/.julia/environments/v#.#/`). This is the standard way to "deactivate"
+a project environment and return to your base package setup. There is no separate `deactivate`
+command—`Pkg.activate()` with no arguments serves this purpose.
+
+# Activating a path
+
+When `s` is provided, the logic for what path is activated is as follows:
 
   * If `shared` is `true`, the first existing environment named `s` from the depots
     in the depot stack will be activated. If no such environment exists,
@@ -701,15 +732,18 @@ The logic for what path is activated is as follows:
     activate the environment at the tracked path.
   * Otherwise, `s` is interpreted as a non-existing path, which is then activated.
 
-If no argument is given to `activate`, then use the first project found in `LOAD_PATH`
-(ignoring `"@"`). For the default value of `LOAD_PATH`, the result is to activate the
-`@v#.#` environment.
-
 # Examples
 ```julia
+# Return to default environment (deactivate current project)
 Pkg.activate()
+
+# Activate a project in a specific directory
 Pkg.activate("local/path")
+
+# Activate a developed package by name
 Pkg.activate("MyDependency")
+
+# Create and activate a temporary environment
 Pkg.activate(; temp=true)
 ```
 
@@ -871,14 +905,6 @@ Below is a comparison between the REPL mode and the functional API::
 const RegistrySpec = Registry.RegistrySpec
 
 """
-    upgrade_manifest()
-    upgrade_manifest(manifest_path::String)
-
-Upgrades the format of the current or specified manifest file from v1.0 to v2.0 without re-resolving.
-"""
-const upgrade_manifest = API.upgrade_manifest
-
-"""
     is_manifest_current(path::AbstractString)
 
 Returns whether the manifest for the project at `path` was resolved from the current project file.
@@ -895,6 +921,28 @@ using Pkg, Test
 ```
 """
 const is_manifest_current = API.is_manifest_current
+
+"""
+    readonly([state::Bool], [ctx::Context])
+
+Get or set the readonly state of the current environment.
+
+# Examples
+```julia-repl
+julia> Pkg.readonly()  # check current readonly state
+false
+
+julia> Pkg.readonly(true)  # enable readonly mode
+false  # returns previous state
+
+julia> Pkg.readonly()
+true
+
+julia> Pkg.readonly(false)  # disable readonly mode
+true
+```
+"""
+const readonly = API.readonly
 
 function __init__()
     OFFLINE_MODE[] = Base.get_bool_env("JULIA_PKG_OFFLINE", false)
@@ -933,7 +981,7 @@ end
 
 const DEPOT_ORPHANAGE_TIMESTAMPS = Dict{String, Float64}()
 const _auto_gc_enabled = Ref{Bool}(true)
-function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
+function _auto_gc(ctx::Types.Context)
     if !_auto_gc_enabled[]
         return
     end
@@ -944,7 +992,7 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     # `orphaned.toml` file, which should tell us how long since the last time
     # we GC'ed.
     orphanage_path = joinpath(logdir(depots1()), "orphaned.toml")
-    delay_secs = Second(collect_delay).value
+    delay_secs = Second(Day(7)).value  # Run auto-GC at most once every 7 days
     curr_time = time()
     if curr_time - get(DEPOT_ORPHANAGE_TIMESTAMPS, depots1(), 0.0) >= delay_secs
         DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = mtime(orphanage_path)
@@ -953,7 +1001,7 @@ function _auto_gc(ctx::Types.Context; collect_delay::Period = Day(7))
     return if curr_time - DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] > delay_secs
         printpkgstyle(ctx.io, :Info, "We haven't cleaned this depot up for a bit, running Pkg.gc()...", color = Base.info_color())
         try
-            Pkg.gc(ctx; collect_delay)
+            Pkg.gc(ctx)
             DEPOT_ORPHANAGE_TIMESTAMPS[depots1()] = curr_time
         catch ex
             @error("GC failed", exception = ex)
@@ -975,9 +1023,9 @@ end
 include("precompile.jl")
 
 # Reset globals that might have been mutated during precompilation.
-DEFAULT_IO[] = nothing
 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
 PREV_ENV_PATH[] = ""
 Types.STDLIB[] = nothing
+empty!(Registry.REGISTRY_CACHE)
 
 end # module

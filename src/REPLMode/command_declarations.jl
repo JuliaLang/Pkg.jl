@@ -224,16 +224,18 @@ compound_declarations = [
             :arg_count => 0 => Inf,
             :option_spec => [
                 PSA[:name => "all", :api => :all_pkgs => true],
+                PSA[:name => "workspace", :api => :workspace => true],
             ],
             :arg_parser => parse_package,
             :completions => :complete_fixed_packages,
             :description => "undoes a `pin`, `develop`, or stops tracking a repo",
             :help => md"""
-                    free pkg[=uuid] ...
-                    free [--all]
+                    free [--workspace] pkg[=uuid] ...
+                    free [--workspace] [--all]
 
                 Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
                 makes the package no longer being checked out. Specifying `--all` will free all dependencies (direct and indirect).
+                The `--workspace` option includes packages from all projects in the workspace when used with `--all`.
                 """,
         ],
         PSA[
@@ -266,16 +268,18 @@ compound_declarations = [
             :arg_count => 0 => Inf,
             :option_spec => [
                 PSA[:name => "all", :api => :all_pkgs => true],
+                PSA[:name => "workspace", :api => :workspace => true],
             ],
             :arg_parser => parse_package,
             :completions => :complete_installed_packages,
             :description => "pins the version of packages",
             :help => md"""
-                    pin pkg[=uuid] ...
-                    pin [--all]
+                    pin [--workspace] pkg[=uuid] ...
+                    pin [--workspace] [--all]
 
                 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-                A pinned package has the symbol `⚲` next to its version in the status list.. Specifying `--all` will pin all dependencies (direct and indirect).
+                A pinned package has the symbol `⚲` next to its version in the status list. Specifying `--all` will pin all dependencies (direct and indirect).
+                The `--workspace` option includes packages from all projects in the workspace when used with `--all`.
 
                 **Examples**
                 ```
@@ -334,16 +338,22 @@ compound_declarations = [
                     activate --temp
                     activate - (activates the previously active environment)
 
-                Activate the environment at the given `path`, or use the first project found in
-                `LOAD_PATH` (ignoring `"@"`) if no `path` is specified.
-                In the latter case, for the default value of `LOAD_PATH`, the result is to activate the
-                `@v#.#` environment.
+                Activate the environment at the given `path`, or return to the default environment if no
+                `path` is specified. When called with no arguments, this returns you to the default shared
+                environment (typically `@v#.#` in `~/.julia/environments/v#.#/`), which is the standard way
+                to "deactivate" a project environment.
+
                 The active environment is the environment that is modified by executing package commands.
+                Activating an environment only affects the current Julia session and does not persist when
+                you restart Julia (unless you use the `--project` startup flag).
+
                 When the option `--shared` is given, `path` will be assumed to be a directory name and searched for in the
                 `environments` folders of the depots in the depot stack. In case no such environment exists in any of the depots,
                 it will be placed in the first depot of the stack.
+
                 Use the `--temp` option to create temporary environments which are removed when the julia
                 process is exited.
+
                 Use a single `-` to activate the previously active environment.
                 """,
         ],
@@ -362,12 +372,13 @@ compound_declarations = [
                 PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
                 PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+                PSA[:name => "workspace", :api => :workspace => true],
             ],
             :completions => :complete_installed_packages,
             :description => "update packages in manifest",
             :help => md"""
-                    [up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
-                    [up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
+                    [up|update] [-p|--project]  [--workspace] [opts] pkg[=uuid] [@version] ...
+                    [up|update] [-m|--manifest] [--workspace] [opts] pkg[=uuid] [@version] ...
 
                     opts: --major | --minor | --patch | --fixed
                           --preserve=<all/direct/none>
@@ -380,6 +391,8 @@ compound_declarations = [
                 the following packages to be upgraded only within the current major, minor,
                 patch version; if the `--fixed` upgrade level is given, then the following
                 packages will not be upgraded at all.
+                The `--workspace` option includes packages from all projects in the workspace
+                when no packages are specified.
 
                 After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
                 """,
@@ -435,6 +448,7 @@ compound_declarations = [
                 PSA[:name => "manifest", :short_name => "m", :api => :mode => PKGMODE_MANIFEST],
                 PSA[:name => "diff", :short_name => "d", :api => :diff => true],
                 PSA[:name => "outdated", :short_name => "o", :api => :outdated => true],
+                PSA[:name => "deprecated", :api => :deprecated => true],
                 PSA[:name => "compat", :short_name => "c", :api => :compat => true],
                 PSA[:name => "extensions", :short_name => "e", :api => :extensions => true],
                 PSA[:name => "workspace", :api => :workspace => true],
@@ -442,9 +456,9 @@ compound_declarations = [
             :completions => :complete_installed_packages,
             :description => "summarize contents of and changes to environment",
             :help => md"""
-                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [pkgs...]
-                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-p|--project] [pkgs...]
-                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [-m|--manifest] [pkgs...]
+                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [--deprecated] [pkgs...]
+                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [--deprecated] [-p|--project] [pkgs...]
+                    [st|status] [-d|--diff] [--workspace] [-o|--outdated] [--deprecated] [-m|--manifest] [pkgs...]
                     [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-p|--project] [pkgs...]
                     [st|status] [-d|--diff] [--workspace] [-e|--extensions] [-m|--manifest] [pkgs...]
                     [st|status] [-c|--compat] [pkgs...]
@@ -455,7 +469,10 @@ compound_declarations = [
                 constraints. To see why use `pkg> status --outdated` which shows any packages
                 that are not at their latest version and if any packages are holding them back.
                 Packages marked with `[yanked]` have been yanked from the registry and should be
-                updated or removed.
+                updated or removed. Packages marked with `[deprecated]` are no longer maintained.
+
+                Use `pkg> status --deprecated` to show only deprecated packages along with deprecation
+                information such as the reason and alternative packages (if provided by the registry).
 
                 Use `pkg> status --extensions` to show dependencies with extensions and what extension dependencies
                 of those that are currently loaded.
@@ -502,7 +519,7 @@ compound_declarations = [
             :name => "gc",
             :api => API.gc,
             :option_spec => [
-                PSA[:name => "all", :api => :collect_delay => Hour(0)],
+                PSA[:name => "all", :api => :collect_delay => nothing],
                 PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
             ],
             :description => "garbage collect packages not used for a significant time",

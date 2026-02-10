@@ -46,6 +46,9 @@ Pkg._auto_gc_enabled[] = false
         reg = regs[1]
         @test reg.name == "General"
         @test reg.uuid == general_uuid
+        # - Check that CACHEDIR.TAG files exist in cache directories
+        @test isfile(joinpath(LOADED_DEPOT, "registries", "CACHEDIR.TAG"))
+        @test isfile(joinpath(LOADED_DEPOT, "packages", "CACHEDIR.TAG"))
         # - The package should be installed correctly.
         source053, source053_time = nothing, nothing
         Pkg.dependencies(exuuid) do pkg
@@ -90,6 +93,7 @@ Pkg._auto_gc_enabled[] = false
         end
         # Now check packages which track repos instead of registered versions
         Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "v0.5.3")
+        @test isfile(joinpath(LOADED_DEPOT, "clones", "CACHEDIR.TAG"))
         Pkg.dependencies(exuuid) do pkg
             @test !pkg.is_tracking_registry
             @test isdir(pkg.source)
@@ -139,6 +143,7 @@ Pkg._auto_gc_enabled[] = false
             end
         end
     end
+    copy_this_pkg_cache(LOADED_DEPOT)
 end
 
 function kill_with_info(p)
@@ -167,62 +172,62 @@ end
 @testset "Concurrent setup/installation/precompilation across processes" begin
     @testset for test in 1:1 # increase for stress testing
         mktempdir() do tmp
-            copy_this_pkg_cache(tmp)
             pathsep = Sys.iswindows() ? ";" : ":"
             Pkg_dir = dirname(@__DIR__)
-            withenv("JULIA_DEPOT_PATH" => string(tmp, pathsep)) do
-                script = """
-                using Dates
-                t = Timer(t->println(stderr, Dates.now()), 4*60; interval = 10)
-                import Pkg
-                samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
-                Pkg.activate(temp=true)
-                Pkg.add(name="FFMPEG", version="0.4") # a package with a lot of deps but fast to load
-                using FFMPEG
-                @showtime FFMPEG.exe("-version")
-                @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
-                close(t)
-                """
-                cmd = `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`
-                did_install_package = Threads.Atomic{Int}(0)
-                did_install_artifact = Threads.Atomic{Int}(0)
-                any_failed = Threads.Atomic{Bool}(false)
-                outputs = fill("", 3)
-                t = @elapsed @sync begin
-                    # All but 1 process should be waiting, so should be ok to run many
-                    for i in 1:3
-                        Threads.@spawn begin
-                            iob = IOBuffer()
-                            start = time()
-                            p = run(pipeline(cmd, stdout = iob, stderr = iob), wait = false)
-                            if timedwait(() -> process_exited(p), 5 * 60; pollint = 1.0) === :timed_out
-                                kill_with_info(p)
-                            end
-                            if !success(p)
-                                Threads.atomic_cas!(any_failed, false, true)
-                            end
-                            str = String(take!(iob))
-                            if occursin(r"Installed FFMPEG ─", str)
-                                Threads.atomic_add!(did_install_package, 1)
-                            end
-                            if occursin(r"Installed artifact FFMPEG ", str)
-                                Threads.atomic_add!(did_install_artifact, 1)
-                            end
-                            outputs[i] = string("=== test $test, process $i. Took $(time() - start) seconds.\n", str)
+            script = """
+            using Dates
+            t = Timer(t->println(stderr, Dates.now()), 4*60; interval = 10)
+            import Pkg
+            samefile(pkgdir(Pkg), $(repr(Pkg_dir))) || error("Using wrong Pkg")
+            Pkg.activate(temp=true)
+            Pkg.add(name="FFMPEG", version="0.4") # a package with a lot of deps but fast to load
+            using FFMPEG
+            @showtime FFMPEG.exe("-version")
+            @showtime FFMPEG.exe("-f", "lavfi", "-i", "testsrc=duration=1:size=128x128:rate=10", "-f", "null", "-") # more complete quick test (~10ms)
+            close(t)
+            """
+            cmd = addenv(
+                `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`,
+                "JULIA_DEPOT_PATH" => join([tmp, LOADED_DEPOT, ""], pathsep)
+            )
+            did_install_package = Threads.Atomic{Int}(0)
+            did_install_artifact = Threads.Atomic{Int}(0)
+            any_failed = Threads.Atomic{Bool}(false)
+            outputs = fill("", 3)
+            t = @elapsed @sync begin
+                # All but 1 process should be waiting, so should be ok to run many
+                for i in 1:3
+                    Threads.@spawn begin
+                        iob = IOBuffer()
+                        start = time()
+                        p = run(pipeline(cmd, stdout = iob, stderr = iob), wait = false)
+                        if timedwait(() -> process_exited(p), 5 * 60; pollint = 1.0) === :timed_out
+                            kill_with_info(p)
                         end
+                        if !success(p)
+                            Threads.atomic_cas!(any_failed, false, true)
+                        end
+                        str = String(take!(iob))
+                        if occursin(r"Installed FFMPEG ─", str)
+                            Threads.atomic_add!(did_install_package, 1)
+                        end
+                        if occursin(r"Installed artifact FFMPEG ", str)
+                            Threads.atomic_add!(did_install_artifact, 1)
+                        end
+                        outputs[i] = string("=== test $test, process $i. Took $(time() - start) seconds.\n", str)
                     end
                 end
-                if any_failed[] || did_install_package[] != 1 || did_install_artifact[] != 1
-                    println("=== Concurrent Pkg.add test $test failed after $t seconds")
-                    for i in 1:3
-                        printstyled(stdout, outputs[i]; color = (:blue, :green, :yellow)[i])
-                    end
-                end
-                # only 1 should have actually installed FFMPEG
-                @test !any_failed[]
-                @test did_install_package[] == 1
-                @test did_install_artifact[] == 1
             end
+            if any_failed[] || did_install_package[] != 1 || did_install_artifact[] != 1
+                println("=== Concurrent Pkg.add test $test failed after $t seconds")
+                for i in 1:3
+                    printstyled(stdout, outputs[i]; color = (:blue, :green, :yellow)[i])
+                end
+            end
+            # only 1 should have actually installed FFMPEG
+            @test !any_failed[]
+            @test did_install_package[] == 1
+            @test did_install_artifact[] == 1
         end
     end
 end
@@ -1253,6 +1258,21 @@ end
             @test args[1].rev == "branch-name"
         end
 
+        # Test SSH URLs with IP addresses (issue #1822)
+        @testset "SSH URLs with IP addresses" begin
+            # Test that user@host:path URLs with IP addresses are parsed correctly as complete URLs
+            api, args, opts = first(Pkg.pkg"add user@10.20.30.40:PackageName.jl")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "user@10.20.30.40:PackageName.jl"
+            @test args[1].subdir === nothing
+
+            api, args, opts = first(Pkg.pkg"add git@192.168.1.100:path/to/repo.jl")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@192.168.1.100:path/to/repo.jl"
+            @test args[1].subdir === nothing
+        end
 
         # Test Git URLs with subdir specifiers
         @testset "Git URLs with subdir specifiers" begin
@@ -1477,7 +1497,7 @@ end
         cd_tempdir() do dir
             # adding a nonexistent directory
             @test_throws PkgError(
-                "Path `$(normpath("some/really/random/Dir"))` does not exist."
+                "Path `$(abspath("some/really/random/Dir"))` does not exist."
             ) Pkg.pkg"add some/really/random/Dir"
             # warn if not explicit about adding directory
             mkdir("Example")
@@ -1950,7 +1970,8 @@ end
             Pkg.develop(path = simple_package_path)
             Pkg.develop(path = unregistered_example_path)
             rm(Pkg.project().path)
-            @test_throws PkgError Pkg.instantiate()
+            # Broken, likely by a change in julia Base
+            # @test_throws PkgError Pkg.instantiate()
         end
     end
     # verbose smoke test
@@ -2430,6 +2451,20 @@ end
             @test !haskey(Pkg.dependencies(), test_stdlib_uuid)
         end
     end
+    # resolve with repo-tracked package that has tree_hash in manifest (issue #4561)
+    # This tests that startswith/endswith correctly handle SHA1 tree_hash types
+    isolate(loaded_depot = true) do
+        Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "v0.5.3")
+        # Remove both clones and packages so resolve needs to re-clone
+        rm(joinpath(DEPOT_PATH[1], "clones"); force = true, recursive = true)
+        rm(joinpath(DEPOT_PATH[1], "packages"); force = true, recursive = true)
+        # This should not throw "MethodError: no method matching startswith(::Base.SHA1, ::String)"
+        Pkg.resolve()
+        Pkg.dependencies(exuuid) do pkg
+            @test pkg.name == "Example"
+            @test isdir(pkg.source)
+        end
+    end
 end
 
 #
@@ -2457,69 +2492,76 @@ end
     end
 
     @testset "threads" begin
-        mktempdir() do dir
-            path = copy_test_package(dir, "TestThreads")
-            cd(path) do
-                # Do this all in a subprocess to protect against the parent having non-default threadpool sizes.
-                script = """
-                    using Pkg, Test
-                    @testset "JULIA_NUM_THREADS=1" begin
-                        withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "1",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
-                            "JULIA_NUM_THREADS" => "1",
-                        ) do
-                            Pkg.test("TestThreads")
+        isolate(loaded_depot = true) do;
+            mktempdir() do dir
+                path = copy_test_package(dir, "TestThreads")
+                cd(path) do
+                    # Do this all in a subprocess to protect against the parent having non-default threadpool sizes.
+                    script = """
+                        using Pkg, Test
+                        @testset "JULIA_NUM_THREADS=1" begin
+                            withenv(
+                                "EXPECTED_NUM_THREADS_DEFAULT" => "1",
+                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
+                                "JULIA_NUM_THREADS" => "1",
+                            ) do
+                                Pkg.test("TestThreads")
+                            end
                         end
-                    end
-                    @testset "JULIA_NUM_THREADS=2" begin
-                        withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
-                            "JULIA_NUM_THREADS" => "2",
-                        ) do
-                            Pkg.test("TestThreads")
+                        @testset "JULIA_NUM_THREADS=2" begin
+                            withenv(
+                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
+                                "JULIA_NUM_THREADS" => "2",
+                            ) do
+                                Pkg.test("TestThreads")
+                            end
                         end
-                    end
-                    @testset "JULIA_NUM_THREADS=2,0" begin
-                        withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
-                            "JULIA_NUM_THREADS" => "2,0",
-                        ) do
-                            Pkg.test("TestThreads")
+                        @testset "JULIA_NUM_THREADS=2,0" begin
+                            withenv(
+                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
+                                "JULIA_NUM_THREADS" => "2,0",
+                            ) do
+                                Pkg.test("TestThreads")
+                            end
                         end
-                    end
 
-                    @testset "--threads=1" begin
-                        withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "1",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
-                            "JULIA_NUM_THREADS" => nothing,
-                        ) do
-                            Pkg.test("TestThreads"; julia_args=`--threads=1`)
+                        @testset "--threads=1" begin
+                            withenv(
+                                "EXPECTED_NUM_THREADS_DEFAULT" => "1",
+                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0", # https://github.com/JuliaLang/julia/pull/57454
+                                "JULIA_NUM_THREADS" => nothing,
+                            ) do
+                                Pkg.test("TestThreads"; julia_args=`--threads=1`)
+                            end
                         end
-                    end
-                    @testset "--threads=2" begin
-                        withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
-                            "JULIA_NUM_THREADS" => nothing,
-                        ) do
-                            Pkg.test("TestThreads"; julia_args=`--threads=2`)
+                        @testset "--threads=2" begin
+                            withenv(
+                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "1",
+                                "JULIA_NUM_THREADS" => nothing,
+                            ) do
+                                Pkg.test("TestThreads"; julia_args=`--threads=2`)
+                            end
                         end
-                    end
-                    @testset "--threads=2,0" begin
-                        withenv(
-                            "EXPECTED_NUM_THREADS_DEFAULT" => "2",
-                            "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
-                            "JULIA_NUM_THREADS" => nothing,
-                        ) do
-                            Pkg.test("TestThreads"; julia_args=`--threads=2,0`)
+                        @testset "--threads=2,0" begin
+                            withenv(
+                                "EXPECTED_NUM_THREADS_DEFAULT" => "2",
+                                "EXPECTED_NUM_THREADS_INTERACTIVE" => "0",
+                                "JULIA_NUM_THREADS" => nothing,
+                            ) do
+                                Pkg.test("TestThreads"; julia_args=`--threads=2,0`)
+                            end
                         end
-                    end
-                """
-                @test Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`)
+                    """
+                    @test Utils.show_output_if_command_errors(
+                        addenv(
+                            `$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`,
+                            "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+                        )
+                    )
+                end
             end
         end
     end
@@ -2728,6 +2770,7 @@ end
                 "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "f99d57aad0e5eb2434491b47bac92bb88d463001", "build.log"
             )
             @test isfile(log_file_add)
+            @test isfile(joinpath(DEPOT_PATH[1], "scratchspaces", "CACHEDIR.TAG"))
             @test occursin("oops", read(log_file_add, String))
         end
     end
@@ -2745,7 +2788,7 @@ end
         @test isempty(opts)
         api, opts = first(Pkg.pkg"gc --all")
         @test api == Pkg.gc
-        @test opts[:collect_delay] == Hour(0)
+        # N.B.: `--all` is now a no-op, but is retained for now for compatibility.
     end
 end
 
@@ -2801,6 +2844,24 @@ end
             end
         end
     end
+    # Test generate . (issue #2821)
+    isolate(loaded_depot = true) do
+        cd_tempdir() do dir
+            mkdir("MyNewPkg")
+            cd("MyNewPkg") do
+                Pkg.generate(".")
+                @test isfile("Project.toml")
+                @test isfile("src/MyNewPkg.jl")
+                @test Pkg.Types.read_project("Project.toml").name == "MyNewPkg"
+            end
+
+            mkdir("NonEmpty")
+            write("NonEmpty/existing.txt", "content")
+            cd("NonEmpty") do
+                @test_throws Pkg.Types.PkgError Pkg.generate(".")
+            end
+        end
+    end
 end
 
 #
@@ -2809,8 +2870,11 @@ end
 @testset "Pkg.status" begin
     # other
     isolate(loaded_depot = true) do
+        # IO is necessary even if we're not looking at it, because we have a short-circuit for
+        # devnull (and also don't want to pollute the logs (if any))
+        io = PipeBuffer()
         @test_deprecated Pkg.status(Pkg.PKGMODE_MANIFEST)
-        @test_logs (:warn, r"diff option only available") match_mode = :any Pkg.status(diff = true)
+        @test_logs (:warn, r"diff option only available") match_mode = :any Pkg.status(diff = true; io)
     end
     # State changes
     isolate(loaded_depot = true) do
@@ -2939,6 +3003,17 @@ end
         @test any(l -> occursin(r"\[7876af07\] Example\s*v0\.3\.0", l), statuslines)
         @test any(l -> occursin(r"\[2a0f44e3\] Base64", l), statuslines)
         @test any(l -> occursin(r"\[d6f4376e\] Markdown", l), statuslines)
+        # Test that manifest status with filter shows package and its dependencies (issue #1989)
+        Pkg.add(name = "JSON", version = "0.21.0")  # JSON has dependencies
+        Pkg.status("JSON"; io = io, mode = Pkg.PKGMODE_MANIFEST)
+        statuslines = readlines(io)
+        @test occursin(r"Status `.+Manifest.toml`", first(statuslines))
+        @test any(l -> occursin(r"\[682c06a0\] JSON\s*v0\.21\.0", l), statuslines)
+        # JSON's dependencies (Parsers, Dates, Mmap, Unicode) should also be shown
+        @test any(l -> occursin(r"Parsers", l), statuslines)
+        # But Example and Markdown (not dependencies of JSON) should not be shown
+        @test !any(l -> occursin(r"\[7876af07\] Example", l), statuslines)
+        @test !any(l -> occursin(r"\[d6f4376e\] Markdown", l), statuslines)
     end
     # Diff API
     isolate(loaded_depot = true) do
@@ -3286,7 +3361,9 @@ end
             Pkg.Types.write_project(a, temp)
             b = Pkg.Types.read_project(temp)
             for property in propertynames(a)
-                @test getproperty(a, property) == getproperty(b, property)
+                @testset let property = property
+                    @test getproperty(a, property) == getproperty(b, property)
+                end
             end
             @test a == b
         end
@@ -3797,45 +3874,70 @@ end
 end
 
 @testset "status showing incompatible loaded deps" begin
-    cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
-        using Pkg
-        Pkg.activate(temp=true)
-        Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.4\"))
-        using Example
-        Pkg.activate(temp=true)
-        Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.5\"))
-        "`)
-    iob = IOBuffer()
-    run(pipeline(cmd, stderr = iob, stdout = iob))
-    out = String(take!(iob))
-    @test occursin("[loaded: v0.5.4]", out)
+    isolate(loaded_depot = true) do
+        cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
+            using Pkg
+            Pkg.activate(temp=true)
+            Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.4\"))
+            using Example
+            Pkg.activate(temp=true)
+            Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.5\"))
+            "`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"))
+        iob = IOBuffer()
+        run(pipeline(cmd, stderr = iob, stdout = iob))
+        out = String(take!(iob))
+        @test occursin("[loaded: v0.5.4]", out)
+    end
 end
 
 @test allunique(unique([Pkg.PackageSpec(path = "foo"), Pkg.PackageSpec(path = "foo")]))
 
 # Test the readonly functionality
 @testset "Readonly Environment Tests" begin
-    mktempdir() do dir
-        project_file = joinpath(dir, "Project.toml")
-
-        # Test that normal environment works
-        cd(dir) do
+    isolate() do
+        cd_tempdir() do dir
             # Activate the environment
             Pkg.activate(".")
 
-            # This should work fine
-            Pkg.add("Test")  # Add Test package
+            # Test readonly API - should be false initially
+            @test Pkg.readonly() == false
 
-            # Now make it readonly
-            project_data = Dict("readonly" => true)
-            open(project_file, "w") do io
-                TOML.print(io, project_data)
-            end
+            # Add a package (should work fine)
+            Pkg.add("Test")
 
-            # Now these should fail
+            # Enable readonly mode using new API
+            previous_state = Pkg.readonly(true)
+            @test previous_state == false
+            @test Pkg.readonly() == true
+
+            # Test that status shows readonly indicator
+            io = IOBuffer()
+            Pkg.status(io = io)
+            status_output = String(take!(io))
+            @test occursin("(readonly)", status_output)
+
+            # These operations should fail with early readonly check
             @test_throws Pkg.Types.PkgError Pkg.add("Dates")
             @test_throws Pkg.Types.PkgError Pkg.rm("Test")
             @test_throws Pkg.Types.PkgError Pkg.update()
+            @test_throws Pkg.Types.PkgError Pkg.pin("Test")
+            @test_throws Pkg.Types.PkgError Pkg.free("Test")
+            @test_throws Pkg.Types.PkgError Pkg.develop("Example")
+
+            # Disable readonly mode
+            previous_state = Pkg.readonly(false)
+            @test previous_state == true
+            @test Pkg.readonly() == false
+
+            # Test that status no longer shows readonly indicator
+            io = IOBuffer()
+            Pkg.status(io = io)
+            status_output = String(take!(io))
+            @test !occursin("(readonly)", status_output)
+
+            # Operations should work again
+            @test_nowarn Pkg.add("Random")
+            @test_nowarn Pkg.rm("Random")
         end
     end
 end

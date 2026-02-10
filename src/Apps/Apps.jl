@@ -8,7 +8,10 @@ using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest
 using Pkg.Operations: print_single, source_path, update_package_add
 using Pkg.API: handle_package_input!
 using TOML, UUIDs
+using Dates
 import Pkg.Registry
+
+public add, rm, status, update, develop
 
 app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
 app_manifest_file() = joinpath(app_env_folder(), "AppManifest.toml")
@@ -66,6 +69,11 @@ end
 
 
 function overwrite_file_if_different(file, content)
+    # Windows batch files require CRLF line endings for reliable label parsing
+    if endswith(file, ".bat")
+        content = replace(content, "\r\n" => "\n")  # normalize to LF first
+        content = replace(content, "\n" => "\r\n")  # then convert to CRLF
+    end
     return if !isfile(file) || read(file, String) != content
         mkpath(dirname(file))
         write(file, content)
@@ -74,7 +82,8 @@ end
 
 function check_apps_in_path(apps)
     for app_name in keys(apps)
-        which_result = Sys.which(app_name)
+        which_name = app_name * (Sys.iswindows() ? ".bat" : "")
+        which_result = Sys.which(which_name)
         if which_result === nothing
             @warn """
             App '$app_name' was installed but is not available in PATH.
@@ -104,7 +113,7 @@ function get_max_version_register(pkg::PackageSpec, regs)
         if get(reg, pkg.uuid, nothing) !== nothing
             reg_pkg = get(reg, pkg.uuid, nothing)
             reg_pkg === nothing && continue
-            pkg_info = Registry.registry_info(reg_pkg)
+            pkg_info = Registry.registry_info(reg, reg_pkg)
             for (version, info) in pkg_info.version_info
                 info.yanked && continue
                 if pkg.version isa VersionNumber
@@ -184,6 +193,9 @@ function add(pkg::PackageSpec)
     handle_package_input!(pkg)
 
     ctx = app_context()
+
+    Pkg.Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
+
     manifest = ctx.env.manifest
     new = false
 
@@ -208,10 +220,14 @@ function add(pkg::PackageSpec)
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
     # TODO: Wrong if package itself has a sourcepath?
-    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid)
+    # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be VersionSpec
+    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version isa VersionNumber ? project.version : nothing, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid)
     manifest.deps[pkg.uuid] = entry
 
     _resolve(manifest, pkg.name)
+    if new === true || (new isa Set{UUID} && pkg.uuid in new)
+        Pkg.Operations.build_versions(ctx, Set([pkg.uuid]); verbose = true)
+    end
     precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
@@ -227,7 +243,7 @@ end
 
 function develop(pkg::PackageSpec)
     if pkg.path !== nothing
-        pkg.path == abspath(pkg.path)
+        pkg.path = abspath(pkg.path)
     end
     handle_package_input!(pkg)
     ctx = app_context()
@@ -244,13 +260,15 @@ function develop(pkg::PackageSpec)
         pkg.repo.source = nothing
     end
 
-
-    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid = pkg.uuid)
+    # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be VersionSpec
+    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version isa VersionNumber ? project.version : nothing, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid = pkg.uuid)
     manifest = ctx.env.manifest
     manifest.deps[pkg.uuid] = entry
 
-    _resolve(manifest, pkg.name)
-    precompile(pkg.name)
+    # For dev, we don't create an app environment - just point shims directly to the dev'd project
+    write_manifest(manifest, app_manifest_file())
+    generate_shims_for_apps(pkg.name, project.apps, sourcepath, joinpath(Sys.BINDIR, "julia"))
+
     @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
     return check_apps_in_path(project.apps)
 end
@@ -279,11 +297,7 @@ function update(pkg::Union{PackageSpec, Nothing} = nothing)
         end
         Pkg.activate(joinpath(app_env_folder(), info.name)) do
             # precompile only after updating all apps?
-            if pkg !== nothing
-                Pkg.update(pkg)
-            else
-                Pkg.update()
-            end
+            Pkg.update()
         end
         sourcepath = abspath(source_path(ctx.env.manifest_file, info))
         project = get_project(sourcepath)

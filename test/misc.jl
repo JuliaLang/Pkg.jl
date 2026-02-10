@@ -26,6 +26,25 @@ end
     end
 end
 
+@testset "normalize_path_for_toml" begin
+    # Test that relative paths with backslashes are normalized to forward slashes on Windows
+    # and left unchanged on other platforms
+    if Sys.iswindows()
+        @test Pkg.normalize_path_for_toml("foo\\bar\\baz") == "foo/bar/baz"
+        @test Pkg.normalize_path_for_toml("..\\parent\\dir") == "../parent/dir"
+        @test Pkg.normalize_path_for_toml(".\\current") == "./current"
+        # Absolute paths should not be normalized (they're platform-specific)
+        @test Pkg.normalize_path_for_toml("C:\\absolute\\path") == "C:\\absolute\\path"
+        @test Pkg.normalize_path_for_toml("\\\\network\\share") == "\\\\network\\share"
+    else
+        # On Unix-like systems, paths should be unchanged
+        @test Pkg.normalize_path_for_toml("foo/bar/baz") == "foo/bar/baz"
+        @test Pkg.normalize_path_for_toml("../parent/dir") == "../parent/dir"
+        @test Pkg.normalize_path_for_toml("./current") == "./current"
+        @test Pkg.normalize_path_for_toml("/absolute/path") == "/absolute/path"
+    end
+end
+
 @test eltype([PackageSpec(a) for a in []]) == PackageSpec
 
 @testset "PackageSpec version default" begin

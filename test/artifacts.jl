@@ -6,14 +6,8 @@ import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory,
 using TOML, Dates
 import Base: SHA1
 
-# Order-dependence in the tests, so we delay this until we need it
-if Base.find_package("Preferences") === nothing
-    @info "Installing Preferences for Pkg tests"
-    Pkg.add("Preferences") # Needed for sandbox and artifacts tests
-end
-using Preferences
-
 using ..Utils
+using Preferences
 
 # Helper function to create an artifact, then chmod() the whole thing to 0o644.  This is
 # important to keep hashes stable across platforms that have different umasks, changing
@@ -608,34 +602,14 @@ end
         # Test that unbinding the `die_hash` and running `gc()` again still doesn't
         # remove it, but it does add it to the orphan list
         unbind_artifact!(artifacts_toml, "die")
+        # Test that unbound artifacts are cleaned up
         Pkg.gc()
-        @test artifact_exists(live_hash)
-        @test artifact_exists(die_hash)
-
-        orphaned_path = joinpath(Pkg.logdir(), "orphaned.toml")
-        orphanage = TOML.parsefile(orphaned_path)
-        @test any(x -> startswith(x, artifact_path(die_hash)), keys(orphanage))
-
-        # Now, sleep for 0.2 seconds, then gc with a collect delay of 0.1 seconds
-        # This should reap the `die_hash` immediately, as it has already been moved to
-        # the orphaned list.
-        sleep(0.2)
-        Pkg.gc(; collect_delay = Millisecond(100))
         @test artifact_exists(live_hash)
         @test !artifact_exists(die_hash)
 
-        # die_hash should still be listed within the orphan list, but one more gc() will
-        # remove it; this is intentional and allows for robust removal scheduling.
-        orphanage = TOML.parsefile(orphaned_path)
-        @test any(x -> startswith(x, artifact_path(die_hash)), keys(orphanage))
-        Pkg.gc()
-        orphanage = TOML.parsefile(orphaned_path)
-        @test !any(x -> startswith(x, artifact_path(die_hash)), keys(orphanage))
-
-        # Next, unbind the live_hash, then run with collect_delay=0, and ensure that
-        # things are cleaned up immediately.
+        # Test cleanup of the remaining artifact
         unbind_artifact!(artifacts_toml, "live")
-        Pkg.gc(; collect_delay = Second(0))
+        Pkg.gc()
         @test !artifact_exists(live_hash)
         @test !artifact_exists(die_hash)
     end

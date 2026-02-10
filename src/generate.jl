@@ -1,10 +1,24 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 function generate(path::String; io::IO = stderr_f())
-    base = basename(path)
+    # Handle "." to generate in current directory
+    abspath_path = abspath(path)
+    # Remove trailing path separator to ensure basename works correctly
+    abspath_path = rstrip(abspath_path, ('/', '\\'))
+    base = basename(abspath_path)
     pkg = endswith(lowercase(base), ".jl") ? chop(base, tail = 3) : base
     Base.isidentifier(pkg) || pkgerror("$(repr(pkg)) is not a valid package name")
-    isdir(path) && pkgerror("$(abspath(path)) already exists")
+
+    if isdir(abspath_path)
+        # Allow generating in existing directory only if it's effectively empty for our purposes
+        files = readdir(abspath_path)
+        # Filter out common hidden files that are okay to have
+        relevant_files = filter(f -> f != ".git" && f != ".gitignore", files)
+        if !isempty(relevant_files)
+            pkgerror("$(abspath_path) already exists and is not empty")
+        end
+    end
+
     printpkgstyle(io, :Generating, " project $pkg:")
     uuid = project(io, pkg, path)
     entrypoint(io, pkg, path)

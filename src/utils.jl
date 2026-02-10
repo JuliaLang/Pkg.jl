@@ -24,18 +24,31 @@ function linewrap(str::String; io = stdout_f(), padding = 0, width = Base.displa
     return lines
 end
 
-const URL_regex = r"((file|git|ssh|http(s)?)|(git@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
+const URL_regex = r"((file|git|ssh|http(s)?)|([\w\-\.]+@[\w\-\.]+))(:(//)?)([\w\.@\:/\-~]+)(\.git)?(/)?"x
 isurl(r::String) = occursin(URL_regex, r)
 
-stdlib_dir() = normpath(joinpath(Sys.BINDIR::String, "..", "share", "julia", "stdlib", "v$(VERSION.major).$(VERSION.minor)"))
-stdlib_path(stdlib::String) = joinpath(stdlib_dir(), stdlib)
+stdlib_path(stdlib::String) = joinpath(Sys.STDLIB, stdlib)
 
 function pathrepr(path::String)
     # print stdlib paths as @stdlib/Name
-    if startswith(path, stdlib_dir())
+    if startswith(path, Sys.STDLIB)
         path = "@stdlib/" * basename(path)
     end
     return "`" * Base.contractuser(path) * "`"
+end
+
+"""
+    normalize_path_for_toml(path::String)
+
+Normalize a path for writing to TOML files (Project.toml/Manifest.toml).
+On Windows, converts relative paths to use forward slashes for cross-platform compatibility.
+Absolute paths are left unchanged as they are platform-specific by nature.
+"""
+function normalize_path_for_toml(path::String)
+    if Sys.iswindows() && !isabspath(path)
+        return join(splitpath(path), "/")
+    end
+    return path
 end
 
 function set_readonly(path)
@@ -198,3 +211,7 @@ function discover_repo(path::AbstractString)
     end
     return
 end
+
+# Resolve a manifest-relative path to an absolute path
+# Note: Despite the name "manifest_rel_path", this resolves relative to the manifest file
+manifest_rel_path(env, path::String) = normpath(joinpath(dirname(env.manifest_file), path))

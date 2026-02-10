@@ -48,6 +48,7 @@ Pkg.project
 Pkg.undo
 Pkg.redo
 Pkg.setprotocol!
+Pkg.readonly
 PackageSpec
 PackageMode
 UpgradeLevel

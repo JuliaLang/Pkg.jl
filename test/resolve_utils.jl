@@ -40,8 +40,6 @@ function graph_from_data(deps_data)
     uuid_to_name = Dict{UUID, String}()
     uuid(p) = storeuuid(p, uuid_to_name)
     fixed = Dict{UUID, Fixed}()
-    all_compat = Dict{UUID, Dict{VersionNumber, Dict{UUID, VersionSpec}}}()
-    all_compat_w = Dict{UUID, Dict{VersionNumber, Set{UUID}}}()
 
     deps = Dict{String, Dict{VersionNumber, Dict{String, VersionSpec}}}()
     deps_w = Dict{String, Dict{VersionNumber, Set{String}}}()
@@ -63,26 +61,76 @@ function graph_from_data(deps_data)
             push!(get!(Set{String}, get!(Dict{VersionNumber, Set{String}}, deps_w, p), vn), rp)
         end
     end
+    # Build pkg_versions map
+    pkg_versions = Dict{UUID, Vector{VersionNumber}}()
     for (p, preq) in deps
         u = uuid(p)
-        deps_pkgs = Dict{String, Set{VersionNumber}}()
-        for (vn, vreq) in deps[p], rp in keys(vreq)
-            push!(get!(Set{VersionNumber}, deps_pkgs, rp), vn)
-        end
-        all_compat[u] = Dict{VersionNumber, Dict{UUID, VersionSpec}}()
+        pkg_versions[u] = sort!(collect(keys(preq)))
+    end
+
+    # Convert per-version data to compressed format
+    # For tests, each version gets its own VersionRange
+    all_deps_compressed = Dict{UUID, Dict{VersionRange, Set{UUID}}}()
+    all_compat_compressed = Dict{UUID, Dict{VersionRange, Dict{UUID, VersionSpec}}}()
+    all_weak_deps_compressed = Dict{UUID, Dict{VersionRange, Set{UUID}}}()
+    all_weak_compat_compressed = Dict{UUID, Dict{VersionRange, Dict{UUID, VersionSpec}}}()
+
+    for (p, preq) in deps
+        u = uuid(p)
+        all_deps_compressed[u] = Dict{VersionRange, Set{UUID}}()
+        all_compat_compressed[u] = Dict{VersionRange, Dict{UUID, VersionSpec}}()
+        all_weak_deps_compressed[u] = Dict{VersionRange, Set{UUID}}()
+        all_weak_compat_compressed[u] = Dict{VersionRange, Dict{UUID, VersionSpec}}()
+
         for (vn, vreq) in preq
-            all_compat[u][vn] = Dict{UUID, VersionSpec}()
+            # Create a single-version range for this version
+            vrange = VersionRange(vn, vn)
+            deps_set = Set{UUID}()
+            compat_dict = Dict{UUID, VersionSpec}()
+            weak_deps_set = Set{UUID}()
+            weak_compat_dict = Dict{UUID, VersionSpec}()
+
             for (rp, rvs) in vreq
-                all_compat[u][vn][uuid(rp)] = rvs
+                dep_uuid = uuid(rp)
+                push!(deps_set, dep_uuid)
+                compat_dict[dep_uuid] = rvs
+
                 # weak dependency?
                 if haskey(deps_w, p) && haskey(deps_w[p], vn) && (rp ∈ deps_w[p][vn])
-                    # same as push!(all_compat_w[u][vn], uuid(rp)) but create keys as needed
-                    push!(get!(Set{UUID}, get!(Dict{VersionNumber, Set{UUID}}, all_compat_w, u), vn), uuid(rp))
+                    push!(weak_deps_set, dep_uuid)
+                    weak_compat_dict[dep_uuid] = rvs
                 end
+            end
+
+            all_deps_compressed[u][vrange] = deps_set
+            all_compat_compressed[u][vrange] = compat_dict
+            if !isempty(weak_deps_set)
+                all_weak_deps_compressed[u][vrange] = weak_deps_set
+                all_weak_compat_compressed[u][vrange] = weak_compat_dict
             end
         end
     end
-    return Graph(all_compat, all_compat_w, uuid_to_name, Requires(), fixed, VERBOSE)
+
+    # Wrap in vectors for multi-registry support (tests simulate a single registry)
+    all_deps_compressed_vec = Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}}(
+        u => [d] for (u, d) in all_deps_compressed
+    )
+    all_compat_compressed_vec = Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}}(
+        u => [c] for (u, c) in all_compat_compressed
+    )
+    all_weak_deps_compressed_vec = Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}}(
+        u => [d] for (u, d) in all_weak_deps_compressed
+    )
+    all_weak_compat_compressed_vec = Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}}(
+        u => [c] for (u, c) in all_weak_compat_compressed
+    )
+
+    # Create pkg_versions_per_registry (single registry with all versions)
+    pkg_versions_per_registry = Dict{UUID, Vector{Set{VersionNumber}}}(
+        u => [Set(versions)] for (u, versions) in pkg_versions
+    )
+
+    return Graph(all_deps_compressed_vec, all_compat_compressed_vec, all_weak_deps_compressed_vec, all_weak_compat_compressed_vec, pkg_versions, pkg_versions_per_registry, uuid_to_name, Requires(), fixed, VERBOSE)
 end
 function reqs_from_data(reqs_data, graph::Graph)
     reqs = Dict{UUID, VersionSpec}()

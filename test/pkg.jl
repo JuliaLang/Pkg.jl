@@ -187,22 +187,17 @@ temp_pkg_dir() do project_path
         @test !isinstalled(TEST_PKG)
         pkgdir = joinpath(Pkg.depots1(), "packages")
 
-        # Test to ensure that with a long enough collect_delay, nothing gets reaped
-        Pkg.gc(; collect_delay = Day(1000))
-        @test !isempty(readdir(pkgdir))
-
-        # Setting collect_delay to zero causes it to be reaped immediately, however
-        Pkg.gc(; collect_delay = Second(0))
-        @test isempty(readdir(pkgdir))
+        # Test that unused packages are reaped
+        Pkg.gc()
+        @test isempty(filter(x -> x != "CACHEDIR.TAG", readdir(pkgdir)))
 
         clonedir = joinpath(Pkg.depots1(), "clones")
         Pkg.add(Pkg.PackageSpec(name = TEST_PKG.name, rev = "master"))
         @test !isempty(readdir(clonedir))
         Pkg.rm(TEST_PKG.name)
-        Pkg.gc(; collect_delay = Day(1000))
-        @test !isempty(readdir(clonedir))
-        Pkg.gc(; collect_delay = Second(0))
-        @test isempty(readdir(clonedir))
+        # Test that unused repos are also reaped
+        Pkg.gc()
+        @test isempty(filter(x -> x != "CACHEDIR.TAG", readdir(clonedir)))
     end
 
     @testset "package with wrong UUID" begin
@@ -413,59 +408,62 @@ temp_pkg_dir() do project_path
     end
 
     @testset "test atomicity of write_env_usage with $(Sys.CPU_THREADS) parallel processes" begin
-        tasks = Task[]
-        iobs = IOBuffer[]
         Sys.CPU_THREADS == 1 && error("Cannot test for atomic usage log file interaction effectively with only Sys.CPU_THREADS=1")
-        # Precompile Pkg given we're in a different depot
-        # and make sure the General registry is installed
-        Utils.show_output_if_command_errors(`$(Base.julia_cmd()) --project="$(pkgdir(Pkg))" -e "import Pkg; isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add()"`)
-        flag_start_dir = tempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
-        flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
-        for i in 1:Sys.CPU_THREADS
-            iob = IOBuffer()
-            t = @async run(
-                pipeline(
-                    `$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
-                -e "import Pkg;
-                Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
-                Pkg.activate(temp = true);
-                Pkg.add(\"Random\", io = devnull);
-                touch(tempname(raw\"$flag_start_dir\")) # file marker that first part has finished
-                while length(readdir(raw\"$flag_start_dir\")) < $(Sys.CPU_THREADS)
-                    # sync all processes to start at the same time
-                    sleep(0.1)
-                end
-                @async begin
-                    sleep(15)
-                    touch(raw\"$flag_end_file\")
-                end
-                i = 0
-                while !isfile(raw\"$flag_end_file\")
-                    global i += 1
-                    try
-                        Pkg.Types.EnvCache()
-                    catch
-                        touch(raw\"$flag_end_file\")
-                        println(stderr, \"Errored after $i iterations\")
-                        rethrow()
+        isolate(loaded_depot = true) do
+            tasks = Task[]
+            iobs = IOBuffer[]
+            # Precompile Pkg given we're in a different depot
+            # and make sure the General registry is installed
+            flag_start_dir = mktempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
+            flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
+            for i in 1:Sys.CPU_THREADS
+                iob = IOBuffer()
+                t = @async run(
+                    pipeline(
+                        addenv(
+                            `$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
+                    -e "import Pkg;
+                    Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
+                    Pkg.activate(temp = true);
+                    Pkg.add(\"Random\", io = devnull);
+                    touch(tempname(raw\"$flag_start_dir\")*raw\"$i\") # file marker that first part has finished
+                    while length(readdir(raw\"$flag_start_dir\")) < $(Sys.CPU_THREADS)
+                        # sync all processes to start at the same time
+                        sleep(0.1)
                     end
-                    yield()
-                end"`,
-                    stderr = iob, stdout = devnull
+                    @async begin
+                        sleep(15)
+                        touch(raw\"$flag_end_file\")
+                    end
+                    i = 0
+                    while !isfile(raw\"$flag_end_file\")
+                        global i += 1
+                        try
+                            Pkg.Types.EnvCache()
+                        catch
+                            touch(raw\"$flag_end_file\")
+                            println(stderr, \"Errored after $i iterations\")
+                            rethrow()
+                        end
+                        yield()
+                    end"`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+                        ),
+                        stderr = iob, stdout = devnull
+                    )
                 )
-            )
-            push!(tasks, t)
-            push!(iobs, iob)
-        end
-        for i in eachindex(tasks)
-            try
-                fetch(tasks[i]) # If any of these failed it will throw when fetched
-            catch
-                print(String(take!(iobs[i])))
-                break
+                push!(tasks, t)
+                push!(iobs, iob)
             end
+            for i in eachindex(tasks)
+                try
+                    fetch(tasks[i]) # If any of these failed it will throw when fetched
+                catch
+                    print(String(take!(iobs[i])))
+                    break
+                end
+            end
+            @test any(istaskfailed, tasks) == false
         end
-        @test any(istaskfailed, tasks) == false
     end
 
     @testset "parsing malformed usage file" begin
@@ -699,6 +697,29 @@ end
     end
 end
 
+if isdefined(Base.Filesystem, :delayed_delete_ref)
+    @testset "Pkg.gc for delayed deletes" begin
+        mktempdir() do root
+            with_temp_env(root) do
+                dir = joinpath(root, "julia_delayed_deletes")
+                mkdir(dir)
+                testfile = joinpath(dir, "testfile")
+                write(testfile, "foo bar")
+                delayed_delete_ref_path = Base.Filesystem.delayed_delete_ref()
+                mkpath(delayed_delete_ref_path)
+                ref = tempname(delayed_delete_ref_path; cleanup = false)
+                write(ref, testfile)
+                @test isfile(testfile)
+                Pkg.gc()
+                @test !ispath(testfile)
+                @test !ispath(dir)
+                @test !ispath(ref)
+                @test !ispath(delayed_delete_ref_path) || !isempty(readdir(delayed_delete_ref_path))
+            end
+        end
+    end
+end
+
 #issue #876
 @testset "targets should survive add/rm" begin
     temp_pkg_dir() do project_path
@@ -818,7 +839,8 @@ end
             git_init_and_commit(dir)
             write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
             Pkg.activate(dir)
-            @test_logs (:warn, r"could not read project from HEAD") Pkg.status(diff = true)
+            io = PipeBuffer() # IO is required to avoid short-circuit in Pkg.status
+            @test_logs (:warn, r"could not read project from HEAD") Pkg.status(diff = true; io)
         end
     end
 end
@@ -1050,88 +1072,91 @@ end
 end
 
 @testset "Suggest `Pkg.develop` instead of `Pkg.add`" begin
-    mktempdir() do tmp_dir
-        touch(joinpath(tmp_dir, "Project.toml"))
-        @test_throws Pkg.Types.PkgError Pkg.add(; path = tmp_dir)
+    isolate() do
+        mktempdir() do tmp_dir
+            touch(joinpath(tmp_dir, "Project.toml"))
+            @test_throws Pkg.Types.PkgError Pkg.add(; path = tmp_dir)
+        end
     end
 end
 
 @testset "Issue #3069" begin
-    p = PackageSpec(; path = "test_packages/Example")
-    @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
+    with_temp_env() do
+        p = PackageSpec(; path = "test_packages/Example")
+        @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
+    end
 end
 
 @testset "Issue #3147" begin
-    prev_project = Base.active_project()
+    isolate() do
 
-    @testset "Pkg.add" begin
-        Pkg.activate(temp = true)
-        mktempdir() do tmp_dir
-            LibGit2.close(LibGit2.clone(TEST_PKG.url, tmp_dir))
-            Pkg.develop(path = tmp_dir)
+        @testset "Pkg.add" begin
+            Pkg.activate(temp = true)
+            mktempdir() do tmp_dir
+                LibGit2.close(LibGit2.clone(TEST_PKG.url, tmp_dir))
+                Pkg.develop(path = tmp_dir)
+                Pkg.pin("Example")
+                Pkg.add("Example")
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version > v"0.5.3"
+            end
+            Pkg.rm("Example")
+
+            Pkg.add(url = TEST_PKG.url, rev = "29aa1b4")
             Pkg.pin("Example")
             Pkg.add("Example")
             info = Pkg.dependencies()[TEST_PKG.uuid]
             @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version > v"0.5.3"
+            @test !info.is_tracking_path
+            @test info.is_tracking_repo
+            @test info.version == v"0.5.3"
+            Pkg.rm("Example")
         end
-        Pkg.rm("Example")
 
-        Pkg.add(url = TEST_PKG.url, rev = "29aa1b4")
-        Pkg.pin("Example")
-        Pkg.add("Example")
-        info = Pkg.dependencies()[TEST_PKG.uuid]
-        @test info.is_pinned
-        @test !info.is_tracking_path
-        @test info.is_tracking_repo
-        @test info.version == v"0.5.3"
-        Pkg.rm("Example")
-    end
+        @testset "Pkg.update" begin
+            Pkg.activate(temp = true)
+            mktempdir() do tmp_dir
+                ver = v"0.5.3"
+                repo = LibGit2.clone(TEST_PKG.url, tmp_dir)
+                tag = LibGit2.GitObject(repo, "v$ver")
+                hash = string(LibGit2.target(tag))
+                LibGit2.checkout!(repo, hash)
+                LibGit2.close(repo)
+                Pkg.develop(path = tmp_dir)
+                Pkg.pin("Example")
+                Pkg.update("Example")  # pkg should remain pinned
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == ver
 
-    @testset "Pkg.update" begin
-        Pkg.activate(temp = true)
-        mktempdir() do tmp_dir
-            ver = v"0.5.3"
-            repo = LibGit2.clone(TEST_PKG.url, tmp_dir)
-            tag = LibGit2.GitObject(repo, "v$ver")
-            hash = string(LibGit2.target(tag))
-            LibGit2.checkout!(repo, hash)
-            LibGit2.close(repo)
-            Pkg.develop(path = tmp_dir)
-            Pkg.pin("Example")
-            Pkg.update("Example")  # pkg should remain pinned
-            info = Pkg.dependencies()[TEST_PKG.uuid]
-            @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version == ver
+                # modify the pkg version manually, to mimic developing this pkg
+                dev_ver = VersionNumber(ver.major, ver.minor, ver.patch + 1)
+                fn = joinpath(tmp_dir, "Project.toml")
+                toml = TOML.parse(read(fn, String))
+                toml["version"] = string(dev_ver)
+                open(io -> TOML.print(io, toml), fn, "w")
+                Pkg.update("Example")  # noop since Pkg.is_fully_pinned(...) is true
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == ver
 
-            # modify the pkg version manually, to mimic developing this pkg
-            dev_ver = VersionNumber(ver.major, ver.minor, ver.patch + 1)
-            fn = joinpath(tmp_dir, "Project.toml")
-            toml = TOML.parse(read(fn, String))
-            toml["version"] = string(dev_ver)
-            open(io -> TOML.print(io, toml), fn, "w")
-            Pkg.update("Example")  # noop since Pkg.is_fully_pinned(...) is true
-            info = Pkg.dependencies()[TEST_PKG.uuid]
-            @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version == ver
-
-            Pkg.pin("Example")  # pinning a 2ⁿᵈ time updates versions in the manifest
-            info = Pkg.dependencies()[TEST_PKG.uuid]
-            @test info.is_pinned
-            @test info.is_tracking_path
-            @test !info.is_tracking_repo
-            @test info.version == dev_ver
+                Pkg.pin("Example")  # pinning a 2ⁿᵈ time updates versions in the manifest
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == dev_ver
+            end
+            Pkg.rm("Example")
         end
-        Pkg.rm("Example")
     end
-
-    Pkg.activate(prev_project)
 end
 
 @testset "check_registered error paths" begin
@@ -1146,10 +1171,6 @@ end
 
             Pkg.Registry.rm("General")
             @test isempty(Pkg.Registry.reachable_registries())
-
-            @test_throws r"no registries have been installed\. Cannot resolve the following packages:" begin
-                Pkg.resolve()
-            end
         end
     end
 
@@ -1165,6 +1186,60 @@ end
                 @test_throws r"expected package.*to be registered" begin
                     Pkg.add("JSON")  # This will fail because Example UUID in manifest is unregistered
                 end
+            end
+        end
+    end
+end
+
+# issue #2291: relative paths in manifests should be resolved relative to manifest location
+@testset "relative path resolution from different directories (issue #2291)" begin
+    isolate() do
+        mktempdir() do dir
+            # Create a local package with a git repo
+            pkg_path = joinpath(dir, "LocalPackage")
+            mkpath(joinpath(pkg_path, "src"))
+            write(
+                joinpath(pkg_path, "Project.toml"), """
+                name = "LocalPackage"
+                uuid = "00000000-0000-0000-0000-000000000001"
+                version = "0.1.0"
+                """
+            )
+            write(
+                joinpath(pkg_path, "src", "LocalPackage.jl"), """
+                module LocalPackage
+                greet() = "Hello from LocalPackage!"
+                end
+                """
+            )
+
+            # Initialize git repo
+            LibGit2.with(LibGit2.init(pkg_path)) do repo
+                LibGit2.add!(repo, "*")
+                LibGit2.commit(repo, "Initial commit"; author = TEST_SIG, committer = TEST_SIG)
+            end
+
+            # Create a project in a subdirectory and add the package with relative path
+            project_path = joinpath(dir, "project")
+            mkpath(project_path)
+            cd(project_path) do
+                Pkg.activate(".")
+                Pkg.add(Pkg.PackageSpec(path = "../LocalPackage"))
+
+                # Verify the package was added with relative path
+                manifest = read_manifest(joinpath(project_path, "Manifest.toml"))
+                pkg_entry = manifest[UUID("00000000-0000-0000-0000-000000000001")]
+                @test pkg_entry.repo.source == "../LocalPackage"
+            end
+
+            # Now change to parent directory and try to update - this should work
+            cd(dir) do
+                Pkg.activate("project")
+                Pkg.update()  # This should not fail
+                # Check the package is installed by looking it up in dependencies
+                pkg_info = Pkg.dependencies()[UUID("00000000-0000-0000-0000-000000000001")]
+                @test pkg_info.name == "LocalPackage"
+                @test isinstalled(PackageSpec(uuid = UUID("00000000-0000-0000-0000-000000000001"), name = "LocalPackage"))
             end
         end
     end

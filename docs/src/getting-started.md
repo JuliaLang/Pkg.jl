@@ -159,6 +159,17 @@ We can see that the `tutorial` environment now contains `Example` and `JSON`.
     Julia. Learning how to use environments effectively will improve your experience with
     Julia packages.
 
+When you're done working in a specific environment and want to return to the default environment, use `activate` with no arguments:
+
+```julia-repl
+(tutorial) pkg> activate
+  Activating project at `~/.julia/environments/v1.10`
+
+(@v1.10) pkg>
+```
+
+This returns you to the default `@v1.10` environment. There is no separate "deactivate" command—`activate` with no arguments serves this purpose.
+
 For more information about environments, see the [Working with Environments](@ref Working-with-Environments) section of the documentation.
 
 ## Asking for Help
