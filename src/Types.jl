@@ -1168,6 +1168,12 @@ function get_object_or_branch(repo, rev)
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
+        gitobject = LibGit2.GitObject(repo, "heads/" * rev)
+        return gitobject, true
+    catch err
+        err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
+    end
+    try
         gitobject = LibGit2.GitObject(repo, rev)
         return gitobject, false
     catch err
