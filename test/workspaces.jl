@@ -227,4 +227,60 @@ end
     end
 end
 
+@testset "selective workspace instantiate" begin
+    mktempdir() do dir
+        path = copy_test_package(dir, "WorkspaceTestInstantiate")
+        cd(path) do
+            with_current_env() do
+                # Add Crayons dependency to root project to differentiate from subproject's Example
+                Pkg.activate(".")
+                Pkg.add("Crayons")
+
+                # The test subproject already has Example dependency
+                # Workspace structure is already set up in the test package
+
+                # Resolve to create full manifest
+                Pkg.resolve()
+                @test isfile("Manifest.toml")
+
+                # Verify manifest contains both dependencies
+                manifest = Pkg.Types.read_manifest("Manifest.toml")
+                example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")  # From test subproject
+                crayons_uuid = UUID("a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f")  # From root project
+                @test haskey(manifest.deps, example_uuid)
+                @test haskey(manifest.deps, crayons_uuid)
+
+                # Clear package installations to test selective download
+                depot_path = first(Pkg.depots())
+                packages_dir = joinpath(depot_path, "packages")
+                for pkg_name in ["Example", "Crayons"]
+                    pkg_dir = joinpath(packages_dir, pkg_name)
+                    rm(pkg_dir, recursive = true, force = true)
+                end
+
+                # Test workspace=false only downloads root project deps (Crayons)
+                Pkg.instantiate(workspace = false)
+                example_installed = isdir(joinpath(packages_dir, "Example"))
+                crayons_installed = isdir(joinpath(packages_dir, "Crayons"))
+                @test crayons_installed   # Should be installed (root project dependency)
+                @test !example_installed  # Should not be installed with workspace=false
+
+                # Clear and test workspace=true downloads all deps
+                rm(joinpath(packages_dir, "Crayons"), recursive = true, force = true)
+                Pkg.instantiate(workspace = true)
+                example_installed = isdir(joinpath(packages_dir, "Example"))
+                crayons_installed = isdir(joinpath(packages_dir, "Crayons"))
+                @test crayons_installed   # Should be installed
+                @test example_installed   # Should be installed with workspace=true
+
+                # Test is_instantiated behavior
+                rm(joinpath(packages_dir, "Example"), recursive = true, force = true)
+                ctx = Pkg.Types.Context()
+                @test Pkg.Operations.is_instantiated(ctx.env, false)   # Root project complete (has Crayons)
+                @test !Pkg.Operations.is_instantiated(ctx.env, true)   # Workspace incomplete (missing Example)
+            end
+        end
+    end
+end
+
 end # module
