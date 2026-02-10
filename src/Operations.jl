@@ -1297,7 +1297,7 @@ mutable struct DownloadState
 end
 
 function download_artifacts(
-        ctx::Context;
+        ctx::Context, pkgs;
         platform::AbstractPlatform = HostPlatform(),
         julia_version = VERSION,
         verbose::Bool = false,
@@ -1308,7 +1308,9 @@ function download_artifacts(
     io = ctx.io
     fancyprint = can_fancyprint(io)
     pkg_info = Tuple{String, Union{Base.UUID, Nothing}}[]
+    pkg_uuids = Set(pkg.uuid for pkg in pkgs)
     for (uuid, pkg) in env.manifest
+        uuid in pkg_uuids || continue
         pkg = manifest_info(env.manifest, uuid)
         pkg_root = source_path(env.manifest_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_info, (pkg_root, uuid))
@@ -1475,6 +1477,17 @@ function download_artifacts(
 
 
     return write_env_usage(used_artifact_tomls, "artifact_usage.toml")
+end
+
+function download_artifacts(
+        ctx::Context;
+        platform::AbstractPlatform = HostPlatform(),
+        julia_version = VERSION,
+        verbose::Bool = false,
+        io::IO = stderr_f(),
+        include_lazy::Bool = false
+    )
+    return download_artifacts(ctx, values(ctx.env.manifest); platform, julia_version, verbose, io, include_lazy)
 end
 
 function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform = HostPlatform())
