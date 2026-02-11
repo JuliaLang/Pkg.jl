@@ -432,10 +432,18 @@ function _precompilepkgs(pkgs::Vector{String},
     # consider exts of project deps to be project deps so that errors are reported
     append!(project_deps, keys(filter(d->last(d).name in keys(env.project_deps), ext_to_parent)))
 
+    # An extension effectively depends on another extension if it has a strict superset of its triggers
+    for ext_a in keys(ext_to_parent)
+        for ext_b in keys(ext_to_parent)
+            if triggers[ext_a] ⊋ triggers[ext_b]
+                push!(direct_deps[ext_a], ext_b)
+            end
+        end
+    end
+
     @debug "precompile: deps collected"
 
-    # A package/extension effectively depends on another extension if it (transitively)
-    # has all the dependencies of that other extension
+    # A package depends on an extension if it (indirectly) depends on all extension triggers
     function expand_indirect_dependencies(direct_deps)
         function visit!(visited, node, all_deps)
             if node in visited
@@ -450,7 +458,7 @@ function _precompilepkgs(pkgs::Vector{String},
             end
         end
 
-        indirect_deps = Dict{Base.PkgId, Set{Base.PkgId}}()
+        local indirect_deps = Dict{Base.PkgId, Set{Base.PkgId}}()
         for package in keys(direct_deps)
             # Initialize a set to keep track of all dependencies for 'package'
             all_deps = Set{Base.PkgId}()
@@ -471,17 +479,9 @@ function _precompilepkgs(pkgs::Vector{String},
         for pkg in keys(direct_deps)
             pkg === ext && continue
             is_trigger = in(pkg, direct_deps[ext])
+            is_extension = in(pkg, keys(ext_to_parent))
             has_triggers = issubset(direct_deps[ext], indirect_deps[pkg])
-            # In contrast to 1.11+, on 1.10 both "pkg → ext" and "ext → ext" dependency edges
-            # are implied based on transitive dependencies.
-            #
-            # This condition is inconsistent for "ext → ext" edges, leading to dependency
-            # cycles on 1.10, but this behavior is intentionally preserved for now to avoid
-            # breaking packages that depend on this (bad) implicit behavior.
-            #
-            # See https://github.com/JuliaLang/julia/issues/56204#issuecomment-2442652997
-            # for the improved behavior this was replaced with in 1.11
-            if has_triggers && !is_trigger
+            if !is_extension && has_triggers && !is_trigger
                 push!(ext_loadable_by[ext], pkg)
             end
         end
