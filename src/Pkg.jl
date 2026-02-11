@@ -162,8 +162,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=true)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=true)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -174,6 +174,16 @@ added automatically with a lower bound of the added version.
 
 To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
 To add as an extra dep (in the `[extras]` field) set `target=:extras`.
+
+## Loaded Version Preference
+
+By default, when adding packages, Pkg will prefer versions of packages (and their dependencies) that are
+already loaded in the current Julia session. This helps maintain compatibility with code already running
+in your session. To disable this behavior and resolve versions independently of what's currently loaded,
+set `prefer_loaded_versions=false`.
+
+!!! compat "Julia 1.13"
+    The `prefer_loaded_versions` kwarg requires at least Julia 1.13.
 
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
@@ -213,6 +223,7 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 Pkg.add("Example") # Add a package from registry
 Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
 Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
+Pkg.add("Example"; prefer_loaded_versions=false) # Add a package, ignoring versions already loaded in this session
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release

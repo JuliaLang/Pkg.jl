@@ -755,7 +755,7 @@ end
 # all versioned packages should have a `tree_hash`
 function resolve_versions!(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
-        installed_only::Bool
+        installed_only::Bool, preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
     )
     installed_only = installed_only || OFFLINE_MODE[]
 
@@ -824,7 +824,10 @@ function resolve_versions!(
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid, julia_version) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
     deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
-    graph = Resolve.Graph(deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version)
+    graph = Resolve.Graph(
+        deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
+        pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version, preferred_versions
+    )
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
 
@@ -897,6 +900,84 @@ function resolve_versions!(
         final_deps_map[pkg.uuid] = deps
     end
     return final_deps_map
+end
+
+function collect_preferred_loaded_versions(env::EnvCache)
+    preferred = Dict{UUID, VersionNumber}()
+    for (pkgid, mod) in Base.loaded_modules
+        pkgid isa Base.PkgId || continue
+        pkg_uuid = pkgid.uuid
+        pkg_uuid isa UUID || continue
+        Types.is_stdlib(pkg_uuid) && continue
+        haskey(env.manifest, pkg_uuid) && continue
+        env.pkg !== nothing && pkg_uuid == env.pkg.uuid && continue
+        version = Base.pkgversion(mod)
+        version isa VersionNumber || continue
+        preferred[pkg_uuid] = version
+    end
+    return preferred
+end
+
+function preferred_loaded_packages_usage(
+        pkgs::Vector{PackageSpec}, preferred_versions::Dict{UUID, VersionNumber}, manifest_uuids::Set{UUID},
+        direct_requested_uuids::Set{UUID}
+    )
+    (isempty(preferred_versions) || isempty(pkgs)) && return String[], 0
+    direct_names = String[]
+    indirect_count = 0
+    for pkg in pkgs
+        uuid = pkg.uuid
+        uuid isa UUID || continue
+        uuid in manifest_uuids && continue
+        preferred_version = get(preferred_versions, uuid, nothing)
+        preferred_version === nothing && continue
+        pkg_version = pkg.version
+        pkg_version isa VersionNumber || continue
+        pkg_version == preferred_version || continue
+        pkg.name === nothing && continue
+        if uuid in direct_requested_uuids
+            push!(direct_names, pkg.name)
+        else
+            indirect_count += 1
+        end
+    end
+    sort!(direct_names)
+    unique!(direct_names)
+    return direct_names, indirect_count
+end
+
+function maybe_print_preferred_loaded_note(io::IO, direct_names::Vector{String}, indirect_count::Int)
+    isempty(direct_names) && indirect_count == 0 && return
+    parts = String[]
+    if !isempty(direct_names)
+        push!(parts, join(direct_names, ", "))
+    end
+    if indirect_count > 0
+        dep_word = indirect_count == 1 ? "dependency" : "dependencies"
+        push!(parts, "$(indirect_count) $(dep_word)")
+    end
+    joined = length(parts) == 2 ? string(parts[1], " and ", parts[2]) : parts[1]
+    msg = if length(direct_names) + indirect_count > 1
+        "was able to add the versions of $(joined) that are already loaded"
+    else
+        "was able to add the version of $(joined) that is already loaded"
+    end
+    printpkgstyle(io, :Resolve, msg; color = Base.info_color())
+    return
+end
+
+function apply_preferred_versions_to_direct!(pkgs::Vector{PackageSpec}, preferred_versions::Dict{UUID, VersionNumber})
+    isempty(preferred_versions) && return
+    empty_spec = VersionSpec()
+    for pkg in pkgs
+        pkg.version == empty_spec || continue
+        uuid = pkg.uuid
+        uuid isa UUID || continue
+        pref_version = get(preferred_versions, uuid, nothing)
+        pref_version === nothing && continue
+        pkg.version = VersionSpec(pref_version)
+    end
+    return
 end
 
 get_or_make!(d::Dict{K, V}, k::K) where {K, V} = get!(d, k) do;
@@ -2154,8 +2235,17 @@ end
 
 function tiered_resolve(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
-        try_all_installed::Bool
+        try_all_installed::Bool; preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
     )
+    if !isempty(preferred_versions)
+        # first try maintaining any loaded versions of the new packages
+        try # do not modify existing subgraph
+            @debug "tiered_resolve: trying PRESERVE_ALL with any loaded versions of new packages"
+            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version; preferred_versions)
+        catch err
+            err isa Resolve.ResolverError || rethrow()
+        end
+    end
     if try_all_installed
         try # do not modify existing subgraph and only add installed versions of the new packages
             @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
@@ -2186,7 +2276,10 @@ function tiered_resolve(
     return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
 end
 
-function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function targeted_resolve(
+        env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel,
+        julia_version; preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
+    )
     if preserve == PRESERVE_ALL || preserve == PRESERVE_ALL_INSTALLED
         pkgs = load_all_deps(env, pkgs; preserve)
     else
@@ -2194,23 +2287,24 @@ function targeted_resolve(env::EnvCache, registries::Vector{Registry.RegistryIns
     end
     check_registered(registries, pkgs)
 
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED, preferred_versions)
     return pkgs, deps_map
 end
 
 function _resolve(
         io::IO, env::EnvCache, registries::Vector{Registry.RegistryInstance},
-        pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version
+        pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version;
+        preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
     )
     usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
     printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
     return try
         if preserve == PRESERVE_TIERED_INSTALLED
-            tiered_resolve(env, registries, pkgs, julia_version, true)
+            tiered_resolve(env, registries, pkgs, julia_version, true; preferred_versions)
         elseif preserve == PRESERVE_TIERED
-            tiered_resolve(env, registries, pkgs, julia_version, false)
+            tiered_resolve(env, registries, pkgs, julia_version, false; preferred_versions)
         else
-            targeted_resolve(env, registries, pkgs, preserve, julia_version)
+            targeted_resolve(env, registries, pkgs, preserve, julia_version; preferred_versions)
         end
     catch err
 
@@ -2273,7 +2367,7 @@ end
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}, new_git = Set{UUID}();
         allow_autoprecomp::Bool = true, preserve::PreserveLevel = default_preserve(), platform::AbstractPlatform = HostPlatform(),
-        target::Symbol = :deps
+        target::Symbol = :deps, prefer_loaded_versions::Bool = true
     )
     assert_can_add(ctx, pkgs)
     # load manifest data
@@ -2317,11 +2411,34 @@ function add(
         return
     end
 
+    preferred_loaded_versions = Dict{UUID, VersionNumber}()
+    existing_manifest_uuids = Set{UUID}()
+    preferred_direct_note_names = String[]
+    preferred_indirect_note_count = 0
+    direct_requested_uuids = Set{UUID}()
     foreach(pkg -> target_field[pkg.name] = pkg.uuid, pkgs) # update set of deps/weakdeps/extras
+    for pkg in pkgs
+        uuid = pkg.uuid
+        uuid isa UUID || continue
+        push!(direct_requested_uuids, uuid)
+    end
+
+    if target == :deps && prefer_loaded_versions
+        preferred_loaded_versions = collect_preferred_loaded_versions(ctx.env)
+        existing_manifest_uuids = Set(keys(ctx.env.manifest))
+    end
 
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
-        man_pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
+        apply_preferred_versions_to_direct!(pkgs, preferred_loaded_versions)
+        man_pkgs, deps_map = _resolve(
+            ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version;
+            preferred_versions = preferred_loaded_versions
+        )
+        preferred_direct_note_names, preferred_indirect_note_count = preferred_loaded_packages_usage(
+            man_pkgs, preferred_loaded_versions, existing_manifest_uuids, direct_requested_uuids
+        )
+        maybe_print_preferred_loaded_note(ctx.io, preferred_direct_note_names, preferred_indirect_note_count)
         update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, ctx.registries)
         new_apply = download_source(ctx)
         fixups_from_projectfile!(ctx)
