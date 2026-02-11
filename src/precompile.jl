@@ -202,7 +202,6 @@ let
                 Base.precompile(Tuple{typeof(Base.:(==)), Base.Dict{String, Any}, Base.Dict{String, Any}})
                 Base.precompile(Tuple{typeof(Base.join), Base.GenericIOBuffer{Memory{UInt8}}, Tuple{String}, Char})
                 Base.precompile(Tuple{typeof(Base.values), Base.Dict{String, Array{Base.Dict{String, Any}, 1}}})
-                Base.precompile(Tuple{typeof(Base.all), Base.Generator{Base.ValueIterator{Base.Dict{String, Array{Base.Dict{String, Any}, 1}}}, TOML.Internals.Printer.var"#5#6"}})
                 Base.precompile(Tuple{typeof(TOML.Internals.Printer.is_array_of_tables), Array{Base.Dict{String, Any}, 1}})
                 Base.precompile(Tuple{Type{Array{Dates.DateTime, 1}}, UndefInitializer, Tuple{Int64}})
                 Base.precompile(Tuple{Type{Pair{A, B} where {B} where {A}}, String, Dates.DateTime})
