@@ -419,17 +419,21 @@ Pkg.test("foo"; test_args=["--extended"])
 const test = API.test
 
 """
-    Pkg.gc(; collect_delay::Period=Day(7), io::IO=stderr)
+    Pkg.gc(; verbose=false, force=false, collect_unused_for=nothing, kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
-finding artifacts and packages that are thereafter not used by any other projects,
-marking them as "orphaned".  This method will only remove orphaned objects (package
-versions, artifacts, and scratch spaces) that have been continually un-used for a period
-of `collect_delay`; which defaults to seven days.
+finding artifacts and packages that are thereafter not used by any other projects.
+Unused packages, artifacts, repos, and scratch spaces are immediately deleted.
 
-To disable automatic garbage collection, you can set the environment variable
-`JULIA_PKG_GC_AUTO` to `"false"` before starting Julia or call `API.auto_gc(false)`.
+Garbage collection is only applied to the "user depot", e.g. the first entry in the
+depot path. If you want to run `gc` on all depots set `force=true` (this might require
+admin privileges depending on the setup).
+
+Use verbose mode (`verbose=true`) for detailed output.
+
+The `collect_unused_for` parameter can be set to a `Period` (e.g., `Day(30)`, `Week(2)`) to treat
+manifests that have not been used for longer than the specified time as obsolete.
 """
 const gc = API.gc
 
