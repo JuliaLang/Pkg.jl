@@ -674,12 +674,14 @@ function init_log!(data::GraphData)
     rlog = data.rlog
     for p0 in 1:np
         p = pkgs[p0]
+        reginfo = registry_info(p) # TODO: p::UUID - need to convert to PkgEntry
         id = pkgID(p0, data)
         versions = pvers[p0]
         if isempty(versions)
             msg = "$(logstr(id)) has no known versions!" # This shouldn't happen?
         else
-            vspec = range_compressed_versionspec(versions)
+            not_yanked_versions = [ver.v for ver in versions if !isyanked(reginfo, ver)]
+            vspec = range_compressed_versionspec(versions, not_yanked_versions)
             vers = logstr(id, vspec)
             uuid = data.pkgs[p0]
             name = data.uuid_to_name[uuid]
