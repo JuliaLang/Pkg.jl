@@ -15,3 +15,9 @@ repos:
       - id: runic
         additional_dependencies:
           - 'Runic@1.4' # Keep version in sync with .github/workflows/Check.yml
+  - repo: https://github.com/JuliaTesting/ExplicitImports.jl
+    rev: 1fcbe989a493e9795b5fcdb56a534f30264cf182
+    hooks:
+      - id: explicit-imports
+        language_version: '1.12'
+        args: ['--checklist', 'no_implicit_imports,all_qualified_accesses_via_owners,no_self_qualified_accesses']
