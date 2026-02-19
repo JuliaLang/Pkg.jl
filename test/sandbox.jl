@@ -142,6 +142,20 @@ end
     end
 end
 
+@testset "Preferences sandboxing of implicit test dependencies" begin
+    # Preferences of FooDep (implicit test dependency via Foo)
+    # should be copied over into sandbox
+    temp_pkg_dir() do project_path; mktempdir() do tmp
+        copy_test_package(tmp, "Sandbox_PreservePrefsImplicit")
+        Pkg.activate(joinpath(tmp, "Sandbox_PreservePrefsImplicit"))
+        test_test() do
+            uuid =  UUID("ecddbb86-518e-4a4d-b30b-c11ee99fa784")
+            @test !Preferences.has_preference(uuid, "does_not_exist")
+            @test_broken Preferences.load_preference(uuid, "weather") == "sunny"
+        end
+    end end
+end
+
 @testset "Nested Preferences sandboxing" begin
     # Preferences should be copied over into sandbox
     temp_pkg_dir() do project_path
