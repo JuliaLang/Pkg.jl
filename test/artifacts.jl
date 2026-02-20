@@ -256,6 +256,12 @@ end
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=linux64) == artifact_path(hash2)
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform=win32) == artifact_path(hash)
 
+        # Default HostPlatform() adds a compare_strategy key that doesn't get picked up from
+        # the Artifacts.toml
+        testhost = Platform("x86_64", "linux", Dict("libstdcxx_version" => "1.2.3"))
+        BinaryPlatforms.set_compare_strategy!(testhost, "libstdcxx_version", BinaryPlatforms.compare_version_cap)
+        @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash; download_info=download_info, platform=testhost)
+
         # Next, check that we can get the download_info properly:
         meta = artifact_meta("foo_txt", artifacts_toml; platform=win32)
         @test meta["download"][1]["url"] == "http://google.com/hello_world"
