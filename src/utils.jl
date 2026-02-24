@@ -66,7 +66,6 @@ set_readonly(::Nothing) = nothing
 
 # try to call realpath on as much as possible
 function safe_realpath(path)
-    isempty(path) && return path
     if ispath(path)
         try
             return realpath(path)
@@ -75,6 +74,8 @@ function safe_realpath(path)
         end
     end
     a, b = splitdir(path)
+    # path cannot be reduced at the root or drive, avoid stack overflow
+    isempty(b) && return path
     return joinpath(safe_realpath(a), b)
 end
 
