@@ -671,10 +671,13 @@ may fit your package better.
        and other packages each implement a unique approach based on a particular design philosophy.
      * In contrast, `SortingAlgorithms` provides a consistent interface to use many well-established
        sorting algorithms.
-6. Packages that wrap external libraries or programs can be named after those libraries or programs.
 
-     * `CPLEX.jl` wraps the `CPLEX` library, which can be identified easily in a web search.
-     * `MATLAB.jl` provides an interface to call the MATLAB engine from within Julia.
+6. Packages that wrap external libraries or programs can be named after those libraries or programs. However, as of February 2026, we now request that these packages indicate in their package name (in some way) that they are wrapping an external library or program. For example, consider a hypothetical package that wraps a library or program named `ABC`. Possible names for the Julia package might include:
+     * `ABCWrapper`
+     * `ABCInterface`
+     * `ExternalABC`
+     * `ABCLibrary`
+     * `LibABC`
 
 7. Avoid naming a package closely to an existing package
      * `Websocket` is too close to `WebSockets` and can be confusing to users. Rather use a new name such as `SimpleWebsockets`.
