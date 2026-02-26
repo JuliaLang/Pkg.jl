@@ -251,7 +251,7 @@ end
 
 function develop(pkg::PackageSpec)
     if pkg.path !== nothing
-        pkg.path == abspath(pkg.path)
+        pkg.path = abspath(pkg.path)
     end
     handle_package_input!(pkg)
     ctx = app_context()
@@ -306,11 +306,7 @@ function update(pkg::Union{PackageSpec, Nothing} = nothing)
         end
         Pkg.activate(joinpath(app_env_folder(), info.name)) do
             # precompile only after updating all apps?
-            if pkg !== nothing
-                Pkg.update(pkg)
-            else
-                Pkg.update()
-            end
+            Pkg.update()
         end
         sourcepath = abspath(source_path(ctx.env.manifest_file, info))
         project = get_project(sourcepath)

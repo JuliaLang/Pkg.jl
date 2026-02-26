@@ -248,7 +248,7 @@ If `workspace` is true, this will consider all projects in the workspace and not
 const why = API.why
 
 """
-    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel)
+    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false)
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
@@ -259,6 +259,8 @@ If packages are given as positional arguments, the `preserve` argument can be us
 - `PRESERVE_ALL` (default): Only allow `pkg` to update.
 - `PRESERVE_DIRECT`: Only allow `pkg` and indirect dependencies that are not a direct dependency in the project to update.
 - `PRESERVE_NONE`: Allow `pkg` and all its indirect dependencies to update.
+
+If `workspace` is `true`, packages from all projects in the workspace will be included when no packages are specified.
 
 After any package updates the project will be precompiled. See more at [Environment Precompilation](@ref).
 
@@ -362,13 +364,16 @@ redirecting to the `build.log` file.
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never automatically updated: if `pkg` is tracking a path,
 or a repository, those remain tracked but will not update.
 To get updates from the origin path or remote repository the package must first be freed.
+
+If `workspace` is `true` and `all_pkgs` is `true`, packages from all projects in the workspace
+will be included.
 
 !!! compat "Julia 1.7"
     The `all_pkgs` kwarg was introduced in julia 1.7.
@@ -388,12 +393,15 @@ Pkg.pin(all_pkgs = true)
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false)
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false)
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
 
 If `pkg` is pinned, remove the pin.
 If `pkg` is tracking a path, e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
 To free all dependencies set `all_pkgs=true`.
+
+If `workspace` is `true` and `all_pkgs` is `true`, packages from all projects in the workspace
+will be included.
 
 !!! compat "Julia 1.7"
     The `all_pkgs` kwarg was introduced in julia 1.7.
