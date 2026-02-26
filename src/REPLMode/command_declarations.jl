@@ -224,16 +224,18 @@ compound_declarations = [
             :arg_count => 0 => Inf,
             :option_spec => [
                 PSA[:name => "all", :api => :all_pkgs => true],
+                PSA[:name => "workspace", :api => :workspace => true],
             ],
             :arg_parser => parse_package,
             :completions => :complete_fixed_packages,
             :description => "undoes a `pin`, `develop`, or stops tracking a repo",
             :help => md"""
-                    free pkg[=uuid] ...
-                    free [--all]
+                    free [--workspace] pkg[=uuid] ...
+                    free [--workspace] [--all]
 
                 Free pinned packages, which allows it to be upgraded or downgraded again. If the package is checked out (see `help develop`) then this command
                 makes the package no longer being checked out. Specifying `--all` will free all dependencies (direct and indirect).
+                The `--workspace` option includes packages from all projects in the workspace when used with `--all`.
                 """,
         ],
         PSA[
@@ -266,16 +268,18 @@ compound_declarations = [
             :arg_count => 0 => Inf,
             :option_spec => [
                 PSA[:name => "all", :api => :all_pkgs => true],
+                PSA[:name => "workspace", :api => :workspace => true],
             ],
             :arg_parser => parse_package,
             :completions => :complete_installed_packages,
             :description => "pins the version of packages",
             :help => md"""
-                    pin pkg[=uuid] ...
-                    pin [--all]
+                    pin [--workspace] pkg[=uuid] ...
+                    pin [--workspace] [--all]
 
                 Pin packages to given versions, or the current version if no version is specified. A pinned package has its version fixed and will not be upgraded or downgraded.
-                A pinned package has the symbol `⚲` next to its version in the status list.. Specifying `--all` will pin all dependencies (direct and indirect).
+                A pinned package has the symbol `⚲` next to its version in the status list. Specifying `--all` will pin all dependencies (direct and indirect).
+                The `--workspace` option includes packages from all projects in the workspace when used with `--all`.
 
                 **Examples**
                 ```
@@ -368,12 +372,13 @@ compound_declarations = [
                 PSA[:name => "patch", :api => :level => UPLEVEL_PATCH],
                 PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
+                PSA[:name => "workspace", :api => :workspace => true],
             ],
             :completions => :complete_installed_packages,
             :description => "update packages in manifest",
             :help => md"""
-                    [up|update] [-p|--project]  [opts] pkg[=uuid] [@version] ...
-                    [up|update] [-m|--manifest] [opts] pkg[=uuid] [@version] ...
+                    [up|update] [-p|--project]  [--workspace] [opts] pkg[=uuid] [@version] ...
+                    [up|update] [-m|--manifest] [--workspace] [opts] pkg[=uuid] [@version] ...
 
                     opts: --major | --minor | --patch | --fixed
                           --preserve=<all/direct/none>
@@ -386,6 +391,8 @@ compound_declarations = [
                 the following packages to be upgraded only within the current major, minor,
                 patch version; if the `--fixed` upgrade level is given, then the following
                 packages will not be upgraded at all.
+                The `--workspace` option includes packages from all projects in the workspace
+                when no packages are specified.
 
                 After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
                 """,
