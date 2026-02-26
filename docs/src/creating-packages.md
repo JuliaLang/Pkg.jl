@@ -632,7 +632,7 @@ For Julia 1.13+, using workspaces is recommended and this duplication is not nec
 
 ## Package naming guidelines
 
-Please see the [package naming guidelines for the `General` registry](TODO_URL).
+Please see the [package naming guidelines for the `General` registry](https://github.com/JuliaRegistries/General/blob/master/NAMING_GUIDELINES.md).
 
 For the complete list of rules for automatic merging into the General registry, see [the AutoMerge guidelines](https://juliaregistries.github.io/RegistryCI.jl/stable/guidelines/).
 
