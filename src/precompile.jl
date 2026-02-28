@@ -205,7 +205,7 @@ let
                 Base.precompile(Tuple{typeof(TOML.Internals.Printer.is_array_of_tables), Array{Base.Dict{String, Any}, 1}})
                 Base.precompile(Tuple{Type{Array{Dates.DateTime, 1}}, UndefInitializer, Tuple{Int64}})
                 Base.precompile(Tuple{Type{Pair{A, B} where {B} where {A}}, String, Dates.DateTime})
-                Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:internal_call, :strict, :warn_loaded, :timing, :_from_loading, :configs, :manifest, :io), Tuple{Bool, Bool, Bool, Bool, Bool, Pair{Base.Cmd, Base.CacheFlags}, Bool, Base.TTY}}, typeof(Base.Precompilation.precompilepkgs), Array{String, 1}})
+                Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:internal_call, :strict, :warn_loaded, :timing, :_from_loading, :configs, :manifest, :io, :detachable), Tuple{Bool, Bool, Bool, Bool, Bool, Pair{Base.Cmd, Base.CacheFlags}, Bool, Base.TTY, Bool}}, typeof(Base.Precompilation.precompilepkgs), Array{String, 1}})
                 ################
             end
         end

@@ -1218,8 +1218,30 @@ function precompile(
         ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool = false,
         strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
         _from_loading::Bool = false, configs::Union{Base.Precompilation.Config, Vector{Base.Precompilation.Config}} = (`` => Base.CacheFlags()),
-        workspace::Bool = false, kwargs...
+        workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false, kwargs...
     )
+    # Handle background precompilation control options via Base
+    if monitor
+        Base.Precompilation.monitor_background_precompile(ctx.io)
+        return
+    end
+    if stop
+        if Base.Precompilation.stop_background_precompile(graceful = true)
+            printpkgstyle(ctx.io, :Info, "Stopping background precompilation...")
+        else
+            printpkgstyle(ctx.io, :Info, "No background precompilation is running")
+        end
+        return
+    end
+    if cancel
+        if Base.Precompilation.stop_background_precompile(graceful = false)
+            printpkgstyle(ctx.io, :Info, "Canceling background precompilation...")
+        else
+            printpkgstyle(ctx.io, :Info, "No background precompilation is running")
+        end
+        return
+    end
+
     Context!(ctx; kwargs...)
     if !already_instantiated
         instantiate(ctx; allow_autoprecomp = false, kwargs...)
@@ -1244,7 +1266,9 @@ function precompile(
             ctx.io
         end
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
+        # Allow user to press 'd' to detach when running interactively
+        detachable = isinteractive()
+        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
     end
 end
 
