@@ -111,6 +111,9 @@ the section on [pre-1.0 behavior](@ref compat-pre-1.0) for more details.
 
 ### The `readonly` field
 
+!!! compat
+    The `readonly` field requires Julia 1.13+.
+
 The `readonly` field is a boolean that, when set to `true`, marks the environment as read-only. This prevents any modifications to the environment, including adding, removing, or updating packages. For example:
 
 ```toml
@@ -152,6 +155,9 @@ handled by Pkg operations such as `add`.
 
 ### [The `[sources]` section](@id sources-section)
 
+!!! compat
+    Specifying sources requires Julia 1.11+.
+
 Specifying a path or repo (+ branch) for a dependency is done in the `[sources]` section.
 These are especially useful for controlling unregistered dependencies without having to bundle a
 corresponding manifest file.
@@ -192,9 +198,6 @@ This recursive behavior is particularly useful for managing chains of unregister
 
 !!! tip "Test-specific dependencies"
     A use case for `[sources]` with `path` is in `test/Project.toml` to reference the parent package using `path = ".."`. This allows test dependencies to be managed independently with their own manifest file. See [Test-specific dependencies](@ref) for more details on this and other approaches.
-
-!!! compat
-    Specifying sources requires Julia 1.11+.
 
 ### The `[weakdeps]` section
 
@@ -266,6 +269,9 @@ julia = "1.1"
 
 ### [The `[workspace]` section](@id Workspaces)
 
+!!! compat
+    Workspaces require Julia 1.12+.
+
 A project file can define a workspace by giving a set of projects that is part of that workspace.
 Each project in a workspace can include their own dependencies, compatibility information, and even function as full packages.
 
@@ -305,6 +311,9 @@ For more information, see the [Test-specific dependencies](@ref adding-tests-to-
 
 ### The `[targets]` section (legacy)
 
+!!! compat
+    Targets require Julia < 1.13; for Julia 1.13+ use [workspaces](@ref Workspaces).
+
 !!! warning
     The `[targets]` section is a legacy feature maintained for compatibility. For Julia 1.13+,
     using [workspaces](@ref Workspaces) is the recommended approach for managing test-specific
@@ -337,6 +346,9 @@ For the details, see [`Pkg.instantiate`](@ref).
 !!! note
     The `Manifest.toml` file is generated and maintained by Pkg and, in general, this file
     should *never* be modified manually.
+
+!!! compat
+    Versioned manifests (`Manifest-v{major}.{minor}.toml`) require Julia 1.10.8+.
 
 ### Different Manifests for Different Julia versions
 
