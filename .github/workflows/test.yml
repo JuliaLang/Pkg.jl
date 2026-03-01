@@ -72,7 +72,7 @@ jobs:
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: ${{ join(matrix.*, '-') }}_Pkg.log
@@ -101,7 +101,7 @@ jobs:
         env:
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
       - name: Upload documentation artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pkg-docs
