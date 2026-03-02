@@ -1,3 +1,4 @@
+import ..GitTools
 import ..isdir_nothrow, ..Registry.RegistrySpec, ..isurl
 using UUIDs
 
@@ -146,15 +147,9 @@ function extract_version(input::String)
 end
 
 function preprocess_github_url(input::String)
-    # Handle GitHub tree/commit URLs
-    if (m = match(r"https://github.com/(.*?)/(.*?)/(?:tree|commit)/(.*?)$", input)) !== nothing
-        return [PackageIdentifier("https://github.com/$(m.captures[1])/$(m.captures[2])"), Rev(m.captures[3])]
-        # Handle GitHub pull request URLs
-    elseif (m = match(r"https://github.com/(.*?)/(.*?)/pull/(\d+)$", input)) !== nothing
-        return [PackageIdentifier("https://github.com/$(m.captures[1])/$(m.captures[2])"), Rev("pull/$(m.captures[3])/head")]
-    else
-        return nothing
-    end
+    parsed = GitTools.parse_url_with_ref(input)
+    parsed === nothing && return nothing
+    return [PackageIdentifier(parsed[1]), Rev(parsed[2])]
 end
 
 # Check if a colon in a URL string is part of URL structure (not a subdir separator)

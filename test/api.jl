@@ -341,6 +341,28 @@ end
     @test_throws Pkg.Types.PkgError("`Example.jl` is not a valid package name. Perhaps you meant `Example`") Pkg.API.check_package_name("Example.jl")
 end
 
+@testset "API: handle GitHub URL shorthand in `url` field" begin
+    pkg = Pkg.PackageSpec(url = "https://github.com/MilesCranmer/DispatchDoctor.jl/pull/111")
+    Pkg.API.handle_package_input!(pkg)
+    @test pkg.repo.source == "https://github.com/MilesCranmer/DispatchDoctor.jl"
+    @test pkg.repo.rev == "pull/111/head"
+
+    pkg = Pkg.PackageSpec(url = "https://github.com/MilesCranmer/DispatchDoctor.jl/pull/111/")
+    Pkg.API.handle_package_input!(pkg)
+    @test pkg.repo.source == "https://github.com/MilesCranmer/DispatchDoctor.jl"
+    @test pkg.repo.rev == "pull/111/head"
+
+    pkg = Pkg.PackageSpec(url = "https://github.com/MilesCranmer/DispatchDoctor.jl/tree/aa/gitlab?foo=bar")
+    Pkg.API.handle_package_input!(pkg)
+    @test pkg.repo.source == "https://github.com/MilesCranmer/DispatchDoctor.jl"
+    @test pkg.repo.rev == "aa/gitlab"
+
+    pkg = Pkg.PackageSpec(url = "https://github.com/MilesCranmer/DispatchDoctor.jl/pull/111", rev = "master")
+    Pkg.API.handle_package_input!(pkg)
+    @test pkg.repo.source == "https://github.com/MilesCranmer/DispatchDoctor.jl/pull/111"
+    @test pkg.repo.rev == "master"
+end
+
 @testset "issue #2587, PR #2589: `Pkg.PackageSpec` accepts `Union{UUID, AbstractString, Nothing}` for `uuid`" begin
     @testset begin
         xs = [
