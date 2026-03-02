@@ -76,6 +76,10 @@ const GIT_REGEX =
     r"^(?:(?<proto>git|ssh|https)://)?(?:[\w\.\+\-:]+@)?(?<hostname>.+?)(?(<proto>)/|:)(?<path>.+?)(?:\.git)?$"
 const GIT_PROTOCOLS = Dict{String, Union{Nothing, String}}()
 const GIT_USERS = Dict{String, Union{Nothing, String}}()
+const GIT_URL_PULL_REQUEST =
+    r"^https://github.com/([^/]+)/([^/]+)/pull/(\d+)(?:/)?$"
+const GIT_URL_TREE_OR_COMMIT =
+    r"^https://github.com/([^/]+)/([^/]+)/(?:tree|commit)/(.*?)$"
 
 @deprecate setprotocol!(proto::Union{Nothing, AbstractString}) setprotocol!(protocol = proto) false
 
@@ -108,6 +112,31 @@ function normalize_url(url::AbstractString)
 
         "$proto://$user$host/$path"
     end
+end
+
+"""
+    parse_url_with_ref(url::AbstractString)
+
+Return `(url, rev)` for certain GitHub URL forms that support shorthand package syntax.
+Supported forms:
+- `/tree/<ref>` -> `(repo_url, ref)`
+- `/commit/<ref>` -> `(repo_url, ref)`
+- `/pull/<n>` -> `(repo_url, "pull/<n>/head")`
+
+Trailing slashes and URL query/fragment components are ignored for rewrite detection.
+"""
+function parse_url_with_ref(url::AbstractString)
+    stripped_url = split(split(url, '?', limit = 2)[1], '#', limit = 2)[1]
+    stripped_url = rstrip(stripped_url, '/')
+
+    m = match(GIT_URL_TREE_OR_COMMIT, stripped_url)
+    if m !== nothing
+        return "https://github.com/$(m.captures[1])/$(m.captures[2])", m.captures[3]
+    end
+
+    m = match(GIT_URL_PULL_REQUEST, stripped_url)
+    m === nothing && return nothing
+    return "https://github.com/$(m.captures[1])/$(m.captures[2])", "pull/$(m.captures[3])/head"
 end
 
 function ensure_clone(io::IO, target_path, url; kwargs...)
