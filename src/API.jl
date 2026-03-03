@@ -414,11 +414,24 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all
 end
 
 
-function append_all_pkgs!(pkgs, ctx, mode)
+function append_all_pkgs!(pkgs, ctx, mode; workspace::Bool = false)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
         for (name::String, uuid::UUID) in ctx.env.project.deps
             path, repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, name)
             push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
+        end
+        if workspace
+            for (project_file, project) in ctx.env.workspace
+                for (name::String, uuid::UUID) in project.deps
+                    path, repo = get_path_repo(project, project_file, ctx.env.manifest_file, name)
+                    existing = findfirst(p -> p.uuid == uuid, pkgs)
+                    if existing !== nothing
+                        Operations.merge_pkg_source!(pkgs[existing], path, repo)
+                        continue
+                    end
+                    push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
+                end
+            end
         end
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
@@ -436,6 +449,7 @@ function up(
         preserve::Union{Nothing, PreserveLevel} = isempty(pkgs) ? nothing : PRESERVE_ALL,
         update_registry::Bool = true,
         skip_writing_project::Bool = false,
+        workspace::Bool = false,
         kwargs...
     )
     Context!(ctx; kwargs...)
@@ -451,7 +465,7 @@ function up(
     end
     Operations.prune_manifest(ctx.env)
     if isempty(pkgs)
-        append_all_pkgs!(pkgs, ctx, mode)
+        append_all_pkgs!(pkgs, ctx, mode; workspace)
     else
         mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
         mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
@@ -472,13 +486,13 @@ function resolve(ctx::Context; skip_writing_project::Bool = false, kwargs...)
     return nothing
 end
 
-function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
+function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, workspace::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST; workspace)
     else
         require_not_empty(pkgs, :pin)
     end
@@ -514,13 +528,13 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kw
     return
 end
 
-function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, kwargs...)
+function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, workspace::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
-        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST)
+        append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST; workspace)
     else
         require_not_empty(pkgs, :free)
     end
@@ -1364,9 +1378,9 @@ function instantiate(
     end
 
     # Install all packages
-    new_apply = Operations.download_source(ctx)
+    new_apply = Operations.download_source(ctx, pkgs)
     # Install all artifacts
-    Operations.download_artifacts(ctx; platform, verbose)
+    Operations.download_artifacts(ctx, pkgs; platform, verbose)
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose = verbose)
 

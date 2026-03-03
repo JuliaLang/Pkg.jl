@@ -150,6 +150,20 @@ function load_version(version, fixed, preserve::PreserveLevel)
     end
 end
 
+function merge_pkg_source!(pkg::PackageSpec, path::Union{Nothing, String}, repo::GitRepo)
+    if pkg.path === nothing && path !== nothing
+        pkg.path = path
+    elseif pkg.repo.source === nothing && repo.source !== nothing
+        pkg.repo.source = repo.source
+    end
+    if pkg.repo.rev === nothing && repo.rev !== nothing
+        pkg.repo.rev = repo.rev
+    end
+    return
+end
+merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
+    merge_pkg_source!(target, source.path, source.repo)
+
 function load_direct_deps(
         env::EnvCache, pkgs::Vector{PackageSpec} = PackageSpec[];
         preserve::PreserveLevel = PRESERVE_DIRECT
@@ -167,18 +181,7 @@ function load_direct_deps(
         pkg = pkgs_direct[idxs[1]]
         idx_to_drop = Int[]
         for i in Iterators.drop(idxs, 1)
-            # Merge in sources from other projects
-            # Manifest info like pinned, tree_hash and version should be the same
-            # since that is all loaded from the same manifest
-            if pkg.path === nothing && pkgs_direct[i].path !== nothing
-                pkg.path = pkgs_direct[i].path
-            end
-            if pkg.repo.source === nothing && pkgs_direct[i].repo.source !== nothing
-                pkg.repo.source = pkgs_direct[i].repo.source
-            end
-            if pkg.repo.rev === nothing && pkgs_direct[i].repo.rev !== nothing
-                pkg.repo.rev = pkgs_direct[i].repo.rev
-            end
+            merge_pkg_source!(pkg, pkgs_direct[i])
             push!(idx_to_drop, i)
         end
         sort!(unique!(idx_to_drop))
@@ -1254,7 +1257,7 @@ mutable struct DownloadState
 end
 
 function download_artifacts(
-        ctx::Context;
+        ctx::Context, pkgs;
         platform::AbstractPlatform = HostPlatform(),
         julia_version = VERSION,
         verbose::Bool = false,
@@ -1265,7 +1268,9 @@ function download_artifacts(
     io = ctx.io
     fancyprint = can_fancyprint(io)
     pkg_info = Tuple{String, Union{Base.UUID, Nothing}}[]
+    pkg_uuids = Set(pkg.uuid for pkg in pkgs)
     for (uuid, pkg) in env.manifest
+        uuid in pkg_uuids || continue
         pkg = manifest_info(env.manifest, uuid)
         pkg_root = source_path(env.manifest_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_info, (pkg_root, uuid))
@@ -1432,6 +1437,17 @@ function download_artifacts(
 
 
     return write_env_usage(used_artifact_tomls, "artifact_usage.toml")
+end
+
+function download_artifacts(
+        ctx::Context;
+        platform::AbstractPlatform = HostPlatform(),
+        julia_version = VERSION,
+        verbose::Bool = false,
+        io::IO = stderr_f(),
+        include_lazy::Bool = false
+    )
+    return download_artifacts(ctx, values(ctx.env.manifest); platform, julia_version, verbose, io, include_lazy)
 end
 
 function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform = HostPlatform())
