@@ -67,6 +67,20 @@ function load_version(version, fixed, preserve::PreserveLevel)
     end
 end
 
+function merge_pkg_source!(pkg::PackageSpec, path::Union{Nothing, String}, repo::GitRepo)
+    if pkg.path === nothing && path !== nothing
+        pkg.path = path
+    elseif pkg.repo.source === nothing && repo.source !== nothing
+        pkg.repo.source = repo.source
+    end
+    if pkg.repo.rev === nothing && repo.rev !== nothing
+        pkg.repo.rev = repo.rev
+    end
+    return
+end
+merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
+    merge_pkg_source!(target, source.path, source.repo)
+
 function load_direct_deps(
         env::EnvCache, pkgs::Vector{PackageSpec} = PackageSpec[];
         preserve::PreserveLevel = PRESERVE_DIRECT
@@ -84,18 +98,7 @@ function load_direct_deps(
         pkg = pkgs_direct[idxs[1]]
         idx_to_drop = Int[]
         for i in Iterators.drop(idxs, 1)
-            # Merge in sources from other projects
-            # Manifest info like pinned, tree_hash and version should be the same
-            # since that is all loaded from the same manifest
-            if pkg.path === nothing && pkgs_direct[i].path !== nothing
-                pkg.path = pkgs_direct[i].path
-            end
-            if pkg.repo.source === nothing && pkgs_direct[i].repo.source !== nothing
-                pkg.repo.source = pkgs_direct[i].repo.source
-            end
-            if pkg.repo.rev === nothing && pkgs_direct[i].repo.rev !== nothing
-                pkg.repo.rev = pkgs_direct[i].repo.rev
-            end
+            merge_pkg_source!(pkg, pkgs_direct[i])
             push!(idx_to_drop, i)
         end
         sort!(unique!(idx_to_drop))
