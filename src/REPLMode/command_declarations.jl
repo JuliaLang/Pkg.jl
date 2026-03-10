@@ -418,10 +418,14 @@ compound_declarations = [
             :description => "precompile all the project dependencies",
             :option_spec => [
                 PSA[:name => "workspace", :api => :workspace => true],
+                PSA[:name => "monitor", :api => :monitor => true],
+                PSA[:name => "stop", :api => :stop => true],
+                PSA[:name => "cancel", :api => :cancel => true],
             ],
             :help => md"""
-                    precompile [--workspace]
-                    precompile [--workspace] pkgs...
+                    precompile [--workspace] [--detach/-d]
+                    precompile [--monitor | --stop | --cancel]
+                    precompile [--workspace] [--detach/-d] pkgs...
 
                 Precompile all or specified dependencies of the project in parallel.
                 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
@@ -434,6 +438,20 @@ compound_declarations = [
                 Any packages that have previously errored during precompilation won't be retried in auto mode
                 until they have changed. To disable automatic precompilation set the environment variable `JULIA_PKG_PRECOMPILE_AUTO=0`.
                 To manually control the number of tasks used set the environment variable `JULIA_NUM_PRECOMPILE_TASKS`.
+
+                Background precompilation control:
+                - `--detach/-d`: Run precompilation in the background (returns immediately to prompt)
+                - `--monitor`: Monitor the progress of background precompilation (blocks until completion)
+                - `--stop`: Gracefully stop background precompilation (waits for active jobs to finish)
+                - `--cancel`: Cancel background precompilation immediately (interrupts active jobs)
+
+                Keyboard controls during precompilation:
+                - `c`: Cancel precompilation (kills subprocesses, suppresses output)
+                - `d`: Detach (return to REPL, precompilation continues in background)
+                - `i`: Send a profiling signal to subprocesses for a profile peek
+                - `Ctrl-C`: Interrupt (sends SIGINT to subprocesses, shows output)
+
+                To disable background precompilation set the environment variable `JULIA_PKG_PRECOMPILE_BACKGROUND=0`.
                 """,
         ],
         PSA[
