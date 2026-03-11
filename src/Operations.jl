@@ -203,9 +203,40 @@ function load_project_deps(
     end
 
     for (name::String, uuid::UUID) in project.deps
-        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        # Check if package already exists in pkgs (from up_load_manifest_info! etc)
+        existing_idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
+
         path, repo = get_path_repo(project, project_file, manifest_file, name)
         entry = manifest_info(manifest, uuid)
+
+        # Track when [sources] entries should override manifest data
+        sources_has_path = path !== nothing
+        sources_has_repo = repo != GitRepo()
+        repo_overrides_entry = sources_has_repo && (entry === nothing || repo != entry.repo)
+        clear_tree_hash = sources_has_path || repo_overrides_entry
+        tree_hash = entry === nothing ? nothing :
+            clear_tree_hash ? nothing :
+            entry.tree_hash
+        final_repo = repo == GitRepo() ? (entry === nothing ? GitRepo() : entry.repo) : repo
+
+        if existing_idx !== nothing
+            # Package already in pkgs - update it with sources info
+            existing_pkg = pkgs[existing_idx]
+            # Update tree_hash when we purposely cleared it for sources overrides
+            if clear_tree_hash
+                existing_pkg.tree_hash = tree_hash
+            end
+            # Update path if from sources
+            if path !== nothing
+                existing_pkg.path = path
+            end
+            # Update repo if from sources
+            if sources_has_repo
+                existing_pkg.repo = final_repo
+            end
+            continue
+        end
+
         push!(
             pkgs_direct, entry === nothing ?
                 PackageSpec(; uuid, name, path, repo) :
@@ -213,9 +244,9 @@ function load_project_deps(
                     uuid = uuid,
                     name = name,
                     path = path === nothing ? entry.path : path,
-                    repo = repo == GitRepo() ? entry.repo : repo,
+                    repo = final_repo,
                     pinned = entry.pinned,
-                    tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
+                    tree_hash = tree_hash,
                     version = load_version(entry.version, isfixed(entry), preserve),
                 )
         )
@@ -251,24 +282,7 @@ function load_all_deps(
         preserve::PreserveLevel = PRESERVE_ALL
     )
     pkgs = load_manifest_deps(env.manifest, pkgs; preserve = preserve)
-    # Sources takes presedence over the manifest...
-    for pkg in pkgs
-        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg.name)
-        if path !== nothing
-            # Path from [sources] takes precedence - clear tree_hash and repo from manifest
-            pkg.tree_hash = nothing
-            pkg.repo = GitRepo()  # Clear any repo info
-            pkg.path = path
-        end
-        if repo.source !== nothing
-            # Repo from [sources] takes precedence - clear path from manifest
-            pkg.path = nothing
-            pkg.repo.source = repo.source
-        end
-        if repo.rev !== nothing
-            pkg.repo.rev = repo.rev
-        end
-    end
+    # load_direct_deps will apply sources and update tree_hash via load_project_deps
     return load_direct_deps(env, pkgs; preserve = preserve)
 end
 
@@ -2332,8 +2346,8 @@ function add(
 
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
-        record_project_hash(ctx.env) # compat entries changed the hash after it was last recorded in update_manifest!
 
+        record_project_hash(ctx.env)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
         build_versions(ctx, union(new_apply, new_git))
@@ -2364,6 +2378,7 @@ function develop(
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; platform = platform, julia_version = ctx.julia_version)
+    record_project_hash(ctx.env)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io)
     return build_versions(ctx, union(new_apply, new_git))
@@ -2518,6 +2533,7 @@ function up(
     new_apply = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx, julia_version = ctx.julia_version)
+    record_project_hash(ctx.env)
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io, hidden_upgrades_info = true)
 
@@ -2593,6 +2609,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec})
     new = download_source(ctx)
     fixups_from_projectfile!(ctx)
     download_artifacts(ctx; julia_version = ctx.julia_version)
+    record_project_hash(ctx.env)
     write_env(ctx.env) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io)
     return build_versions(ctx, new)
@@ -2643,6 +2660,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
         new = download_source(ctx)
         fixups_from_projectfile!(ctx)
         download_artifacts(ctx)
+        record_project_hash(ctx.env)
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
         build_versions(ctx, new)
