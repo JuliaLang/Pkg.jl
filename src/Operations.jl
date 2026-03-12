@@ -3173,7 +3173,7 @@ end
 
 # Display
 
-function stat_rep(x::PackageSpec; name = true)
+function stat_rep(x::PackageSpec; name = true, short_repo = nothing, show_hash = false)
     name = name ? "$(x.name)" : ""
     version = x.version == VersionSpec() ? "" : "v$(x.version)"
     rev = ""
@@ -3181,10 +3181,28 @@ function stat_rep(x::PackageSpec; name = true)
         rev = occursin(r"\b([a-f0-9]{40})\b", x.repo.rev) ? x.repo.rev[1:7] : x.repo.rev
     end
     subdir_str = x.repo.subdir === nothing ? "" : ":$(x.repo.subdir)"
-    repo = Operations.is_tracking_repo(x) ? "`$(x.repo.source)$(subdir_str)#$(rev)`" : ""
+    tree_hash_str = (show_hash && x.tree_hash !== nothing) ? "@$(string(x.tree_hash)[1:7])" : ""
+    repo = if Operations.is_tracking_repo(x)
+        if short_repo === true
+            "`...$(tree_hash_str)`"
+        else
+            "`$(x.repo.source)$(subdir_str)#$(rev)$(tree_hash_str)`"
+        end
+    else
+        ""
+    end
     path = Operations.is_tracking_path(x) ? "$(pathrepr(x.path))" : ""
     pinned = x.pinned ? "⚲" : ""
     return join(filter(!isempty, [name, version, repo, path, pinned]), " ")
+end
+
+same_repo_source(::Nothing, ::Any) = false
+same_repo_source(::Any, ::Nothing) = false
+function same_repo_source(old::PackageSpec, new::PackageSpec)
+    return is_tracking_repo(old) && is_tracking_repo(new) &&
+        old.repo.source == new.repo.source &&
+        old.repo.rev == new.repo.rev &&
+        old.repo.subdir == new.repo.subdir
 end
 
 print_single(io::IO, pkg::PackageSpec) = print(io, stat_rep(pkg))
@@ -3205,7 +3223,8 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
             printstyled(io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_magenta)
         end
     else
-        printstyled(io, "~ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_yellow)
+        same_repo = same_repo_source(old, new)
+        printstyled(io, "~ $(stat_rep(old; show_hash = same_repo)) ⇒ $(stat_rep(new; name = false, short_repo = same_repo, show_hash = same_repo))"; color = :light_yellow)
     end
 end
 
