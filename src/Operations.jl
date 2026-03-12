@@ -966,20 +966,6 @@ function maybe_print_preferred_loaded_note(io::IO, direct_names::Vector{String},
     return
 end
 
-function apply_preferred_versions_to_direct!(pkgs::Vector{PackageSpec}, preferred_versions::Dict{UUID, VersionNumber})
-    isempty(preferred_versions) && return
-    empty_spec = VersionSpec()
-    for pkg in pkgs
-        pkg.version == empty_spec || continue
-        uuid = pkg.uuid
-        uuid isa UUID || continue
-        pref_version = get(preferred_versions, uuid, nothing)
-        pref_version === nothing && continue
-        pkg.version = VersionSpec(pref_version)
-    end
-    return
-end
-
 get_or_make!(d::Dict{K, V}, k::K) where {K, V} = get!(d, k) do;
     V()
 end
@@ -2237,43 +2223,34 @@ function tiered_resolve(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
         try_all_installed::Bool; preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
     )
-    if !isempty(preferred_versions)
-        # first try maintaining any loaded versions of the new packages
-        try # do not modify existing subgraph
-            @debug "tiered_resolve: trying PRESERVE_ALL with any loaded versions of new packages"
-            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version; preferred_versions)
-        catch err
-            err isa Resolve.ResolverError || rethrow()
-        end
-    end
     if try_all_installed
         try # do not modify existing subgraph and only add installed versions of the new packages
             @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
-            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version)
+            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version; preferred_versions)
         catch err
             err isa Resolve.ResolverError || rethrow()
         end
     end
     try # do not modify existing subgraph
         @debug "tiered_resolve: trying PRESERVE_ALL"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version; preferred_versions)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
         @debug "tiered_resolve: trying PRESERVE_DIRECT"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version; preferred_versions)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try
         @debug "tiered_resolve: trying PRESERVE_SEMVER"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version; preferred_versions)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     @debug "tiered_resolve: trying PRESERVE_NONE"
-    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version)
+    return targeted_resolve(env, registries, pkgs, PRESERVE_NONE, julia_version; preferred_versions)
 end
 
 function targeted_resolve(
@@ -2430,7 +2407,6 @@ function add(
 
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
-        apply_preferred_versions_to_direct!(pkgs, preferred_loaded_versions)
         man_pkgs, deps_map = _resolve(
             ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version;
             preferred_versions = preferred_loaded_versions
