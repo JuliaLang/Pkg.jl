@@ -2388,33 +2388,25 @@ function add(
         return
     end
 
-    preferred_loaded_versions = Dict{UUID, VersionNumber}()
-    existing_manifest_uuids = Set{UUID}()
-    preferred_direct_note_names = String[]
-    preferred_indirect_note_count = 0
-    direct_requested_uuids = Set{UUID}()
     foreach(pkg -> target_field[pkg.name] = pkg.uuid, pkgs) # update set of deps/weakdeps/extras
-    for pkg in pkgs
-        uuid = pkg.uuid
-        uuid isa UUID || continue
-        push!(direct_requested_uuids, uuid)
-    end
-
-    if target == :deps && prefer_loaded_versions
-        preferred_loaded_versions = collect_preferred_loaded_versions(ctx.env)
-        existing_manifest_uuids = Set(keys(ctx.env.manifest))
-    end
 
     if target == :deps # nothing to resolve/install if it's weak or extras
         # resolve
+        preferred_loaded_versions = Dict{UUID, VersionNumber}()
+        existing_manifest_uuids = Set{UUID}()
+        direct_requested_uuids = Set{UUID}(pkg.uuid for pkg in pkgs if pkg.uuid isa UUID)
+        if prefer_loaded_versions
+            preferred_loaded_versions = collect_preferred_loaded_versions(ctx.env)
+            existing_manifest_uuids = Set(keys(ctx.env.manifest))
+        end
         man_pkgs, deps_map = _resolve(
             ctx.io, ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version;
             preferred_versions = preferred_loaded_versions
         )
-        preferred_direct_note_names, preferred_indirect_note_count = preferred_loaded_packages_usage(
+        direct_names, indirect_count = preferred_loaded_packages_usage(
             man_pkgs, preferred_loaded_versions, existing_manifest_uuids, direct_requested_uuids
         )
-        maybe_print_preferred_loaded_note(ctx.io, preferred_direct_note_names, preferred_indirect_note_count)
+        maybe_print_preferred_loaded_note(ctx.io, direct_names, indirect_count)
         update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, ctx.registries)
         new_apply = download_source(ctx)
         fixups_from_projectfile!(ctx)
