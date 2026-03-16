@@ -309,9 +309,21 @@ projects = ["test"]
 ```
 
 When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single `Manifest.toml` next to the base `Project.toml`. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
+Note that dependencies of `HelloWorld` itself are **not** automatically inherited. Any package used directly in tests must also be listed under `[deps]`.
 
 !!! info
     Unlike some earlier test dependency workflows, this one explicitly requires adding `HelloWorld` (the parent package) to your `test/Project.toml`.
+
+The resulting `test/Project.toml` will look like:
+
+```toml
+[deps]
+HelloWorld = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # UUID from HelloWorld's Project.toml
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+HelloWorld = {path = ".."}
+```
 
 You can now use `Test` in the test script:
 
