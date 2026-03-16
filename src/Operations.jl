@@ -1130,6 +1130,7 @@ function install_archive(
         urls::Vector{Pair{String, Bool}},
         hash::SHA1,
         version_path::String;
+        name::Union{String, Nothing} = nothing,
         io::IO = stderr_f()
     )::Bool
     # Because we use `mv_temp_dir_retries` which uses `rename` not `mv` it can fail if the temp
@@ -1176,7 +1177,7 @@ function install_archive(
         # Assert that the tarball unpacked to the tree sha we wanted
         computed_hash = GitTools.tree_hash(unpacked)
         if SHA1(computed_hash) != hash
-            @warn "tarball content of url $url does not match git-tree-sha1, expected $hash, got $computed_hash"
+            @warn "Downloaded package content does not match expected hash (git-tree-sha1); skipping this source" package = name url = url expected = hash computed = computed_hash
             url_success = false
         end
         url_success || continue
@@ -1598,7 +1599,7 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
                             url !== nothing && push!(archive_urls, url => false)
                         end
                         try
-                            success = install_archive(archive_urls, pkg.tree_hash, path, io = ctx.io)
+                            success = install_archive(archive_urls, pkg.tree_hash, path; name = pkg.name, io = ctx.io)
                             if success && readonly
                                 set_readonly(path) # In add mode, files should be read-only
                             end
