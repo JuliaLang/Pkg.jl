@@ -271,7 +271,48 @@ Each project in a workspace can include their own dependencies, compatibility in
 
 When the package manager resolves dependencies, it considers the requirements of all the projects in the workspace. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
 
-A workspace is defined in the base project by giving a list of the projects in it:
+A workspace is defined in the base project by giving a list of the projects in it. For a standard package with test dependencies the layout looks like:
+
+```
+MainPackage/
+├── Project.toml
+├── Manifest.toml    # single shared manifest for the whole workspace, usually gitignored
+├── src/
+│   └── MainPackage.jl
+└── test/
+    ├── Project.toml
+    └── runtests.jl
+```
+
+**`MainPackage/Project.toml`** (root — defines the workspace):
+
+```toml
+name = "MainPackage"
+uuid = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+version = "1.0.0"
+
+[deps]
+DepA = "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+
+[workspace]
+projects = ["test"]
+```
+
+**`MainPackage/test/Project.toml`** (child — lists all deps used by tests and references the parent):
+
+```toml
+[deps]
+MainPackage = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+DepA = "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy" # must be declared here as well if used directly in tests
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+MainPackage = {path = ".."}
+```
+
+The `[sources]` entry tells Pkg to resolve `MainPackage` from the local path `..` (the package root) rather than a registry. The workspace then resolves all projects together and writes a single `Manifest.toml` at the root.
+
+The `[workspace]` entry can list any number of sub-directories:
 
 ```toml
 [workspace]
@@ -280,7 +321,7 @@ projects = ["test", "docs", "benchmarks", "PrivatePackage"]
 
 This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding test-specific dependencies to a package by including a `test` project in the workspace (see [Test-specific dependencies](@ref adding-tests-to-packages)), or for adding documentation or benchmarks with their own dependencies.
 
-Workspace can be nested: a project that itself defines a workspace can also be part of another workspace.
+Workspaces can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ### The `[extras]` section (legacy)
