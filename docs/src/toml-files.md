@@ -271,6 +271,10 @@ Each project in a workspace can include their own dependencies, compatibility in
 
 When the package manager resolves dependencies, it considers the requirements of all the projects in the workspace. The compatible versions identified during this process are recorded in a single manifest file located next to the base project file.
 
+Note that dependencies of the root package are **not** automatically available in child projects.
+Each child must declare its own `[deps]`. The parent package itself can be included in a child project
+via a `[sources]` path entry. See [Test-specific dependencies](@ref adding-tests-to-packages) for more information.
+
 A workspace is defined in the base project by giving a list of the projects in it:
 
 ```toml
@@ -280,7 +284,7 @@ projects = ["test", "docs", "benchmarks", "PrivatePackage"]
 
 This structure is particularly beneficial for developers using a monorepo approach, where a large number of unregistered packages may be involved. It's also useful for adding test-specific dependencies to a package by including a `test` project in the workspace (see [Test-specific dependencies](@ref adding-tests-to-packages)), or for adding documentation or benchmarks with their own dependencies.
 
-Workspace can be nested: a project that itself defines a workspace can also be part of another workspace.
+Workspaces can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
 ### The `[extras]` section (legacy)
