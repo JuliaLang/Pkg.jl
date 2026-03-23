@@ -238,6 +238,13 @@ end
                 end
             end
         end
+
+        # file:// URLs (issue #4640)
+        for path in ["/some/local/path", "/srv/pkg"]
+            server = "file://$(path)"
+            url = "$(server)/foo"
+            test_server_dir(url, server, basename(path))
+        end
     end
 
     called = 0
