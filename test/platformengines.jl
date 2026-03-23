@@ -238,6 +238,13 @@ end
                 end
             end
         end
+
+        # file:// URLs (issue #4640)
+        for (path, expected) in [("/some/local/path", "some"), ("/srv/pkg", "srv"), ("/c%3A/foo/bar", "c%3A")]
+            server = "file://$(path)"
+            url = "$(server)/foo"
+            test_server_dir(url, server, expected)
+        end
     end
 
     called = 0
