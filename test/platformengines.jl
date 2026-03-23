@@ -240,10 +240,10 @@ end
         end
 
         # file:// URLs (issue #4640)
-        for path in ["/some/local/path", "/srv/pkg"]
+        for (path, expected) in [("/some/local/path", "some"), ("/srv/pkg", "srv"), ("/c%3A/foo/bar", "c%3A")]
             server = "file://$(path)"
             url = "$(server)/foo"
-            test_server_dir(url, server, basename(path))
+            test_server_dir(url, server, expected)
         end
     end
 
