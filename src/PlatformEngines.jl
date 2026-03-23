@@ -807,7 +807,7 @@ function verify_archive_tree_hash(compressed_tar::AbstractString, expected_hash:
         return false
     end
     if calc_hash != expected_hash
-        @warn "tarball content does not match expected git-tree-sha1"
+        @warn "Tarball content does not match expected hash (git-tree-sha1)" tarball = compressed_tar expected = expected_hash computed = calc_hash
         return false
     end
     return true
