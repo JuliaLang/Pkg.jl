@@ -60,6 +60,7 @@ end
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
+const OVERLAY_PROJECT = Ref{Union{Nothing, String}}(nothing)
 # For globally overriding in e.g. tests
 const DEFAULT_IO = Base.ScopedValues.ScopedValue{IO}()
 

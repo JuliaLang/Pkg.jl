@@ -152,6 +152,27 @@ Shared environments can be activated with the `--shared` flag to `activate`:
 Shared environments have a `@` before their name in the Pkg REPL prompt.
 
 
+## Overlay Projects
+
+As an alternative to shared environments for development tools, you can use an
+[overlay project](@ref overlay-projects). An overlay project's dependencies are resolved
+together with whatever project you activate, sharing a single manifest. This avoids the version
+incompatibilities and redundant precompilation that can occur with stacked environments. See the
+[Overlay Projects](@ref overlay-projects) section in the `Project.toml` documentation for details.
+
+When using an overlay project, you typically want to disable the default stacked environment
+(`@v1.11`) since the overlay already provides your dev tools through the shared manifest.
+To do this, set `JULIA_LOAD_PATH` to only include the active project and stdlib:
+
+```sh
+# In your shell profile (e.g. .bashrc, .zshrc)
+export JULIA_LOAD_PATH="@:@stdlib"
+```
+
+The default value of `JULIA_LOAD_PATH` is `@:@v#.#:@stdlib`, where `@v#.#` is the versioned
+shared environment. Removing it prevents stacked environment packages from being loadable,
+which is what you want when the overlay project is the sole source of your extra dependencies.
+
 ## Environment Precompilation
 
 Before a package can be imported, Julia will "precompile" the source code into an intermediate more efficient cache on disc.

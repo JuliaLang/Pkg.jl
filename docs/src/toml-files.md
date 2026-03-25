@@ -287,6 +287,62 @@ This structure is particularly beneficial for developers using a monorepo approa
 Workspaces can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
+### [Overlay Projects](@id overlay-projects)
+
+An overlay project is a globally-configured `Project.toml` whose dependencies get merged into
+every active environment as if it were an additional workspace member. This is useful for
+development tools (e.g. `Debugger`, `JET`, `Cthulhu`) that you want available everywhere
+without polluting individual project dependencies.
+
+Unlike stacked environments (`LOAD_PATH` / `@v1.11`), which use separate manifests and can
+load incompatible versions, an overlay project shares the active environment's manifest. This
+means overlay dependencies are resolved together with your project's dependencies, respecting
+`[compat]` constraints and avoiding redundant precompilation.
+
+An overlay project is a plain `Project.toml` with `[deps]` and optionally `[compat]` and
+`[sources]` sections. It should **not** have `name`, `uuid`, or `version` fields — it is not
+a package, just a dependency list.
+
+```toml
+# ~/.julia/overlay/Project.toml
+[deps]
+Debugger = "31a5f54b-26ea-5571-9fe8-bf658c09c6c1"
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+
+[compat]
+Debugger = "0.7"
+JET = "0.9"
+```
+
+To enable the overlay, either set the environment variable `JULIA_PKG_OVERLAY` or the Julia
+global `Pkg.OVERLAY_PROJECT[]`:
+
+```julia
+# Via environment variable (e.g. in startup.jl or shell profile)
+ENV["JULIA_PKG_OVERLAY"] = expanduser("~/.julia/overlay")
+
+# Or via Julia global (takes precedence over the env var)
+Pkg.OVERLAY_PROJECT[] = expanduser("~/.julia/overlay")
+```
+
+The path can point to a directory (containing a `Project.toml`) or directly to a `Project.toml`
+file. Paths starting with `@` are expanded using the same logic as `JULIA_LOAD_PATH` entries —
+they resolve to named environments in your depots. For example:
+
+```julia
+ENV["JULIA_PKG_OVERLAY"] = "@devtools"  # expands to ~/.julia/environments/devtools
+```
+
+Once configured, the overlay's dependencies will appear in resolution and in the manifest of
+whatever project you activate. If an overlay dependency conflicts with a project's `[compat]`,
+resolution will fail with a normal compat error — adjust the overlay's `[compat]` or remove the
+conflicting dependency.
+
+!!! note
+    The overlay project is **never written to** by Pkg operations. It does not appear in any
+    `[workspace]` section — it is injected at runtime only. Changing the overlay's contents
+    will trigger re-resolution on the next `Pkg.instantiate` or `Pkg.resolve`.
+
 ### The `[extras]` section (legacy)
 
 !!! warning

@@ -3196,6 +3196,10 @@ is_instantiated(x::PackageSpec) = x.version != VersionSpec() || is_stdlib(x.uuid
 function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing, PackageSpec})
     return if !is_instantiated(old) && is_instantiated(new)
         printstyled(io, "+ $(stat_rep(new))"; color = :light_green)
+    elseif !is_instantiated(old) && !is_instantiated(new)
+        pkg = something(new, old)
+        pkg === nothing && return
+        printstyled(io, "+ $(stat_rep(pkg))"; color = :light_green)
     elseif !is_instantiated(new)
         printstyled(io, "- $(stat_rep(old))"; color = :light_red)
     elseif is_tracking_registry(old) && is_tracking_registry(new) &&
@@ -3437,7 +3441,8 @@ function print_status(
         if workspace && !manifest
             for (path, _) in env.workspace
                 relative_path = Types.relative_project_path(env.project_file, path)
-                printpkgstyle(io, :Status, relative_path, true)
+                display_path = startswith(relative_path, "..") ? path : relative_path
+                printpkgstyle(io, :Status, display_path, true)
             end
         end
         # Sort stdlibs and _jlls towards the end in status output
