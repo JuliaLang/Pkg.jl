@@ -842,9 +842,25 @@ end
     end
 
     # Platform with no matching artifacts → (0, 0), warning suffix
-    result = count_artifacts(artifacts_toml_dir; platform = bogus_platform)
-    @test result === (0, 0)
-    @test artifact_suffix(result) == " (no artifacts on this platform)"
+    # Use a temp dir with a platform-specific-only Artifacts.toml (no platform-independent entries)
+    # so that the bogus platform genuinely matches nothing.
+    mktempdir() do platform_specific_dir
+        write(
+            joinpath(platform_specific_dir, "Artifacts.toml"), """
+            [[HelloWorldC]]
+            arch = "x86_64"
+            os = "linux"
+            git-tree-sha1 = "0000000000000000000000000000000000000000"
+
+                [[HelloWorldC.download]]
+                sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+                url = "https://example.com/HelloWorldC.tar.gz"
+            """
+        )
+        result = count_artifacts(platform_specific_dir; platform = bogus_platform)
+        @test result === (0, 0)
+        @test artifact_suffix(result) == " (no artifacts on this platform)"
+    end
 
     # HostPlatform → at least one eager match (HelloWorldC) and one lazy (socrates)
     host_result = count_artifacts(artifacts_toml_dir; platform = HostPlatform())
