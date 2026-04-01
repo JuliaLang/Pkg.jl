@@ -42,7 +42,7 @@ jobs:
 
       - name: Cache Julia packages
         if: steps.extract.outputs.version != ''
-        uses: julia-actions/cache@v2
+        uses: julia-actions/cache@v3
         with:
           cache-name: backporter
 
