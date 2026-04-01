@@ -1,3 +1,9 @@
+Pkg v1.14 Release Notes
+=======================
+
+- During package source installation, Pkg now reports when a package has an Artifacts.toml but no artifacts match the
+  current platform. ([#4646])
+
 Pkg v1.13 Release Notes
 =======================
 

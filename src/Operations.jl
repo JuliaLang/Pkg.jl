@@ -1520,6 +1520,25 @@ end
 
 download_source(ctx::Context; readonly::Bool = true) = download_source(ctx, collect(values(ctx.env.manifest)); readonly)
 
+function count_artifacts(pkg_root::String; platform::AbstractPlatform = HostPlatform())
+    for f in artifact_names
+        artifacts_toml = joinpath(pkg_root, f)
+        if isfile(artifacts_toml)
+            eager = select_downloadable_artifacts(artifacts_toml; platform, include_lazy = false)
+            all_matching = select_downloadable_artifacts(artifacts_toml; platform, include_lazy = true)
+            return (length(eager), length(all_matching) - length(eager))
+        end
+    end
+    return nothing
+end
+
+function artifact_suffix(artifact_counts)
+    artifact_counts === nothing && return ""
+    n_eager, n_lazy = artifact_counts
+    n_eager + n_lazy == 0 && return " (no artifacts on this platform)"
+    return ""
+end
+
 function download_source(ctx::Context, pkgs; readonly::Bool = true)
     pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
@@ -1644,7 +1663,8 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
                             short_treehash = string(pkg.tree_hash)[1:16]
                             "[$short_treehash]"
                         end
-                        printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
+                        artifact_str = artifact_suffix(count_artifacts(path))
+                        printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr, artifact_str))
                         fancyprint && show_progress(io, bar)
                     end
                 end
@@ -1670,7 +1690,8 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
                 short_treehash = string(pkg.tree_hash)[1:16]
                 "[$short_treehash]"
             end
-            printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr))
+            artifact_str = artifact_suffix(count_artifacts(path))
+            printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr, artifact_str))
         end
     end
 
