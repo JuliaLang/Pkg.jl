@@ -3,6 +3,7 @@ import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Random, Pkg.Artifacts, Base.BinaryPlatforms, Pkg.PlatformEngines
 import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory, ensure_all_artifacts_installed, extract_all_hashes
+import Pkg.Operations: count_artifacts, artifact_suffix
 using TOML, Dates
 import Base: SHA1
 
@@ -829,6 +830,47 @@ end
         end
     end
 end
+
+@testset "count_artifacts and artifact_suffix" begin
+    artifacts_toml_dir = joinpath(@__DIR__, "test_packages", "ArtifactInstallation")
+    bogus_platform = Platform("bogus", "linux")
+
+    # No Artifacts.toml → nothing, no suffix
+    mktempdir() do empty_dir
+        @test count_artifacts(empty_dir) === nothing
+        @test artifact_suffix(nothing) == ""
+    end
+
+    # Platform with no matching artifacts → (0, 0), warning suffix
+    # Use a temp dir with a platform-specific-only Artifacts.toml (no platform-independent entries)
+    # so that the bogus platform genuinely matches nothing.
+    mktempdir() do platform_specific_dir
+        write(
+            joinpath(platform_specific_dir, "Artifacts.toml"), """
+            [[HelloWorldC]]
+            arch = "x86_64"
+            os = "linux"
+            git-tree-sha1 = "0000000000000000000000000000000000000000"
+
+                [[HelloWorldC.download]]
+                sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+                url = "https://example.com/HelloWorldC.tar.gz"
+            """
+        )
+        result = count_artifacts(platform_specific_dir; platform = bogus_platform)
+        @test result === (0, 0)
+        @test artifact_suffix(result) == " (no artifacts on this platform)"
+    end
+
+    # HostPlatform → at least one eager match (HelloWorldC) and one lazy (socrates)
+    host_result = count_artifacts(artifacts_toml_dir; platform = HostPlatform())
+    @test host_result !== nothing
+    n_eager, n_lazy = host_result
+    @test n_eager >= 1
+    @test n_lazy >= 1   # socrates is lazy = true
+    @test artifact_suffix(host_result) == ""
+end
+
 
 if Sys.iswindows()
     @testset "filemode(dir) non-executable on windows" begin

@@ -266,6 +266,19 @@ end
 !!! compat "Julia 1.13"
     The `Pkg.precompile(f, args...; kwargs...)` do-block syntax requires at least Julia 1.13.
 
+During interactive precompilation the following keyboard controls are available:
+
+  * **`d`/`q`/`]`** — Detach. Returns to the REPL while precompilation continues in the background.
+    Use `pkg> precompile --monitor` to reattach, `--stop` to stop, or `--cancel` to cancel.
+  * **`c`** — Cancel. Kills all subprocesses; prompts for Enter to confirm.
+  * **`i`** — Info. Sends a profiling signal to subprocesses for a profile peek.
+  * **`v`** — Toggle verbose mode. Shows timing, worker PID, CPU%, and memory per compiling package.
+  * **`?`/`h`** — Show keyboard shortcut help.
+  * **Ctrl-C** — Interrupt. Sends SIGINT to subprocesses and displays their output.
+
+!!! compat "Julia 1.14"
+    Keyboard controls during precompilation require at least Julia 1.14.
+
 # Examples
 ```julia
 Pkg.precompile()
@@ -1016,6 +1029,7 @@ end
 
 function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
     return if should_autoprecompile()
+        # Auto precompile runs in foreground with detachable support
         Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
     end
 end
