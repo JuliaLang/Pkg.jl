@@ -868,7 +868,7 @@ function _precompilepkgs(pkgs::Vector{String},
                                     # for packages, we may load any extension (all possible triggers are accounted for above)
                                     loadable_exts = haskey(ext_to_parent, pkg) ? filter((dep)->haskey(ext_to_parent, dep), direct_deps[pkg]) : nothing
                                     Base.compilecache(pkg, sourcepath, std_pipe, std_pipe, keep_loaded_modules;
-                                                      #=flags, cacheflags, loadable_exts=#)
+                                                      #=flags, cacheflags,=# loadable_exts)
                                 end
                             end
                             if ret isa Base.PrecompilableError
