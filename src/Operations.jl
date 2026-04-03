@@ -588,7 +588,7 @@ isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
 function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
     source = source_path(env.manifest_file, pkg)
-    source_env = EnvCache(projectfile_path(source))
+    source_env = EnvCache(projectfile_path(source); snapshot_originals = false)
     pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
     for pkg in pkgs
         if any(x -> x.uuid == pkg.uuid, developed)
@@ -3231,7 +3231,27 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
     end
 end
 
+function build_reverse_deps(manifest::Manifest)
+    reverse_deps = Dict{UUID, Vector{Tuple{UUID, PackageEntry}}}()
+    for (uuid, dep_pkg) in manifest
+        for dep_uuid in values(dep_pkg.deps)
+            rdeps = get!(reverse_deps, dep_uuid) do
+                Tuple{UUID, PackageEntry}[]
+            end
+            push!(rdeps, (uuid, dep_pkg))
+        end
+    end
+    return reverse_deps
+end
+
 function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance})
+    return status_compat_info(pkg, env, regs, build_reverse_deps(env.manifest))
+end
+
+function status_compat_info(
+        pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance},
+        reverse_deps::Dict{UUID, Vector{Tuple{UUID, PackageEntry}}}
+    )
     pkg.version isa VersionNumber || return nothing # Can happen when there is no manifest
     manifest, project = env.manifest, env.project
     packages_holding_back = String[]
@@ -3268,19 +3288,15 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
 
-    # Check compat of dependencies
-    for (uuid, dep_pkg) in manifest
+    # Check compat of dependencies using pre-built reverse dep map
+    for (uuid, dep_pkg) in get(reverse_deps, pkg.uuid, Tuple{UUID, PackageEntry}[])
         is_stdlib(uuid) && continue
-        if !(pkg.uuid in values(dep_pkg.deps))
-            continue
-        end
         dep_info = get(manifest, uuid, nothing)
         dep_info === nothing && continue
         for reg in regs
             reg_pkg = get(reg, uuid, nothing)
             reg_pkg === nothing && continue
             info = Registry.registry_info(reg, reg_pkg)
-            # Query compressed deps and compat for the specific dependency version (optimized: only fetch this pkg's compat)
             compat_info_v_uuid = Registry.query_compat_for_version(info, dep_info.version, pkg.uuid)
             compat_info_v_uuid === nothing && continue
             if !(max_version in compat_info_v_uuid)
@@ -3311,10 +3327,6 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
 end
 
 function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manifest = true, workspace = false)
-    function index_pkgs(pkgs, uuid)
-        idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
-        return idx === nothing ? nothing : pkgs[idx]
-    end
     # load deps
     if workspace
         new = manifest ? load_all_deps(new_env) : load_direct_deps(new_env)
@@ -3331,9 +3343,12 @@ function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manife
     else
         old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(old_env.project, old_env.project_file, old_env.manifest, old_env.manifest_file)
     end
+    # Build Dict for O(1) lookup by UUID
+    old_by_uuid = Dict{T, PackageSpec}(pkg.uuid => pkg for pkg in old)
+    new_by_uuid = Dict{T, PackageSpec}(pkg.uuid => pkg for pkg in new)
     # merge old and new into single array
-    all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
-    return Tuple{T, S, S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T, S, S} for uuid in all_uuids]
+    all_uuids = union(keys(old_by_uuid), keys(new_by_uuid))
+    return Tuple{T, S, S}[(uuid, get(old_by_uuid, uuid, nothing), get(new_by_uuid, uuid, nothing))::Tuple{T, S, S} for uuid in all_uuids]
 end
 
 function is_package_downloaded(manifest_file::String, pkg::PackageSpec; platform = HostPlatform())
@@ -3471,6 +3486,9 @@ function print_status(
     no_packages_heldback = true
     lpadding = 2
 
+    # Pre-build reverse dependency map: for each dep UUID, which (uuid, entry) pairs depend on it
+    reverse_deps = build_reverse_deps(env.manifest)
+
     package_statuses = PackageStatusData[]
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
@@ -3485,7 +3503,7 @@ function print_status(
         cinfo = nothing
         ext_info = nothing
         if !isnothing(new) && !is_stdlib(new.uuid)
-            cinfo = status_compat_info(new, env, registries)
+            cinfo = status_compat_info(new, env, registries, reverse_deps)
             if cinfo !== nothing
                 latest_version = false
             end
@@ -3706,9 +3724,17 @@ function git_head_env(env, project_dir)
 end
 
 function show_update(env::EnvCache, registries::Vector{Registry.RegistryInstance}; io::IO, hidden_upgrades_info = false)
-    old_env = EnvCache()
-    old_env.project = env.original_project
-    old_env.manifest = env.original_manifest
+    old_env = EnvCache(
+        env.env,
+        env.project_file,
+        env.manifest_file,
+        env.pkg,
+        env.original_project,
+        env.workspace,
+        env.original_manifest,
+        env.original_project,
+        env.original_manifest,
+    )
     status(env, registries; header = :Updating, mode = PKGMODE_COMBINED, env_diff = old_env, ignore_indent = false, io = io, hidden_upgrades_info)
     return nothing
 end
