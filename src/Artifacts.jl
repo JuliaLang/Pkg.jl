@@ -83,9 +83,9 @@ function create_artifact(f::Function)
 end
 
 """
-    remove_artifact(hash::SHA1; honor_overrides::Bool=false)
+    remove_artifact(hash::Union{SHA1, SHA256}; honor_overrides::Bool=false)
 
-Removes the given artifact (identified by its SHA1 git tree hash) from disk.  Note that
+Removes the given artifact (identified by its SHA1 or SHA256 git tree hash) from disk.  Note that
 if an artifact is installed in multiple depots, it will be removed from all of them.  If
 an overridden artifact is requested for removal, it will be silently ignored; this method
 will never attempt to remove an overridden artifact.
@@ -94,7 +94,7 @@ In general, we recommend that you use `Pkg.gc()` to manage artifact installation
 not use `remove_artifact()` directly, as it can be difficult to know if an artifact is
 being used by another package.
 """
-function remove_artifact(hash::SHA1)
+function remove_artifact(hash::Union{SHA1, SHA256})
     if query_override(hash) !== nothing
         # We never remove overridden artifacts.
         return
@@ -111,13 +111,13 @@ function remove_artifact(hash::SHA1)
 end
 
 """
-    verify_artifact(hash::SHA1; honor_overrides::Bool=false)
+    verify_artifact(hash::Union{SHA1, SHA256}; honor_overrides::Bool=false)
 
-Verifies that the given artifact (identified by its SHA1 git tree hash) is installed on-
+Verifies that the given artifact (identified by its SHA1 or SHA256 git tree hash) is installed on-
 disk, and retains its integrity.  If the given artifact is overridden, skips the
 verification unless `honor_overrides` is set to `true`.
 """
-function verify_artifact(hash::SHA1; honor_overrides::Bool = false)
+function verify_artifact(hash::Union{SHA1, SHA256}; honor_overrides::Bool = false)
     # Silently skip overridden artifacts unless we really ask for it
     if !honor_overrides
         if query_override(hash) !== nothing
@@ -135,13 +135,13 @@ function verify_artifact(hash::SHA1; honor_overrides::Bool = false)
 end
 
 """
-    archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
+    archive_artifact(hash::Union{SHA1, SHA256}, tarball_path::String; honor_overrides::Bool=false)
 
 Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 of the
 resultant tarball as a hexadecimal string. Throws an error if the artifact does not
 exist.  If the artifact is overridden, throws an error unless `honor_overrides` is set.
 """
-function archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool = false)
+function archive_artifact(hash::Union{SHA1, SHA256}, tarball_path::String; honor_overrides::Bool = false)
     if !honor_overrides
         if query_override(hash) !== nothing
             error("Will not archive an overridden artifact unless `honor_overrides` is set!")
@@ -212,7 +212,7 @@ function make_dict(adi::ArtifactDownloadInfo)
 end
 
 """
-    bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
+    bind_artifact!(artifacts_toml::String, name::String, hash::Union{SHA1, SHA256};
                     platform::Union{AbstractPlatform,Nothing} = nothing,
                     download_info::Union{Vector{Tuple},Nothing} = nothing,
                     lazy::Bool = false,
@@ -231,7 +231,7 @@ downloaded until it is accessed via the `artifact"name"` syntax, or
 `ensure_artifact_installed()` is called upon it.
 """
 function bind_artifact!(
-        artifacts_toml::String, name::String, hash::SHA1;
+        artifacts_toml::String, name::String, hash::Union{SHA1, SHA256};
         platform::Union{AbstractPlatform, Nothing} = nothing,
         download_info::Union{Vector{<:Tuple}, Vector{<:ArtifactDownloadInfo}, Nothing} = nothing,
         lazy::Bool = false,
@@ -330,7 +330,7 @@ function unbind_artifact!(
 end
 
 """
-    download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
+    download_artifact(tree_hash::Union{SHA1, SHA256}, tarball_url::String, tarball_hash::String;
                         verbose::Bool = false, io::IO=stderr)
 
 Download/install an artifact into the artifact store.  Returns `true` on success,
@@ -341,7 +341,7 @@ returns an error object on failure.
     failure occurs
 """
 function download_artifact(
-        tree_hash::SHA1,
+        tree_hash::Union{SHA1, SHA256},
         tarball_url::String,
         tarball_hash::Union{String, Nothing} = nothing;
         verbose::Bool = false,
@@ -388,7 +388,8 @@ function download_artifact(
                 ignore_existence = true, verbose, quiet_download, io, progress
             )
             isnothing(progress) || progress(10000, 10000; status = "verifying")
-            calc_hash = SHA1(GitTools.tree_hash(temp_dir))
+            calc_hash_sha1 = SHA1(GitTools.tree_hash(temp_dir))
+            calc_hash_sha256 = SHA256(GitTools.tree_hash(temp_dir))
 
             # Did we get what we expected?  If not, freak out.
             if calc_hash.bytes != tree_hash.bytes
@@ -491,7 +492,8 @@ function ensure_artifact_installed(
         progress::Union{Function, Nothing} = nothing,
         io::IO = stderr_f()
     )
-    hash = SHA1(meta["git-tree-sha1"])
+    hash_sha1 = SHA1(meta["git-tree-sha1"])
+    hash_sha256 = SHA256(meta["git-tree-sha256"])
     if !artifact_exists(hash)
         if isnothing(progress) || verbose == true
             return try_artifact_download_sources(name, hash, meta, artifacts_toml; pkg_server_eligible, platform, verbose, quiet_download, io)
@@ -505,7 +507,7 @@ function ensure_artifact_installed(
 end
 
 function try_artifact_download_sources(
-        name::String, hash::SHA1, meta::Dict, artifacts_toml::String;
+        name::String, hash::Union{SHA1, SHA256}, meta::Dict, artifacts_toml::String;
         pkg_server_eligible::Bool = true,
         platform::AbstractPlatform = HostPlatform(),
         verbose::Bool = false,
@@ -658,7 +660,7 @@ function extract_all_hashes(
         pkg_uuid::Union{Nothing, Base.UUID} = nothing,
         include_lazy::Bool = false
     )
-    hashes = Base.SHA1[]
+    hashes = Union{SHA1, SHA256}[]
     if !isfile(artifacts_toml)
         return hashes
     end
@@ -678,7 +680,8 @@ function extract_all_hashes(
         end
 
         # Otherwise, add it to the list!
-        push!(hashes, Base.SHA1(meta["git-tree-sha1"]))
+        push!(hashes, SHA1(meta["git-tree-sha1"]))
+        push!(hashes, SHA256(meta["git-tree-sha256"]))
     end
 
     return hashes
@@ -686,13 +689,13 @@ end
 
 # Support `AbstractString`s, but avoid compilers needing to track backedges for callers
 # of these functions in case a user defines a new type that is `<: AbstractString`
-archive_artifact(hash::SHA1, tarball_path::AbstractString; kwargs...) =
+archive_artifact(hash::Union{SHA1, SHA256}, tarball_path::AbstractString; kwargs...) =
     archive_artifact(hash, string(tarball_path)::String; kwargs...)
-bind_artifact!(artifacts_toml::AbstractString, name::AbstractString, hash::SHA1; kwargs...) =
+bind_artifact!(artifacts_toml::AbstractString, name::AbstractString, hash::Union{SHA1, SHA256}; kwargs...) =
     bind_artifact!(string(artifacts_toml)::String, string(name)::String, hash; kwargs...)
 unbind_artifact!(artifacts_toml::AbstractString, name::AbstractString) =
     unbind_artifact!(string(artifacts_toml)::String, string(name)::String)
-download_artifact(tree_hash::SHA1, tarball_url::AbstractString, args...; kwargs...) =
+download_artifact(tree_hash::Union{SHA1, SHA256}, tarball_url::AbstractString, args...; kwargs...) =
     download_artifact(tree_hash, string(tarball_url)::String, args...; kwargs...)
 ensure_artifact_installed(name::AbstractString, artifacts_toml::AbstractString; kwargs...) =
     ensure_artifact_installed(string(name)::String, string(artifacts_toml)::String; kwargs...)
