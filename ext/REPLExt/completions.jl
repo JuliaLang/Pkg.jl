@@ -148,6 +148,18 @@ function complete_all_installed_packages(options, partial; hint::Bool, arguments
     return filter(pkg -> !(pkg in specified_names), packages)
 end
 
+function complete_registry_packages(options, partial; hint::Bool, arguments = [])
+    names = Set{String}()
+    for reg in Registry.reachable_registries()
+        for (_, entry) in reg
+            push!(names, entry.name)
+        end
+    end
+    result = sort!(collect(names))
+    specified_names = extract_specified_names(arguments)
+    return filter(pkg -> !(pkg in specified_names), result)
+end
+
 function complete_installed_packages_and_compat(options, partial; hint::Bool, arguments = [])
     env = try
         EnvCache()

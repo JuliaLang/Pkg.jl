@@ -262,6 +262,35 @@ compound_declarations = [
                 """,
         ],
         PSA[
+            :name => "dependents",
+            :api => API.dependents,
+            :should_splat => false,
+            :arg_count => 1 => Inf,
+            :arg_parser => parse_package,
+            :option_spec => [
+                PSA[:name => "all", :api => :all => true],
+            ],
+            :completions => :complete_registry_packages,
+            :description => "list packages that depend on the given package in reachable registries",
+            :help => md"""
+                    dependents [--all] pkg[=uuid] ...
+
+                List the direct dependents of `pkg` across all reachable registries.
+                By default only the count of indirect dependents is shown.
+                Use `--all` to also list all indirect dependents.
+
+                If a package name is ambiguous (multiple UUIDs), disambiguate with
+                `pkg=uuid` syntax.
+
+                **Examples**
+                ```
+                pkg> dependents JSON
+                pkg> dependents --all Example
+                pkg> dependents Example=7876af07-990d-54b4-ab0e-23690620f79a
+                ```
+                """,
+        ],
+        PSA[
             :name => "pin",
             :api => API.pin,
             :should_splat => false,

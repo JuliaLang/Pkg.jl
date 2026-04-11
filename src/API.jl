@@ -1696,6 +1696,133 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = 
 end
 
 
+###############
+# Dependents  #
+###############
+
+dependents(pkg::Union{AbstractString, PackageSpec}; kwargs...) =
+    dependents([pkg isa AbstractString ? PackageSpec(; name = pkg) : pkg]; kwargs...)
+dependents(pkgs::Vector{<:AbstractString}; kwargs...) =
+    dependents([PackageSpec(; name = pkg) for pkg in pkgs]; kwargs...)
+
+function dependents(pkgs::Vector{PackageSpec}; io::IO = stderr_f(), all::Bool = false)
+    require_not_empty(pkgs, :dependents)
+    Registry.download_default_registries(io)
+    registries = Registry.reachable_registries()
+    if isempty(registries)
+        printpkgstyle(io, :Warning, "No registries found")
+        return
+    end
+    for (i, pkg) in enumerate(pkgs)
+        i > 1 && println(io)
+        _show_dependents(io, registries, pkg; show_indirect = all)
+    end
+    return
+end
+
+function _resolve_package_in_registries(registries, pkg::PackageSpec)
+    # found maps uuid => (name, [registry descriptions])
+    found = Dict{UUID, Tuple{String, Vector{String}}}()
+    for reg in registries
+        if pkg.uuid !== nothing
+            if haskey(reg, pkg.uuid)
+                name = reg[pkg.uuid].name
+                val = get!(() -> (name, String[]), found, pkg.uuid)
+                push!(val[2], "$(reg.name) ($(reg.path))")
+            end
+        elseif pkg.name !== nothing
+            uuids = Registry.uuids_from_name(reg, pkg.name)
+            for uuid in uuids
+                name = reg[uuid].name
+                val = get!(() -> (name, String[]), found, uuid)
+                push!(val[2], "$(reg.name) ($(reg.path))")
+            end
+        end
+    end
+    return found
+end
+
+function _show_dependents(io::IO, registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec; show_indirect::Bool = false)
+    found = _resolve_package_in_registries(registries, pkg)
+
+    if isempty(found)
+        pkgerror("Package $(something(pkg.name, string(pkg.uuid))) not found in any registry")
+    end
+
+    if length(found) > 1 && pkg.uuid === nothing
+        name = pkg.name
+        lines = String[]
+        for (uuid, (_, reg_paths)) in found
+            push!(lines, "  $name=$uuid (in $(join(reg_paths, ", ")))")
+        end
+        sort!(lines)
+        pkgerror(
+            "Package name \"$name\" is ambiguous. It matches $(length(found)) UUIDs:\n" *
+                join(lines, "\n") *
+                "\nDisambiguate with: dependents $name={uuid}"
+        )
+    end
+
+    for (target_uuid, (target_name, reg_paths)) in found
+        short_uuid = string(target_uuid)[1:8]
+        printpkgstyle(io, :Dependents, "$target_name [$short_uuid]")
+        println(io, "  Found in: ", join(reg_paths, ", "))
+
+        for reg in registries
+            # Build reverse dependency map for this registry
+            reverse_deps = Dict{UUID, Set{UUID}}()
+            for (uuid, entry) in reg
+                info = Registry.registry_info(reg, entry)
+                all_dep_uuids = Set{UUID}()
+                for (_, deps_set) in info.deps
+                    union!(all_dep_uuids, deps_set)
+                end
+                for (_, weak_set) in info.weak_deps
+                    union!(all_dep_uuids, weak_set)
+                end
+                for dep_uuid in all_dep_uuids
+                    push!(get!(Set{UUID}, reverse_deps, dep_uuid), uuid)
+                end
+            end
+
+            # Direct dependents of target
+            direct = get(Set{UUID}, reverse_deps, target_uuid)
+
+            # Indirect dependents via BFS through reverse dependency graph
+            indirect = Set{UUID}()
+            queue = collect(direct)
+            while !isempty(queue)
+                current = popfirst!(queue)
+                for next in get(Set{UUID}, reverse_deps, current)
+                    if next != target_uuid && next ∉ direct && next ∉ indirect
+                        push!(indirect, next)
+                        push!(queue, next)
+                    end
+                end
+            end
+
+            direct_names = sort!([reg[uuid].name for uuid in direct if haskey(reg, uuid)])
+            n_indirect = length(indirect)
+
+            if !isempty(direct_names) || n_indirect > 0
+                printstyled(io, "  $(reg.name)"; bold = true)
+                println(io, " registry")
+                println(io, "    $(length(direct_names)) direct: ", join(direct_names, ", "))
+                if n_indirect > 0
+                    if show_indirect
+                        indirect_names = sort!([reg[uuid].name for uuid in indirect if haskey(reg, uuid)])
+                        println(io, "    $n_indirect indirect: ", join(indirect_names, ", "))
+                    else
+                        println(io, "    $n_indirect indirect")
+                    end
+                end
+            end
+        end
+    end
+    return
+end
+
+
 ########
 # Undo #
 ########

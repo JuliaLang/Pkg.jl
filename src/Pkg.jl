@@ -22,7 +22,7 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec, Apps
 
-public activate, add, build, compat, develop, free, gc, generate, instantiate,
+public activate, add, build, compat, dependents, develop, free, gc, generate, instantiate,
     pin, precompile, readonly, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
@@ -346,6 +346,16 @@ If `workspace` is true, this will consider all projects in the workspace and not
     This function requires at least Julia 1.9.
 """
 const why = API.why
+
+"""
+    Pkg.dependents(pkg::Union{String, PackageSpec})
+    Pkg.dependents(pkgs::Vector{PackageSpec}; all=false)
+
+List the direct dependents of `pkg` across all reachable registries.
+By default only the count of indirect dependents is shown; pass `all=true` to list them.
+If a package name is ambiguous (multiple UUIDs), use `PackageSpec(; name, uuid)` to disambiguate.
+"""
+const dependents = API.dependents
 
 """
     Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false)
