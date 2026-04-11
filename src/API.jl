@@ -1726,16 +1726,18 @@ function _resolve_package_in_registries(registries, pkg::PackageSpec)
     for reg in registries
         if pkg.uuid !== nothing
             if haskey(reg, pkg.uuid)
-                name = reg[pkg.uuid].name
-                val = get!(() -> (name, String[]), found, pkg.uuid)
-                push!(val[2], "$(reg.name) ($(reg.path))")
+                id = pkg.uuid
+                if !haskey(found, id)
+                    found[id] = (reg[id].name, String[])
+                end
+                push!(found[id][2], "$(reg.name) ($(reg.path))")
             end
         elseif pkg.name !== nothing
-            uuids = Registry.uuids_from_name(reg, pkg.name)
-            for uuid in uuids
-                name = reg[uuid].name
-                val = get!(() -> (name, String[]), found, uuid)
-                push!(val[2], "$(reg.name) ($(reg.path))")
+            for uuid in Registry.uuids_from_name(reg, pkg.name)
+                if !haskey(found, uuid)
+                    found[uuid] = (reg[uuid].name, String[])
+                end
+                push!(found[uuid][2], "$(reg.name) ($(reg.path))")
             end
         end
     end
