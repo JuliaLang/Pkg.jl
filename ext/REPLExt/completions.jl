@@ -34,11 +34,10 @@ function complete_local_dir(s, i1, i2)
 end
 
 function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
-    cmp = REPL.REPLCompletions.complete_path(s, i2, shell_escape = true)
-    cmp2 = cmp[2]
-    completions = [REPL.REPLCompletions.completion_text(p) for p in cmp[1]]
-    completions = filter!(completions) do x
-        Base.isaccessibledir(s[1:prevind(s, first(cmp2) - i1 + 1)] * x)
+    paths, dir, success = REPL.REPLCompletions.complete_path(s; cmd_escape = true)
+    completions = [REPL.REPLCompletions.completion_text(p) for p in paths]
+    filter!(completions) do x
+        Base.isaccessibledir(joinpath(dir, x))
     end
     if expanded_user
         if length(completions) == 1 && endswith(joinpath(homedir(), ""), first(completions))
@@ -48,8 +47,9 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
         end
         return completions, i1:oldi2, true
     end
-
-    return completions, cmp[2], !isempty(completions)
+    prefix = splitdir(s)[2]
+    startpos = i2 - lastindex(prefix) + 1
+    return completions, startpos:i2, !isempty(completions)
 end
 
 
