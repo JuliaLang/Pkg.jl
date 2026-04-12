@@ -3072,8 +3072,10 @@ function test(
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             proj = Base.locate_project_file(abspath(testdir(source_path)))
             env = EnvCache(proj)
-            # Instantiate test env
-            Pkg.instantiate(Context(env = env); allow_autoprecomp = false)
+            # Use a Context pointing at the test env so that instantiate and
+            # precompile operate on the test project rather than the parent.
+            test_ctx = Context(env = env; io = ctx.io)
+            Pkg.instantiate(test_ctx; allow_autoprecomp = false)
             status(env, ctx.registries; mode = PKGMODE_COMBINED, io = ctx.io, ignore_indent = false, show_usagetips = false)
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
@@ -3081,7 +3083,7 @@ function test(
                 cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
                 # Don't warn about already loaded packages, since we are going to run tests in a new
                 # subprocess anyway.
-                Pkg.precompile(; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
+                Pkg.precompile(test_ctx; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
