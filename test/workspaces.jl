@@ -175,13 +175,15 @@ end
             path = copy_test_package(dir, "WorkspaceTestInstantiate")
             cd(path) do
                 with_current_env() do
-                    @test !isfile("Manifest.toml")
-                    @test !isfile("test/Manifest.toml")
-                    Pkg.test()
-                    @test isfile("Manifest.toml")
-                    @test !isfile("test/Manifest.toml")
-                    rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
-                    Pkg.test()
+                    withenv("JULIA_PKG_PRECOMPILE_AUTO" => "1") do
+                        @test !isfile("Manifest.toml")
+                        @test !isfile("test/Manifest.toml")
+                        Pkg.test()
+                        @test isfile("Manifest.toml")
+                        @test !isfile("test/Manifest.toml")
+                        rm(joinpath(DEPOT_PATH[1], "packages", "Example"); recursive = true)
+                        Pkg.test()
+                    end
                 end
             end
         end
