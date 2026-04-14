@@ -22,6 +22,12 @@ import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path
 # Utils #
 #########
 
+# Syntax versioning was first introduced in Julia 1.14, so we clamp the
+# syntax version to this minimum to avoid enforcing old syntax rules for
+# packages with ancient compat declarations (e.g., compat.julia = "1").
+# This mirrors Base.NON_VERSIONED_SYNTAX in loading.jl.
+const NON_VERSIONED_SYNTAX = v"1.13"
+
 # Helper functions for yanked package checking
 function is_pkgversion_yanked(uuid::UUID, version::VersionNumber, registries::Vector{Registry.RegistryInstance} = Registry.reachable_registries())
     for reg in registries
@@ -394,29 +400,44 @@ this precedence order:
 2. If `compat.julia` is specified, use the minimum version from the compat range
 3. Otherwise, default to the current Julia VERSION
 
+The result is clamped to at least `NON_VERSIONED_SYNTAX` (v1.13) since syntax
+versioning was introduced in Julia 1.14. This prevents packages with ancient
+compat declarations (e.g., `julia = "1"`) from having their syntax version set
+too low, which would cause the parser to reject newer syntax features.
+
 This information is used to populate the `syntax.julia_version` field in the
 Manifest.toml, allowing Base's loading system to parse each package with the
 correct syntax version.
 """
 function get_project_syntax_version(p::Project)::VersionNumber
+    sv = nothing
+
     # First check syntax.julia_version entry in Project.other
     if p.julia_syntax_version !== nothing
-        return VersionNumber(syntax_table["julia_version"])
-    end
-
-    # If not found, default to minimum(compat["julia"])
-    if haskey(p.compat, "julia")
+        sv = p.julia_syntax_version
+    elseif haskey(p.compat, "julia")
+        # If not found, default to minimum(compat["julia"])
         julia_compat = p.compat["julia"]
         # Get the minimum version from the first range
         if !isempty(julia_compat.val.ranges)
             first_range = first(julia_compat.val.ranges)
             lower_bound = first_range.lower
-            return VersionNumber(lower_bound.t[1], lower_bound.t[2], lower_bound.t[3])
+            sv = VersionNumber(lower_bound.t[1], lower_bound.t[2], lower_bound.t[3])
         end
     end
 
-    # Finally, if neither of those are set, default to the current Julia version
-    return VERSION
+    # If no version was found, default to the current Julia version
+    if sv === nothing
+        sv = VERSION
+    end
+
+    # Clamp to at least NON_VERSIONED_SYNTAX since syntax versioning was
+    # introduced in Julia 1.14
+    if sv <= NON_VERSIONED_SYNTAX
+        sv = NON_VERSIONED_SYNTAX
+    end
+
+    return sv
 end
 
 # This has to be done after the packages have been downloaded
