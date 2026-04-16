@@ -2675,10 +2675,21 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
     end
 end
 
-function gen_test_code(source_path::String; test_args::Cmd)
+function gen_test_code(source_path::String; test_args::Cmd, maxfailures::Int = 0)
     test_file = testfile(source_path)
+    maxfailures_setup = if maxfailures > 0
+        """
+        let _Test = Base.require(Base.PkgId(Base.UUID("8dfed614-e22c-358e-b65c-d98082ae9e1e"), "Test"))
+            _Test.global_failure_count[] = 0
+            _Test.global_failure_limit = $maxfailures
+        end
+        """
+    else
+        ""
+    end
     return """
     $(Base.load_path_setup_code(false))
+    $maxfailures_setup
     cd($(repr(dirname(test_file))))
     append!(empty!(ARGS), $(repr(test_args.exec)))
     include($(repr(test_file)))
@@ -2976,24 +2987,25 @@ end
 testdir(source_path::String) = joinpath(source_path, "test")
 testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 
-function run_test_subprocess(io::IO, flags::Cmd, source_path::String, test_args::Cmd; with_threads::Bool)
-    code = gen_test_code(source_path; test_args)
+function run_test_subprocess(io::IO, flags::Cmd, source_path::String, test_args::Cmd; with_threads::Bool, maxfailures::Int = 0)
+    code = gen_test_code(source_path; test_args, maxfailures)
     threads_arg = with_threads ? `--threads=$(get_threads_spec())` : ``
     cmd = `$(Base.julia_cmd()) $threads_arg $(flags) --eval $code`
     return subprocess_handler(cmd, io, "Tests interrupted. Exiting the test process")
 end
 
-function run_test_subprocess_in_env(io::IO, flags::Cmd, source_path::String, test_args::Cmd)
+function run_test_subprocess_in_env(io::IO, flags::Cmd, source_path::String, test_args::Cmd; maxfailures::Int = 0)
     path_sep = Sys.iswindows() ? ';' : ':'
     return withenv("JULIA_LOAD_PATH" => "@$(path_sep)$(testdir(source_path))", "JULIA_PROJECT" => nothing) do
-        run_test_subprocess(io, flags, source_path, test_args; with_threads = false)
+        run_test_subprocess(io, flags, source_path, test_args; with_threads = false, maxfailures)
     end
 end
 
 function run_sandboxed_tests!(
         ctx::Context, pkg::PackageSpec, source_path::String, test_args::Cmd,
         coverage::Union{Bool, AbstractString}, julia_args::Cmd, test_fn,
-        pkgs_errored::Vector{Tuple{String, Base.Process}}
+        pkgs_errored::Vector{Tuple{String, Base.Process}};
+        maxfailures::Int = 0
     )
     test_fn !== nothing && test_fn()
     sandbox_ctx = Context(; io = ctx.io)
@@ -3013,7 +3025,7 @@ function run_sandboxed_tests!(
 
     printpkgstyle(ctx.io, :Testing, "Running tests...")
     flush(ctx.io)
-    p, interrupted = run_test_subprocess(ctx.io, flags, source_path, test_args; with_threads = true)
+    p, interrupted = run_test_subprocess(ctx.io, flags, source_path, test_args; with_threads = true, maxfailures)
     if success(p)
         printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
     elseif !interrupted
@@ -3028,7 +3040,8 @@ function test(
         test_fn = nothing,
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
-        allow_reresolve::Bool = true
+        allow_reresolve::Bool = true,
+        maxfailures::Int = 0
     )
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
@@ -3088,7 +3101,7 @@ function test(
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            p, interrupted = run_test_subprocess_in_env(ctx.io, flags, source_path, test_args)
+            p, interrupted = run_test_subprocess_in_env(ctx.io, flags, source_path, test_args; maxfailures)
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
             elseif !interrupted
@@ -3121,7 +3134,8 @@ function test(
         ) do
             run_sandboxed_tests!(
                 ctx, pkg, source_path, test_args,
-                coverage, julia_args, test_fn, pkgs_errored,
+                coverage, julia_args, test_fn, pkgs_errored;
+                maxfailures,
             )
         end
     end

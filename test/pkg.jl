@@ -252,6 +252,57 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
+    @testset "maxfailures" begin
+        mktempdir() do dir
+            pkg_path = joinpath(dir, "MaxFailuresPkg")
+            mkpath(joinpath(pkg_path, "src"))
+            write(joinpath(pkg_path, "Project.toml"), """
+                name = "MaxFailuresPkg"
+                uuid = "00000000-dead-beef-0000-000000000001"
+                version = "0.1.0"
+                """)
+            write(joinpath(pkg_path, "src", "MaxFailuresPkg.jl"), """
+                module MaxFailuresPkg
+                end
+                """)
+            mkpath(joinpath(pkg_path, "test"))
+            # 5 testsets: first 3 fail, last 2 pass
+            write(joinpath(pkg_path, "test", "runtests.jl"), """
+                using Test
+                @testset "A" begin; @test false; end
+                @testset "B" begin; @test false; end
+                @testset "C" begin; @test false; end
+                @testset "D" begin; @test true;  end
+                @testset "E" begin; @test true;  end
+                """)
+
+            Pkg.develop(Pkg.PackageSpec(path = pkg_path))
+
+            # Default: no limit — all testsets run.
+            iob = IOBuffer()
+            try; Pkg.test("MaxFailuresPkg"; io = iob); catch; end
+            out = String(take!(iob))
+            @test occursin("D", out) && occursin("E", out)
+
+            # maxfailures=0 means no limit (same as default).
+            iob = IOBuffer()
+            try; Pkg.test("MaxFailuresPkg"; maxfailures = 0, io = iob); catch; end
+            out = String(take!(iob))
+            @test occursin("D", out) && occursin("E", out)
+
+            # maxfailures=2 should stop after the 2nd failure.
+            iob = IOBuffer()
+            try; Pkg.test("MaxFailuresPkg"; maxfailures = 2, io = iob); catch; end
+            out = String(take!(iob))
+            @test occursin("Max failures reached", out)
+
+            # Negative value must error before launching any subprocess.
+            @test_throws Pkg.Types.PkgError Pkg.test("MaxFailuresPkg"; maxfailures = -1)
+
+            Pkg.rm("MaxFailuresPkg")
+        end
+    end
+
     @testset "coverage specific path" begin
         mktempdir() do tmp
             coverage_path = joinpath(tmp, "tracefile.info")
