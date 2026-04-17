@@ -268,6 +268,13 @@ end
             end
         end
     end
+    @testset "syntax julia_version" begin
+        @testset "dropbuild applied: dev build number dropped" begin
+            # syntax.julia_version should drop the DEV build number to avoid manifest churn
+            p = Pkg.Types.Project()
+            @test Pkg.Operations.get_project_syntax_version(p) == Pkg.Operations.dropbuild(VERSION)
+        end
+    end
 end
 
 @testset "Manifest registry tracking" begin
