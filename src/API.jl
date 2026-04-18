@@ -567,10 +567,10 @@ function test(
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
         allow_reresolve::Bool = true,
-        maxfailures::Int = 0,
+        maxfailures::Union{Nothing,Int} = nothing,
         kwargs...
     )
-    maxfailures >= 0 || pkgerror("`maxfailures` must be a non-negative integer, got $maxfailures")
+    maxfailures !== nothing && maxfailures < 0 && pkgerror("`maxfailures` must be a non-negative integer, got $maxfailures")
     julia_args = Cmd(julia_args)
     test_args = Cmd(test_args)
     Context!(ctx; kwargs...)

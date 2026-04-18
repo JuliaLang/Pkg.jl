@@ -22,8 +22,8 @@ compound_declarations = [
                 in the package directory. The option `--coverage` can be used to run the tests with
                 coverage enabled. The `startup.jl` file is disabled during testing unless
                 julia is started with `--startup-file=yes`. The option `--maxfailures=n` stops the
-                test run after `n` cumulative failures and errors. When `n` is 0 (the default)
-                all tests always run to completion.
+                test run after `n` cumulative failures or errors. When `n` is 0 the run stops on the
+                first failure. When not set, all tests always run to completion.
                 """,
         ],
         PSA[
