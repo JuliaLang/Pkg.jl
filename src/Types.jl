@@ -417,7 +417,7 @@ mutable struct EnvCache
     original_manifest::Manifest
 end
 
-function EnvCache(env::Union{Nothing, String} = nothing)
+function EnvCache(env::Union{Nothing, String} = nothing; snapshot_originals::Bool = true)
     # @show env
     project_file = find_project_file(env)
     # @show project_file
@@ -462,8 +462,8 @@ function EnvCache(env::Union{Nothing, String} = nothing)
         project,
         workspace,
         manifest,
-        deepcopy(project),
-        deepcopy(manifest),
+        snapshot_originals ? deepcopy(project) : project,
+        snapshot_originals ? deepcopy(manifest) : manifest,
     )
 
     return env′
