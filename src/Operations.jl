@@ -1836,7 +1836,7 @@ function gen_build_code(build_file::String; inherit_project::Bool = false, add_s
     # *unless* the parent julia session is started with --startup=yes explicitly.
     startup_flag = Base.JLOptions().startupfile == 1 ? "yes" : "no"
     return ```
-    $(Base.julia_cmd()) -O0 --color=no --history-file=no
+    $(Base.julia_cmd()) -q -O0 --color=no --history-file=no
     --startup-file=$startup_flag
     $(inherit_project ? `--project=$(Base.active_project())` : ``)
     --eval $code
@@ -2979,7 +2979,16 @@ testfile(source_path::String) = joinpath(testdir(source_path), "runtests.jl")
 function run_test_subprocess(io::IO, flags::Cmd, source_path::String, test_args::Cmd; with_threads::Bool)
     code = gen_test_code(source_path; test_args)
     threads_arg = with_threads ? `--threads=$(get_threads_spec())` : ``
-    cmd = `$(Base.julia_cmd()) $threads_arg $(flags) --eval $code`
+    # Suppress "Precompiling..." messages via `-q` to avoid spamming users with
+    # precompilation work that is routine and not actionable from their perspective.
+    #
+    # FIXME: This is only necessary because auto-precompile before test() is not
+    # reliable and may precompile packages that still need re-precompilation in
+    # the test subprocess. If that design is changed to be properly predictive,
+    # precompilation during test execution becomes rare and indicates a real
+    # problem, so this logging can be enabled again.
+    quiet_flag = "-q"
+    cmd = `$(Base.julia_cmd()) $(quiet_flag) $(threads_arg) $(flags) --eval $code`
     return subprocess_handler(cmd, io, "Tests interrupted. Exiting the test process")
 end
 
@@ -3007,7 +3016,7 @@ function run_sandboxed_tests!(
     flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
     if should_autoprecompile()
-        cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
+        cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) -q $(flags) --eval 'show(Base.CacheFlags())'`, String))
         Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
     end
 
@@ -3080,7 +3089,7 @@ function test(
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
             if should_autoprecompile()
-                cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
+                cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) -q $(flags) --eval 'show(Base.CacheFlags())'`, String))
                 # Don't warn about already loaded packages, since we are going to run tests in a new
                 # subprocess anyway.
                 Pkg.precompile(test_ctx; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
