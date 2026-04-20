@@ -2055,6 +2055,64 @@ end
 end
 
 #
+# # Dependents
+#
+@testset "dependents: REPL" begin
+    isolate() do
+        Pkg.REPLMode.TEST_MODE[] = true
+        api, opts = first(Pkg.pkg"dependents Foo")
+        @test api == Pkg.dependents
+        @test first(opts).name == "Foo"
+
+        api, args, opts = first(Pkg.pkg"dependents --all Foo")
+        @test api == Pkg.dependents
+        @test first(args).name == "Foo"
+        @test opts[:all] == true
+    end
+end
+
+@testset "dependents" begin
+    isolate() do
+        # Basic output structure: known package with dependents
+        io = IOBuffer()
+        Pkg.dependents("Parsers"; io)
+        str = String(take!(io))
+        @test occursin("Dependents", str)
+        @test occursin("Parsers", str)
+        @test occursin("direct:", str)
+        @test occursin("JSON", str)  # JSON depends on Parsers
+        @test occursin("indirect", str)
+
+        # --all flag shows indirect package names
+        io = IOBuffer()
+        Pkg.dependents("Parsers"; io, all = true)
+        str_all = String(take!(io))
+        @test occursin("indirect:", str_all)
+
+        # Without --all, indirect line has no colon (just count)
+        io = IOBuffer()
+        Pkg.dependents("Parsers"; io, all = false)
+        str_no_all = String(take!(io))
+        m = match(r"(\d+) indirect$"m, str_no_all)
+        @test m !== nothing
+        @test parse(Int, m[1]) > 0
+
+        # Package not in registry
+        @test_throws PkgError Pkg.dependents("ThisPackageDefinitelyDoesNotExist123456"; io)
+
+        # Lookup by UUID
+        io = IOBuffer()
+        Pkg.dependents(Pkg.PackageSpec(uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"); io)
+        str = String(take!(io))
+        @test occursin("Parsers", str)
+        @test occursin("direct:", str)
+
+        # Empty arguments
+        @test_throws PkgError Pkg.dependents(Pkg.PackageSpec[]; io)
+    end
+end
+
+#
 # # Update
 #
 @testset "update: input checking" begin

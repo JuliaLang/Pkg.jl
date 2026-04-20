@@ -1,6 +1,8 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Added `Pkg.dependents` / `pkg> dependents` command to list the direct and indirect dependents of a package across
+  all reachable registries. Use `--all` to expand indirect dependents.
 - During package source installation, Pkg now reports when a package has an Artifacts.toml but no artifacts match the
   current platform. ([#4646])
 
