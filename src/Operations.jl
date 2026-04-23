@@ -2134,6 +2134,11 @@ function check_registered(registries::Vector{Registry.RegistryInstance}, pkgs::V
                 end
             end
         end
+        registry_names = [reg.name for reg in registries]
+        msg *= "\n\nThe available registries are:\n - $(join(registry_names, "\n - "))\n"
+        if "General" ∉ registry_names
+            msg *= "\nNote: If you add a custom registry on a fresh Julia installation General won't be registered automatically and must be manually installed.\n"
+        end
         pkgerror(msg)
     end
     return nothing
