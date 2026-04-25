@@ -619,9 +619,21 @@ function wipe_snapshots!(graph::Graph)
     return graph
 end
 
-# system colors excluding whites/greys/blacks and error-red
-const CONFLICT_COLORS = [1:6; 10:14];
-pkgID_color(pkgID) = CONFLICT_COLORS[mod1(hash(pkgID), end)]
+# 256-color palette excluding whites/greys/blacks and error-red.
+const CONFLICT_COLORS = [
+    26, 28, 31, 32, 33, 34, 35, 36, 37, 38,
+    39, 40, 41, 42, 43, 44, 45, 49, 50, 51,
+    62, 63, 69, 70, 75, 76, 81, 82, 83, 87,
+    99, 105, 111, 112, 117, 118, 123, 129, 135,
+    141, 147, 153, 159, 165, 171, 177, 183, 189,
+    195, 201, 207, 213, 219,
+]
+
+function pkgID_color(pkgID)
+    uuid_range = findlast('[', pkgID):prevind(pkgID, lastindex(pkgID))
+    uuid_hash = foldl((h, c) -> 33h + UInt(c), codeunits(pkgID[uuid_range]); init = UInt(5381))
+    return CONFLICT_COLORS[mod1(uuid_hash, end)]
+end
 
 logstr(pkgID) = logstr(pkgID, pkgID)
 function logstr(pkgID, args...)
@@ -1052,6 +1064,48 @@ function collect_log_entries!(entries::Vector{ResolveLogEntry}, entry::ResolveLo
     return
 end
 
+function _conflict_summary(io::IO, graph::Graph, p0::Int; source::Union{Int, Nothing} = nothing, previously_allowed::Union{BitVector, Nothing} = nothing, restricted_to::Union{BitVector, Nothing} = nothing)
+    pvers = graph.data.pvers
+    target_id = pkgID(p0, graph)
+    if source !== nothing && previously_allowed !== nothing && restricted_to !== nothing
+        source_id = pkgID(source, graph)
+        if any(restricted_to)
+            printstyled(io, "| "; color = :light_black)
+            println(io, "Compatibility with ", logstr(source_id), " restricts ", logstr(target_id), " to ", _vs_string(p0, restricted_to, target_id, pvers), ".")
+        else
+            printstyled(io, "| "; color = :light_black)
+            println(io, "Compatibility with ", logstr(source_id), " leaves no compatible versions for ", logstr(target_id), ".")
+        end
+        if any(previously_allowed)
+            printstyled(io, "| "; color = :light_black)
+            println(io, "Existing constraints restrict ", logstr(target_id), " to ", _vs_string(p0, previously_allowed, target_id, pvers), ".")
+        end
+    else
+        printstyled(io, "| "; color = :light_black)
+        println(io, logstr(target_id), " has no versions left after applying the listed requirements.")
+    end
+    return
+end
+
+function resolver_error_msg(graph::Graph, p0::Int; err_msg_preamble::String = "", source::Union{Int, Nothing} = nothing, previously_allowed::Union{BitVector, Nothing} = nothing, restricted_to::Union{BitVector, Nothing} = nothing)
+    pkgs = graph.data.pkgs
+    rlog = graph.data.rlog
+    exact = rlog.exact
+    id(p0::Int) = pkgID(p0, graph)
+
+    err_msg = err_msg_preamble
+    if exact
+        err_msg *= "Unsatisfiable requirements detected for package $(logstr(id(p0))):\n"
+    else
+        err_msg *= "Resolve failed to satisfy requirements for package $(logstr(id(p0))):\n"
+    end
+    err_msg *= sprint(; context = stderr::IO) do io
+        _conflict_summary(io, graph, p0; source, previously_allowed, restricted_to)
+    end
+    err_msg *= sprint(showlog, rlog, pkgs[p0])
+    return chomp(err_msg)
+end
+
 # Show a recursive tree with requirements applied to a package, either directly or indirectly
 function _show(io::IO, rlog::ResolveLog, entry::ResolveLogEntry, indent::String, seen::IdDict, recursive::Bool)
     toplevel = (indent == _logindent)
@@ -1085,21 +1139,9 @@ is_julia(graph::Graph, p0::Int) = graph.data.pkgs[p0] == uuid_julia
 function check_constraints(graph::Graph)
     np = graph.np
     gconstr = graph.gconstr
-    pkgs = graph.data.pkgs
-    rlog = graph.data.rlog
-    exact = graph.data.rlog.exact
-
-    id(p0::Int) = pkgID(p0, graph)
-
     for p0 in 1:np
         any(gconstr[p0]) && continue
-        if exact
-            err_msg = "Unsatisfiable requirements detected for package $(logstr(id(p0))):\n"
-        else
-            err_msg = "Resolve failed to satisfy requirements for package $(logstr(id(p0))):\n"
-        end
-        err_msg *= sprint(showlog, rlog, pkgs[p0])
-        throw(ResolverError(chomp(err_msg)))
+        throw(ResolverError(resolver_error_msg(graph, p0)))
     end
     return true
 end
@@ -1185,14 +1227,7 @@ function propagate_constraints!(graph::Graph, sources::Set{Int} = Set{Int}(); lo
                     push!(staged_next, p1)
                 end
                 if !any(gconstr1)
-                    err_msg = err_msg_preamble # currently used by validate_versions!
-                    if exact
-                        err_msg *= "Unsatisfiable requirements detected for package $(logstr(id(p1))):\n"
-                    else
-                        err_msg *= "Resolve failed to satisfy requirements for package $(logstr(id(p1))):\n"
-                    end
-                    err_msg *= sprint(showlog, rlog, pkgs[p1])
-                    throw(ResolverError(chomp(err_msg)))
+                    throw(ResolverError(resolver_error_msg(graph, p1; err_msg_preamble, source = p0, previously_allowed = old_gconstr1, restricted_to = added_constr1)))
                 end
             end
         end
