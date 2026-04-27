@@ -584,7 +584,7 @@ Since Julia 1.5, `https://pkg.julialang.org` provided by the JuliaLang organizat
 pkg server. In most cases, this should be transparent, but users can still set/unset a pkg server
 upstream via the environment variable `JULIA_PKG_SERVER`.
 
-```julia
+```julia-repl
 # manually set it to some pkg server
 julia> ENV["JULIA_PKG_SERVER"] = "pkg.julialang.org"
 "pkg.julialang.org"

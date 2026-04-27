@@ -546,7 +546,7 @@ end
         force::Bool = false,
         verbose::Bool = false,
         quiet_download::Bool = false,
-        io::IO=stderr,
+        io::IO = stderr,
     )
 
 Helper method to download tarball located at `url`, verify it matches the
@@ -667,9 +667,11 @@ end
 
 
 """
-    verify(path::AbstractString, hash::AbstractString;
-           verbose::Bool = false, report_cache_status::Bool = false,
-           details::Union{Vector{String},Nothing} = nothing)
+    verify(
+        path::AbstractString, hash::AbstractString;
+        verbose::Bool = false, report_cache_status::Bool = false,
+        details::Union{Vector{String}, Nothing} = nothing
+    )
 
 Given a file `path` and a `hash`, calculate the SHA256 of the file and compare
 it to `hash`.  This method caches verification results in a `"\$(path).sha256"`
