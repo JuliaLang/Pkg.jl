@@ -632,7 +632,7 @@ function logstr(pkgID, args...)
 end
 
 """
-    range_compressed_versionspec(pool, subset=pool)
+    range_compressed_versionspec(pool, subset = pool)
 
  - `pool`: all versions that exist (a superset of `subset`)
  - `subset`: the subset of those versions that we want to include in the spec.
