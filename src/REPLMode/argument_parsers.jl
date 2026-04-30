@@ -556,6 +556,13 @@ end
 #
 # # Option Maps
 #
+function do_maxfailures(x::String)
+    n = tryparse(Int, x)
+    n === nothing && pkgerror("`--maxfailures` requires a non-negative integer argument, got $(repr(x))")
+    n >= 0 || pkgerror("`--maxfailures` requires a non-negative integer argument, got $n")
+    return n
+end
+
 function do_preserve(x::String)
     x == "installed"        && return Types.PRESERVE_ALL_INSTALLED
     x == "all"              && return Types.PRESERVE_ALL

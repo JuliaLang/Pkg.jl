@@ -3028,7 +3028,8 @@ function test(
         test_fn = nothing,
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
-        allow_reresolve::Bool = true
+        allow_reresolve::Bool = true,
+        maxfailures::Union{Nothing,Int} = nothing
     )
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
@@ -3066,6 +3067,7 @@ function test(
 
     # sandbox
     pkgs_errored = Tuple{String, Base.Process}[]
+    maxfailures_env = maxfailures !== nothing ? ("JULIA_TEST_MAXFAILURES" => string(maxfailures),) : ()
     for (pkg, source_path) in zip(pkgs, source_paths)
         # TODO: DRY with code below.
         # If the test is in the our "workspace", no need to create a temp env etc, just activate and run thests
@@ -3088,7 +3090,9 @@ function test(
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
             flush(ctx.io)
-            p, interrupted = run_test_subprocess_in_env(ctx.io, flags, source_path, test_args)
+            p, interrupted = withenv(maxfailures_env...) do
+                run_test_subprocess_in_env(ctx.io, flags, source_path, test_args)
+            end
             if success(p)
                 printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
             elseif !interrupted
@@ -3112,17 +3116,19 @@ function test(
         end
         # now we sandbox
         printpkgstyle(ctx.io, :Testing, pkg.name)
-        sandbox(
-            ctx, pkg, testdir(source_path), test_project_override;
-            preferences = test_project_preferences,
-            force_latest_compatible_version,
-            allow_earlier_backwards_compatible_versions,
-            allow_reresolve,
-        ) do
-            run_sandboxed_tests!(
-                ctx, pkg, source_path, test_args,
-                coverage, julia_args, test_fn, pkgs_errored,
-            )
+        withenv(maxfailures_env...) do
+            sandbox(
+                ctx, pkg, testdir(source_path), test_project_override;
+                preferences = test_project_preferences,
+                force_latest_compatible_version,
+                allow_earlier_backwards_compatible_versions,
+                allow_reresolve,
+            ) do
+                run_sandboxed_tests!(
+                    ctx, pkg, source_path, test_args,
+                    coverage, julia_args, test_fn, pkgs_errored,
+                )
+            end
         end
     end
 
