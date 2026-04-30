@@ -3258,13 +3258,33 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && Base.in_sysimage(pkgid)
         pkgorigin = get(Base.pkgorigins, pkgid, nothing)
         if pkgorigin !== nothing && pkg.version !== nothing && pkg.version == pkgorigin.version
-            return ["sysimage"], max_version, max_version_in_compat
+            return ["sysimage"], max_version, max_version_in_compat, String[]
         end
     end
 
     # Check compat of project
     if pkg.version == max_version_in_compat && max_version_in_compat != max_version
-        return ["compat"], max_version, max_version_in_compat
+        # In a workspace, identify which projects impose the compat restriction
+        compat_projects = String[]
+        if !isempty(env.workspace)
+            if haskey(env.project.compat, pkg.name)
+                main_compat = get_compat(env.project, pkg.name)
+                if !(max_version in main_compat)
+                    name = env.project.name
+                    push!(compat_projects, name !== nothing ? name : "main project")
+                end
+            end
+            for (path, project) in env.workspace
+                if haskey(project.compat, pkg.name)
+                    ws_compat = get_compat(project, pkg.name)
+                    if !(max_version in ws_compat)
+                        name = project.name
+                        push!(compat_projects, name !== nothing ? name : basename(dirname(path)))
+                    end
+                end
+            end
+        end
+        return ["compat"], max_version, max_version_in_compat, sort!(compat_projects)
     end
 
     manifest_info = get(manifest, pkg.uuid, nothing)
@@ -3309,7 +3329,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         push!(packages_holding_back, "julia")
     end
 
-    return sort!(unique!(packages_holding_back)), max_version, max_version_in_compat
+    return sort!(unique!(packages_holding_back)), max_version, max_version_in_compat, String[]
 end
 
 function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manifest = true, workspace = false)
@@ -3393,7 +3413,7 @@ struct PackageStatusData
     downloaded::Bool
     upgradable::Bool
     heldback::Bool
-    compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
+    compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber, Vector{String}}}
     changed::Bool
     extinfo::Union{Nothing, Vector{ExtInfo}}
     deprecation_info::Union{Nothing, Dict{String, Any}}
@@ -3587,14 +3607,18 @@ function print_status(
         end
 
         if outdated && !diff && pkg.compat_data !== nothing
-            packages_holding_back, max_version, max_version_compat = pkg.compat_data
+            packages_holding_back, max_version, max_version_compat, compat_projects = pkg.compat_data
             if pkg.new.version !== max_version_compat && max_version_compat != max_version
                 printstyled(io, " [<v", max_version_compat, "]", color = :light_magenta)
                 printstyled(io, ",")
             end
             printstyled(io, " (<v", max_version, ")"; color = Base.warn_color())
             if packages_holding_back == ["compat"]
-                printstyled(io, " [compat]"; color = :light_magenta)
+                if isempty(compat_projects)
+                    printstyled(io, " [compat]"; color = :light_magenta)
+                else
+                    printstyled(io, " [compat: ", join(compat_projects, ", "), "]"; color = :light_magenta)
+                end
             elseif packages_holding_back == ["sysimage"]
                 printstyled(io, " [sysimage]"; color = :light_magenta)
             else
