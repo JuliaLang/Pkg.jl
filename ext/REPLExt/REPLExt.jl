@@ -136,7 +136,10 @@ function on_done(s, buf, ok, repl)
     ok || return REPL.transition(s, :abort)
     input = String(take!(buf))
     REPL.reset(repl)
-    do_cmds(repl, input)
+    # Opt this task in to the precompile keyboard menu (see JuliaLang/julia#61698).
+    task_local_storage(:precompile_key_controls, true) do
+        do_cmds(repl, input)
+    end
     REPL.prepare_next(repl)
     REPL.reset_state(s)
     return s.current_mode.sticky || REPL.transition(s, main)
