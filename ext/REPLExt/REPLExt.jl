@@ -136,7 +136,10 @@ function on_done(s, buf, ok, repl)
     ok || return REPL.transition(s, :abort)
     input = String(take!(buf))
     REPL.reset(repl)
-    do_cmds(repl, input)
+    # Mark this task as the foreground task while running the Pkg command so that
+    # interactive features (e.g. the precompile keyboard menu) recognize it as the
+    # task currently owning stdin. See JuliaLang/julia#61698.
+    Base.@as_foreground_task do_cmds(repl, input)
     REPL.prepare_next(repl)
     REPL.reset_state(s)
     return s.current_mode.sticky || REPL.transition(s, main)
