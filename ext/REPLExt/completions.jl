@@ -34,7 +34,10 @@ function complete_local_dir(s, i1, i2)
 end
 
 function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
-    paths, dir, success = REPL.REPLCompletions.complete_path(s; cmd_escape = true)
+    # Don't shell-escape: Pkg's REPL lexer doesn't interpret backslashes or
+    # other shell metacharacters, and shell-escaping path separators (e.g.
+    # `\` on Windows becoming `'foo\'`) breaks the `isaccessibledir` filter.
+    paths, dir, success = REPL.REPLCompletions.complete_path(s)
     completions = [REPL.REPLCompletions.completion_text(p) for p in paths]
     filter!(completions) do x
         Base.isaccessibledir(joinpath(dir, x))
