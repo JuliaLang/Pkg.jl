@@ -304,7 +304,7 @@ end
             Registry.update(; depots = [depot_off_path], io, update_cooldown = Second(0))
             closewrite(io)
             output = read(io, String)
-            @test occursin("registry at `$(depot_off_path)", output)
+            @test occursin("registry at `$(Base.contractuser(depot_off_path))", output)
 
             # Show that we can install `Example` off of that depot
             empty!(Base.DEPOT_PATH)
