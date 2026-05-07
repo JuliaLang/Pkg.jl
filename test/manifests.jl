@@ -275,6 +275,86 @@ end
             @test Pkg.Operations.get_project_syntax_version(p) == Pkg.Operations.dropbuild(VERSION)
         end
     end
+
+    @testset "update_on_mismatch" begin
+        @testset "manifest from a different julia minor version" begin
+            if VERSION >= v"1.8"
+                # Without the flag, just warns and keeps the stale manifest
+                reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
+                    Pkg.activate(env_dir)
+                    @test_logs (:warn, r"The active manifest file") Pkg.instantiate()
+                    @test Pkg.Types.Context().env.manifest.julia_version == v"1.7.0-DEV"
+                end
+                # With update_on_mismatch=true, falls back to update so the manifest
+                # is regenerated for the current Julia version
+                reference_manifest_isolated_test("v2.0") do env_dir, env_manifest
+                    Pkg.activate(env_dir)
+                    Pkg.instantiate(update_on_mismatch = true)
+                    @test Pkg.Types.Context().env.manifest.julia_version == Pkg.Operations.dropbuild(VERSION)
+                end
+            end
+        end
+
+        @testset "manifest stale due to compat change" begin
+            sync_msg_str = r"The project dependencies or compat requirements have changed since the manifest was last resolved."
+
+            # Default: instantiate just warns, manifest stays stale
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
+                Pkg.add("Example")
+                Pkg.compat("Example", "0.4")
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
+                @test_logs (:warn, sync_msg_str) Pkg.instantiate()
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
+            end
+
+            # update_on_mismatch=true: falls back to update, manifest becomes current
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
+                Pkg.add("Example")
+                Pkg.compat("Example", "0.4")
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
+                Pkg.instantiate(update_on_mismatch = true)
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
+            end
+        end
+
+        @testset "no mismatch: update_on_mismatch=true is a no-op" begin
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
+                Pkg.add("Example")
+                ex_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+                version_before = Pkg.Types.Context().env.manifest[ex_uuid].version
+                Pkg.instantiate(update_on_mismatch = true)
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
+                @test Pkg.Types.Context().env.manifest[ex_uuid].version == version_before
+            end
+        end
+
+        @testset "undo reverts the fallback even as first op" begin
+            # If instantiate(update_on_mismatch=true) is the first op in a session and
+            # triggers the fallback, the pre-update state must be snapshotted so that
+            # Pkg.undo can revert to it.
+            isolate(loaded_depot = true) do
+                cd_tempdir() do tmp
+                    Pkg.activate(".")
+                    Pkg.add("Example")
+                    Pkg.compat("Example", "0.4")
+                    proj_file = Pkg.Types.Context().env.project_file
+                    # Simulate "fresh session" by clearing undo state
+                    delete!(Pkg.API.undo_entries, proj_file)
+                    Pkg.API.saved_initial_snapshot[] = false
+                    ex_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+                    version_pre = Pkg.Types.Context().env.manifest[ex_uuid].version
+                    Pkg.instantiate(update_on_mismatch = true)
+                    version_post = Pkg.Types.Context().env.manifest[ex_uuid].version
+                    @test version_post != version_pre
+                    Pkg.undo()
+                    @test Pkg.Types.Context().env.manifest[ex_uuid].version == version_pre
+                end
+            end
+        end
+    end
 end
 
 @testset "Manifest registry tracking" begin

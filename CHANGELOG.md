@@ -1,6 +1,10 @@
 Pkg v1.14 Release Notes
 =======================
 
+- `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
+  `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
+  or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and
+  helper environments where any compatible set of dependency versions is acceptable. ([#4678])
 - During package source installation, Pkg now reports when a package has an Artifacts.toml but no artifacts match the
   current platform. ([#4646])
 
@@ -217,3 +221,4 @@ Pkg v1.7 Release Notes
 [#4305]: https://github.com/JuliaLang/Pkg.jl/pull/4305
 [#4170]: https://github.com/JuliaLang/Pkg.jl/pull/4170
 [#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
+[#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
