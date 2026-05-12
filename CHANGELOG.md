@@ -1,6 +1,10 @@
 Pkg v1.14 Release Notes
 =======================
 
+- `Pkg.activate` now warns when packages already loaded into the session differ
+  from what the newly activated environment specifies (different version or
+  source path). This makes accidental reproducibility issues and unnecessary
+  recompilation easier to spot. ([#4679])
 - During package source installation, Pkg now reports when a package has an Artifacts.toml but no artifacts match the
   current platform. ([#4646])
 
@@ -217,3 +221,4 @@ Pkg v1.7 Release Notes
 [#4305]: https://github.com/JuliaLang/Pkg.jl/pull/4305
 [#4170]: https://github.com/JuliaLang/Pkg.jl/pull/4170
 [#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
+[#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679

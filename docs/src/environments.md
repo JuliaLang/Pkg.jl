@@ -84,6 +84,14 @@ If you already have a resolved `Manifest.toml`, then you will still need to ensu
 
 In short, [`instantiate`](@ref Pkg.instantiate) is your friend to make sure an environment is ready to use. If there's nothing to do, `instantiate` does nothing.
 
+!!! note "Loaded packages and activation"
+    Activating an environment does not unload packages that have already been
+    loaded into the current Julia session. If a package is loaded from a
+    different version or source path than the newly activated environment
+    specifies, Pkg prints a warning so the discrepancy is visible. Restart
+    Julia (or use a fresh subprocess) to pick up the activated environment's
+    versions cleanly.
+
 ## Returning to the default environment
 
 To return to the default environment after working in a project environment, simply call `activate` with no arguments:
