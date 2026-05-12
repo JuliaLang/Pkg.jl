@@ -1293,7 +1293,8 @@ function instantiate(
         ctx::Context; manifest::Union{Bool, Nothing} = nothing,
         update_registry::Bool = true, verbose::Bool = false,
         platform::AbstractPlatform = HostPlatform(), allow_build::Bool = true, allow_autoprecomp::Bool = true,
-        workspace::Bool = false, julia_version_strict::Bool = false, kwargs...
+        workspace::Bool = false, julia_version_strict::Bool = false,
+        update_on_mismatch::Bool = false, kwargs...
     )
     Context!(ctx; kwargs...)
     if Registry.download_default_registries(ctx.io)
@@ -1302,7 +1303,9 @@ function instantiate(
     Operations.ensure_manifest_registries!(ctx)
     if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
-        Types.check_manifest_julia_version_compat(_manifest, ctx.env.manifest_file; julia_version_strict)
+        # Skip the version check when update_on_mismatch is set; the recursion below
+        # will detect the mismatch via manifest_is_mismatched and fall back to update.
+        update_on_mismatch || Types.check_manifest_julia_version_compat(_manifest, ctx.env.manifest_file; julia_version_strict)
         deps = Dict{String, String}()
         for (uuid, pkg) in _manifest
             if pkg.name in keys(deps)
@@ -1312,7 +1315,7 @@ function instantiate(
             deps[pkg.name] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
-        return instantiate(Context(); manifest = manifest, update_registry = update_registry, allow_autoprecomp = allow_autoprecomp, verbose = verbose, platform = platform, kwargs...)
+        return instantiate(Context(); manifest = manifest, update_registry = update_registry, allow_autoprecomp = allow_autoprecomp, verbose = verbose, platform = platform, update_on_mismatch = update_on_mismatch, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
@@ -1324,6 +1327,23 @@ function instantiate(
     if !isfile(ctx.env.manifest_file) && manifest == true
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
+
+    if update_on_mismatch && Operations.manifest_is_mismatched(ctx.env)
+        # We're about to mutate the manifest via `up`, so save a pre-mutation snapshot
+        # for `Pkg.undo` to revert to (the convenience macro at the top of this file
+        # does this for other mutating ops, but `instantiate` is not in its list).
+        # Call with no args so the snapshot reads fresh state from disk; passing
+        # `ctx.env` would share the manifest reference that `up` mutates in place.
+        if !saved_initial_snapshot[]
+            add_snapshot_to_undo()
+            saved_initial_snapshot[] = true
+        end
+        printpkgstyle(ctx.io, :Update, "manifest does not match project or Julia version, falling back to `Pkg.update()`", color = Base.info_color())
+        up(ctx; update_registry, mode = workspace ? PKGMODE_MANIFEST : PKGMODE_PROJECT)
+        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+        return
+    end
+
     Types.check_manifest_julia_version_compat(ctx.env.manifest, ctx.env.manifest_file; julia_version_strict)
 
     if Operations.is_manifest_current(ctx.env) === false

@@ -617,7 +617,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false)
+    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false, update_on_mismatch=false)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -629,6 +629,13 @@ redirecting to the `build.log` file.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
+
+`update_on_mismatch=true` falls back to [`Pkg.update`](@ref) when the existing manifest cannot
+be used as-is — for example, when the project's dependencies or compat bounds have changed
+since the manifest was last resolved, or when the manifest was resolved with a different Julia
+minor version. The default (`false`) preserves the existing behavior of warning or erroring in
+those cases. This is intended for tooling and helper environments where any version of the
+dependencies that satisfies the project is acceptable, and the goal is "just make it work".
 
 After packages have been installed the project will be precompiled.
 See more and how to disable auto-precompilation at [Environment Precompilation](@ref).
