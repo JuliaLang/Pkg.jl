@@ -276,6 +276,9 @@ end
 
 update(pkgs_or_apps::String) = update([pkgs_or_apps])
 function update(pkgs_or_apps::Vector)
+    if isempty(pkgs_or_apps)
+        return update(nothing)
+    end
     for pkg_or_app in pkgs_or_apps
         if pkg_or_app isa String
             pkg_or_app = PackageSpec(pkg_or_app)
@@ -292,19 +295,21 @@ function update(pkg::Union{PackageSpec, Nothing} = nothing)
     deps = Pkg.Operations.load_manifest_deps(manifest)
     for dep in deps
         info = manifest.deps[dep.uuid]
-        if pkg === nothing || info.name !== pkg.name
+        if pkg !== nothing && info.name !== pkg.name
             continue
         end
         Pkg.activate(joinpath(app_env_folder(), info.name)) do
             # precompile only after updating all apps?
             Pkg.update()
         end
-        sourcepath = abspath(source_path(ctx.env.manifest_file, info))
-        project = get_project(sourcepath)
-        # Get the tree hash from the project file
+        # Resolve package source from the updated sub-env manifest. Relative `path` entries (e.g. ".")
+        # are relative to *this* manifest's directory, not the outer AppManifest.toml.
         manifest_file = manifestfile_path(joinpath(app_env_folder(), info.name))
         manifest_app = Pkg.Types.read_manifest(manifest_file)
         manifest_entry = manifest_app.deps[info.uuid]
+        sourcepath = source_path(manifest_file, manifest_entry)
+        sourcepath === nothing && error("could not resolve source path for app package $(info.name)")
+        project = get_project(abspath(sourcepath))
 
         entry = PackageEntry(;
             apps = project.apps, name = manifest_entry.name, version = manifest_entry.version, tree_hash = manifest_entry.tree_hash,
