@@ -321,7 +321,7 @@ end
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel = Operations.default_preserve(),
         platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true,
-        prefer_loaded_versions::Bool = true, kwargs...
+        prefer_loaded_versions::Bool = Pkg.in_repl_mode(), kwargs...
     )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)

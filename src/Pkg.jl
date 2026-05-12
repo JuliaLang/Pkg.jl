@@ -162,8 +162,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=true)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=true)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -177,10 +177,11 @@ To add as an extra dep (in the `[extras]` field) set `target=:extras`.
 
 ## Loaded Version Preference
 
-By default, when adding packages, Pkg will prefer versions of packages (and their dependencies) that are
-already loaded in the current Julia session. This helps maintain compatibility with code already running
-in your session. To disable this behavior and resolve versions independently of what's currently loaded,
-set `prefer_loaded_versions=false`.
+When adding packages from the Pkg REPL mode (`pkg> add`), Pkg will by default prefer versions of packages
+(and their dependencies) that are already loaded in the current Julia session. This helps maintain
+compatibility with code already running in your session. When calling `Pkg.add` programmatically the
+default is the opposite: versions are resolved independently of what's currently loaded, for more
+reproducible behavior. Pass `prefer_loaded_versions=true`/`false` to override the default.
 
 !!! compat "Julia 1.13"
     The `prefer_loaded_versions` kwarg requires at least Julia 1.13.
