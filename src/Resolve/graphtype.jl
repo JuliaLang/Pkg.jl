@@ -246,7 +246,8 @@ mutable struct Graph
             reqs::Requires,
             fixed::Dict{UUID, Fixed},
             verbose::Bool = false,
-            julia_version::Union{VersionNumber, Nothing} = VERSION
+            julia_version::Union{VersionNumber, Nothing} = VERSION;
+            workspace_reqs::Set{UUID} = Set{UUID}()
         )
 
         # Tell the resolver about julia itself
@@ -395,7 +396,7 @@ mutable struct Graph
         )
 
         _add_fixed!(graph, fixed)
-        _add_reqs!(graph, reqs, :explicit_requirement)
+        _add_reqs!(graph, reqs, :explicit_requirement; workspace_reqs)
 
         @assert check_consistency(graph)
         check_constraints(graph)
@@ -431,7 +432,7 @@ function add_reqs!(graph::Graph, reqs::Requires)
     return graph
 end
 
-function _add_reqs!(graph::Graph, reqs::Requires, reason; weak_reqs::Set{UUID} = Set{UUID}())
+function _add_reqs!(graph::Graph, reqs::Requires, reason; weak_reqs::Set{UUID} = Set{UUID}(), workspace_reqs::Set{UUID} = Set{UUID}())
     gconstr = graph.gconstr
     spp = graph.spp
     req_inds = graph.req_inds
@@ -450,8 +451,9 @@ function _add_reqs!(graph::Graph, reqs::Requires, reason; weak_reqs::Set{UUID} =
         new_constr[end] = weak
         old_constr = copy(gconstr[rp0])
         gconstr[rp0] .&= new_constr
+        log_reason = reason ≡ :explicit_requirement && rp ∈ workspace_reqs ? :workspace_requirement : reason
         reason ≡ :explicit_requirement && push!(req_inds, rp0)
-        old_constr ≠ gconstr[rp0] && log_event_req!(graph, rp, rvs, reason)
+        old_constr ≠ gconstr[rp0] && log_event_req!(graph, rp, rvs, log_reason)
     end
     return graph
 end
@@ -730,9 +732,13 @@ function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
     id = pkgID(rp, rlog)
     msg = "restricted to versions $(logstr(id, rvs)) by "
     if reason isa Symbol
-        @assert reason === :explicit_requirement
+        @assert reason === :explicit_requirement || reason === :workspace_requirement
         other_entry = nothing
-        msg *= "an explicit requirement"
+        if reason === :workspace_requirement
+            msg *= "an explicit requirement (workspace)"
+        else
+            msg *= "an explicit requirement"
+        end
     else
         other_p, other_entry = reason::Tuple{UUID, ResolveLogEntry}
         if other_p == uuid_julia
@@ -743,7 +749,7 @@ function log_event_req!(graph::Graph, rp::UUID, rvs::VersionSpec, reason)
         end
     end
     rp0 = pdict[rp]
-    @assert !gconstr[rp0][end] || reason ≢ :explicit_requirement
+    @assert !gconstr[rp0][end] || (reason ≢ :explicit_requirement && reason ≢ :workspace_requirement)
     if any(gconstr[rp0])
         msg *= ", leaving only versions: $(_vs_string(rp0, gconstr[rp0], id, pvers))"
     else

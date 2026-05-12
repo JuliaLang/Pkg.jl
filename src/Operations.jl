@@ -823,8 +823,16 @@ function resolve_versions!(
     # happened on a different julia version / commit and the stdlib version in the manifest is not the current stdlib version
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid, julia_version) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
+    # Collect UUIDs that are deps of workspace projects but not the main project
+    workspace_reqs = Set{UUID}()
+    main_project_deps = Set{UUID}(values(env.project.deps))
+    for (_, project) in env.workspace
+        for (_, uuid) in project.deps
+            uuid ∉ main_project_deps && push!(workspace_reqs, uuid)
+        end
+    end
     deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
-    graph = Resolve.Graph(deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version)
+    graph = Resolve.Graph(deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version; workspace_reqs)
     Resolve.simplify_graph!(graph)
     vers = Resolve.resolve(graph)
 
