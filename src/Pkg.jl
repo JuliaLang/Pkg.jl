@@ -162,8 +162,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps)
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -174,6 +174,18 @@ added automatically with a lower bound of the added version.
 
 To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
 To add as an extra dep (in the `[extras]` field) set `target=:extras`.
+
+## Loaded Version Preference
+
+When adding packages from the Pkg REPL mode (`pkg> add`), Pkg will by default prefer versions of packages
+(and their dependencies) that are already loaded in the current Julia session. This helps maintain
+compatibility with code already running in your session. Run `pkg> up` afterwards to update to the latest
+compatible versions. When calling `Pkg.add` programmatically the default is the opposite: versions are
+resolved independently of what's currently loaded, for more reproducible behavior. Pass
+`prefer_loaded_versions=true`/`false` to override the default.
+
+!!! compat "Julia 1.13"
+    The `prefer_loaded_versions` kwarg requires at least Julia 1.13.
 
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
@@ -213,6 +225,7 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 Pkg.add("Example") # Add a package from registry
 Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
 Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
+Pkg.add("Example"; prefer_loaded_versions=true) # Prefer the version of Example already loaded in this session, if any
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
