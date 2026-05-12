@@ -611,7 +611,7 @@ const UsageDict = Dict{String, DateTime}
 const UsageByDepotDict = Dict{String, UsageDict}
 
 """
-    gc(ctx::Context=Context(); verbose=false, force=false, kwargs...)
+    gc(ctx::Context = Context(); verbose = false, force = false, kwargs...)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then

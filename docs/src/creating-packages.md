@@ -205,10 +205,12 @@ A package is built by executing the file `deps/build.jl`.
 ```julia-repl
 julia> mkpath("deps");
 
-julia> write("deps/build.jl",
-             """
-             println("I am being built...")
-             """);
+julia> write(
+           "deps/build.jl",
+           """
+           println("I am being built...")
+           """
+       );
 
 (HelloWorld) pkg> build
   Building HelloWorld → `deps/build.log`
@@ -221,10 +223,12 @@ I am being built...
 If the build step fails, the output of the build step is printed to the console
 
 ```julia-repl
-julia> write("deps/build.jl",
-             """
-             error("Ooops")
-             """);
+julia> write(
+           "deps/build.jl",
+           """
+           error("Ooops")
+           """
+       );
 
 (HelloWorld) pkg> build
     Building HelloWorld → `~/HelloWorld/deps/build.log`
@@ -253,10 +257,12 @@ When a package is tested the file `test/runtests.jl` is executed:
 ```julia-repl
 julia> mkpath("test");
 
-julia> write("test/runtests.jl",
-             """
-             println("Testing...")
-             """);
+julia> write(
+           "test/runtests.jl",
+           """
+           println("Testing...")
+           """
+       );
 
 (HelloWorld) pkg> test
    Testing HelloWorld
@@ -328,11 +334,13 @@ HelloWorld = {path = ".."}
 You can now use `Test` in the test script:
 
 ```julia-repl
-julia> write("test/runtests.jl",
-             """
-             using HelloWorld, Test
-             @test 1 == 1
-             """);
+julia> write(
+           "test/runtests.jl",
+           """
+           using HelloWorld, Test
+           @test 1 == 1
+           """
+       );
 
 (HelloWorld/test) pkg> activate .
 

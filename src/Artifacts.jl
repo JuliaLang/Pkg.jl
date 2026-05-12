@@ -62,7 +62,7 @@ function create_artifact(f::Function)
 end
 
 """
-    remove_artifact(hash::SHA1; honor_overrides::Bool=false)
+    remove_artifact(hash::SHA1; honor_overrides::Bool = false)
 
 Removes the given artifact (identified by its SHA1 git tree hash) from disk.  Note that
 if an artifact is installed in multiple depots, it will be removed from all of them.  If
@@ -90,7 +90,7 @@ function remove_artifact(hash::SHA1)
 end
 
 """
-    verify_artifact(hash::SHA1; honor_overrides::Bool=false)
+    verify_artifact(hash::SHA1; honor_overrides::Bool = false)
 
 Verifies that the given artifact (identified by its SHA1 git tree hash) is installed on-
 disk, and retains its integrity.  If the given artifact is overridden, skips the
@@ -114,7 +114,7 @@ function verify_artifact(hash::SHA1; honor_overrides::Bool = false)
 end
 
 """
-    archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool=false)
+    archive_artifact(hash::SHA1, tarball_path::String; honor_overrides::Bool = false)
 
 Archive an artifact into a tarball stored at `tarball_path`, returns the SHA256 of the
 resultant tarball as a hexadecimal string. Throws an error if the artifact does not
@@ -191,11 +191,13 @@ function make_dict(adi::ArtifactDownloadInfo)
 end
 
 """
-    bind_artifact!(artifacts_toml::String, name::String, hash::SHA1;
-                    platform::Union{AbstractPlatform,Nothing} = nothing,
-                    download_info::Union{Vector{Tuple},Nothing} = nothing,
-                    lazy::Bool = false,
-                    force::Bool = false)
+    bind_artifact!(
+        artifacts_toml::String, name::String, hash::SHA1;
+        platform::Union{AbstractPlatform, Nothing} = nothing,
+        download_info::Union{Vector{Tuple}, Nothing} = nothing,
+        lazy::Bool = false,
+        force::Bool = false
+    )
 
 Writes a mapping of `name` -> `hash` within the given `(Julia)Artifacts.toml` file. If
 `platform` is not `nothing`, this artifact is marked as platform-specific, and will be
@@ -309,8 +311,10 @@ function unbind_artifact!(
 end
 
 """
-    download_artifact(tree_hash::SHA1, tarball_url::String, tarball_hash::String;
-                        verbose::Bool = false, io::IO=stderr)
+    download_artifact(
+        tree_hash::SHA1, tarball_url::String, tarball_hash::String;
+        verbose::Bool = false, io::IO = stderr
+    )
 
 Download/install an artifact into the artifact store.  Returns `true` on success,
 returns an error object on failure.
@@ -430,12 +434,14 @@ function download_artifact(
 end
 
 """
-    ensure_artifact_installed(name::String, artifacts_toml::String;
-                                platform::AbstractPlatform = HostPlatform(),
-                                pkg_uuid::Union{Base.UUID,Nothing}=nothing,
-                                verbose::Bool = false,
-                                quiet_download::Bool = false,
-                                io::IO=stderr)
+    ensure_artifact_installed(
+        name::String, artifacts_toml::String;
+        platform::AbstractPlatform = HostPlatform(),
+        pkg_uuid::Union{Base.UUID, Nothing} = nothing,
+        verbose::Bool = false,
+        quiet_download::Bool = false,
+        io::IO = stderr
+    )
 
 Ensures an artifact is installed, downloading it via the download information stored in
 `artifacts_toml` if necessary.  Throws an error if unable to install.
@@ -573,13 +579,15 @@ function with_show_download_info(f, io, name, quiet_download)
 end
 
 """
-    ensure_all_artifacts_installed(artifacts_toml::String;
-                                    platform = HostPlatform(),
-                                    pkg_uuid = nothing,
-                                    include_lazy = false,
-                                    verbose = false,
-                                    quiet_download = false,
-                                    io::IO=stderr)
+    ensure_all_artifacts_installed(
+        artifacts_toml::String;
+        platform = HostPlatform(),
+        pkg_uuid = nothing,
+        include_lazy = false,
+        verbose = false,
+        quiet_download = false,
+        io::IO = stderr
+    )
 
 Installs all non-lazy artifacts from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
@@ -590,7 +598,7 @@ This function is deprecated and should be replaced with the following snippet:
 
     artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
     for name in keys(artifacts)
-        ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform=platform)
+        ensure_artifact_installed(name, artifacts[name], artifacts_toml; platform = platform)
     end
 
 !!! warning
@@ -621,10 +629,12 @@ function ensure_all_artifacts_installed(
 end
 
 """
-    extract_all_hashes(artifacts_toml::String;
-                        platform = HostPlatform(),
-                        pkg_uuid = nothing,
-                        include_lazy = false)
+    extract_all_hashes(
+        artifacts_toml::String;
+        platform = HostPlatform(),
+        pkg_uuid = nothing,
+        include_lazy = false
+    )
 
 Extract all hashes from a given `(Julia)Artifacts.toml` file. `package_uuid` must
 be provided to properly support overrides from `Overrides.toml` entries in depots.
