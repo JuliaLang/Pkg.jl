@@ -383,6 +383,27 @@ function find_root_base_project(start_project::String)
     return
 end
 
+function find_overlay_project()::Union{Nothing, String}
+    path = Pkg.OVERLAY_PROJECT[]
+    if path === nothing
+        path = get(ENV, "JULIA_PKG_OVERLAY", nothing)
+    end
+    path === nothing && return nothing
+    if startswith(path, "@")
+        project_file = Base.load_path_expand(path)
+        project_file isa String || return nothing
+        return project_file
+    end
+    project_file = Base.locate_project_file(abspath(path))
+    project_file isa String || return nothing
+    return project_file
+end
+
+function is_overlay_active(project_file::String)
+    overlay = find_overlay_project()
+    overlay === nothing && return false
+    return Pkg.safe_realpath(project_file) == Pkg.safe_realpath(overlay)
+end
 function collect_workspace(base_project_file::String, d::Dict{String, Project} = Dict{String, Project}())
     base_project = read_project(base_project_file)
     d[base_project_file] = base_project
@@ -447,6 +468,12 @@ function EnvCache(env::Union{Nothing, String} = nothing)
         delete!(workspace, abspath(project_file))
     end
 
+    overlay_project_file = find_overlay_project()
+    if overlay_project_file !== nothing
+        overlay = read_project(overlay_project_file)
+        workspace[abspath(overlay_project_file)] = overlay
+    end
+
     dir = abspath(project_dir)
     manifest_file = manifest_file !== nothing ?
         (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
@@ -468,6 +495,8 @@ function EnvCache(env::Union{Nothing, String} = nothing)
 
     return env′
 end
+
+is_overlay_active(env::EnvCache) = is_overlay_active(env.project_file)
 
 # Convert a path from project-relative to manifest-relative
 # If path is absolute, returns it as-is

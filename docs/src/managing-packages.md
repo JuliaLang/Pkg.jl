@@ -553,6 +553,21 @@ To run a typical garbage collection with default arguments, simply use the `gc` 
 
 Note that only packages in `~/.julia/packages` are deleted.
 
+## Overlay Project
+
+The `JULIA_PKG_OVERLAY` environment variable specifies a path to an [overlay project](@ref overlay-projects) —
+a `Project.toml` whose dependencies are merged into every active environment's resolution. This
+is useful for globally available dev tools that should be resolved together with your project.
+The same can be set programmatically via `Pkg.OVERLAY_PROJECT[]`, which takes precedence over
+the environment variable.
+
+```julia
+ENV["JULIA_PKG_OVERLAY"] = expanduser("~/.julia/overlay")
+
+# Or use @ to reference a named environment in your depots
+ENV["JULIA_PKG_OVERLAY"] = "@devtools"  # expands to ~/.julia/environments/devtools
+```
+
 ## Offline Mode
 
 In offline mode, Pkg tries to do as much as possible without connecting

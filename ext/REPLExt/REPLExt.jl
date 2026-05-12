@@ -114,6 +114,9 @@ function promptf()
     if Pkg.OFFLINE_MODE[]
         prefix = "$(prefix)[offline] "
     end
+    if project_file !== nothing && Types.is_overlay_active(project_file)
+        prefix = "$(prefix)[overlay] "
+    end
     return "$(prefix)pkg> "
 end
 

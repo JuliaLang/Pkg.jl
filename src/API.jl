@@ -153,6 +153,14 @@ function check_readonly(ctx::Context)
     return ctx.env.project.readonly && pkgerror("Cannot modify a readonly environment. The project at $(ctx.env.project_file) is marked as readonly.")
 end
 
+function check_overlay(ctx::Context)
+    Types.is_overlay_active(ctx.env) && pkgerror(
+        "The active project is the overlay project at $(ctx.env.project_file). " *
+        "This operation is not supported for overlay projects. " *
+        "Only `add` and `rm` are supported to manage the overlay's dependency list."
+    )
+end
+
 # Provide some convenience calls
 for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :precompile)
     @eval begin
@@ -271,6 +279,7 @@ function develop(
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
+    check_overlay(ctx)
 
     for pkg in pkgs
         check_package_name(pkg.name, "develop")
@@ -376,6 +385,25 @@ function add(
         update_source_if_set(ctx.env, pkg)
     end
 
+    # Overlay project: just write deps to Project.toml, skip resolution/manifest
+    if Types.is_overlay_active(ctx.env)
+        target_field = if target == :deps
+            ctx.env.project.deps
+        elseif target == :weakdeps
+            ctx.env.project.weakdeps
+        elseif target == :extras
+            ctx.env.project.extras
+        else
+            pkgerror("Unrecognized target $(target)")
+        end
+        for pkg in pkgs
+            target_field[pkg.name] = pkg.uuid
+        end
+        Types.write_project(ctx.env)
+        Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
+        return
+    end
+
     Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target)
     return
 end
@@ -407,6 +435,21 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all
     mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
     mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
+
+    # Overlay project: just remove deps from Project.toml, skip resolution/manifest
+    if Types.is_overlay_active(ctx.env)
+        for pkg in pkgs
+            if haskey(ctx.env.project.deps, pkg.name)
+                delete!(ctx.env.project.deps, pkg.name)
+            elseif haskey(ctx.env.project.weakdeps, pkg.name)
+                delete!(ctx.env.project.weakdeps, pkg.name)
+            end
+            haskey(ctx.env.project.compat, pkg.name) && delete!(ctx.env.project.compat, pkg.name)
+        end
+        Types.write_project(ctx.env)
+        Operations.show_update(ctx.env, ctx.registries; io = ctx.io)
+        return
+    end
 
     Operations.rm(ctx, pkgs; mode)
 
@@ -455,6 +498,7 @@ function up(
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
+    check_overlay(ctx)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
         return
@@ -490,6 +534,7 @@ function pin(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, wo
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
+    check_overlay(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST; workspace)
@@ -532,6 +577,7 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, w
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
+    check_overlay(ctx)
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST; workspace)
