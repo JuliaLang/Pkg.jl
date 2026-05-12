@@ -1,6 +1,8 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Added `Pkg.dependents` / `pkg> dependents` command to list the direct and indirect dependents of a package across
+  all reachable registries. Use `--all` to expand indirect dependents.
 - `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
   `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
   or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and

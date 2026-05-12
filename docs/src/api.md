@@ -42,6 +42,7 @@ Pkg.precompile
 Pkg.autoprecompilation_enabled
 Pkg.offline
 Pkg.why
+Pkg.dependents
 Pkg.dependencies
 Pkg.respect_sysimage_versions
 Pkg.project

@@ -1837,6 +1837,169 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = 
 end
 
 
+###############
+# Dependents  #
+###############
+
+dependents(pkg::Union{AbstractString, PackageSpec}; kwargs...) =
+    dependents([pkg isa AbstractString ? PackageSpec(; name = pkg) : pkg]; kwargs...)
+dependents(pkgs::Vector{<:AbstractString}; kwargs...) =
+    dependents([PackageSpec(; name = pkg) for pkg in pkgs]; kwargs...)
+
+function dependents(pkgs::Vector{PackageSpec}; io::IO = stderr_f(), all::Bool = false)
+    require_not_empty(pkgs, :dependents)
+    Registry.download_default_registries(io)
+    registries = Registry.reachable_registries()
+    if isempty(registries)
+        pkgerror("No registries found")
+    end
+    # Pre-compute the reverse-dependency maps for each registry once,
+    # so multiple `pkgs` don't each trigger a full registry scan.
+    rdeps_per_reg = [(reg, _build_reverse_deps(reg)...) for reg in registries]
+    for (i, pkg) in enumerate(pkgs)
+        i > 1 && println(io)
+        _show_dependents(io, rdeps_per_reg, pkg; show_indirect = all)
+    end
+    return
+end
+
+# For each package in `reg`, take its latest non-yanked version and
+# record incoming edges (strong and weak separately) into the returned maps:
+#   strong[target_uuid] = Set of UUIDs that strong-depend on target at their latest version
+#   weak[target_uuid]   = Set of UUIDs that weak-depend on target at their latest version
+function _build_reverse_deps(reg::Registry.RegistryInstance)
+    strong = Dict{UUID, Set{UUID}}()
+    weak = Dict{UUID, Set{UUID}}()
+    for (uuid, entry) in reg
+        info = Registry.registry_info(reg, entry)
+        latest = nothing
+        for (v, vinfo) in info.version_info
+            vinfo.yanked && continue
+            if latest === nothing || v > latest
+                latest = v
+            end
+        end
+        latest === nothing && continue
+        for (vrange, deps_set) in info.deps
+            latest in vrange || continue
+            for dep_uuid in deps_set
+                push!(get!(Set{UUID}, strong, dep_uuid), uuid)
+            end
+        end
+        for (vrange, weak_set) in info.weak_deps
+            latest in vrange || continue
+            for dep_uuid in weak_set
+                push!(get!(Set{UUID}, weak, dep_uuid), uuid)
+            end
+        end
+    end
+    return strong, weak
+end
+
+function _resolve_package_in_registries(registries, pkg::PackageSpec)
+    # found maps uuid => (name, [registry descriptions])
+    found = Dict{UUID, Tuple{String, Vector{String}}}()
+    for reg in registries
+        if pkg.uuid !== nothing
+            if haskey(reg, pkg.uuid)
+                id = pkg.uuid
+                if !haskey(found, id)
+                    found[id] = (reg[id].name, String[])
+                end
+                push!(found[id][2], "$(reg.name) ($(reg.path))")
+            end
+        elseif pkg.name !== nothing
+            for uuid in Registry.uuids_from_name(reg, pkg.name)
+                if !haskey(found, uuid)
+                    found[uuid] = (reg[uuid].name, String[])
+                end
+                push!(found[uuid][2], "$(reg.name) ($(reg.path))")
+            end
+        end
+    end
+    return found
+end
+
+function _show_dependents(
+        io::IO,
+        rdeps_per_reg::Vector,
+        pkg::PackageSpec;
+        show_indirect::Bool = false,
+    )
+    registries = [t[1] for t in rdeps_per_reg]
+    found = _resolve_package_in_registries(registries, pkg)
+
+    if isempty(found)
+        pkgerror("Package $(something(pkg.name, string(pkg.uuid))) not found in any registry")
+    end
+
+    if length(found) > 1
+        name = pkg.name
+        lines = String[]
+        for (uuid, (_, reg_paths)) in found
+            push!(lines, "  $name=$uuid (in $(join(reg_paths, ", ")))")
+        end
+        sort!(lines)
+        pkgerror(
+            "Package name \"$name\" is ambiguous. It matches $(length(found)) UUIDs:\n" *
+                join(lines, "\n") *
+                "\nDisambiguate with: dependents $name={uuid}"
+        )
+    end
+
+    for (target_uuid, (target_name, reg_paths)) in found
+        short_uuid = string(target_uuid)[1:8]
+        printpkgstyle(io, :Dependents, "$target_name [$short_uuid]")
+        println(io, "  Found in: ", join(reg_paths, ", "))
+
+        for (reg, strong_rdeps, weak_rdeps) in rdeps_per_reg
+            direct = get(Set{UUID}, strong_rdeps, target_uuid)
+            weak_direct = setdiff(get(Set{UUID}, weak_rdeps, target_uuid), direct)
+
+            # Indirect dependents via BFS following both strong and weak edges,
+            # excluding anything already counted as direct/weak-direct.
+            indirect = Set{UUID}()
+            visited = union(direct, weak_direct)
+            queue = collect(visited)
+            while !isempty(queue)
+                current = popfirst!(queue)
+                for rmap in (strong_rdeps, weak_rdeps)
+                    for next in get(Set{UUID}, rmap, current)
+                        next == target_uuid && continue
+                        next in visited && continue
+                        push!(visited, next)
+                        push!(indirect, next)
+                        push!(queue, next)
+                    end
+                end
+            end
+
+            direct_names = sort!([reg[uuid].name for uuid in direct if haskey(reg, uuid)])
+            weak_names = sort!([reg[uuid].name for uuid in weak_direct if haskey(reg, uuid)])
+            n_indirect = length(indirect)
+
+            if !isempty(direct_names) || !isempty(weak_names) || n_indirect > 0
+                printstyled(io, "  $(reg.name)"; bold = true)
+                println(io, " registry")
+                println(io, "    $(length(direct_names)) direct: ", join(direct_names, ", "))
+                if !isempty(weak_names)
+                    println(io, "    $(length(weak_names)) weak: ", join(weak_names, ", "))
+                end
+                if n_indirect > 0
+                    if show_indirect
+                        indirect_names = sort!([reg[uuid].name for uuid in indirect if haskey(reg, uuid)])
+                        println(io, "    $n_indirect indirect: ", join(indirect_names, ", "))
+                    else
+                        println(io, "    $n_indirect indirect")
+                    end
+                end
+            end
+        end
+    end
+    return
+end
+
+
 ########
 # Undo #
 ########

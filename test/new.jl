@@ -2055,6 +2055,76 @@ end
 end
 
 #
+# # Dependents
+#
+@testset "dependents: REPL" begin
+    isolate() do
+        Pkg.REPLMode.TEST_MODE[] = true
+        api, args, opts = first(Pkg.pkg"dependents Foo")
+        @test api == Pkg.dependents
+        @test first(args).name == "Foo"
+        @test isempty(opts)
+
+        api, args, opts = first(Pkg.pkg"dependents --all Foo")
+        @test api == Pkg.dependents
+        @test first(args).name == "Foo"
+        @test opts[:all] == true
+    end
+end
+
+@testset "dependents" begin
+    isolate() do
+        # Basic output structure: known package with dependents
+        io = IOBuffer()
+        Pkg.dependents("Parsers"; io)
+        str = String(take!(io))
+        @test occursin("Dependents", str)
+        @test occursin("Parsers", str)
+        @test occursin("direct:", str)
+        @test occursin("JSON", str)  # JSON depends on Parsers
+        @test occursin("indirect", str)
+
+        # --all flag lists indirect package names; without it, only the count appears
+        io = IOBuffer()
+        Pkg.dependents("Parsers"; io, all = true)
+        str_all = String(take!(io))
+        @test occursin("indirect:", str_all)
+        # `all=true` output should be a strict superset (longer) than the summary form
+        @test length(str_all) > length(str)
+
+        # Without --all, indirect line has no colon (just count)
+        io = IOBuffer()
+        Pkg.dependents("Parsers"; io, all = false)
+        str_no_all = String(take!(io))
+        m = match(r"(\d+) indirect$"m, str_no_all)
+        @test m !== nothing
+        @test parse(Int, m[1]) > 0
+
+        # Multi-package invocation: both targets appear, separated
+        io = IOBuffer()
+        Pkg.dependents([Pkg.PackageSpec(; name = "Parsers"), Pkg.PackageSpec(; name = "JSON")]; io)
+        str_multi = String(take!(io))
+        @test occursin("Parsers", str_multi)
+        @test occursin("JSON", str_multi)
+        # Two `Dependents` headers, one per package
+        @test count("Dependents", str_multi) == 2
+
+        # Package not in registry
+        @test_throws PkgError Pkg.dependents("ThisPackageDefinitelyDoesNotExist123456"; io)
+
+        # Lookup by UUID
+        io = IOBuffer()
+        Pkg.dependents(Pkg.PackageSpec(uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"); io)
+        str = String(take!(io))
+        @test occursin("Parsers", str)
+        @test occursin("direct:", str)
+
+        # Empty arguments
+        @test_throws PkgError Pkg.dependents(Pkg.PackageSpec[]; io)
+    end
+end
+
+#
 # # Update
 #
 @testset "update: input checking" begin
