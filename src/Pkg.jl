@@ -179,9 +179,10 @@ To add as an extra dep (in the `[extras]` field) set `target=:extras`.
 
 When adding packages from the Pkg REPL mode (`pkg> add`), Pkg will by default prefer versions of packages
 (and their dependencies) that are already loaded in the current Julia session. This helps maintain
-compatibility with code already running in your session. When calling `Pkg.add` programmatically the
-default is the opposite: versions are resolved independently of what's currently loaded, for more
-reproducible behavior. Pass `prefer_loaded_versions=true`/`false` to override the default.
+compatibility with code already running in your session. Run `pkg> up` afterwards to update to the latest
+compatible versions. When calling `Pkg.add` programmatically the default is the opposite: versions are
+resolved independently of what's currently loaded, for more reproducible behavior. Pass
+`prefer_loaded_versions=true`/`false` to override the default.
 
 !!! compat "Julia 1.13"
     The `prefer_loaded_versions` kwarg requires at least Julia 1.13.
