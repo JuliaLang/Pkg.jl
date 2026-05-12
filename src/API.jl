@@ -1448,6 +1448,119 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mod
 end
 
 
+# Tracks (project_path, pkgid) pairs already warned about so re-activating the
+# same project does not re-emit the same warnings during a session.
+const _ACTIVATE_WARNED_LOADED = Set{Tuple{String, Base.PkgId}}()
+
+# A package directory inside a depot is `<depot>/packages/<Name>/<slug>/...`,
+# where `<slug>` is derived from the package's tree hash. Two paths whose
+# package-dir slugs agree therefore correspond to the same source tree, even if
+# they live in different depots. This lets us suppress noisy warnings when a
+# package is loaded from a different depot but is byte-identical content.
+function _depot_package_slug(path::AbstractString)
+    parts = splitpath(path)
+    for i in (length(parts) - 1):-1:2
+        parts[i - 1] == "packages" || continue
+        # parts: [..., "packages", "<Name>", "<slug>", ...]
+        return parts[i + 1]
+    end
+    return nothing
+end
+
+"""
+    _warn_loaded_module_path_mismatch(io::IO)
+
+After activation, warn if any already-loaded module is recorded in the new
+environment's manifest but is loaded from a different path than the one the new
+environment would resolve. Reports a version mismatch when the loaded version
+differs from the manifest entry, otherwise reports the path difference.
+
+Designed to be lightweight: the manifest is parsed at most once per call, and
+each `(project, package)` pair is warned about at most once per session.
+"""
+function _warn_loaded_module_path_mismatch(io::IO)
+    p = Base.active_project()
+    p === nothing && return
+    isfile(p) || return
+    loaded = Base.loaded_modules
+    isempty(loaded) && return
+
+    # (a) Use the manifest's full dep set (transitive) rather than only direct
+    # project deps, since most precompile thrash comes from transitive deps.
+    # If the manifest cannot be parsed, fall back to the project's [deps].
+    env_uuids = Dict{UUID, Union{VersionNumber, Nothing}}()
+    manifest_file = manifestfile_path(dirname(p); strict = true)
+    if manifest_file !== nothing
+        try
+            manifest = read_manifest(manifest_file)
+            for (uuid, entry) in manifest.deps
+                env_uuids[uuid] = entry.version
+            end
+        catch
+            # fall through to project-only filter
+        end
+    end
+    if isempty(env_uuids)
+        project_deps = try
+            get(parse_toml(p), "deps", nothing)
+        catch
+            nothing
+        end
+        (project_deps isa Dict) && !isempty(project_deps) || return
+        for (_, uuid_str) in project_deps
+            uuid_str isa AbstractString || continue
+            u = tryparse(UUID, uuid_str)
+            u === nothing || (env_uuids[u] = nothing)
+        end
+        isempty(env_uuids) && return
+    end
+
+    mismatches = Tuple{Base.PkgId, String, String, Union{VersionNumber, Nothing}}[]
+    for (pkgid, m) in loaded
+        m isa Module || continue
+        pkgid.uuid === nothing && continue
+        haskey(env_uuids, pkgid.uuid) || continue
+        # (b) skip pairs we've already warned about for this project
+        (p, pkgid) in _ACTIVATE_WARNED_LOADED && continue
+        loaded_path = pathof(m)
+        loaded_path === nothing && continue
+        env_path = try
+            Base.locate_package(pkgid)
+        catch
+            nothing
+        end
+        env_path === nothing && continue
+        same = try
+            Base.samefile(loaded_path, env_path)
+        catch
+            loaded_path == env_path
+        end
+        same && continue
+        # (c) suppress when the depot package slugs match: same tree hash,
+        # different depot.
+        loaded_slug = _depot_package_slug(loaded_path)
+        env_slug = _depot_package_slug(env_path)
+        loaded_slug !== nothing && loaded_slug == env_slug && continue
+        push!(mismatches, (pkgid, loaded_path, env_path, pkgversion(m)))
+    end
+    isempty(mismatches) && return
+
+    printpkgstyle(io, :Warning, "Some loaded packages differ from the active environment, which may affect reproducibility and trigger recompilation:"; color = Base.warn_color())
+    for (pkgid, loaded_path, env_path, loaded_ver) in mismatches
+        env_ver = get(env_uuids, pkgid.uuid, nothing)
+        if loaded_ver !== nothing && env_ver !== nothing && loaded_ver != env_ver
+            println(io, "  $(pkgid.name): loaded v$loaded_ver, environment specifies v$env_ver")
+        else
+            ver_str = loaded_ver === nothing ? "" : " (v$loaded_ver)"
+            println(io, "  $(pkgid.name)$ver_str")
+            println(io, "    loaded:      $loaded_path")
+            println(io, "    environment: $env_path")
+        end
+        push!(_ACTIVATE_WARNED_LOADED, (p, pkgid))
+    end
+    return
+end
+
 function activate(; temp = false, shared = false, prev = false, io::IO = stderr_f())
     shared && pkgerror("Must give a name for a shared environment")
     temp && return activate(mktempdir(); io = io)
@@ -1464,6 +1577,7 @@ function activate(; temp = false, shared = false, prev = false, io::IO = stderr_
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
     p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
+    _warn_loaded_module_path_mismatch(io)
     add_snapshot_to_undo()
     return nothing
 end
@@ -1525,6 +1639,7 @@ function activate(path::AbstractString; shared::Bool = false, temp::Bool = false
         n = ispath(p) ? "" : "new "
         printpkgstyle(io, :Activating, "$(n)project at $(pathrepr(dirname(p)))")
     end
+    _warn_loaded_module_path_mismatch(io)
     add_snapshot_to_undo()
     return nothing
 end
