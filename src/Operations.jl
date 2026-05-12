@@ -401,7 +401,7 @@ correct syntax version.
 function get_project_syntax_version(p::Project)::VersionNumber
     # First check syntax.julia_version entry in Project.other
     if p.julia_syntax_version !== nothing
-        return VersionNumber(syntax_table["julia_version"])
+        return p.julia_syntax_version
     end
 
     # If not found, default to minimum(compat["julia"])
@@ -416,7 +416,7 @@ function get_project_syntax_version(p::Project)::VersionNumber
     end
 
     # Finally, if neither of those are set, default to the current Julia version
-    return VERSION
+    return dropbuild(VERSION)
 end
 
 # This has to be done after the packages have been downloaded

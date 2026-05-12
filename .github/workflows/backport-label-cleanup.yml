@@ -17,8 +17,9 @@ jobs:
     steps:
       - name: Extract version from branch
         id: extract
+        env:
+          BRANCH: ${{ github.event.pull_request.base.ref }}
         run: |
-          BRANCH="${{ github.event.pull_request.base.ref }}"
           if [[ "$BRANCH" =~ ^release-([0-9]+\.[0-9]+)$ ]]; then
             echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           else

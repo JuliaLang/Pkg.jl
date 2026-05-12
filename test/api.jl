@@ -454,4 +454,127 @@ end
     end
 end
 
+@testset "Pkg.activate warns on loaded module mismatch" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do tmp
+            uuid = string(UUIDs.uuid4())
+            # Two sibling source trees for a package "MyDep" with the same
+            # UUID but distinct content / paths.
+            function make_pkg(dir, marker)
+                mkpath(joinpath(dir, "src"))
+                write(
+                    joinpath(dir, "Project.toml"),
+                    """
+                    name = "MyDep"
+                    uuid = "$uuid"
+                    version = "0.1.0"
+                    """,
+                )
+                return write(
+                    joinpath(dir, "src", "MyDep.jl"),
+                    "module MyDep\nconst MARKER = $(repr(marker))\nend\n",
+                )
+            end
+            pkg_a = joinpath(tmp, "a", "MyDep")
+            pkg_b = joinpath(tmp, "b", "MyDep")
+            make_pkg(pkg_a, "A")
+            make_pkg(pkg_b, "B")
+
+            function make_env(dir, src)
+                mkpath(dir)
+                write(
+                    joinpath(dir, "Project.toml"),
+                    """
+                    [deps]
+                    MyDep = "$uuid"
+                    """,
+                )
+                return write(
+                    joinpath(dir, "Manifest.toml"),
+                    """
+                    julia_version = "$(VERSION)"
+                    manifest_format = "2.0"
+
+                    [[deps.MyDep]]
+                    path = $(repr(src))
+                    uuid = "$uuid"
+                    version = "0.1.0"
+                    """,
+                )
+            end
+            env_a = joinpath(tmp, "envA")
+            env_b = joinpath(tmp, "envB")
+            make_env(env_a, pkg_a)
+            make_env(env_b, pkg_b)
+
+            depot_path = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+            function run_script(script)
+                cmd = addenv(
+                    `$(Base.julia_cmd()) --color=no --startup-file=no --project=$(pkgdir(Pkg)) -e $script`,
+                    "JULIA_DEPOT_PATH" => depot_path,
+                    "JULIA_LOAD_PATH" => nothing,
+                    "JULIA_PROJECT" => nothing,
+                    "JULIA_PKG_PRECOMPILE_AUTO" => "0",
+                )
+                iob = IOBuffer()
+                proc = run(pipeline(ignorestatus(cmd), stdout = iob, stderr = iob))
+                out = String(take!(iob))
+                if !success(proc)
+                    @info "subprocess failed" exit = proc.exitcode output = out
+                end
+                return success(proc), out
+            end
+
+            @testset "warns on path mismatch" begin
+                ok, out = run_script(
+                    """
+                    using Pkg
+                    Pkg.activate($(repr(env_a)); io = devnull)
+                    using MyDep
+                    Pkg.activate($(repr(env_b)))
+                    """
+                )
+                @test ok
+                @test occursin("Some loaded packages differ", out)
+                @test occursin("MyDep", out)
+            end
+
+            @testset "no warning when re-activating same env" begin
+                ok, out = run_script(
+                    """
+                    using Pkg
+                    Pkg.activate($(repr(env_a)); io = devnull)
+                    using MyDep
+                    Pkg.activate($(repr(env_a)))
+                    """
+                )
+                @test ok
+                @test !occursin("Some loaded packages differ", out)
+            end
+
+            @testset "warning suppressed on repeated activation" begin
+                ok, out = run_script(
+                    """
+                    using Pkg
+                    Pkg.activate($(repr(env_a)); io = devnull)
+                    using MyDep
+                    Pkg.activate($(repr(env_b)); io = devnull)  # primes the warned-set
+                    Pkg.activate($(repr(env_a)); io = devnull)
+                    Pkg.activate($(repr(env_b)))                # should not warn again
+                    """
+                )
+                @test ok
+                @test !occursin("Some loaded packages differ", out)
+            end
+        end
+    end
+end
+
+@testset "Pkg.API._depot_package_slug" begin
+    sep = Base.Filesystem.path_separator
+    base = join(["", "home", "user", ".julia", "packages", "Foo", "abcd1234", "src", "Foo.jl"], sep)
+    @test Pkg.API._depot_package_slug(base) == "abcd1234"
+    @test Pkg.API._depot_package_slug(join(["", "tmp", "Foo", "src", "Foo.jl"], sep)) === nothing
+end
+
 end # module APITests
