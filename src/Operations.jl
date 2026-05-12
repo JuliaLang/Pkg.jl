@@ -474,7 +474,7 @@ function load_tree_hash!(
         pkg::PackageSpec,
         julia_version,
     )
-    if is_stdlib(pkg.uuid, julia_version) && pkg.tree_hash !== nothing
+    if is_stdlib(pkg.uuid, julia_version) && pkg.tree_hash !== nothing && pkg.repo.source === nothing
         # manifests from newer julia versions might have stdlibs that are upgradable (FORMER_STDLIBS)
         # that have tree_hash recorded, which we need to clear for this version where they are not upgradable
         # given regular stdlibs don't have tree_hash recorded
@@ -3780,6 +3780,29 @@ function is_manifest_current(env::EnvCache)
         # Manifest doesn't have a hash of the source Project recorded
         return nothing
     end
+end
+
+# Returns true when the manifest cannot be used as-is and would need a re-resolve
+# (or update) to match the project and current Julia. Used by `instantiate(update_on_mismatch=true)`
+# to decide whether to fall back to `Pkg.update()`.
+function manifest_is_mismatched(env::EnvCache)
+    manifest = env.manifest
+    if !isempty(manifest.deps)
+        # v1 format predates the julia_version entry, so the version is unknown;
+        # treat as mismatched since we can't verify compatibility with current Julia
+        manifest.manifest_format < v"2" && return true
+        v = manifest.julia_version
+        v === nothing && return true
+        Base.thisminor(v) != Base.thisminor(VERSION) && return true
+    end
+    is_manifest_current(env) === false && return true
+    # `project_hash` was added to the v2 format only later, so a v2.0/2.1 manifest
+    # may not have it; in that case `is_manifest_current` returns `nothing` and we
+    # still need an explicit direct-dep check to catch project drift.
+    for (_, uuid) in env.project.deps
+        get(manifest, uuid, nothing) === nothing && return true
+    end
+    return false
 end
 
 function compat_line(io, pkg, uuid, compat_str, longest_dep_len; indent = "  ")

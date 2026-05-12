@@ -3,6 +3,10 @@ Pkg v1.14 Release Notes
 
 - Added `Pkg.dependents` / `pkg> dependents` command to list the direct and indirect dependents of a package across
   all reachable registries. Use `--all` to expand indirect dependents.
+- `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
+  `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
+  or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and
+  helper environments where any compatible set of dependency versions is acceptable. ([#4678])
 - `Pkg.activate` now warns when packages already loaded into the session differ
   from what the newly activated environment specifies (different version or
   source path). This makes accidental reproducibility issues and unnecessary
@@ -223,4 +227,5 @@ Pkg v1.7 Release Notes
 [#4305]: https://github.com/JuliaLang/Pkg.jl/pull/4305
 [#4170]: https://github.com/JuliaLang/Pkg.jl/pull/4170
 [#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
+[#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679

@@ -37,7 +37,7 @@ jobs:
 
       - name: Setup Julia
         if: steps.extract.outputs.version != ''
-        uses: julia-actions/setup-julia@v2
+        uses: julia-actions/setup-julia@v3
         with:
           version: '1'
 
