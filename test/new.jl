@@ -2060,9 +2060,10 @@ end
 @testset "dependents: REPL" begin
     isolate() do
         Pkg.REPLMode.TEST_MODE[] = true
-        api, opts = first(Pkg.pkg"dependents Foo")
+        api, args, opts = first(Pkg.pkg"dependents Foo")
         @test api == Pkg.dependents
-        @test first(opts).name == "Foo"
+        @test first(args).name == "Foo"
+        @test isempty(opts)
 
         api, args, opts = first(Pkg.pkg"dependents --all Foo")
         @test api == Pkg.dependents
@@ -2083,11 +2084,13 @@ end
         @test occursin("JSON", str)  # JSON depends on Parsers
         @test occursin("indirect", str)
 
-        # --all flag shows indirect package names
+        # --all flag lists indirect package names; without it, only the count appears
         io = IOBuffer()
         Pkg.dependents("Parsers"; io, all = true)
         str_all = String(take!(io))
         @test occursin("indirect:", str_all)
+        # `all=true` output should be a strict superset (longer) than the summary form
+        @test length(str_all) > length(str)
 
         # Without --all, indirect line has no colon (just count)
         io = IOBuffer()
@@ -2096,6 +2099,15 @@ end
         m = match(r"(\d+) indirect$"m, str_no_all)
         @test m !== nothing
         @test parse(Int, m[1]) > 0
+
+        # Multi-package invocation: both targets appear, separated
+        io = IOBuffer()
+        Pkg.dependents([Pkg.PackageSpec(; name = "Parsers"), Pkg.PackageSpec(; name = "JSON")]; io)
+        str_multi = String(take!(io))
+        @test occursin("Parsers", str_multi)
+        @test occursin("JSON", str_multi)
+        # Two `Dependents` headers, one per package
+        @test count("Dependents", str_multi) == 2
 
         # Package not in registry
         @test_throws PkgError Pkg.dependents("ThisPackageDefinitelyDoesNotExist123456"; io)

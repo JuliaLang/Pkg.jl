@@ -352,8 +352,14 @@ const why = API.why
     Pkg.dependents(pkgs::Vector{PackageSpec}; all=false)
 
 List the direct dependents of `pkg` across all reachable registries.
-By default only the count of indirect dependents is shown; pass `all=true` to list them.
-If a package name is ambiguous (multiple UUIDs), use `PackageSpec(; name, uuid)` to disambiguate.
+
+Edges are computed from each candidate package's latest non-yanked registered
+version. Strong and weak dependencies are reported separately (`direct` vs
+`weak`). By default only the count of indirect dependents is shown; pass
+`all=true` to list them.
+
+If a package name is ambiguous (multiple UUIDs), use `PackageSpec(; name, uuid)`
+to disambiguate.
 """
 const dependents = API.dependents
 
