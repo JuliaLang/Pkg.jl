@@ -1471,6 +1471,12 @@ function _warn_loaded_module_path_mismatch(io::IO)
     env_uuids = Dict{UUID, Union{VersionNumber, Nothing}}()
     manifest_file = manifestfile_path(dirname(p); strict = true)
     if manifest_file !== nothing
+        # Normalize via realpath so this matches the path used by EnvCache
+        # (which goes through `find_project_file` → `safe_realpath`). Otherwise
+        # the same manifest can be read under two different paths (e.g.
+        # `/var/...` vs `/private/var/...` on macOS), defeating the `maxlog=1`
+        # `_id`-keyed suppression of the unknown-manifest-format warning.
+        manifest_file = Pkg.safe_realpath(manifest_file)
         try
             manifest = read_manifest(manifest_file)
             for (uuid, entry) in manifest.deps
