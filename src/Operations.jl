@@ -2366,7 +2366,7 @@ end
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}, new_git = Set{UUID}();
         allow_autoprecomp::Bool = true, preserve::PreserveLevel = default_preserve(), platform::AbstractPlatform = HostPlatform(),
-        target::Symbol = :deps, prefer_loaded_versions::Bool = true
+        target::Symbol = :deps, prefer_loaded_versions::Bool = false
     )
     assert_can_add(ctx, pkgs)
     # load manifest data

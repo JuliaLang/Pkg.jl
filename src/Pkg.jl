@@ -225,7 +225,7 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 Pkg.add("Example") # Add a package from registry
 Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
 Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
-Pkg.add("Example"; prefer_loaded_versions=false) # Add a package, ignoring versions already loaded in this session
+Pkg.add("Example"; prefer_loaded_versions=true) # Prefer the version of Example already loaded in this session, if any
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release

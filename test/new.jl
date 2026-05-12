@@ -3961,6 +3961,14 @@ end
         add_output = String(take!(io))
         @test occursin("was able to add the version of Example that is already loaded", add_output)
         @test occursin("[7876af07] + Example v0.5.4", add_output)
+        Pkg.activate(; temp = true)
+        # REPL mode default: should prefer loaded version without explicit kwarg
+        Base.ScopedValues.@with Pkg.IN_REPL_MODE => true begin
+            Pkg.add("Example", io = io)
+        end
+        add_output = String(take!(io))
+        @test occursin("was able to add the version of Example that is already loaded", add_output)
+        @test occursin("[7876af07] + Example v0.5.4", add_output)
         """
         cmd = addenv(
             `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
