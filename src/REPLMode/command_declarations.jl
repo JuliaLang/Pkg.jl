@@ -10,17 +10,20 @@ compound_declarations = [
             :arg_parser => parse_package,
             :option_spec => [
                 PSA[:name => "coverage", :api => :coverage => true],
+                PSA[:name => "maxfailures", :takes_arg => true, :api => :maxfailures => do_maxfailures],
             ],
             :completions => :complete_installed_packages,
             :description => "run tests for packages",
             :help => md"""
-                    test [--coverage] [pkg[=uuid]] ...
+                    test [--coverage] [--maxfailures=n] [pkg[=uuid]] ...
 
                 Run the tests for package `pkg`, or for the current project (which thus needs to be
                 a package) if `pkg` is omitted.  This is done by running the file `test/runtests.jl`
                 in the package directory. The option `--coverage` can be used to run the tests with
                 coverage enabled. The `startup.jl` file is disabled during testing unless
-                julia is started with `--startup-file=yes`.
+                julia is started with `--startup-file=yes`. The option `--maxfailures=n` stops the
+                test run after `n` cumulative failures or errors. When `n` is 0 the run stops on the
+                first failure. When not set, all tests always run to completion.
                 """,
         ],
         PSA[
