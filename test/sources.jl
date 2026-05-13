@@ -4,6 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Test, Pkg
 using ..Utils
 using UUIDs
+using LibGit2
 
 temp_pkg_dir() do project_path
     @testset "test Project.toml [sources]" begin
@@ -234,6 +235,97 @@ temp_pkg_dir() do project_path
                     @test manifest[local_pkg_uuid].path !== nothing
                     @test manifest[local_pkg_uuid].tree_hash === nothing
                     @test manifest[local_pkg_uuid].repo.source === nothing
+                end
+            end
+        end
+    end
+
+    @testset "changing rev in sources updates git-tree-sha1 (#4157)" begin
+        isolate() do
+            mktempdir() do tmp
+                # Create a test package with two commits
+                test_pkg_dir = joinpath(tmp, "TestPkg")
+                mkpath(test_pkg_dir)
+                cd(test_pkg_dir) do
+                    write(
+                        "Project.toml", """
+                        name = "TestPkg"
+                        uuid = "b4017d7c-a742-4580-99f2-e286571e6290"
+                        version = "0.1.0"
+                        """
+                    )
+                    mkpath("src")
+                    write(
+                        "src/TestPkg.jl", """
+                        module TestPkg
+                        greet() = "Hello, World!"
+                        end
+                        """
+                    )
+
+                    first_commit = string(git_init_and_commit(test_pkg_dir; msg = "Initial commit"))
+                    first_tree_hash = LibGit2.with(LibGit2.GitRepo(test_pkg_dir)) do repo
+                        string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.GitCommit(repo, first_commit))))
+                    end
+
+                    # Make a second commit
+                    write("README.md", "# TestPkg\n")
+                    second_commit = LibGit2.with(LibGit2.GitRepo(test_pkg_dir)) do repo
+                        LibGit2.add!(repo, "README.md")
+                        string(LibGit2.commit(repo, "Add README"; author = TEST_SIG, committer = TEST_SIG))
+                    end
+                    second_tree_hash = LibGit2.with(LibGit2.GitRepo(test_pkg_dir)) do repo
+                        string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.GitCommit(repo, second_commit))))
+                    end
+
+                    # Create consumer project
+                    consumer_dir = joinpath(tmp, "consumer")
+                    mkpath(consumer_dir)
+                    cd(consumer_dir) do
+                        # Start with first revision
+                        write(
+                            "Project.toml", """
+                            [deps]
+                            TestPkg = "b4017d7c-a742-4580-99f2-e286571e6290"
+
+                            [sources]
+                            TestPkg = { url = "$test_pkg_dir", rev = "$first_commit" }
+                            """
+                        )
+
+                        Pkg.activate(".")
+                        Pkg.resolve()
+                        @test isfile("Manifest.toml")
+                        manifest = Pkg.Types.read_manifest("Manifest.toml")
+
+                        # Verify first state
+                        test_pkg_uuid = UUID("b4017d7c-a742-4580-99f2-e286571e6290")
+                        @test haskey(manifest.deps, test_pkg_uuid)
+                        test_pkg_entry = manifest[test_pkg_uuid]
+                        @test test_pkg_entry.tree_hash !== nothing
+                        @test string(test_pkg_entry.tree_hash) == first_tree_hash
+                        @test test_pkg_entry.repo.rev == first_commit
+
+                        # Change to second revision
+                        write(
+                            "Project.toml", """
+                            [deps]
+                            TestPkg = "b4017d7c-a742-4580-99f2-e286571e6290"
+
+                            [sources]
+                            TestPkg = { url = "$test_pkg_dir", rev = "$second_commit" }
+                            """
+                        )
+
+                        Pkg.resolve()
+                        manifest = Pkg.Types.read_manifest("Manifest.toml")
+
+                        # Verify second state - git-tree-sha1 should change
+                        test_pkg_entry = manifest[test_pkg_uuid]
+                        @test test_pkg_entry.tree_hash !== nothing
+                        @test string(test_pkg_entry.tree_hash) == second_tree_hash
+                        @test test_pkg_entry.repo.rev == second_commit
+                    end
                 end
             end
         end
