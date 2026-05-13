@@ -242,6 +242,49 @@ import .FakeTerminals.FakeTerminal
                 @test occursin("Precompiling", String(take!(iob)))
             end
 
+            @testset "instantiate empty environment" begin
+                cd_tempdir() do tmp
+                    iob = IOBuffer()
+                    # Test with empty Project.toml (no deps)
+                    mkdir("empty_env1")
+                    cd("empty_env1") do
+                        write(
+                            "Project.toml", """
+                            name = "EmptyEnv"
+                            uuid = "00000000-0000-0000-0000-000000000001"
+                            """
+                        )
+                        Pkg.activate(".")
+                        Pkg.instantiate(io = iob)
+                        output = String(take!(iob))
+                        @test occursin("Instantiate", output)
+                        @test occursin("called on an empty environment", output)
+                    end
+
+                    # Test with empty Project.toml and empty Manifest.toml
+                    mkdir("empty_env2")
+                    cd("empty_env2") do
+                        write(
+                            "Project.toml", """
+                            name = "EmptyEnv2"
+                            uuid = "00000000-0000-0000-0000-000000000002"
+                            """
+                        )
+                        write(
+                            "Manifest.toml", """
+                            julia_version = "$(VERSION)"
+                            manifest_format = "2.0"
+                            """
+                        )
+                        Pkg.activate(".")
+                        Pkg.instantiate(io = iob)
+                        output = String(take!(iob))
+                        @test occursin("Instantiate", output)
+                        @test occursin("called on an empty environment", output)
+                    end
+                end
+            end
+
             ENV["JULIA_PKG_PRECOMPILE_AUTO"] = 0
 
             @testset "waiting for trailing tasks" begin
