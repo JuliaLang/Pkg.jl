@@ -206,6 +206,12 @@ let
                 Base.precompile(Tuple{Type{Array{Dates.DateTime, 1}}, UndefInitializer, Tuple{Int64}})
                 Base.precompile(Tuple{Type{Pair{A, B} where {B} where {A}}, String, Dates.DateTime})
                 Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:internal_call, :strict, :warn_loaded, :timing, :_from_loading, :configs, :manifest, :io, :detachable), Tuple{Bool, Bool, Bool, Bool, Bool, Pair{Base.Cmd, Base.CacheFlags}, Bool, Base.TTY, Bool}}, typeof(Base.Precompilation.precompilepkgs), Array{String, 1}})
+
+                # `Val{PkgArtifacts}` flavour of `@artifact_str` dispatch, for JLLs using `using Pkg.Artifacts`
+                Base.precompile(Tuple{typeof(PkgArtifacts.Artifacts._artifact_str), Module, String, SubString{String}, String,
+                                      Dict{String,Any}, Base.SHA1, Base.BinaryPlatforms.Platform, Val{PkgArtifacts}})
+                Base.precompile(Tuple{typeof(PkgArtifacts.Artifacts.__artifact_str), Module, String, SubString{String}, String,
+                                      Dict{String,Any}, Base.SHA1, Base.BinaryPlatforms.Platform, Val{PkgArtifacts}})
                 ################
             end
         end
