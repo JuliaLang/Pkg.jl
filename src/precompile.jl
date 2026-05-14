@@ -207,11 +207,27 @@ let
                 Base.precompile(Tuple{Type{Pair{A, B} where {B} where {A}}, String, Dates.DateTime})
                 Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:internal_call, :strict, :warn_loaded, :timing, :_from_loading, :configs, :manifest, :io, :detachable), Tuple{Bool, Bool, Bool, Bool, Bool, Pair{Base.Cmd, Base.CacheFlags}, Bool, Base.TTY, Bool}}, typeof(Base.Precompilation.precompilepkgs), Array{String, 1}})
 
-                # `Val{PkgArtifacts}` flavour of `@artifact_str` dispatch, for JLLs using `using Pkg.Artifacts`
-                Base.precompile(Tuple{typeof(PkgArtifacts.Artifacts._artifact_str), Module, String, SubString{String}, String,
-                                      Dict{String,Any}, Base.SHA1, Base.BinaryPlatforms.Platform, Val{PkgArtifacts}})
-                Base.precompile(Tuple{typeof(PkgArtifacts.Artifacts.__artifact_str), Module, String, SubString{String}, String,
-                                      Dict{String,Any}, Base.SHA1, Base.BinaryPlatforms.Platform, Val{PkgArtifacts}})
+                # `Val{PkgArtifacts}` flavour of `@artifact_str` dispatch, for JLLs using `using Pkg.Artifacts`.
+                # `_artifact_str`/`__artifact_str` live in the stdlib `Artifacts` module, which is shadowed
+                # inside `Pkg` by the `const Artifacts = PkgArtifacts` alias; reach it via an imported function.
+                let StdlibArtifacts = parentmodule(PkgArtifacts.artifact_paths)
+                    if isdefined(StdlibArtifacts, :_artifact_str)
+                        Base.precompile(
+                            Tuple{
+                                typeof(StdlibArtifacts._artifact_str), Module, String, SubString{String}, String,
+                                Dict{String, Any}, Base.SHA1, Base.BinaryPlatforms.Platform, Val{PkgArtifacts},
+                            }
+                        )
+                    end
+                    if isdefined(StdlibArtifacts, :__artifact_str)
+                        Base.precompile(
+                            Tuple{
+                                typeof(StdlibArtifacts.__artifact_str), Module, String, SubString{String}, String,
+                                Dict{String, Any}, Base.SHA1, Base.BinaryPlatforms.Platform, Val{PkgArtifacts},
+                            }
+                        )
+                    end
+                end
                 ################
             end
         end
