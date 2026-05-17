@@ -689,7 +689,6 @@ end
 
 @testset "unit test for REPLMode.promptf" begin
     function set_name(projfile_path, newname)
-        sleep(1.1)
         project = TOML.parsefile(projfile_path)
         project["name"] = newname
         open(projfile_path, "w") do io
@@ -697,33 +696,37 @@ end
         end
     end
 
+    # `promptf` caches its result; invalidate before each call so the test
+    # exercises a fresh computation.
+    fresh_prompt() = (REPLExt.invalidate_prompt!(); REPLExt.promptf())
+
     with_temp_env("SomeEnv") do
-        @test REPLExt.promptf() == "(SomeEnv) pkg> "
+        @test fresh_prompt() == "(SomeEnv) pkg> "
     end
 
     with_temp_env("this_is_a_test_for_truncating_long_folder_names_in_the_prompt") do
-        @test REPLExt.promptf() == "(this_is_a_test_for_truncati...) pkg> "
+        @test fresh_prompt() == "(this_is_a_test_for_truncati...) pkg> "
     end
 
     env_name = "Test2"
     with_temp_env(env_name) do env_path
         projfile_path = joinpath(env_path, "Project.toml")
-        @test REPLExt.promptf() == "($env_name) pkg> "
+        @test fresh_prompt() == "($env_name) pkg> "
 
         newname = "NewName"
         set_name(projfile_path, newname)
-        @test REPLExt.promptf() == "($newname) pkg> "
+        @test fresh_prompt() == "($newname) pkg> "
         cd(env_path) do
-            @test REPLExt.promptf() == "($newname) pkg> "
+            @test fresh_prompt() == "($newname) pkg> "
         end
-        @test REPLExt.promptf() == "($newname) pkg> "
+        @test fresh_prompt() == "($newname) pkg> "
 
         newname = "NewNameII"
         set_name(projfile_path, newname)
         cd(env_path) do
-            @test REPLExt.promptf() == "($newname) pkg> "
+            @test fresh_prompt() == "($newname) pkg> "
         end
-        @test REPLExt.promptf() == "($newname) pkg> "
+        @test fresh_prompt() == "($newname) pkg> "
     end
 end
 
