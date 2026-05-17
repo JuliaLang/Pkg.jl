@@ -56,9 +56,10 @@ function LineEdit.complete_line(c::PkgCompletionProvider, s; hint::Bool = false)
     return named_completions, region, should_complete
 end
 
-prev_project_file = nothing
-prev_project_timestamp = nothing
-prev_prefix = ""
+# Cached `pkg>` prompt. Computed once per prompt display and reused on every
+# subsequent line refresh to avoid per-keystroke stat/TOML work on the active
+# project (#4683). Invalidated when a command is entered or pkg mode is re-entered.
+const cached_prompt = Ref{Union{String, Nothing}}(nothing)
 
 function projname(project_file::String)
     project = try
@@ -81,7 +82,8 @@ function projname(project_file::String)
 end
 
 function promptf()
-    global prev_project_timestamp, prev_prefix, prev_project_file
+    cached = cached_prompt[]
+    cached === nothing || return cached
     project_file = try
         Types.find_project_file()
     catch
@@ -89,33 +91,30 @@ function promptf()
     end
     prefix = ""
     if project_file !== nothing
-        if prev_project_file == project_file && prev_project_timestamp == mtime(project_file)
-            prefix = prev_prefix
-        else
-            project_name = projname(project_file)
-            if project_name !== nothing
-                root = Types.find_root_base_project(project_file)
-                rootname = projname(root)
-                if root !== project_file
-                    path_prefix = "/" * dirname(Types.relative_project_path(root, project_file))
-                else
-                    path_prefix = ""
-                end
-                if textwidth(rootname) > 30
-                    rootname = first(rootname, 27) * "..."
-                end
-                prefix = "($(rootname)$(path_prefix)) "
-                prev_prefix = prefix
-                prev_project_timestamp = mtime(project_file)
-                prev_project_file = project_file
+        project_name = projname(project_file)
+        if project_name !== nothing
+            root = Types.find_root_base_project(project_file)
+            rootname = projname(root)
+            if root !== project_file
+                path_prefix = "/" * dirname(Types.relative_project_path(root, project_file))
+            else
+                path_prefix = ""
             end
+            if textwidth(rootname) > 30
+                rootname = first(rootname, 27) * "..."
+            end
+            prefix = "($(rootname)$(path_prefix)) "
         end
     end
     if Pkg.OFFLINE_MODE[]
         prefix = "$(prefix)[offline] "
     end
-    return "$(prefix)pkg> "
+    prompt = "$(prefix)pkg> "
+    cached_prompt[] = prompt
+    return prompt
 end
+
+invalidate_prompt!() = (cached_prompt[] = nothing; nothing)
 
 function do_cmds(repl::REPL.AbstractREPL, commands::Union{String, Vector{Command}})
     try
@@ -142,6 +141,9 @@ function on_done(s, buf, ok, repl)
     Base.@as_foreground_task do_cmds(repl, input)
     REPL.prepare_next(repl)
     REPL.reset_state(s)
+    # The command may have changed the active project (e.g. `activate`), so
+    # recompute the prompt on the next render.
+    invalidate_prompt!()
     return s.current_mode.sticky || REPL.transition(s, main)
 end
 
@@ -214,6 +216,9 @@ function repl_init(repl::REPL.LineEditREPL)
         ']' => function (s, args...)
             if isempty(s) || position(LineEdit.buffer(s)) == 0
                 buf = copy(LineEdit.buffer(s))
+                # Active project may have changed in julia mode (e.g. via
+                # `Pkg.activate`), so force a fresh prompt computation.
+                invalidate_prompt!()
                 return LineEdit.transition(s, pkg_mode) do
                     LineEdit.state(s, pkg_mode).input_buffer = buf
                 end
@@ -351,6 +356,8 @@ end
 
 
 function __init__()
+    # Clear any cached prompt baked in during precompilation.
+    invalidate_prompt!()
     if isdefined(Base, :active_repl)
         if Base.active_repl isa REPL.LineEditREPL
             repl_init(Base.active_repl)
