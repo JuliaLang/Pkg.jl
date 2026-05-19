@@ -143,6 +143,16 @@ end
     ]
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
 
+    err = try
+        resolve_tst(deps_data, reqs_data)
+    catch err
+        err
+    end
+    @test err isa ResolverError
+    @test occursin("| Compatibility with", err.msg)
+    @test occursin("These restrictions have no versions in common", err.msg)
+    @test occursin("resolver trace follows", err.msg)
+
 
     VERBOSE && @info("SCHEME 4")
     ## DEPENDENCY SCHEME 4: TWO PACKAGES, DAG, WITH TRIVIAL INCONSISTENCY
