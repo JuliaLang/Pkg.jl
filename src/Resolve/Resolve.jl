@@ -6,6 +6,7 @@ using ..Versions
 using ..Registry
 using ..Types
 import ..stdout_f, ..stderr_f
+using ..Registry: registry_info, isyanked
 
 using Printf
 using Random
