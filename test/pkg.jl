@@ -252,6 +252,63 @@ temp_pkg_dir() do project_path
         Pkg.rm(TEST_PKG.name)
     end
 
+    @testset "maxfailures" begin
+        mktempdir() do dir
+            pkg_path = joinpath(dir, "MaxFailuresPkg")
+            mkpath(joinpath(pkg_path, "src"))
+            write(joinpath(pkg_path, "Project.toml"), """
+                name = "MaxFailuresPkg"
+                uuid = "00000000-dead-beef-0000-000000000001"
+                version = "0.1.0"
+                """)
+            write(joinpath(pkg_path, "src", "MaxFailuresPkg.jl"), """
+                module MaxFailuresPkg
+                end
+                """)
+            mkpath(joinpath(pkg_path, "test"))
+            # Outer testset so all inner testsets run even when some fail.
+            # REACHED_D and REACHED_E are unique enough to check presence/absence.
+            write(joinpath(pkg_path, "test", "runtests.jl"), """
+                using Test
+                @testset "AllTests" begin
+                    @testset "A" begin; @test false; end
+                    @testset "B" begin; @test false; end
+                    @testset "C" begin; @test false; end
+                    @testset "REACHED_D" begin; @test true; end
+                    @testset "REACHED_E" begin; @test true; end
+                end
+                """)
+            
+            Pkg.develop(Pkg.PackageSpec(path = pkg_path))
+            
+            # Default: no limit, all testsets run including D and E.
+            iob = IOBuffer()
+            try; Pkg.test("MaxFailuresPkg"; io = iob); catch; end
+            out = String(take!(iob))
+            @test occursin("REACHED_D", out)
+            @test occursin("REACHED_E", out)
+            
+            # maxfailures=0: stop on first failure, D and E never run.
+            iob = IOBuffer()
+            try; Pkg.test("MaxFailuresPkg"; maxfailures = 0, io = iob); catch; end
+            out = String(take!(iob))
+            @test !occursin("REACHED_D", out)
+            @test !occursin("REACHED_E", out)
+            
+            # maxfailures=2: stop after 2nd failure (B), D and E never run.
+            iob = IOBuffer()
+            try; Pkg.test("MaxFailuresPkg"; maxfailures = 2, io = iob); catch; end
+            out = String(take!(iob))
+            @test !occursin("REACHED_D", out)
+            @test !occursin("REACHED_E", out)
+            
+            # Negative value must error immediately, before any subprocess launches.
+            @test_throws Pkg.Types.PkgError Pkg.test("MaxFailuresPkg"; maxfailures = -1)
+            
+            Pkg.rm("MaxFailuresPkg")
+        end
+    end
+
     @testset "coverage specific path" begin
         mktempdir() do tmp
             coverage_path = joinpath(tmp, "tracefile.info")
