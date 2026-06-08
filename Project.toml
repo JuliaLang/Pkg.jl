@@ -9,6 +9,7 @@ version = "1.14.0"
 projects = ["test", "docs"]
 
 [deps]
+ArgTools = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
 Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
@@ -33,9 +34,10 @@ REPL = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 REPLExt = "REPL"
 
 [compat]
+ArgTools = "1.2"
 Artifacts = "1.11"
 Dates = "1.11"
-Downloads = "1.6"
+Downloads = "1.7"
 FileWatching = "1.11"
 LibGit2 = "1.11"
 Libdl = "1.11"

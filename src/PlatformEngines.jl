@@ -5,6 +5,7 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar, Dates, Printf
+using ArgTools: FileSpec
 import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f, atomic_toml_write
 using ..MiniProgressBars
 using Base.BinaryPlatforms, p7zip_jll, Zstd_jll
@@ -189,7 +190,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     refresh_token = auth_info["refresh_token"]::String
     refresh_auth = "Authorization" => "Bearer $refresh_token"
     try
-        download(refresh_url, tmp, auth_header = refresh_auth, verbose = verbose)
+        download(refresh_url, FileSpec(tmp; mode = 0o600), auth_header = refresh_auth, verbose = verbose)
     catch err
         @warn "token refresh failure" file = auth_file url = refresh_url err = err
         rm(tmp, force = true)
@@ -289,7 +290,7 @@ end
 
 function download(
         url::AbstractString,
-        dest::AbstractString;
+        dest::Union{AbstractString, FileSpec};
         verbose::Bool = false,
         headers::Vector{Pair{String, String}} = Pair{String, String}[],
         auth_header::Union{Pair{String, String}, Nothing} = nothing,

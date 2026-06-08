@@ -1,8 +1,39 @@
 module PlatformEngineTests
 import ..Pkg # ensure we are using the correct Pkg
 
-using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA
+using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA, Sockets
 using ..Utils: list_tarball_files
+
+function auth_refresh_server(response::String)
+    server = listen(Sockets.localhost, 0)
+    base_url = "http://$(Sockets.localhost):$(Int(last(getsockname(server))))"
+    request = Ref("")
+    headers = Ref(String[])
+    socket = Ref{Union{Nothing, TCPSocket}}(nothing)
+    task = @async begin
+        try
+            sock = socket[] = accept(server)
+            request[] = rstrip(readline(sock))
+            header_lines = String[]
+            while true
+                line = rstrip(readline(sock))
+                isempty(line) && break
+                push!(header_lines, line)
+            end
+            headers[] = header_lines
+            write(sock, "HTTP/1.1 200 OK\r\n")
+            write(sock, "Content-Type: application/toml\r\n")
+            write(sock, "Content-Length: $(ncodeunits(response))\r\n")
+            write(sock, "Connection: close\r\n\r\n")
+            write(sock, response)
+            flush(sock)
+        finally
+            socket[] !== nothing && close(socket[])
+            close(server)
+        end
+    end
+    return (; server, task, socket, request, headers, base_url, refresh_url = "$base_url/auth-refresh")
+end
 
 @testset "Packaging" begin
     # Gotta set this guy up beforehand
@@ -277,6 +308,74 @@ end
 
     old === nothing ? delete!(ENV, "JULIA_PKG_SERVER") : (ENV["JULIA_PKG_SERVER"] = old)
     pop!(Base.DEPOT_PATH)
+end
+
+# Ensure refreshed token downloads use a private temporary file.
+@testset "Authentication token refresh file mode" begin
+    mktempdir() do depot
+        mktempdir() do temp
+            old_depot_path = copy(Base.DEPOT_PATH)
+            refresh = nothing
+            try
+                empty!(Base.DEPOT_PATH)
+                push!(Base.DEPOT_PATH, depot)
+
+                fresh_token = "fresh-$(basename(depot))"
+                refresh = auth_refresh_server(
+                    """
+                    access_token = "$(fresh_token)"
+                    expires_in = 3600
+                    """
+                )
+
+                withenv(
+                    "JULIA_PKG_SERVER" => refresh.base_url,
+                    "TMPDIR" => temp,
+                    "TMP" => temp,
+                    "TEMP" => temp,
+                    "TEMPDIR" => temp,
+                ) do
+                    server_dir = PlatformEngines.get_server_dir("$(refresh.base_url)/baz")
+                    mkpath(server_dir)
+                    auth_file = joinpath(server_dir, "auth.toml")
+                    write(
+                        auth_file, """
+                        access_token = "expired"
+                        expires_at = 0
+                        refresh_token = "refresh"
+                        refresh_url = "$(refresh.refresh_url)"
+                        """
+                    )
+
+                    before = Set(readdir(temp; join = true))
+                    @test PlatformEngines.get_auth_header("$(refresh.base_url)/baz") == ("Authorization" => "Bearer $fresh_token")
+                    fetch(refresh.task)
+
+                    @test startswith(refresh.request[], "GET /auth-refresh ")
+                    @test any(header -> lowercase(header) == "authorization: bearer refresh", refresh.headers[])
+
+                    new_files = setdiff(Set(readdir(temp; join = true)), before)
+                    token_files = filter(collect(new_files)) do file
+                        isfile(file) && occursin(fresh_token, read(file, String))
+                    end
+                    @test length(token_files) == 1
+                    expected_mode = Sys.iswindows() ? 0o666 : 0o600
+                    @test filemode(only(token_files)) & 0o777 == expected_mode
+                end
+            finally
+                if refresh !== nothing && !istaskdone(refresh.task)
+                    refresh.socket[] !== nothing && close(refresh.socket[])
+                    close(refresh.server)
+                    try
+                        wait(refresh.task)
+                    catch
+                    end
+                end
+                empty!(Base.DEPOT_PATH)
+                append!(Base.DEPOT_PATH, old_depot_path)
+            end
+        end
+    end
 end
 
 end # module
