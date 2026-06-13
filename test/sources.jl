@@ -210,6 +210,17 @@ temp_pkg_dir() do project_path
                         """
                     )
 
+                    # Regression test for: https://github.com/JuliaLang/Pkg.jl/issues/4688
+                    # Check behaviour with a stale manifest.
+                    err = try
+                        Pkg.precompile()
+                        nothing
+                    catch e
+                        e
+                    end
+                    @test err isa Pkg.Types.PkgError
+                    @test occursin("manifest", err.msg)
+
                     # This should NOT cause an assertion error about tree_hash and path both being set
                     Pkg.update()
                     manifest = Pkg.Types.read_manifest("Manifest.toml")

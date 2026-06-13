@@ -1394,6 +1394,18 @@ function instantiate(
         repo_source = pkg.repo.source
         repo_source !== nothing || continue
         sourcepath = Operations.source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
+        if sourcepath === nothing
+            # `source_path` returns `nothing` when the package tracks a repo but the
+            # manifest entry has no recorded tree hash. This happens when a `[sources]`
+            # entry is changed (e.g. from a `path` to a `url`) without re-resolving, so
+            # the manifest is stale and we cannot determine which tree to check out.
+            resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+            update_cmd = Pkg.in_repl_mode() ? "pkg> update" : "Pkg.update()"
+            pkgerror(
+                "The source of $(err_rep(pkg)) has changed but the manifest has not been updated to match.",
+                " Run `$resolve_cmd` (or `$update_cmd`) to update the manifest, then try again."
+            )
+        end
         isdir(sourcepath) && continue
         ## Download repo at tree hash
         # determine canonical form of repo source
