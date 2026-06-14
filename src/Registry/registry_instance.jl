@@ -501,15 +501,16 @@ registry_info(registry::RegistryInstance, pkg::PkgEntry) = init_package_info!(re
         r.repo = get(d, "repo", nothing)::Union{String, Nothing}
         r.description = get(d, "description", nothing)::Union{String, Nothing}
 
-        r.pkgs = Dict{UUID, PkgEntry}()
+        pkgs = Dict{UUID, PkgEntry}()
         for (uuid, info) in d["packages"]::Dict{String, Any}
             uuid = UUID(uuid::String)
             info::Dict{String, Any}
             name = info["name"]::String
             pkgpath = info["path"]::String
             pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid)
-            r.pkgs[uuid] = pkg
+            pkgs[uuid] = pkg
         end
+        r.pkgs = pkgs
 
         r.name_to_uuids = Dict{String, Vector{UUID}}()
 
