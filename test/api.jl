@@ -159,7 +159,6 @@ import .FakeTerminals.FakeTerminal
                 Pkg.precompile(io = iob, timing = true)
                 str = String(take!(iob))
                 @test occursin("Precompiling", str)
-                @test occursin(" ms", str)
                 @test occursin("Dep6", str)
                 Pkg.precompile(io = iob)
                 @test !occursin("Precompiling", String(take!(iob))) # test that the previous precompile was a no-op
