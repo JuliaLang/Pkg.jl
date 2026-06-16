@@ -18,6 +18,24 @@ end
     hash(Pkg.Types.PackageEntry()) # hash isn't stable because the internal `repo` field is a mutable struct
 end
 
+@testset "stdlib compat entries" begin
+    infos = Pkg.Types.load_stdlib()
+    # SparseArrays ships a `[compat]` section
+    sparsearrays = Base.UUID("2f01184e-e22b-5df5-ae63-d93ebab69eaf")
+    if haskey(infos, sparsearrays)
+        info = infos[sparsearrays]
+        # julia compat is recorded against the julia pseudo-UUID
+        @test haskey(info.compat, Pkg.Registry.JULIA_UUID)
+        # only actual (weak)deps and julia are kept; extras-only entries are dropped
+        allowed = Set{Base.UUID}([info.deps; info.weakdeps; Pkg.Registry.JULIA_UUID])
+        @test issubset(keys(info.compat), allowed)
+        @test all(v -> v isa Pkg.Versions.VersionSpec, values(info.compat))
+    end
+    # 5-arg constructor (older HistoricalStdlibVersions.jl payloads) defaults to no compat
+    s = Pkg.Types.StdlibInfo("Foo", Base.UUID(UInt128(1)), v"1.0.0", Base.UUID[], Base.UUID[])
+    @test isempty(s.compat)
+end
+
 @testset "safe_realpath" begin
     realpath(Sys.BINDIR) == Pkg.safe_realpath(Sys.BINDIR)
     # issue #3085

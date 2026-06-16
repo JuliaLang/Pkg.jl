@@ -1077,7 +1077,19 @@ function deps_graph(
                     push!(deps_set, other_uuid)
                 end
                 stdlib_deps[vrange] = deps_set
-                stdlib_compat[vrange] = Dict{UUID, VersionSpec}()
+
+                # Honor the stdlib's own compat bounds
+                weakdeps_set = Set{UUID}(stdlib_info.weakdeps)
+                stdlib_compat_entries = Dict{UUID, VersionSpec}()
+                stdlib_weak_compat_entries = Dict{UUID, VersionSpec}()
+                for (dep_uuid, vspec) in stdlib_info.compat
+                    if dep_uuid in weakdeps_set
+                        stdlib_weak_compat_entries[dep_uuid] = vspec
+                    else
+                        stdlib_compat_entries[dep_uuid] = vspec
+                    end
+                end
+                stdlib_compat[vrange] = stdlib_compat_entries
 
                 if !isempty(stdlib_info.weakdeps)
                     weak_deps_set = Set{UUID}()
@@ -1087,7 +1099,7 @@ function deps_graph(
                         push!(all_weak_uuids, other_uuid)
                     end
                     stdlib_weak_deps[vrange] = weak_deps_set
-                    stdlib_weak_compat[vrange] = Dict{UUID, VersionSpec}()
+                    stdlib_weak_compat[vrange] = stdlib_weak_compat_entries
                 end
 
                 all_deps_compressed[uuid] = [stdlib_deps]
