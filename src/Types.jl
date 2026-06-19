@@ -1336,7 +1336,7 @@ function available_names(ctx::Context = Context(); manifest::Manifest = ctx.env.
     end
     if include_registries
         for reg in ctx.registries
-            for (_, pkgentry) in reg.pkgs
+            for pkgentry in values(reg.pkgs)
                 push!(all_names, pkgentry.name)
             end
         end
