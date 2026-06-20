@@ -631,6 +631,7 @@ const project = API.project
 
 """
     Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false, update_on_mismatch=false)
+    Pkg.instantiate(paths::AbstractString...; kwargs...)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -642,6 +643,12 @@ redirecting to the `build.log` file.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
+
+When passed one or more `paths` (each a path to a project file or to a directory
+containing one), each environment is instantiated in turn. The registries are read
+from disk once and shared across all of the environments, which is more convenient
+and efficient than activating and instantiating each environment separately. All
+keyword arguments are forwarded to each instantiation.
 
 `update_on_mismatch=true` falls back to [`Pkg.update`](@ref) when the existing manifest cannot
 be used as-is — for example, when the project's dependencies or compat bounds have changed
@@ -655,6 +662,9 @@ See more and how to disable auto-precompilation at [Environment Precompilation](
 
 !!! compat "Julia 1.12"
     The `julia_version_strict` keyword argument requires at least Julia 1.12.
+
+!!! compat "Julia 1.14"
+    Passing `paths` requires at least Julia 1.14.
 
 """
 const instantiate = API.instantiate

@@ -1290,6 +1290,23 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
+
+function instantiate(path::AbstractString, paths::AbstractString...; kwargs...)
+    # Reading the registries from disk is one of the more expensive parts of setting up
+    # a context, so do it once and share the result across every environment instead of
+    # paying that cost separately for each path.
+    registries = Registry.reachable_registries()
+    for p in (path, paths...)
+        # Accept either a path to a project file or to a directory containing one.
+        project_file = isdir(p) ? projectfile_path(p) : p
+        # `copy` so that any per-environment registry mutation (e.g. installing a
+        # registry referenced by a manifest) does not affect the shared list.
+        ctx = Context(; env = EnvCache(project_file), registries = copy(registries))
+        instantiate(ctx; kwargs...)
+    end
+    return
+end
+
 function instantiate(
         ctx::Context; manifest::Union{Bool, Nothing} = nothing,
         update_registry::Bool = true, verbose::Bool = false,
