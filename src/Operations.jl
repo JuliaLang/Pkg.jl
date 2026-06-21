@@ -3075,17 +3075,20 @@ function run_test_subprocess_in_env(io::IO, flags::Cmd, source_path::String, tes
     end
 end
 
-function run_sandboxed_tests!(
-        ctx::Context, pkg::PackageSpec, source_path::String, test_args::Cmd,
-        coverage::Union{Bool, AbstractString}, julia_args::Cmd, test_fn,
-        pkgs_errored::Vector{Tuple{String, Base.Process}}
+# Common test-running logic shared by the sandboxed and workspace code paths in `test`:
+# report status, precompile (if enabled), then run the test subprocess via `run_subprocess`
+# and record any failure. `run_subprocess` is called as `run_subprocess(io, flags)` and must
+# return `(process, interrupted)`.
+function precompile_and_run_tests!(
+        run_ctx::Context, pkg::PackageSpec, source_path::String,
+        coverage::Union{Bool, AbstractString}, julia_args::Cmd,
+        pkgs_errored::Vector{Tuple{String, Base.Process}};
+        run_subprocess,
     )
-    test_fn !== nothing && test_fn()
-    sandbox_ctx = Context(; io = ctx.io)
     status(
-        sandbox_ctx.env, sandbox_ctx.registries;
+        run_ctx.env, run_ctx.registries;
         mode = PKGMODE_COMBINED,
-        io = sandbox_ctx.io,
+        io = run_ctx.io,
         ignore_indent = false,
         show_usagetips = false,
     )
@@ -3095,17 +3098,31 @@ function run_sandboxed_tests!(
         cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
         # Don't warn about already loaded packages, since we are going to run tests in a new
         # subprocess anyway.
-        Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, warn_loaded = false, configs = flags => cacheflags)
+        Pkg.precompile(run_ctx; io = run_ctx.io, warn_loaded = false, configs = flags => cacheflags)
     end
 
-    printpkgstyle(ctx.io, :Testing, "Running tests...")
-    flush(ctx.io)
-    p, interrupted = run_test_subprocess(ctx.io, flags, source_path, test_args; with_threads = true)
+    printpkgstyle(run_ctx.io, :Testing, "Running tests...")
+    flush(run_ctx.io)
+    p, interrupted = run_subprocess(run_ctx.io, flags)
     if success(p)
-        printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
+        printpkgstyle(run_ctx.io, :Testing, pkg.name * " tests passed ")
     elseif !interrupted
         push!(pkgs_errored, (pkg.name, p))
     end
+    return
+end
+
+function run_sandboxed_tests!(
+        ctx::Context, pkg::PackageSpec, source_path::String, test_args::Cmd,
+        coverage::Union{Bool, AbstractString}, julia_args::Cmd, test_fn,
+        pkgs_errored::Vector{Tuple{String, Base.Process}}
+    )
+    test_fn !== nothing && test_fn()
+    sandbox_ctx = Context(; io = ctx.io)
+    precompile_and_run_tests!(
+        sandbox_ctx, pkg, source_path, coverage, julia_args, pkgs_errored;
+        run_subprocess = (io, flags) -> run_test_subprocess(io, flags, source_path, test_args; with_threads = true),
+    )
     return
 end
 
@@ -3154,8 +3171,7 @@ function test(
     # sandbox
     pkgs_errored = Tuple{String, Base.Process}[]
     for (pkg, source_path) in zip(pkgs, source_paths)
-        # TODO: DRY with code below.
-        # If the test is in the our "workspace", no need to create a temp env etc, just activate and run thests
+        # If the test is in our "workspace", no need to create a temp env etc, just activate and run the tests
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             proj = Base.locate_project_file(abspath(testdir(source_path)))
             env = EnvCache(proj)
@@ -3163,24 +3179,10 @@ function test(
             # precompile operate on the test project rather than the parent.
             test_ctx = Context(env = env; io = ctx.io)
             Pkg.instantiate(test_ctx; allow_autoprecomp = false)
-            status(env, ctx.registries; mode = PKGMODE_COMBINED, io = ctx.io, ignore_indent = false, show_usagetips = false)
-            flags = gen_subprocess_flags(source_path; coverage, julia_args)
-
-            if should_autoprecompile()
-                cacheflags = parse(CacheFlags, read(`$(Base.julia_cmd()) $(flags) --eval 'show(Base.CacheFlags())'`, String))
-                # Don't warn about already loaded packages, since we are going to run tests in a new
-                # subprocess anyway.
-                Pkg.precompile(test_ctx; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
-            end
-
-            printpkgstyle(ctx.io, :Testing, "Running tests...")
-            flush(ctx.io)
-            p, interrupted = run_test_subprocess_in_env(ctx.io, flags, source_path, test_args)
-            if success(p)
-                printpkgstyle(ctx.io, :Testing, pkg.name * " tests passed ")
-            elseif !interrupted
-                push!(pkgs_errored, (pkg.name, p))
-            end
+            precompile_and_run_tests!(
+                test_ctx, pkg, source_path, coverage, julia_args, pkgs_errored;
+                run_subprocess = (io, flags) -> run_test_subprocess_in_env(io, flags, source_path, test_args),
+            )
             continue
         end
 
