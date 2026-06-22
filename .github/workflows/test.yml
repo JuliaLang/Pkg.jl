@@ -6,9 +6,9 @@ on:
       - 'master'
       - 'release-*'
     tags: '*'
-defaults:
-  run:
-    shell: bash
+# defaults:
+#  run:
+#     shell: bash
 concurrency:
   # Skip intermediate builds: all builds except for builds on the `master` or `release-*` branches
   # Cancel intermediate builds: only pull request builds
