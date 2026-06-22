@@ -2588,7 +2588,9 @@ function test(
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
-                Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
+                # Don't warn about already loaded packages, since we are going to run tests in a new
+                # subprocess anyway.
+                Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, warn_loaded = false, configs = flags => cacheflags)
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
