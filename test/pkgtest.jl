@@ -377,6 +377,26 @@ end
     end
 end
 
+@testset "parallel testing" begin
+    @test_throws PkgError("`ntasks` must be positive") Pkg.test(; ntasks = 0)
+    isolate(loaded_depot = true) do
+        mktempdir() do dir
+            pkgnames = ["ParallelTestA", "ParallelTestB"]
+            for name in pkgnames
+                cp(joinpath(@__DIR__, "test_packages", name), joinpath(dir, name))
+            end
+            with_temp_env() do
+                Pkg.develop([Pkg.PackageSpec(path = joinpath(dir, name)) for name in pkgnames])
+                mktempdir() do sync_dir
+                    withenv("PKG_PARALLEL_SYNC_DIR" => sync_dir) do
+                        @test Pkg.test(pkgnames; ntasks = 2) === nothing
+                    end
+                end
+            end
+        end
+    end
+end
+
 @testset "Pkg.test process failure" begin
     temp_pkg_dir() do project_path
         mktempdir() do dir
