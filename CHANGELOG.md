@@ -65,6 +65,10 @@ Pkg v1.13 Release Notes
 - Fixed various edge cases in package resolution and manifest handling. ([#4307], [#4308], [#4312])
 - Improved handling of path separators across different operating systems. ([#4305])
 - Added better error messages when accessing private PackageSpec.repo field. ([#4170])
+- Git tree hashing now records symlink blob lengths by byte count rather than character count, fixing tree hashes for
+  symlinks whose targets contain non-ASCII characters so they match `git`. `create_artifact` and `GitTools.tree_hash`
+  accept a `legacy_symlink_size` keyword to reproduce the old hash, and artifact verification accepts either hash so
+  artifacts recorded by older Pkg versions keep installing.
 
 Pkg v1.12 Release Notes
 =======================

@@ -3581,6 +3581,29 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
             @test tree_hash(dir) == "5e50a4254773a7c689bebca79e2954630cab9c04"
         end
     end
+
+    # Symlink targets containing non-ASCII (multi-byte UTF-8) characters: the git blob
+    # length must be the byte count of the target, not the character count. The default
+    # computes the byte-correct hash; `legacy_symlink_size = true` reproduces the
+    # historical character-count hash used by older Pkg versions.
+    if !Sys.iswindows()
+        mktempdir() do dir
+            # "schön": the 'ö' is two bytes in UTF-8, so byte length (6) != char length (5)
+            symlink("schön", joinpath(dir, "link"))
+            # default byte-correct hash, cross-checked against command-line git
+            @test tree_hash(dir) == "289b9713bf8902fbd0688b0ca5584ec4cf08fdc9"
+            # legacy (character-count) hash as recorded by older Pkg versions
+            @test tree_hash(dir; legacy_symlink_size = true) == "23b444ffcdb0f0581971360378088dbaf47c011e"
+            @test tree_hash(dir) != tree_hash(dir; legacy_symlink_size = true)
+        end
+
+        # An ASCII-only target hashes identically under both, confirming the difference
+        # is specific to multi-byte targets.
+        mktempdir() do dir
+            symlink("plain-target", joinpath(dir, "link"))
+            @test tree_hash(dir) == tree_hash(dir; legacy_symlink_size = true)
+        end
+    end
 end
 
 @testset "multiple registries overlapping version ranges for different versions" begin

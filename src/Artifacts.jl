@@ -21,13 +21,19 @@ export Artifacts, create_artifact, artifact_exists, artifact_path, remove_artifa
     select_downloadable_artifacts, ArtifactDownloadInfo
 
 """
-    create_artifact(f::Function)
+    create_artifact(f::Function; legacy_symlink_size::Bool = false)
 
 Creates a new artifact by running `f(artifact_path)`, hashing the result, and moving it
 to the artifact store (`~/.julia/artifacts` on a typical installation).  Returns the
 identifying tree hash of this artifact.
+
+The tree hash is computed with the byte-correct, git-matching symlink hashing (see
+[`GitTools.blob_hash`](@ref)). For an artifact whose contents include symlinks with
+non-ASCII targets, this hash differs from the one computed by Pkg versions predating the
+fix, so older Julia would reject it. Pass `legacy_symlink_size = true` to reproduce the
+old hash if you need the artifact to be installable by those older versions.
 """
-function create_artifact(f::Function)
+function create_artifact(f::Function; legacy_symlink_size::Bool = false)
     # Ensure the `artifacts` directory exists in our default depot
     artifacts_dir = first(artifacts_dirs())
     mkpath(artifacts_dir)
@@ -41,7 +47,7 @@ function create_artifact(f::Function)
         f(temp_dir)
 
         # Calculate the tree hash for this temporary directory
-        artifact_hash = SHA1(GitTools.tree_hash(temp_dir))
+        artifact_hash = SHA1(GitTools.tree_hash(temp_dir; legacy_symlink_size))
 
         # If we created a dupe, just let the temp directory get destroyed. It's got the
         # same contents as whatever already exists after all, so it doesn't matter.  Only
@@ -90,6 +96,23 @@ function remove_artifact(hash::SHA1)
 end
 
 """
+    tree_hash_matches(path::AbstractString, expected::SHA1) -> Bool
+
+Return `true` if the git tree hash of `path` matches `expected`.
+
+The primary check uses the default (byte-correct, git-matching) tree hash. Older Pkg
+versions hashed symlink targets by character count rather than byte count (see
+[`GitTools.blob_hash`](@ref)), so artifacts containing symlinks with non-ASCII targets
+may have been recorded with that legacy hash. To keep those installable, this also
+accepts the legacy hash, computed only as a fallback when the default hash does not
+match.
+"""
+function tree_hash_matches(path::AbstractString, expected::SHA1)
+    all(GitTools.tree_hash(path) .== expected.bytes) && return true
+    return all(GitTools.tree_hash(path; legacy_symlink_size = true) .== expected.bytes)
+end
+
+"""
     verify_artifact(hash::SHA1; honor_overrides::Bool=false)
 
 Verifies that the given artifact (identified by its SHA1 git tree hash) is installed on-
@@ -110,7 +133,7 @@ function verify_artifact(hash::SHA1; honor_overrides::Bool = false)
     end
 
     # Otherwise actually run the verification
-    return all(hash.bytes .== GitTools.tree_hash(artifact_path(hash)))
+    return tree_hash_matches(artifact_path(hash), hash)
 end
 
 """
@@ -370,7 +393,11 @@ function download_artifact(
             calc_hash = SHA1(GitTools.tree_hash(temp_dir))
 
             # Did we get what we expected?  If not, freak out.
-            if calc_hash.bytes != tree_hash.bytes
+            # `calc_hash` uses the default (byte-correct) symlink hashing. Older Pkg
+            # versions recorded some artifacts with the legacy character-count hash, so
+            # `tree_hash_matches` also accepts that (computed only as a fallback) before
+            # erroring out.
+            if calc_hash.bytes != tree_hash.bytes && !tree_hash_matches(temp_dir, tree_hash)
                 msg = """
                 Tree Hash Mismatch!
                 Expected git-tree-sha1:   $(bytes2hex(tree_hash.bytes))
