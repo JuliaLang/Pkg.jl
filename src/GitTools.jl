@@ -308,9 +308,9 @@ function blob_hash(::Type{HashType}, path::AbstractString; legacy_symlink_size::
     if islink(path)
         link = readlink(path)
         # The git blob header must be the byte length of the content. `length` counts
-        # characters, not bytes, so it is wrong for non-ASCII targets; `ncodeunits`
-        # gives the correct byte count. `legacy_symlink_size` keeps the old behavior.
-        datalen = legacy_symlink_size ? length(link) : ncodeunits(link)
+        # characters, not bytes, so it is wrong for non-ASCII targets; `sizeof` gives
+        # the correct byte count. `legacy_symlink_size` keeps the old behavior.
+        datalen = legacy_symlink_size ? length(link) : sizeof(link)
     else
         datalen = filesize(path)
     end
