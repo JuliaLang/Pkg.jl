@@ -262,7 +262,11 @@ end
         # Default HostPlatform() adds a compare_strategy key that doesn't get picked up from
         # the Artifacts.toml
         testhost = Platform("x86_64", "linux", Dict("libstdcxx_version" => "1.2.3"))
-        BinaryPlatforms.set_compare_strategy!(testhost, "libstdcxx_version", BinaryPlatforms.compare_version_cap)
+        # Newer Julia translates the `libstdcxx_version` tag into `cxxlib_version`
+        # (with `cxxlib=libstdcxx`), so set the compare strategy on whichever version
+        # tag the platform actually ended up with.
+        version_key = haskey(tags(testhost), "libstdcxx_version") ? "libstdcxx_version" : "cxxlib_version"
+        BinaryPlatforms.set_compare_strategy!(testhost, version_key, BinaryPlatforms.compare_version_cap)
         @test_throws ErrorException bind_artifact!(artifacts_toml, "foo_txt", hash; download_info = download_info, platform = testhost)
 
         # Next, check that we can get the download_info properly:
