@@ -367,7 +367,7 @@ end
 
 Calculate the git tree hash of a given path.
 
-`legacy_symlink_size` is forwarded to [`blob_hash`](@ref); see there for details. It
+`legacy_symlink_size` is forwarded to `blob_hash`; see there for details. It
 defaults to `false` (the byte-correct, git-matching hashing). Pass `true` to reproduce
 the historical character-count symlink hashing used by older Pkg versions.
 """

@@ -28,7 +28,7 @@ to the artifact store (`~/.julia/artifacts` on a typical installation).  Returns
 identifying tree hash of this artifact.
 
 The tree hash is computed with the byte-correct, git-matching symlink hashing (see
-[`GitTools.blob_hash`](@ref)). For an artifact whose contents include symlinks with
+`GitTools.blob_hash`). For an artifact whose contents include symlinks with
 non-ASCII targets, this hash differs from the one computed by Pkg versions predating the
 fix, so older Julia would reject it. Pass `legacy_symlink_size = true` to reproduce the
 old hash if you need the artifact to be installable by those older versions.
@@ -102,7 +102,7 @@ Return `true` if the git tree hash of `path` matches `expected`.
 
 The primary check uses the default (byte-correct, git-matching) tree hash. Older Pkg
 versions hashed symlink targets by character count rather than byte count (see
-[`GitTools.blob_hash`](@ref)), so artifacts containing symlinks with non-ASCII targets
+`GitTools.blob_hash`), so artifacts containing symlinks with non-ASCII targets
 may have been recorded with that legacy hash. To keep those installable, this also
 accepts the legacy hash, computed only as a fallback when the default hash does not
 match.
