@@ -164,6 +164,38 @@ end
 merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
     merge_pkg_source!(target, source.path, source.repo)
 
+# In a workspace the same package can be a direct dependency of several projects,
+# each of which may point it at a source via `[sources]`. Merging those entries
+# only makes sense if they agree; otherwise the resulting source would depend on
+# the order the projects happen to be iterated in, so reject the configuration.
+function assert_no_conflicting_sources(pkgs)
+    paths = Set{String}()
+    repo_sources = Set{String}()
+    revs = Set{String}()
+    subdirs = Set{String}()
+    for pkg in pkgs
+        isnothing(pkg.path) || push!(paths, pkg.path)
+        isnothing(pkg.repo.source) || push!(repo_sources, pkg.repo.source)
+        isnothing(pkg.repo.rev) || push!(revs, pkg.repo.rev)
+        isnothing(pkg.repo.subdir) || push!(subdirs, pkg.repo.subdir)
+    end
+    conflicts = String[]
+    if !isempty(paths) && (!isempty(repo_sources) || !isempty(revs))
+        push!(conflicts, "both a path and a repository")
+    end
+    showvals(vals) = join((repr(v) for v in sort!(collect(vals))), ", ")
+    length(paths) > 1 && push!(conflicts, "paths $(showvals(paths))")
+    length(repo_sources) > 1 && push!(conflicts, "repositories $(showvals(repo_sources))")
+    length(revs) > 1 && push!(conflicts, "revisions $(showvals(revs))")
+    length(subdirs) > 1 && push!(conflicts, "subdirectories $(showvals(subdirs))")
+    isempty(conflicts) && return
+    pkgerror(
+        """
+        Package $(err_rep(first(pkgs))) has conflicting sources specified by different projects in the workspace: $(join(conflicts, "; ")).
+        Make the `[sources]` entries for this package agree across the workspace."""
+    )
+end
+
 function load_direct_deps(
         env::EnvCache, pkgs::Vector{PackageSpec} = PackageSpec[];
         preserve::PreserveLevel = PRESERVE_DIRECT
@@ -177,7 +209,7 @@ function load_direct_deps(
     unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
     for uuid in unique_uuids
         idxs = findall(pkg -> pkg.uuid == uuid, pkgs_direct)
-        # TODO: Assert that projects do not have conflicting sources
+        assert_no_conflicting_sources(view(pkgs_direct, idxs))
         pkg = pkgs_direct[idxs[1]]
         idx_to_drop = Int[]
         for i in Iterators.drop(idxs, 1)
