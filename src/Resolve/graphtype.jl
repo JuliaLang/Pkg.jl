@@ -278,6 +278,8 @@ mutable struct Graph
         vnmap = Dict{UUID, VersionSpec}()
         reg_result = Dict{UUID, VersionSpec}()
         req = Dict{Int, VersionSpec}()
+        prev_req = Dict{Int, VersionSpec}()
+        last_stdlibs = Types.get_last_stdlibs(julia_version)
         for p0 in 1:np
             uuid0 = pkgs[p0]
 
@@ -289,6 +291,15 @@ mutable struct Graph
             uuid0_weak_compat_list = get(Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}, weak_compat_compressed, uuid0)
             uuid0_versions_per_reg = get(Vector{Set{VersionNumber}}, pkg_versions_per_registry, uuid0)
 
+            # Compressed compat data is stored per version range, so consecutive
+            # versions usually produce identical requirements; reuse the previous
+            # version's mask dict when both the requirements and the weak-dep
+            # flags are unchanged.
+            no_weak = all(isempty, uuid0_weak_deps_list)
+            have_prev = false
+            weak_now = Int[]
+            weak_prev = Int[]
+
             for v0 in 1:(spp[p0] - 1)
                 vn = pvers[p0][v0]
                 empty!(req)
@@ -297,7 +308,8 @@ mutable struct Graph
                 # Filter out incompatible stdlib compat entries from registry dependencies
                 for (dep_uuid, dep_compat) in vnmap
                     if Types.is_stdlib(dep_uuid) && !(dep_uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
-                        stdlib_ver = Types.stdlib_version(dep_uuid, julia_version)
+                        stdlib_info = get(last_stdlibs, dep_uuid, nothing)
+                        stdlib_ver = stdlib_info === nothing ? nothing : stdlib_info.version
                         if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
                             @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat package = uuid_to_name[uuid0] version = vn
                             delete!(vnmap, dep_uuid)
@@ -318,29 +330,41 @@ mutable struct Graph
                     end
                 end
 
-                # Translate the requirements into bit masks
-                # Hot code, measure performance before changing
-                req_msk = Dict{Int, BitVector}()
-                sizehint!(req_msk, length(req))
-
-                for (p1, vs) in req
-                    pv = pvers[p1]
-                    # Allocate BitVector with space for weak dep flag
-                    req_msk_p1 = BitVector(undef, spp[p1])
-                    # Use optimized batch version check (fills indices 1 through spp[p1]-1)
-                    Versions.matches_spec_range!(req_msk_p1, pv, vs, spp[p1] - 1)
-                    # Check if this is a weak dep across all registries
-                    weak = false
-                    for weak_deps_dict in uuid0_weak_deps_list
-                        if Registry.is_weak_dep(weak_deps_dict, vn, pkgs[p1])
-                            weak = true
-                            break
+                if !no_weak
+                    empty!(weak_now)
+                    for (p1, _) in req
+                        for weak_deps_dict in uuid0_weak_deps_list
+                            if Registry.is_weak_dep(weak_deps_dict, vn, pkgs[p1])
+                                push!(weak_now, p1)
+                                break
+                            end
                         end
                     end
-                    req_msk_p1[end] = weak
-                    req_msk[p1] = req_msk_p1
+                    sort!(weak_now)
                 end
-                extended_deps[p0][v0] = req_msk
+
+                if have_prev && req == prev_req && weak_now == weak_prev
+                    extended_deps[p0][v0] = extended_deps[p0][v0 - 1]
+                else
+                    # Translate the requirements into bit masks
+                    # Hot code, measure performance before changing
+                    req_msk = Dict{Int, BitVector}()
+                    sizehint!(req_msk, length(req))
+
+                    for (p1, vs) in req
+                        pv = pvers[p1]
+                        # Allocate BitVector with space for weak dep flag
+                        req_msk_p1 = BitVector(undef, spp[p1])
+                        # Use optimized batch version check (fills indices 1 through spp[p1]-1)
+                        Versions.matches_spec_range!(req_msk_p1, pv, vs, spp[p1] - 1)
+                        req_msk_p1[end] = insorted(p1, weak_now)
+                        req_msk[p1] = req_msk_p1
+                    end
+                    extended_deps[p0][v0] = req_msk
+                end
+                req, prev_req = prev_req, req
+                weak_now, weak_prev = weak_prev, weak_now
+                have_prev = true
             end
         end
 
@@ -1374,6 +1398,50 @@ function compute_eq_classes!(graph::Graph)
     return graph
 end
 
+# Dict key wrapping a BitVector's chunks: cheaper hash/isequal than the
+# generic AbstractArray fallbacks (relies on trailing bits being zeroed)
+struct BitChunksKey
+    chunks::Vector{UInt64}
+end
+Base.:(==)(a::BitChunksKey, b::BitChunksKey) = a.chunks == b.chunks
+function Base.hash(k::BitChunksKey, h::UInt)
+    for c in k.chunks
+        h = hash(c, h)
+    end
+    return h
+end
+
+# m[:, cols]: columns of a BitMatrix are contiguous bit ranges, copy chunk-wise
+function bitmat_select_cols(m::BitMatrix, cols::Vector{Int})
+    nr = size(m, 1)
+    out = BitMatrix(undef, nr, length(cols))
+    for (k, c) in enumerate(cols)
+        Base.copy_chunks!(out.chunks, (k - 1) * nr + 1, m.chunks, (c - 1) * nr + 1, nr)
+    end
+    return out
+end
+
+# m[rows, :] without the generic fancy-indexing overhead
+function bitmat_select_rows(m::BitMatrix, rows::Vector{Int})
+    nr, nc = size(m)
+    nro = length(rows)
+    out = BitMatrix(undef, nro, nc)
+    och = out.chunks
+    fill!(och, zero(UInt64))
+    mch = m.chunks
+    @inbounds for c in 1:nc
+        base = (c - 1) * nr - 1
+        o = (c - 1) * nro
+        for k in 1:nro
+            i = base + rows[k]
+            v = (mch[(i >>> 6) + 1] >>> (i & 63)) & one(UInt64)
+            och[(o >>> 6) + 1] |= v << (o & 63)
+            o += 1
+        end
+    end
+    return out
+end
+
 function build_eq_classes1!(graph::Graph, p0::Int, cmat_workspace::BitMatrix, cvecs_workspace::Vector{BitVector})
     np = graph.np
     spp = graph.spp
@@ -1409,16 +1477,18 @@ function build_eq_classes1!(graph::Graph, p0::Int, cmat_workspace::BitMatrix, cv
         copy!(cvecs[v0], view(cmat_workspace, 1:nrows, v0))
     end
 
-    # find unique behaviors
-    repr_vecs = unique(cvecs)
+    # group versions into sets that behave identically, in one pass
+    groups = Dict{BitChunksKey, Set{Int}}()
+    for v0 in 1:ncols
+        push!(get!(Set{Int}, groups, BitChunksKey(cvecs[v0].chunks)), v0)
+    end
 
     # number of equivalent classes
-    neq = length(repr_vecs)
+    neq = length(groups)
 
     neq == spp[p0] && return # nothing to do here
 
-    # group versions into sets that behave identically
-    eq_sets = [Set{Int}(v0 for v0 in 1:spp[p0] if cvecs[v0] == rvec) for rvec in repr_vecs]
+    eq_sets = collect(values(groups))
     sort!(eq_sets, by = maximum)
 
     # each set is represented by its highest-valued member,
@@ -1451,10 +1521,10 @@ function build_eq_classes1!(graph::Graph, p0::Int, cmat_workspace::BitMatrix, cv
     spp[p0] = neq
     gconstr[p0] = gconstr[p0][repr_vers]
     for (j1, p1) in enumerate(gadj[p0])
-        gmsk[p0][j1] = gmsk[p0][j1][:, repr_vers]
+        gmsk[p0][j1] = bitmat_select_cols(gmsk[p0][j1], repr_vers)
 
         j0 = adjdict[p0][p1]
-        gmsk[p1][j0] = gmsk[p1][j0][repr_vers, :]
+        gmsk[p1][j0] = bitmat_select_rows(gmsk[p1][j0], repr_vers)
     end
 
     # reduce/rebuild version dictionaries
