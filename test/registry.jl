@@ -503,7 +503,9 @@ if Pkg.Registry.registry_use_pkg_server()
 
                     # This should not uncompress the registry
                     Registry.add(uuid = UUID("23338594-aafe-5451-b93e-139f81909106"))
-                    @test isfile(joinpath(DEPOT_PATH[1], "registries", "General.tar.gz")) != something(unpack, false)
+                    # the server may serve the registry gzip- or zstd-compressed
+                    tarballs = filter(isfile, [joinpath(DEPOT_PATH[1], "registries", "General$ext") for ext in (".tar.gz", ".tar.zst")])
+                    @test !isempty(tarballs) != something(unpack, false)
                     Pkg.add("Example")
 
                     # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
@@ -520,7 +522,7 @@ if Pkg.Registry.registry_use_pkg_server()
                             """
                             git-tree-sha1 = "179182faa6a80b3cf24445e6f55c954938d57941"
                             uuid = "23338594-aafe-5451-b93e-139f81909106"
-                            path = "General.tar.gz"
+                            path = "$(basename(only(tarballs)))"
                             """
                         )
                     end
