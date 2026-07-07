@@ -174,21 +174,23 @@ function load_direct_deps(
         append!(pkgs_direct, load_project_deps(project, path, env.manifest, env.manifest_file, pkgs; preserve))
     end
 
-    unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
-    for uuid in unique_uuids
-        idxs = findall(pkg -> pkg.uuid == uuid, pkgs_direct)
-        # TODO: Assert that projects do not have conflicting sources
-        pkg = pkgs_direct[idxs[1]]
-        idx_to_drop = Int[]
-        for i in Iterators.drop(idxs, 1)
-            merge_pkg_source!(pkg, pkgs_direct[i])
-            push!(idx_to_drop, i)
+    # Merge duplicate direct-dep entries (the same package pulled in by multiple
+    # workspace projects) in a single pass, keeping the first occurrence and folding
+    # any additional source information from later occurrences into it.
+    first_idx = Dict{UUID, Int}()
+    deduped = PackageSpec[]
+    for pkg in pkgs_direct
+        idx = get(first_idx, pkg.uuid, nothing)
+        if isnothing(idx)
+            push!(deduped, pkg)
+            first_idx[pkg.uuid] = length(deduped)
+        else
+            # TODO: Assert that projects do not have conflicting sources
+            merge_pkg_source!(deduped[idx], pkg)
         end
-        sort!(unique!(idx_to_drop))
-        deleteat!(pkgs_direct, idx_to_drop)
     end
 
-    return vcat(pkgs, pkgs_direct)
+    return vcat(pkgs, deduped)
 end
 
 function load_project_deps(
@@ -196,14 +198,15 @@ function load_project_deps(
         preserve::PreserveLevel = PRESERVE_DIRECT
     )
     pkgs_direct = PackageSpec[]
-    if project.name !== nothing && project.uuid !== nothing && findfirst(pkg -> pkg.uuid == project.uuid, pkgs) === nothing
+    existing_uuids = Set{UUID}(pkg.uuid for pkg in pkgs if !isnothing(pkg.uuid))
+    if !isnothing(project.name) && !isnothing(project.uuid) && !(project.uuid in existing_uuids)
         path = Types.relative_project_path(manifest_file, dirname(project_file))
         pkg = PackageSpec(; name = project.name, uuid = project.uuid, version = project.version, path)
         push!(pkgs_direct, pkg)
     end
 
     for (name::String, uuid::UUID) in project.deps
-        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        uuid in existing_uuids && continue # do not duplicate packages
         path, repo = get_path_repo(project, project_file, manifest_file, name)
         entry = manifest_info(manifest, uuid)
         push!(
@@ -228,8 +231,9 @@ function load_manifest_deps(
         preserve::PreserveLevel = PRESERVE_ALL
     )
     pkgs = copy(pkgs)
+    seen_uuids = Set{UUID}(pkg.uuid for pkg in pkgs if !isnothing(pkg.uuid))
     for (uuid, entry) in manifest
-        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        uuid in seen_uuids && continue # do not duplicate packages
         push!(
             pkgs, PackageSpec(
                 uuid = uuid,
@@ -241,6 +245,7 @@ function load_manifest_deps(
                 version = load_version(entry.version, isfixed(entry), preserve),
             )
         )
+        push!(seen_uuids, uuid)
     end
     return pkgs
 end
@@ -617,12 +622,12 @@ is_tracking_repo(pkg) = (pkg.repo.source !== nothing || pkg.repo.rev !== nothing
 is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
-function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
+function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec}, seen::Set{UUID} = Set{UUID}(p.uuid for p in developed if !isnothing(p.uuid)))
     source = source_path(env.manifest_file, pkg)
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
     for pkg in pkgs
-        if any(x -> x.uuid == pkg.uuid, developed)
+        if pkg.uuid in seen
             continue
         end
         if is_tracking_path(pkg)
@@ -634,9 +639,11 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
                 source_path(source_env.manifest_file, pkg)
             )
             push!(developed, pkg)
-            collect_developed!(env, pkg, developed)
+            push!(seen, pkg.uuid)
+            collect_developed!(env, pkg, developed, seen)
         elseif is_tracking_repo(pkg)
             push!(developed, pkg)
+            push!(seen, pkg.uuid)
         end
     end
     return
@@ -644,8 +651,9 @@ end
 
 function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     developed = PackageSpec[]
+    seen = Set{UUID}()
     for pkg in filter(is_tracking_path, pkgs)
-        collect_developed!(env, pkg, developed)
+        collect_developed!(env, pkg, developed, seen)
     end
     return developed
 end
@@ -825,9 +833,11 @@ function resolve_versions!(
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
+    pkg_uuids = Set{UUID}(pkg.uuid for pkg in pkgs if !isnothing(pkg.uuid))
     for pkg in developed
-        if !any(x -> x.uuid == pkg.uuid, pkgs)
+        if !(pkg.uuid in pkg_uuids)
             push!(pkgs, pkg)
+            push!(pkg_uuids, pkg.uuid)
         end
     end
     # this also sets pkg.version for fixed packages
@@ -839,8 +849,9 @@ function resolve_versions!(
     end
     fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version; env_uuids)
     for new_pkg in new_fixed_pkgs
-        any(x -> x.uuid == new_pkg.uuid, pkgs) && continue
+        new_pkg.uuid in pkg_uuids && continue
         push!(pkgs, new_pkg)
+        push!(pkg_uuids, new_pkg.uuid)
     end
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
@@ -900,8 +911,9 @@ function resolve_versions!(
     vers = vers_fix
 
     # update vector of package versions
+    pkg_index = Dict{UUID, Int}(pkg.uuid => i for (i, pkg) in pairs(pkgs))
     for (uuid, ver) in vers
-        idx = findfirst(p -> p.uuid == uuid, pkgs)
+        idx = get(pkg_index, uuid, nothing)
         if idx !== nothing
             pkg = pkgs[idx]
             # Fixed packages are not returned by resolve (they already have their version set)
