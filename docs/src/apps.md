@@ -44,6 +44,11 @@ reverse = {}
 ```
 The empty table `{}` is to allow for giving metadata about the app.
 
+!!! note
+    In TOML, `reverse = {}` under `[apps]` and a `[apps.reverse]` table are
+    equivalent. Pkg may rewrite between these two forms when it writes out the
+    project file.
+
 After installing this app one could run:
 
 ```
@@ -157,4 +162,30 @@ myapp input.txt
 
 ## Installing Julia apps
 
-The installation of Julia apps is similar to [installing Julia libraries](@ref Managing-Packages) but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add` (`develop` is also available).
+The installation of Julia apps is similar to [installing Julia libraries](@ref Managing-Packages) but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add`.
+Apps can be installed from a registry, a git URL, or a local path:
+
+```julia-repl
+pkg> app add Runic          # from a registry
+pkg> app add Runic@1.5      # specific version
+pkg> app add https://github.com/fredrikekre/Runic.jl
+pkg> app add path/to/Package  # local path (must be a git repository)
+```
+
+To install an app from a local package such that changes to the package are immediately reflected in the app, use `Pkg.Apps.develop` or `pkg> app develop`:
+
+```julia-repl
+pkg> app develop path/to/Package
+```
+
+Installed apps are updated with `pkg> app update [name]` (all apps if no name is given), listed with `pkg> app status`, and removed with `pkg> app rm name`.
+
+## Apps API Reference
+
+```@docs
+Pkg.Apps.add
+Pkg.Apps.develop
+Pkg.Apps.update
+Pkg.Apps.status
+Pkg.Apps.rm
+```
