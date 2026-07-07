@@ -26,7 +26,7 @@ end
 Fixed(v::VersionNumber, requires::Requires = Requires()) = Fixed(v, requires, Set{UUID}())
 
 Base.:(==)(a::Fixed, b::Fixed) = a.version == b.version && a.requires == b.requires && a.weak == b.weak
-Base.hash(f::Fixed, h::UInt) = hash((f.version, f.requires, f.weak), h + (0x68628b809fd417ca % UInt))
+Base.hash(f::Fixed, h::UInt) = hash((f.version, f.requires, f.weak), h +% (0x68628b809fd417ca % UInt))
 
 Base.show(io::IO, f::Fixed) = isempty(f.requires) ?
     print(io, "Fixed(", repr(f.version), ")") :
