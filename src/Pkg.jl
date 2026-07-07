@@ -583,12 +583,15 @@ Create a minimal project called `pkgname` in the current folder. For more featur
 const generate = API.generate
 
 """
-    Pkg.dependencies()::Dict{UUID, PackageInfo}
+    Pkg.dependencies(; workspace::Bool=false)::Dict{UUID, PackageInfo}
 
 This feature is considered experimental.
 
 Query the dependency graph of the active project.
 The result is a `Dict` that maps a package UUID to a `PackageInfo` struct representing the dependency (a package).
+
+If `workspace` is `true`, the dependency graphs of all projects in the workspace are
+included, not just that of the active project.
 
 # `PackageInfo` fields
 
@@ -610,11 +613,14 @@ The result is a `Dict` that maps a package UUID to a `PackageInfo` struct repres
 const dependencies = API.dependencies
 
 """
-    Pkg.project()::ProjectInfo
+    Pkg.project(; workspace::Bool=false)::ProjectInfo
 
 This feature is considered experimental.
 
 Request a `ProjectInfo` struct which contains information about the active project.
+
+If `workspace` is `true`, `dependencies` contains the merged direct dependencies of all
+workspace projects. Other fields still describe the active project.
 
 # `ProjectInfo` fields
 
@@ -625,6 +631,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 | `version`      | The project's version                                                                       |
 | `ispackage`    | Whether the project is a package (has a name and uuid)                                      |
 | `dependencies` | The project's direct dependencies as a `Dict` which maps dependency name to dependency UUID |
+| `sources`      | The project's source overrides                                                               |
 | `path`         | The location of the project file which defines the active project                           |
 """
 const project = API.project
