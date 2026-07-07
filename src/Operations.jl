@@ -2392,30 +2392,39 @@ end
 # Operations #
 ##############
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
-    drop = UUID[]
+    drop = Set{UUID}()
     # find manifest-mode drops
     if mode == PKGMODE_MANIFEST
         for pkg in pkgs
             info = manifest_info(ctx.env.manifest, pkg.uuid)
             if info !== nothing
-                pkg.uuid in drop || push!(drop, pkg.uuid)
+                push!(drop, pkg.uuid)
             else
                 str = has_name(pkg) ? pkg.name : string(pkg.uuid)
                 @warn("`$str` not in manifest, ignoring")
             end
         end
     end
-    # drop reverse dependencies
-    while !isempty(drop)
-        clean = true
+    # drop reverse dependencies: any manifest package that (transitively) depends on a
+    # dropped package must also be dropped. Build a reverse-dependency map once, then walk
+    # the closure from the initial drops instead of repeatedly rescanning the whole manifest.
+    if !isempty(drop)
+        dependents = Dict{UUID, Vector{UUID}}()
         for (uuid, entry) in ctx.env.manifest
-            deps = values(entry.deps)
-            isempty(drop ∩ deps) && continue
-            uuid ∉ drop || continue
-            push!(drop, uuid)
-            clean = false
+            for dep in values(entry.deps)
+                push!(get!(() -> UUID[], dependents, dep), uuid)
+            end
         end
-        clean && break
+        worklist = collect(drop)
+        while !isempty(worklist)
+            uuid = pop!(worklist)
+            for r in get(dependents, uuid, UUID[])
+                if r ∉ drop
+                    push!(drop, r)
+                    push!(worklist, r)
+                end
+            end
+        end
     end
     # find project-mode drops
     if mode == PKGMODE_PROJECT
@@ -2427,7 +2436,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
                     error("project file name mismatch for `$uuid`: $(pkg.name) ≠ $name")
                 pkg.uuid == uuid ||
                     error("project file UUID mismatch for `$name`: $(pkg.uuid) ≠ $uuid")
-                uuid in drop || push!(drop, uuid)
+                push!(drop, uuid)
                 found = true
                 break
             end
@@ -3676,7 +3685,18 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
     end
 end
 
-function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance})
+# Map each package UUID to the UUIDs of manifest entries that (directly) depend on it.
+function manifest_dependents_map(manifest::Manifest)
+    dependents = Dict{UUID, Vector{UUID}}()
+    for (uuid, entry) in manifest
+        for dep in values(entry.deps)
+            push!(get!(() -> UUID[], dependents, dep), uuid)
+        end
+    end
+    return dependents
+end
+
+function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance}; dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing)
     pkg.version isa VersionNumber || return nothing # Can happen when there is no manifest
     manifest, project = env.manifest, env.project
     packages_holding_back = String[]
@@ -3713,20 +3733,19 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
 
-    # Check compat of dependencies
-    for (uuid, dep_pkg) in manifest
-        is_stdlib(uuid) && continue
-        if !(pkg.uuid in values(dep_pkg.deps))
-            continue
-        end
-        dep_info = get(manifest, uuid, nothing)
-        dep_info === nothing && continue
+    # Check compat of dependencies. Use a precomputed reverse-dependency map so we only
+    # visit actual dependents instead of scanning the whole manifest for every package.
+    isnothing(dependents) && (dependents = manifest_dependents_map(manifest))
+    for dep_uuid in get(dependents, pkg.uuid, UUID[])
+        is_stdlib(dep_uuid) && continue
+        dep_pkg = get(manifest, dep_uuid, nothing)
+        isnothing(dep_pkg) && continue
         for reg in regs
-            reg_pkg = get(reg, uuid, nothing)
+            reg_pkg = get(reg, dep_uuid, nothing)
             reg_pkg === nothing && continue
             info = Registry.registry_info(reg, reg_pkg)
             # Query compressed deps and compat for the specific dependency version (optimized: only fetch this pkg's compat)
-            compat_info_v_uuid = Registry.query_compat_for_version(info, dep_info.version, pkg.uuid)
+            compat_info_v_uuid = Registry.query_compat_for_version(info, dep_pkg.version, pkg.uuid)
             compat_info_v_uuid === nothing && continue
             if !(max_version in compat_info_v_uuid)
                 push!(packages_holding_back, dep_pkg.name)
@@ -3756,9 +3775,13 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
 end
 
 function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manifest = true, workspace = false)
-    function index_pkgs(pkgs, uuid)
-        idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
-        return idx === nothing ? nothing : pkgs[idx]
+    # Index packages by UUID (keeping the first occurrence) so lookups are O(1)
+    function index_by_uuid(pkgs)
+        index = Dict{Union{UUID, Nothing}, PackageSpec}()
+        for pkg in pkgs
+            get!(index, pkg.uuid, pkg)
+        end
+        return index
     end
     # load deps
     if workspace
@@ -3777,8 +3800,10 @@ function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manife
         old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(old_env.project, old_env.project_file, old_env.manifest, old_env.manifest_file)
     end
     # merge old and new into single array
+    old_index = index_by_uuid(old)
+    new_index = index_by_uuid(new)
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
-    return Tuple{T, S, S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T, S, S} for uuid in all_uuids]
+    return Tuple{T, S, S}[(uuid, get(old_index, uuid, nothing), get(new_index, uuid, nothing))::Tuple{T, S, S} for uuid in all_uuids]
 end
 
 function is_package_downloaded(
@@ -3920,6 +3945,8 @@ function print_status(
     lpadding = 2
 
     package_statuses = PackageStatusData[]
+    # Precompute the reverse-dependency map once so each package's outdated check is fast.
+    manifest_dependents = manifest_dependents_map(env.manifest)
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
             continue
@@ -3933,7 +3960,7 @@ function print_status(
         cinfo = nothing
         ext_info = nothing
         if !isnothing(new) && !is_stdlib(new.uuid)
-            cinfo = status_compat_info(new, env, registries)
+            cinfo = status_compat_info(new, env, registries; dependents = manifest_dependents)
             if cinfo !== nothing
                 latest_version = false
             end
