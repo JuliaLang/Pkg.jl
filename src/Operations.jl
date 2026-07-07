@@ -16,7 +16,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path
+import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path, safe_realpath
 
 #########
 # Utils #
@@ -551,11 +551,21 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, manifest_file::String, julia_version)
+function collect_project(env::EnvCache, pkg::Union{PackageSpec, Nothing}, path::String, julia_version)
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
-    project_file = projectfile_path(path; strict = true)
-    project = project_file === nothing ? Project() : read_project(project_file)
+    manifest_file = env.manifest_file
+    # Use the in-memory project for the active environment and workspace members
+    # instead of re-reading from disk: it may contain modifications that have not
+    # yet been written, e.g. a `[sources]` entry removed by `free`
+    if safe_realpath(abspath(path)) == safe_realpath(dirname(env.project_file))
+        project_file = env.project_file
+        project = env.project
+    else
+        project_file = projectfile_path(path; strict = true)
+        project = project_file === nothing ? Project() :
+            get(() -> read_project(project_file), env.workspace, project_file)
+    end
     julia_compat = get_compat(project, "julia")
     if !isnothing(julia_compat) && !isnothing(julia_version) && !(julia_version in julia_compat)
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
@@ -624,17 +634,17 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     weak_map = Dict{UUID, Set{UUID}}()
 
     uuid = Types.project_uuid(env)
-    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file), env.manifest_file, julia_version)
+    deps, weakdeps = collect_project(env, env.pkg, dirname(env.project_file), julia_version)
     deps_map[uuid] = deps
     weak_map[uuid] = weakdeps
     names[uuid] = env.pkg === nothing ? "project" : env.pkg.name
 
-    for (path, project) in env.workspace
-        uuid = Types.project_uuid(project, path)
+    for (project_file, project) in env.workspace
+        uuid = Types.project_uuid(project, project_file)
         pkg = project.name === nothing ? nothing : PackageSpec(name = project.name, uuid = uuid)
-        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version)
-        deps_map[Types.project_uuid(env)] = deps
-        weak_map[Types.project_uuid(env)] = weakdeps
+        deps, weakdeps = collect_project(env, pkg, dirname(project_file), julia_version)
+        deps_map[uuid] = deps
+        weak_map[uuid] = weakdeps
         names[uuid] = project.name === nothing ? "project" : project.name
     end
 
@@ -680,7 +690,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             end
             pkgerror(error_msg)
         end
-        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version)
+        deps, weakdeps = collect_project(env, pkg, path, julia_version)
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
         for dep in deps

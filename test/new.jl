@@ -2413,6 +2413,21 @@ end
             @test pkg.is_tracking_registry
         end
     end
+    # free developed package when the active project is a package (#4686)
+    isolate(loaded_depot = true) do
+        mktempdir() do dir
+            path = joinpath(dir, "MyPkg")
+            Pkg.generate(path)
+            Pkg.activate(path)
+            Pkg.develop("Example")
+            Pkg.free("Example")
+            Pkg.dependencies(exuuid) do pkg
+                @test pkg.name == "Example"
+                @test pkg.is_tracking_registry
+            end
+            @test !haskey(Pkg.project().sources, "Example")
+        end
+    end
     # free should error when called on packages tracking unregistered packages
     isolate(loaded_depot = true) do
         Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
