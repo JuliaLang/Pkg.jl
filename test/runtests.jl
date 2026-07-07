@@ -61,6 +61,7 @@ module PkgTestsInner
                 "extensions.jl",
                 "binaryplatforms.jl",
                 "platformengines.jl",
+                "hll_rsa.jl",
                 "resolve.jl",
                 "misc.jl",
                 "force_latest_compatible_version.jl",

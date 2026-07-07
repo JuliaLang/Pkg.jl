@@ -611,3 +611,13 @@ For clarification, some sources are not provided by Pkg server
     still use git-controlled registries.
 
 For the deployment of pkg server, please refer to [PkgServer.jl](https://github.com/JuliaPackaging/PkgServer.jl).
+
+### Anonymous client counting
+
+When talking to a package server, the client attaches a `Julia-Pkg-HLL-RSA` header that lets the server
+estimate how many distinct clients use it, without being able to identify or track any individual client —
+even with full access to its own request logs. This uses the HyperLogLog Over RSA protocol; see the
+[writeup](https://karpinski.org/HyperLogLogOverRSA.jl/) for the design and its privacy guarantees.
+
+It is enabled by default. To opt out, set `JULIA_PKG_SERVER_HLL_RSA` to a false value (e.g. `0`, `false`, or
+`no`); the client then sends no such header.
