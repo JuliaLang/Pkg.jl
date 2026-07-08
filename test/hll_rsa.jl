@@ -2,7 +2,7 @@
 
 module HLLRSATests
 import ..Pkg # ensure we are using the correct Pkg
-using Test, TOML, Random
+using Test, TOML, Random, Sockets
 
 const HLL = Pkg.HLL_RSA
 
@@ -59,6 +59,33 @@ function b64_to_int(s::AbstractString)
         end
     end
     return foldl((a, b) -> a * 256 + b, bytes; init = big(0))
+end
+
+# Minimal one-shot HTTP server (same shape as test/platformengines.jl's
+# auth_refresh_server): serve `body` to the first request, then close. Lets a
+# test drive the real certificate fetch/verify/adopt path over http://127.0.0.1.
+function serve_once(body::AbstractString)
+    server = listen(Sockets.localhost, 0)
+    base_url = "http://$(Sockets.localhost):$(Int(last(getsockname(server))))"
+    task = @async begin
+        try
+            sock = accept(server)
+            readline(sock) # request line
+            while !isempty(rstrip(readline(sock))) # drain headers
+            end
+            write(sock, "HTTP/1.1 200 OK\r\n")
+            write(sock, "Content-Type: application/toml\r\n")
+            write(sock, "Content-Length: $(ncodeunits(body))\r\n")
+            write(sock, "Connection: close\r\n\r\n")
+            write(sock, body)
+            flush(sock)
+            close(sock)
+        catch
+        finally
+            close(server)
+        end
+    end
+    return (; server, task, base_url)
 end
 
 @testset "HLL Over RSA" begin
@@ -170,6 +197,29 @@ end
 
         # wrong modulus, right shape (N+4 ≡ 3 mod 4): caught by the fingerprint-free proof
         @test !HLL.hll_verify_cert(B, m, N + 4, g, sqrts)
+    end
+
+    # End to end: a localhost server publishes the fixture certificate; the client
+    # fetches it, verifies it, generates a fresh master key, and stores the ring.
+    @testset "fetch, verify, and adopt a ring" begin
+        srv = serve_once(read(joinpath(FIX, "cert.toml"), String))
+        try
+            mktempdir() do dir
+                ring = HLL.hll_refresh_ring(srv.base_url, dir)
+                @test ring isa HLL.HLLRing # fetched, verified, adopted
+                if ring isa HLL.HLLRing
+                    @test (ring.B, ring.m, ring.N, ring.g) == (B, m, N, g)
+                    @test ring.ring_id == HLL.hll_ring_id(B, m, N, g)
+                    @test HLL.hll_jacobi(ring.x0, N) == -1 # freshly generated master key
+                    @test HLL.hll_load_stored(dir) !== nothing # persisted
+                    b, k = decode(HLL.hll_token(ring, "/registries")) # token from the fresh key
+                    @test 0 ≤ b < B
+                    @test 0 ≤ k ≤ m
+                end
+            end
+        finally
+            istaskdone(srv.task) || (close(srv.server); wait(srv.task))
+        end
     end
 end
 
