@@ -14,7 +14,7 @@ Pkg v1.14 Release Notes
 - Pkg now attaches an anonymous unique-client-counting header (`Julia-Pkg-HLL-RSA`) to package-server requests,
   letting a server estimate how many distinct clients use it without being able to identify or track any individual
   client — even with full access to its own logs. It is on by default and can be disabled by setting
-  `JULIA_PKG_SERVER_HLL_RSA` to a false value. ([#XXXX])
+  `JULIA_PKG_SERVER_HLL_RSA` to a false value. ([#4722])
 
 Pkg v1.13 Release Notes
 =======================
