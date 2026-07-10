@@ -68,14 +68,19 @@ hll_modmul(a::Integer, b::Integer, m::Integer) = mod(a * b, m)
 # Hash `N` and `keys` into the ring ℤ_N (a value mod N), via SHA-512.
 # If `untwist` is nonzero, any negative-Jacobi result is multiplied by it,
 # mapping the value into the positive-Jacobi subgroup.
-function hll_hash_into_ring(N::BigInt, keys...; untwist::BigInt = big(0))
+function hll_hash_into_ring(
+        N::BigInt,
+        keys::Union{Integer, AbstractString, Symbol}...;
+        untwist::BigInt = big(0),
+    )
     prefix = sprint() do io
         print(io, N)
         for key in keys
             tag =
                 key isa Integer ? "int" :
                 key isa AbstractString ? "str" :
-                key isa Symbol ? "sym" : string(typeof(key))
+                key isa Symbol ? "sym" :
+                error("unexpected type")
             print(io, '\0', tag, string(key))
         end
     end
