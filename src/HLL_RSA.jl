@@ -105,20 +105,18 @@ end
 # the ring is adopted (see `HLLRing`) and reused to key the class hash below.
 hll_client_hash(x0::BigInt) = sha256(digits(UInt8, x0; base = 256))
 
-# Map a resource class to a 128-bit exponent (first 16 bytes of SHA-256, big-
-# endian). How classes are hashed is client-specific — the server never
-# recomputes it — so rather than re-serialize the master key on every call we
-# key a plain SHA-256 with the precomputed `client_hash`. It still depends on the
-# secret master key (via that hash), so the client can't bias its own draw, and
-# it stays independent across classes.
+# Map a resource class to a 128-bit exponent (first 16 bytes, big-endian) via
+# HMAC-SHA2-256 keyed by the client's `client_hash`. How classes are hashed is
+# client-specific — the server never recomputes it — so any keyed hash of the
+# class works; HMAC is a standard keyed MAC, so there is nothing to reason about
+# regarding length extension or key size. It depends on the secret master key
+# (via `client_hash`), so the client can't bias its own draw, and it stays
+# independent across classes.
 function hll_hash_resource_class(
         client_hash::Vector{UInt8},
         class::AbstractString,
     )
-    ctx = SHA256_CTX()
-    update!(ctx, client_hash)
-    update!(ctx, codeunits(class))
-    bytes = digest!(ctx)
+    bytes = hmac_sha2_256(client_hash, codeunits(class))
     h = zero(UInt128)
     for i in 1:sizeof(UInt128)
         h = (h << 8) | bytes[i]
