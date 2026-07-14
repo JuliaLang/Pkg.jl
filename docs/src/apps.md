@@ -24,7 +24,7 @@ A very simple example of an app that prints the reversed input arguments would b
 # src/MyReverseApp.jl
 module MyReverseApp
 
-function (@main)(ARGS)
+function @main(ARGS)
     for arg in ARGS
         print(stdout, reverse(arg), " ")
     end
@@ -66,7 +66,7 @@ A single package can define multiple apps by using submodules. Each app can have
 # src/MyMultiApp.jl
 module MyMultiApp
 
-function (@main)(ARGS)
+function @main(ARGS)
     println("Main app: ", join(ARGS, " "))
 end
 
@@ -79,7 +79,7 @@ end # module
 # src/CLI.jl
 module CLI
 
-function (@main)(ARGS)
+function @main(ARGS)
     println("CLI submodule: ", join(ARGS, " "))
 end
 
