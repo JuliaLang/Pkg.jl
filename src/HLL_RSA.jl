@@ -21,28 +21,28 @@ import ..PlatformEngines: is_secure_url, get_auth_header
 
 export hll_header
 
-const HLL_RNG = RandomDevice()
+const RNG = RandomDevice()
 
 # client acceptance bounds (see the "Deployment in Julia's Pkg client" spec)
-const HLL_B_MAX = 2^12
-const HLL_M_MAX = 127
-const HLL_L_MAX = 2^20
-const HLL_ALPHA_MIN = exp2(112)
+const B_MAX = 2^12
+const M_MAX = 127
+const L_MAX = 2^20
+const ALPHA_MIN = exp2(112)
 
-const HLL_RECHECK_SECONDS = 24 * 60 * 60 # recheck server's ring daily
+const RECHECK_SECONDS = 24 * 60 * 60 # recheck server's ring daily
 
 ## --- integer helpers (ported from the reference; must match the server) ---
 
 # Low 2/3 bits of a nonnegative BigInt, read from the low limb via `% UInt8` so
 # no BigInt is allocated (unlike `x & 3`, which allocates a BigInt).
-@inline hll_mod4(x::BigInt) = Int((x % UInt8) & 0x03)
-@inline hll_mod8(x::BigInt) = Int((x % UInt8) & 0x07)
+@inline mod4(x::BigInt) = Int((x % UInt8) & 0x03)
+@inline mod8(x::BigInt) = Int((x % UInt8) & 0x07)
 
 # Jacobi symbol (x | N) for odd positive N; returns -1, 0, or 1. The loop runs on
 # two private, mutable BigInts — shifting and reducing them in place, and swapping
 # by rebinding — so it allocates only the two it starts with, not one per
 # iteration. `N` is copied up front; the caller's argument is never mutated.
-function hll_jacobi(x::BigInt, N::BigInt)::Int
+function jacobi(x::BigInt, N::BigInt)::Int
     N > 0 || throw(ArgumentError("N must be positive"))
     isodd(N) || throw(ArgumentError("N must be odd"))
     x = mod(x, N) # owned, fresh (mod allocates); 0 ≤ x < N
@@ -52,10 +52,10 @@ function hll_jacobi(x::BigInt, N::BigInt)::Int
     while !iszero(x)
         z = trailing_zeros(x)
         if !iszero(z)
-            isodd(z) && (hll_mod8(N) == 3 || hll_mod8(N) == 5) && (s = -s)
+            isodd(z) && (mod8(N) == 3 || mod8(N) == 5) && (s = -s)
             Base.GMP.MPZ.fdiv_q_2exp!(x, z) # x >>= z, in place
         end
-        (hll_mod4(x) == 3 && hll_mod4(N) == 3) && (s = -s)
+        (mod4(x) == 3 && mod4(N) == 3) && (s = -s)
         Base.GMP.MPZ.fdiv_r!(N, N, x) # N = N mod x, in place
         x, N = N, x # swap: x ← remainder, N ← old x
         iszero(x) && break
@@ -63,12 +63,12 @@ function hll_jacobi(x::BigInt, N::BigInt)::Int
     return isone(N) ? s : 0
 end
 
-hll_modmul(a::Integer, b::Integer, m::Integer) = mod(a * b, m)
+modmul(a::Integer, b::Integer, m::Integer) = mod(a * b, m)
 
 # Hash `N` and `keys` into the ring ℤ_N (a value mod N), via SHA-512.
 # If `untwist` is nonzero, any negative-Jacobi result is multiplied by it,
 # mapping the value into the positive-Jacobi subgroup.
-function hll_hash_into_ring(
+function hash_into_ring(
         N::BigInt,
         keys::Union{Integer, AbstractString, Symbol}...;
         untwist::BigInt = big(0),
@@ -95,28 +95,25 @@ function hll_hash_into_ring(
         end
     end
     x = mod(x, N)
-    if !iszero(untwist) && hll_jacobi(x, N) == -1
+    if !iszero(untwist) && jacobi(x, N) == -1
         x = mod(untwist * x, N)
     end
     return x
 end
 
 # A per-client hash of the master key: SHA-256 of x₀'s bytes, computed once when
-# the ring is adopted (see `HLLRing`) and reused to key the class hash below.
-hll_client_hash(x0::BigInt) = sha256(digits(UInt8, x0; base = 256))
+# the ring is adopted (see `Ring`) and reused to key the class hash below.
+client_hash(x0::BigInt) = sha256(digits(UInt8, x0; base = 256))
 
 # Map a resource class to a 128-bit exponent (first 16 bytes, big-endian) via
 # HMAC-SHA2-256 keyed by the client's `client_hash`. How classes are hashed is
 # client-specific — the server never recomputes it — so any keyed hash of the
 # class works; HMAC is a standard keyed MAC, so there is nothing to reason about
 # regarding length extension or key size. It depends on the secret master key
-# (via `client_hash`), so the client can't bias its own draw, and it stays
-# independent across classes.
-function hll_hash_resource_class(
-        client_hash::Vector{UInt8},
-        class::AbstractString,
-    )
-    bytes = hmac_sha2_256(client_hash, codeunits(class))
+# (via the key), so the client can't bias its own draw, and it stays independent
+# across classes.
+function hash_resource_class(key::Vector{UInt8}, class::AbstractString)
+    bytes = hmac_sha2_256(key, codeunits(class))
     h = zero(UInt128)
     for i in 1:sizeof(UInt128)
         h = (h << 8) | bytes[i]
@@ -125,28 +122,28 @@ function hll_hash_resource_class(
 end
 
 # Smallest τ ∈ [1, N) with Jacobi symbol -1 (the fixed twist used by the cert).
-function hll_fixed_twist(N::BigInt)
+function fixed_twist(N::BigInt)
     τ = big(1)
     while τ < N
-        hll_jacobi(τ, N) == -1 && return τ
+        jacobi(τ, N) == -1 && return τ
         τ += 1
     end
     error("no twist value found")
 end
 
 # Random master key x₀ ∈ ℤ_N with Jacobi symbol -1.
-function hll_rand_jacobi_twist(N::BigInt)
+function rand_jacobi_twist(N::BigInt)
     range = big(1):(N - 1)
     while true
-        x = rand(HLL_RNG, range)
-        hll_jacobi(x, N) == -1 && return x
+        x = rand(RNG, range)
+        jacobi(x, N) == -1 && return x
     end
     return
 end
 
 ## --- ring representation, hashing, and certificate verification ---
 
-struct HLLRing
+struct Ring
     B::Int
     m::Int
     N::BigInt
@@ -154,43 +151,43 @@ struct HLLRing
     x0::BigInt                 # this client's master key for the ring
     ring_id::String            # 8-char lowercase hex, sent in the header
     client_hash::Vector{UInt8} # sha256(x0), used to key the resource-class hash
-    HLLRing(B::Int, m::Int, N::BigInt, g::BigInt, x0::BigInt, ring_id::AbstractString) =
-        new(B, m, N, g, x0, ring_id, hll_client_hash(x0))
+    Ring(B::Int, m::Int, N::BigInt, g::BigInt, x0::BigInt, ring_id::AbstractString) =
+        new(B, m, N, g, x0, ring_id, client_hash(x0))
 end
 
 # Canonical ring identifier: SHA-256 of the decimal parameters joined by commas,
 # truncated to its first four bytes as lowercase hex.
-function hll_ring_id(B::Int, m::Int, N::BigInt, g::BigInt)
+function ring_id(B::Int, m::Int, N::BigInt, g::BigInt)
     digest = sha256(string(B, ',', m, ',', N, ',', g))
     return bytes2hex(@view digest[1:4])
 end
 
 # Verify a certificate is well-formed and fingerprint-free (the client's half of
 # the protocol). Returns true only if every check passes.
-function hll_verify_cert(
+function verify_cert(
         B::Int,
         m::Int,
         N::BigInt,
         g::BigInt,
         sqrts::Vector{BigInt},
     )
-    B ≤ HLL_B_MAX || return false
+    B ≤ B_MAX || return false
     isodd(B) || return false
-    2 ≤ m ≤ HLL_M_MAX || return false
-    Base.top_set_bit(N) ≤ HLL_L_MAX || return false
-    hll_mod4(N) == 3 || return false
+    2 ≤ m ≤ M_MAX || return false
+    Base.top_set_bit(N) ≤ L_MAX || return false
+    mod4(N) == 3 || return false
     gcd(B, N) == 1 || return false
     gcd(B, N - 1) == 1 || return false
-    hll_jacobi(g, N) == 1 || return false
-    (8 / 5)^length(sqrts) ≥ HLL_ALPHA_MIN || return false
-    τ = hll_fixed_twist(N)
+    jacobi(g, N) == 1 || return false
+    (8 / 5)^length(sqrts) ≥ ALPHA_MIN || return false
+    τ = fixed_twist(N)
     for (i, r) in enumerate(sqrts)
         r² = powermod(r, 2, N)
-        x = hll_hash_into_ring(N, :sqrt_x, i; untwist = τ)
+        x = hash_into_ring(N, :sqrt_x, i; untwist = τ)
         x == r² && continue
-        y = hll_hash_into_ring(N, :sqrt_y, i; untwist = τ)
+        y = hash_into_ring(N, :sqrt_y, i; untwist = τ)
         y == r² && continue
-        z = hll_modmul(x, y, N)
+        z = modmul(x, y, N)
         z == r² && continue
         return false
     end
@@ -201,21 +198,21 @@ end
 
 # Produce a fresh, randomized encrypted token y = w·xᵗ for `class`. Repeated
 # calls are unlinkable but all decode (by the ring holder) to the same value.
-function hll_token(ring::HLLRing, class::AbstractString)
+function token(ring::Ring, class::AbstractString)
     B, m, N, g, x0 = ring.B, ring.m, ring.N, ring.g, ring.x0
-    h = hll_hash_resource_class(ring.client_hash, class)
-    x = hll_modmul(x0, powermod(g, big(h), N), N) # x = x₀ gʰ
-    z = rand(HLL_RNG, big(1):(N - 1))
+    h = hash_resource_class(ring.client_hash, class)
+    x = modmul(x0, powermod(g, big(h), N), N) # x = x₀ gʰ
+    z = rand(RNG, big(1):(N - 1))
     w = powermod(z, big(B) << m, N) # w = z^(B·2^m)
-    i = rand(HLL_RNG, big(0):((big(1) << (m - 1)) - 1))
+    i = rand(RNG, big(0):((big(1) << (m - 1)) - 1))
     t = 2 * big(B) * i + 1 # t ≡ 1 (mod 2B)
-    return hll_modmul(w, powermod(x, t, N), N) # y = w·xᵗ
+    return modmul(w, powermod(x, t, N), N) # y = w·xᵗ
 end
 
 # base64 (standard alphabet, padded) of the big-endian byte representation of y.
-const HLL_B64 = ['A':'Z'; 'a':'z'; '0':'9'; '+'; '/']
+const B64 = ['A':'Z'; 'a':'z'; '0':'9'; '+'; '/']
 
-function hll_encode_token(y::BigInt)
+function encode_token(y::BigInt)
     bytes = reverse!(digits(UInt8, y; base = 256)) # big-endian
     isempty(bytes) && (bytes = UInt8[0x00])
     io = IOBuffer()
@@ -225,10 +222,10 @@ function hll_encode_token(y::BigInt)
         b0 = bytes[i]
         b1 = i + 1 ≤ n ? bytes[i + 1] : 0x00
         b2 = i + 2 ≤ n ? bytes[i + 2] : 0x00
-        write(io, HLL_B64[(b0 >> 2) + 1])
-        write(io, HLL_B64[(((b0 & 0x03) << 4) | (b1 >> 4)) + 1])
-        write(io, i + 1 ≤ n ? HLL_B64[(((b1 & 0x0f) << 2) | (b2 >> 6)) + 1] : '=')
-        write(io, i + 2 ≤ n ? HLL_B64[(b2 & 0x3f) + 1] : '=')
+        write(io, B64[(b0 >> 2) + 1])
+        write(io, B64[(((b0 & 0x03) << 4) | (b1 >> 4)) + 1])
+        write(io, i + 1 ≤ n ? B64[(((b1 & 0x0f) << 2) | (b2 >> 6)) + 1] : '=')
+        write(io, i + 2 ≤ n ? B64[(b2 & 0x3f) + 1] : '=')
         i += 3
     end
     return String(take!(io))
@@ -239,7 +236,7 @@ end
 # Map a request URL to its resource class (a prefix of the resource path), or
 # `nothing` if the request should carry no HLL header. Mirrors the sharding
 # scheme in the writeup.
-function hll_resource_class(url::AbstractString, server::AbstractString)
+function resource_class(url::AbstractString, server::AbstractString)
     rest = chopprefix(url, server)
     startswith(rest, "/") || return nothing
     q = findfirst('?', rest)
@@ -260,25 +257,25 @@ end
 
 ## --- per-server ring state: load, fetch, verify, cache ---
 
-const HLL_LOCK = ReentrantLock()
+const LOCK = ReentrantLock()
 # map: server_dir => last check time
-const HLL_CHECK = Dict{String, Float64}()
+const CHECK = Dict{String, Float64}()
 # map: server_dir => ring, or a Symbol error reason (:fetch, :verify, :internal)
-const HLL_CACHE = Dict{String, Union{HLLRing, Symbol}}()
+const CACHE = Dict{String, Union{Ring, Symbol}}()
 
 # On unless explicitly set to a recognized false value. `get_bool_env` returns
 # `nothing` for a present-but-unrecognized value (e.g. "off"); `!== false` maps
 # that to enabled and, importantly, keeps this a `Bool` so it is safe to use in
 # boolean context.
-hll_enabled() = Base.get_bool_env("JULIA_PKG_SERVER_HLL_RSA", true) !== false
+enabled() = Base.get_bool_env("JULIA_PKG_SERVER_HLL_RSA", true) !== false
 
-hll_file(server_dir) = joinpath(server_dir, "hll_rsa.toml")
+file(server_dir) = joinpath(server_dir, "hll_rsa.toml")
 
-function hll_load_stored(server_dir::AbstractString)
-    file = hll_file(server_dir)
-    isfile(file) || return nothing
+function load_stored(server_dir::AbstractString)
+    path = file(server_dir)
+    isfile(path) || return nothing
     data = try
-        TOML.parsefile(file)
+        TOML.parsefile(path)
     catch
         return nothing
     end
@@ -288,16 +285,16 @@ function hll_load_stored(server_dir::AbstractString)
         N = BigInt(data["N"]::Integer)
         g = BigInt(data["g"]::Integer)
         x0 = BigInt(data["x0"]::Integer)
-        return HLLRing(B, m, N, g, x0, hll_ring_id(B, m, N, g))
+        return Ring(B, m, N, g, x0, ring_id(B, m, N, g))
     catch
         return nothing
     end
 end
 
-function hll_save_stored(server_dir::AbstractString, ring::HLLRing)
+function save_stored(server_dir::AbstractString, ring::Ring)
     mkpath(server_dir)
     atomic_toml_write(
-        hll_file(server_dir),
+        file(server_dir),
         Dict(
             "B" => ring.B,
             "m" => ring.m,
@@ -312,7 +309,7 @@ end
 
 # Fetch and parse the server's certificate
 # returns (B, m, N, g, sqrts) or nothing
-function hll_fetch_cert(server::AbstractString)
+function fetch_cert(server::AbstractString)
     cert_url = "$server/hll_rsa.toml"
     is_secure_url(cert_url) || return nothing
     tmp = tempname()
@@ -335,49 +332,49 @@ function hll_fetch_cert(server::AbstractString)
     end
 end
 
-# (Re)establish the ring for a server. Returns an `HLLRing`, or a Symbol naming
-# what went wrong: `:fetch` (no certificate could be fetched or parsed) or
-# `:verify` (a certificate was fetched but failed verification). A usable stored
-# ring is preferred over reporting a transient failure.
-function hll_refresh_ring(server::AbstractString, server_dir::AbstractString)
-    stored = hll_load_stored(server_dir)
-    cert = hll_fetch_cert(server)
+# (Re)establish the ring for a server. Returns a `Ring`, or a Symbol naming what
+# went wrong: `:fetch` (no certificate could be fetched or parsed) or `:verify`
+# (a certificate was fetched but failed verification). A usable stored ring is
+# preferred over reporting a transient failure.
+function refresh_ring(server::AbstractString, server_dir::AbstractString)
+    stored = load_stored(server_dir)
+    cert = fetch_cert(server)
     cert === nothing && return stored === nothing ? :fetch : stored
     B, m, N, g, sqrts = cert
     # Unchanged ring? Keep our master key. Compare the parameters exactly, rather
     # than the (truncated) ring-id, so no hash collision can hide a real change.
     stored !== nothing && (stored.B, stored.m, stored.N, stored.g) == (B, m, N, g) && return stored
-    hll_verify_cert(B, m, N, g, sqrts) || return stored === nothing ? :verify : stored
-    ring = HLLRing(B, m, N, g, hll_rand_jacobi_twist(N), hll_ring_id(B, m, N, g))
-    hll_save_stored(server_dir, ring)
+    verify_cert(B, m, N, g, sqrts) || return stored === nothing ? :verify : stored
+    ring = Ring(B, m, N, g, rand_jacobi_twist(N), ring_id(B, m, N, g))
+    save_stored(server_dir, ring)
     return ring
 end
 
 # Return the ring for a server (or a Symbol error reason), using the in-memory
-# cache and refreshing at most once per session and once per HLL_RECHECK_SECONDS
+# cache and refreshing at most once per session and once per RECHECK_SECONDS
 # thereafter.
-function hll_get_ring(server::AbstractString, server_dir::AbstractString)
+function get_ring(server::AbstractString, server_dir::AbstractString)
     t = time()
-    cached = lock(HLL_LOCK) do
-        if haskey(HLL_CHECK, server_dir) && t - HLL_CHECK[server_dir] < HLL_RECHECK_SECONDS
-            return Some(HLL_CACHE[server_dir])
+    cached = lock(LOCK) do
+        if haskey(CHECK, server_dir) && t - CHECK[server_dir] < RECHECK_SECONDS
+            return Some(CACHE[server_dir])
         end
         return nothing
     end
     cached === nothing || return something(cached)
     result = try
-        hll_refresh_ring(server, server_dir)
+        refresh_ring(server, server_dir)
     catch e
         @debug "HLL-RSA: ring refresh failed" server exception = (e, catch_backtrace())
         # reuse a previously cached ring if we have one, else report an internal error
-        prev = lock(HLL_LOCK) do
-            get(HLL_CACHE, server_dir, :internal)
+        prev = lock(LOCK) do
+            get(CACHE, server_dir, :internal)
         end
-        prev isa HLLRing ? prev : :internal
+        prev isa Ring ? prev : :internal
     end
-    lock(HLL_LOCK) do
-        HLL_CACHE[server_dir] = result
-        HLL_CHECK[server_dir] = t
+    lock(LOCK) do
+        CACHE[server_dir] = result
+        CHECK[server_dir] = t
     end
     return result
 end
@@ -386,7 +383,7 @@ end
 
 # `reason` is always one of the fixed symbols `:fetch`, `:verify`, `:internal` —
 # never anything derived from client state, so the header leaks nothing.
-hll_error_header(reason::Symbol) = "Julia-Pkg-HLL-RSA" => "error,$reason"
+error_header(reason::Symbol) = "Julia-Pkg-HLL-RSA" => "error,$reason"
 
 # The `Julia-Pkg-HLL-RSA` header for a request. Returns `nothing` only when the
 # client has opted out, so a *missing* header always and only means opt-out.
@@ -400,24 +397,24 @@ function hll_header(
         server::AbstractString,
         server_dir::AbstractString,
     )
-    hll_enabled() || return nothing
+    enabled() || return nothing
     class = try
-        hll_resource_class(url, server)
+        resource_class(url, server)
     catch e
         @debug "HLL-RSA: resource class failed" url exception = (e, catch_backtrace())
-        return hll_error_header(:internal)    # an unexpected failure, not a clean no-match
+        return error_header(:internal)    # an unexpected failure, not a clean no-match
     end
     # A request in no counted class is normal and explicitly handled — not an
     # error — so it gets its own status rather than an `error,<reason>` marker.
     class === nothing && return "Julia-Pkg-HLL-RSA" => "noclass"
-    ring = hll_get_ring(server, server_dir) # HLLRing or error reason
-    ring isa HLLRing || return hll_error_header(ring)
+    ring = get_ring(server, server_dir) # Ring or error reason
+    ring isa Ring || return error_header(ring)
     try
-        token = hll_encode_token(hll_token(ring, class))
-        return "Julia-Pkg-HLL-RSA" => string(ring.ring_id, ',', token)
+        tok = encode_token(token(ring, class))
+        return "Julia-Pkg-HLL-RSA" => string(ring.ring_id, ',', tok)
     catch e
         @debug "HLL-RSA: token generation failed" exception = (e, catch_backtrace())
-        return hll_error_header(:internal)
+        return error_header(:internal)
     end
 end
 
