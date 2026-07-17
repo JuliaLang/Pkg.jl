@@ -236,6 +236,29 @@ end
     end
 end
 
+@testset "no [sources] created for workspace-internal dependencies" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspacePathResolution")
+            cd(path) do
+                with_current_env() do
+                    project_file = joinpath("SubProjectA", "Project.toml")
+                    Pkg.activate("SubProjectA")
+                    Pkg.resolve()
+                    @test TOML.parsefile(project_file)["sources"]["SubProjectB"] == Dict("path" => "../SubProjectB")
+
+                    project = TOML.parsefile(project_file)
+                    delete!(project, "sources")
+                    Pkg.Types.write_project(project, project_file)
+
+                    Pkg.resolve()
+                    @test !haskey(TOML.parsefile(project_file), "sources")
+                end
+            end
+        end
+    end
+end
+
 # Two workspace member projects that pin the same dependency to different sources
 # cannot be merged into a single manifest entry, so resolving must error clearly.
 @testset "workspace projects with conflicting [sources]" begin
