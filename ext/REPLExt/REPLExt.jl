@@ -6,8 +6,10 @@ import REPL
 import .REPL: LineEdit, REPLCompletions, TerminalMenus
 
 import Pkg
-import .Pkg: linewrap, pathrepr, compat, can_fancyprint, printpkgstyle, PKGMODE_PROJECT
+import .Pkg: linewrap, pathrepr, can_fancyprint, printpkgstyle, PKGMODE_PROJECT
 using .Pkg: Types, Operations, API, Registry, Resolve, REPLMode, safe_realpath
+
+import .API: _compat
 
 using .REPLMode: Statement, CommandSpec, Command, prepare_cmd, tokenize, core_parse, SPECS, api_options, parse_option, api_options, is_opt, wrap_option
 

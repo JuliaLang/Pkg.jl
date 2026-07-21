@@ -128,6 +128,7 @@ function get_max_version_register(pkg::PackageSpec, regs)
         reg_pkg = get(reg, pkg.uuid, nothing)
         if reg_pkg !== nothing
             pkg_info = Registry.registry_info(reg_pkg)
+            compat_info = Registry.compat_info(pkg_info)
             for (version, info) in pkg_info.version_info
                 info.yanked && continue
                 if pkg.version isa VersionNumber
@@ -135,7 +136,7 @@ function get_max_version_register(pkg::PackageSpec, regs)
                 else
                     version in pkg.version || continue
                     # Skip versions that are not compatible with the running julia
-                    julia_compat = Registry.query_compat_for_version(pkg_info, version, Registry.JULIA_UUID)
+                    julia_compat = get(compat_info[version], Registry.JULIA_UUID, nothing)
                     if julia_compat !== nothing && !(VERSION in julia_compat)
                         continue
                     end
