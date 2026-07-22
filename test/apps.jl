@@ -277,6 +277,20 @@ using Test
                 @test read(`$exename`, String) == "hello from SomeDep\nv2\n"
             end
             Pkg.Apps.rm("SomeApp")
+
+            # packages installed in a stacked depot stay loadable from the
+            # shim: with a fresh first depot, the app package resolves to the
+            # copy already installed in the old depot
+            newdepot = mktempdir()
+            pushfirst!(DEPOT_PATH, newdepot)
+            try
+                Pkg.Apps.add(path = someapp)
+                exe = joinpath(newdepot, "bin", exename)
+                @test read(`$exe`, String) == "hello from SomeDep\nv2\n"
+                Pkg.Apps.rm("SomeApp")
+            finally
+                popfirst!(DEPOT_PATH)
+            end
         end
     end
 
