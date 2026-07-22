@@ -646,6 +646,12 @@ function deps_graph(
         union!(uuids, fixed_uuids)
     end
 
+    # Collect all weak dependency UUIDs from fixed packages
+    all_weak_uuids = Set{UUID}()
+    for fx in values(fixed)
+        union!(all_weak_uuids, fx.weak)
+    end
+
     stdlibs_for_julia_version = Types.get_last_stdlibs(julia_version)
     seen = Set{UUID}()
 
@@ -739,16 +745,43 @@ function deps_graph(
         end
     end
 
+    # Track weak dependencies that are not available in any registry
+    unavailable_weak_uuids = Set{UUID}()
+
     for uuid in uuids
         uuid == JULIA_UUID && continue
         if !haskey(uuid_to_name, uuid)
             name = registered_name(registries, uuid)
-            name === nothing && pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
+            if name === nothing
+                # Allow weak dependencies to be missing from registries
+                if uuid in all_weak_uuids
+                    push!(unavailable_weak_uuids, uuid)
+                    continue
+                end
+                pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
+            end
             uuid_to_name[uuid] = name
             entry = manifest_info(env.manifest, uuid)
             entry ≡ nothing && continue
             uuid_to_name[uuid] = entry.name
         end
+    end
+
+    # Filter out unavailable weak dependencies from fixed packages
+    if !isempty(unavailable_weak_uuids)
+        fixed_filtered = Dict{UUID, Resolve.Fixed}()
+        for (uuid, fx) in fixed
+            filtered_requires = Requires()
+            for (req_uuid, req_spec) in fx.requires
+                if !(req_uuid in unavailable_weak_uuids)
+                    filtered_requires[req_uuid] = req_spec
+                end
+            end
+            # Also filter the weak set
+            filtered_weak = setdiff(fx.weak, unavailable_weak_uuids)
+            fixed_filtered[uuid] = Resolve.Fixed(fx.version, filtered_requires, filtered_weak)
+        end
+        fixed = fixed_filtered
     end
 
     return Resolve.Graph(all_compat, weak_compat, uuid_to_name, reqs, fixed, false, julia_version),
@@ -916,7 +949,7 @@ mutable struct DownloadState
 end
 
 function download_artifacts(
-        ctx::Context;
+        ctx::Context, pkgs;
         platform::AbstractPlatform = HostPlatform(),
         julia_version = VERSION,
         verbose::Bool = false,
@@ -927,7 +960,9 @@ function download_artifacts(
     io = ctx.io
     fancyprint = can_fancyprint(io)
     pkg_roots = String[]
+    pkg_uuids = Set(pkg.uuid for pkg in pkgs)
     for (uuid, pkg) in env.manifest
+        uuid in pkg_uuids || continue
         pkg = manifest_info(env.manifest, uuid)
         pkg_root = source_path(env.manifest_file, pkg, julia_version)
         pkg_root === nothing || push!(pkg_roots, pkg_root)
@@ -1078,6 +1113,17 @@ function download_artifacts(
 
 
     return write_env_usage(used_artifact_tomls, "artifact_usage.toml")
+end
+
+function download_artifacts(
+        ctx::Context;
+        platform::AbstractPlatform = HostPlatform(),
+        julia_version = VERSION,
+        verbose::Bool = false,
+        io::IO = stderr_f(),
+        include_lazy::Bool = false
+    )
+    return download_artifacts(ctx, values(ctx.env.manifest); platform, julia_version, verbose, io, include_lazy)
 end
 
 function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform = HostPlatform())
@@ -1769,6 +1815,49 @@ function _resolve(
     end
 end
 
+function can_skip_resolve_for_add(pkg::PackageSpec, entry::Union{PackageEntry, Nothing})
+    # Can't skip if package not in manifest
+    entry === nothing && return false
+
+    # Can't skip if pinned (needs special handling in resolution)
+    entry.pinned && return false
+
+    # Can't skip if tracking path or repo
+    (entry.path !== nothing || entry.repo.source !== nothing || pkg.repo.source !== nothing) && return false
+
+    # Check if requested version is compatible with installed version
+    version_compatible = if isa(pkg.version, VersionNumber)
+        entry.version == pkg.version
+    elseif pkg.version == VersionSpec()
+        # No version specified, current version is acceptable
+        true
+    else
+        # VersionSpec range specified, check if current version is in range
+        entry.version ∈ pkg.version
+    end
+
+    return version_compatible
+end
+
+function add_compat_entries!(ctx::Context, pkgs::Vector{PackageSpec})
+    # Only add compat entries if env is a package
+    ctx.env.pkg === nothing && return
+
+    compat_names = String[]
+    for pkg in pkgs
+        haskey(ctx.env.project.compat, pkg.name) && continue
+        v = ctx.env.manifest[pkg.uuid].version
+        v === nothing && continue
+        pkgversion = string(Base.thispatch(v))
+        set_compat(ctx.env.project, pkg.name, pkgversion)
+        push!(compat_names, pkg.name)
+    end
+    if !isempty(compat_names)
+        printpkgstyle(ctx.io, :Compat, "entries added for $(join(compat_names, ", "))")
+    end
+    return
+end
+
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}, new_git = Set{UUID}();
         allow_autoprecomp::Bool = true, preserve::PreserveLevel = default_preserve(), platform::AbstractPlatform = HostPlatform(),
@@ -1776,10 +1865,12 @@ function add(
     )
     assert_can_add(ctx, pkgs)
     # load manifest data
+    pkg_entries = Tuple{PackageSpec, Union{PackageEntry, Nothing}, Bool}[]
     for (i, pkg) in pairs(pkgs)
         delete!(ctx.env.project.weakdeps, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         is_dep = any(uuid -> uuid == pkg.uuid, [uuid for (name, uuid) in ctx.env.project.deps])
+        push!(pkg_entries, (pkg, entry, is_dep))
         pkgs[i] = update_package_add(ctx, pkg, entry, is_dep)
     end
 
@@ -1792,6 +1883,26 @@ function add(
         ctx.env.project.extras
     else
         pkgerror("Unrecognized target $(target)")
+    end
+
+    # Check if we can skip resolution for all packages
+    can_skip_all = target == :deps && all(pkg_entries) do (pkg, entry, _)
+        can_skip_resolve_for_add(pkg, entry)
+    end
+
+    if can_skip_all
+        # All packages are already in manifest with compatible versions
+        # Just promote to direct dependencies without resolving
+        foreach(pkg -> target_field[pkg.name] = pkg.uuid, pkgs) # update set of deps/weakdeps/extras
+
+        # if env is a package add compat entries
+        add_compat_entries!(ctx, pkgs)
+
+        record_project_hash(ctx.env)
+        write_env(ctx.env)
+        show_update(ctx.env, ctx.registries; io = ctx.io)
+
+        return
     end
 
     foreach(pkg -> target_field[pkg.name] = pkg.uuid, pkgs) # update set of deps/weakdeps/extras
@@ -1808,18 +1919,7 @@ function add(
         download_artifacts(ctx, platform = platform, julia_version = ctx.julia_version)
 
         # if env is a package add compat entries
-        if ctx.env.project.name !== nothing && ctx.env.project.uuid !== nothing
-            compat_names = String[]
-            for pkg in pkgs
-                haskey(ctx.env.project.compat, pkg.name) && continue
-                v = ctx.env.manifest[pkg.uuid].version
-                v === nothing && continue
-                pkgversion = string(Base.thispatch(v))
-                set_compat(ctx.env.project, pkg.name, pkgversion)
-                push!(compat_names, pkg.name)
-            end
-            printpkgstyle(ctx.io, :Compat, """entries added for $(join(compat_names, ", "))""")
-        end
+        add_compat_entries!(ctx, pkgs)
         record_project_hash(ctx.env) # compat entries changed the hash after it was last recorded in update_manifest!
 
         write_env(ctx.env) # write env before building
@@ -2434,8 +2534,10 @@ function test(
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             proj = Base.locate_project_file(abspath(testdir(source_path)))
             env = EnvCache(proj)
-            # Instantiate test env
-            Pkg.instantiate(Context(env = env); allow_autoprecomp = false)
+            # Use a Context pointing at the test env so that instantiate and
+            # precompile operate on the test project rather than the parent.
+            test_ctx = Context(env = env; io = ctx.io)
+            Pkg.instantiate(test_ctx; allow_autoprecomp = false)
             status(env, ctx.registries; mode = PKGMODE_COMBINED, io = ctx.io, ignore_indent = false, show_usagetips = false)
             flags = gen_subprocess_flags(source_path; coverage, julia_args)
 
@@ -2443,7 +2545,7 @@ function test(
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
                 # Don't warn about already loaded packages, since we are going to run tests in a new
                 # subprocess anyway.
-                Pkg.precompile(; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
+                Pkg.precompile(test_ctx; io = ctx.io, warn_loaded = false, configs = flags => cacheflags)
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")
@@ -2486,7 +2588,9 @@ function test(
 
             if should_autoprecompile()
                 cacheflags = Base.CacheFlags(parse(UInt8, read(`$(Base.julia_cmd()) $(flags) --eval 'show(ccall(:jl_cache_flags, UInt8, ()))'`, String)))
-                Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, configs = flags => cacheflags)
+                # Don't warn about already loaded packages, since we are going to run tests in a new
+                # subprocess anyway.
+                Pkg.precompile(sandbox_ctx; io = sandbox_ctx.io, warn_loaded = false, configs = flags => cacheflags)
             end
 
             printpkgstyle(ctx.io, :Testing, "Running tests...")

@@ -309,9 +309,21 @@ projects = ["test"]
 ```
 
 When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single `Manifest.toml` next to the base `Project.toml`. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
+Note that dependencies of `HelloWorld` itself are **not** automatically inherited. Any package used directly in tests must also be listed under `[deps]`.
 
 !!! info
     Unlike some earlier test dependency workflows, this one explicitly requires adding `HelloWorld` (the parent package) to your `test/Project.toml`.
+
+The resulting `test/Project.toml` will look like:
+
+```toml
+[deps]
+HelloWorld = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # UUID from HelloWorld's Project.toml
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+HelloWorld = {path = ".."}
+```
 
 You can now use `Test` in the test script:
 
@@ -585,69 +597,9 @@ For Julia 1.12+, using workspaces is recommended and this duplication is not nec
 
 ## [Package naming guidelines](@id Package-naming-rules)
 
-Package names should be sensible to most Julia users, *even to those who are not domain experts*.
-The following rules apply to the `General` registry but may be useful for other package
-registries as well.
+The [package naming guidelines for the `General` registry](https://github.com/JuliaRegistries/General/blob/master/NAMING_GUIDELINES.md) establish clear rules that may be helpful for naming packages even if they are not submitted to the General registry.
 
-Since the `General` registry belongs to the entire community, people may have opinions about
-your package name when you publish it, especially if it's ambiguous or can be confused with
-something other than what it is. Usually, you will then get suggestions for a new name that
-may fit your package better.
-
-1. Avoid jargon. In particular, avoid acronyms unless there is minimal possibility of confusion.
-
-     * It's ok to say `USA` if you're talking about the USA.
-     * It's not ok to say `PMA`, even if you're talking about positive mental attitude.
-2. Avoid using `Julia` in your package name or prefixing it with `Ju`.
-
-     * It is usually clear from context and to your users that the package is a Julia package.
-     * Package names already have a `.jl` extension, which communicates to users that `Package.jl` is a Julia package.
-     * Having Julia in the name can imply that the package is connected to, or endorsed by, contributors
-       to the Julia language itself.
-3. Packages that provide most of their functionality in association with a new type should have pluralized
-   names.
-
-     * `DataFrames` provides the `DataFrame` type.
-     * `BloomFilters` provides the `BloomFilter` type.
-     * In contrast, `JuliaParser` provides no new type, but instead new functionality in the `JuliaParser.parse()`
-       function.
-4. Err on the side of clarity, even if clarity seems long-winded to you.
-
-     * `RandomMatrices` is a less ambiguous name than `RndMat` or `RMT`, even though the latter are shorter.
-5. A less systematic name may suit a package that implements one of several possible approaches to
-   its domain.
-
-     * Julia does not have a single comprehensive plotting package. Instead, `Gadfly`, `PyPlot`, `Winston`
-       and other packages each implement a unique approach based on a particular design philosophy.
-     * In contrast, `SortingAlgorithms` provides a consistent interface to use many well-established
-       sorting algorithms.
-
-6. Packages that wrap external libraries or programs can be named after those libraries or programs. However, as of February 2026, we now request that these packages indicate in their package name (in some way) that they are wrapping an external library or program. For example, consider a hypothetical package that wraps a library or program named `ABC`. Possible names for the Julia package might include:
-     * `ABCWrapper`
-     * `ABCInterface`
-     * `ExternalABC`
-     * `ABCLibrary`
-     * `LibABC`
-
-7. Avoid naming a package closely to an existing package
-     * `Websocket` is too close to `WebSockets` and can be confusing to users. Rather use a new name such as `SimpleWebsockets`.
-
-8. Avoid using a distinctive name that is already in use in a well known, unrelated project.
-     * Don't use the names `Tkinter.jl`, `TkinterGUI.jl`, etc. for a package that is unrelated
-       to the popular `tkinter` python package, even if it provides bindings to Tcl/Tk.
-       A package name of `Tkinter.jl` would only be appropriate if the package used Python's
-       library to accomplish its work or was spearheaded by the same community of developers.
-     * It's okay to name a package `HTTP.jl` even though it is unrelated to the popular rust
-       crate `http` because in most usages the name "http" refers to the hypertext transfer
-       protocol, not to the `http` rust crate.
-     * It's okay to name a package `OpenSSL.jl` if it provides an interface to the OpenSSL
-       library, even without explicit affiliation with the creators of the OpenSSL (provided
-       there's no copyright or trademark infringement etc.)
-
-9. Packages should follow the [Stylistic Conventions](https://docs.julialang.org/en/v1/manual/variables/#Stylistic-Conventions).
-     * The package name begin with a capital letter and word separation is shown with upper camel case
-     * Packages that provide the functionality of a project from another language should use the Julia convention
-     * Packages that [provide pre-built libraries and executables](https://docs.binarybuilder.org/stable/jll/) can keep orignal name, but should get `_jll`as a suffix. For example `pandoc_jll` wraps pandoc. However, note that the generation and release of most JLL packages is handled by the [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil) system.
+For the complete list of rules for automatic merging into the General registry, see [the AutoMerge guidelines](https://juliaregistries.github.io/RegistryCI.jl/stable/guidelines/).
 
 ## Registering packages
 
