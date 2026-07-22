@@ -2822,8 +2822,8 @@ function sandbox(
         end
 
         Types.write_manifest(working_manifest, tmp_manifest)
-        # Copy over preferences
-        if preferences !== nothing
+        # Copy over preferences (skip if empty to avoid shadowing LocalPreferences.toml)
+        if preferences !== nothing && !isempty(preferences)
             open(tmp_preferences, "w") do io
                 TOML.print(io, preferences::Dict{String, Any})
             end
