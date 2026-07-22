@@ -1275,7 +1275,7 @@ end
 
 """
 Validate package versions one at a time, by checking what would happen by forcing that version and propagating
-the constraints. Versions which lead to unsatisfiable constraints are then diabled. If all versions of a package
+the constraints. Versions which lead to unsatisfiable constraints are then disabled. If all versions of a package
 (including "uninstalled") are invalid, then the requirements are unsatisfiable.
 
 The algorithm starts from an initial pool of packages to check. Then, for each package, if any invalid version is
