@@ -644,9 +644,9 @@ If no `Project.toml` exist in the current active project, create one with all th
 dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
-When passed one or more `paths` to project files or directories, instantiate each
-environment in turn without changing the active environment. Registries are loaded
-once and keyword arguments apply to every environment.
+When passed paths to project files or directories, instantiate each environment without
+changing the active environment. Registries are loaded once and keyword arguments apply
+to every environment. Paths sharing a workspace are precompiled together.
 
 `update_on_mismatch=true` falls back to [`Pkg.update`](@ref) when the existing manifest cannot
 be used as-is — for example, when the project's dependencies or compat bounds have changed
@@ -1055,10 +1055,10 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false, workspace = false)
     return if should_autoprecompile()
         # Auto precompile runs in foreground with detachable support
-        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded, already_instantiated, workspace)
     end
 end
 
