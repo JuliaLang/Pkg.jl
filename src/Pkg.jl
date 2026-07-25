@@ -645,10 +645,9 @@ dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
 When passed one or more `paths` (each a path to a project file or to a directory
-containing one), each environment is instantiated in turn. The registries are read
-from disk once and shared across all of the environments, which is more convenient
-and efficient than activating and instantiating each environment separately. All
-keyword arguments are forwarded to each instantiation.
+containing one), those environments are instantiated together, sharing registries and
+leaving the active environment unchanged; keyword arguments are forwarded to each. Paths
+that share a manifest (members of the same workspace) are precompiled in a single pass.
 
 `update_on_mismatch=true` falls back to [`Pkg.update`](@ref) when the existing manifest cannot
 be used as-is — for example, when the project's dependencies or compat bounds have changed
@@ -1057,10 +1056,10 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false, workspace = false)
     return if should_autoprecompile()
         # Auto precompile runs in foreground with detachable support
-        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded, already_instantiated, workspace)
     end
 end
 
