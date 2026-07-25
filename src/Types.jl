@@ -1351,7 +1351,10 @@ function registered_uuids(registries::Vector{Registry.RegistryInstance}, name::S
     end
     return uuids
 end
-# Determine a single UUID for a given name, prompting if needed
+
+const name_disambiguation_hook = Ref{Any}(nothing)
+
+# Determine a single UUID for a given name
 function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::String)::Union{Nothing, UUID}
     uuids = registered_uuids(registries, name)
     length(uuids) == 0 && return nothing
@@ -1367,11 +1370,19 @@ function registered_uuid(registries::Vector{Registry.RegistryInstance}, name::St
             push!(repo_infos, (reg.name, repo, uuid))
         end
     end
-    pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
+    return if !isnothing(name_disambiguation_hook[])
+        chosen_repo_info = name_disambiguation_hook[](name, repo_infos)
+        if isnothing(chosen_repo_info)
+            nothing
+        else
+            chosen_repo_info[3]
+        end
+    else
+        pkgerror("there are multiple registered `$name` packages, explicitly set the uuid")
+    end
 end
 
 # Determine current name for a given package UUID
-
 function registered_name(registries::Vector{Registry.RegistryInstance}, uuid::UUID)::Union{Nothing, String}
     name = nothing
     for reg in registries
