@@ -589,7 +589,7 @@ end
         withenv("JULIA_PKG_RESOLVER" => "bogus") do
             @test_throws PkgError Pkg.add(TEST_PKG.name)
         end
-        # the SAT resolver (default) diagnoses unsatisfiable requirements
+        # requirements matching no available version are reported directly
         err = try
             Pkg.add(PackageSpec(name = TEST_PKG.name, version = "99"))
             nothing
@@ -597,8 +597,24 @@ end
             e
         end
         @test err isa ResolverError
+        @test occursin("no available version matches the requirement `99`", err.msg)
+        @test occursin("available versions are:", err.msg)
+        # conflicting requirements get a diagnosis with verified fixes
+        err = try
+            Pkg.add(
+                [
+                    PackageSpec(name = "DataFrames", version = "1.7"),
+                    PackageSpec(name = "PrettyTables", version = "1"),
+                ]
+            )
+            nothing
+        catch e
+            e
+        end
+        @test err isa ResolverError
         @test occursin("cannot be satisfied", err.msg)
-        @test occursin("you require Example", err.msg)
+        @test occursin("you require DataFrames", err.msg)
+        @test occursin("Verified fixes:", err.msg)
     end
 end
 

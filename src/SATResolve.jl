@@ -9,7 +9,7 @@ import Resolver
 using UUIDs
 import ..Registry, ..Types
 using ..Versions: VersionSpec, VersionRange
-using ..Resolve: ResolverError, Fixed, Requires
+using ..Resolve: ResolverError, Fixed, Requires, pkgID, range_compressed_versionspec
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 
@@ -182,6 +182,24 @@ function resolve_versions(
         deps_compressed, compat_compressed, weak_deps_compressed, weak_compat_compressed,
         pkg_versions, pkg_versions_per_registry, reqs, fixed, julia_version, preferred_versions
     )
+    # a requirement whose version spec matches no available version can never
+    # resolve; report it directly instead of running the full diagnosis
+    impossible = String[]
+    for u in rlist
+        (u == JULIA_UUID || haskey(fixed, u)) && continue
+        isempty(data[u].versions) || continue
+        id = pkgID(u, uuid_to_name)
+        avail = get(pkg_versions, u, VersionNumber[])
+        if isempty(avail)
+            push!(impossible, " * $id: no versions are available (they may all be yanked, or filtered by offline mode)")
+        else
+            vers = range_compressed_versionspec(copy(avail))
+            push!(impossible, " * $id: no available version matches the requirement `$(reqs[u])`, available versions are: $vers")
+        end
+    end
+    if !isempty(impossible)
+        throw(ResolverError(string("Unsatisfiable requirements detected:\n", join(impossible, "\n"))))
+    end
     info = Resolver.pkg_info(data, rlist)
     # a requirement without any candidate version (e.g. an impossible version
     # spec) is dropped from `info` entirely; that resolve can only fail
