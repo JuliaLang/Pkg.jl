@@ -262,7 +262,7 @@ import .FakeTerminals.FakeTerminal
                 Pkg.precompile()
             "`,
                     "JULIA_PKG_PRECOMPILE_AUTO" => "0",
-                    "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
+                    "JULIA_DEPOT_PATH" => join([Base.DEPOT_PATH; host_deps_depot()], Sys.iswindows() ? ";" : ":"),
                 )
                 iob1 = IOBuffer()
                 iob2 = IOBuffer()
@@ -507,7 +507,7 @@ end
             make_env(env_a, pkg_a)
             make_env(env_b, pkg_b)
 
-            depot_path = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+            depot_path = join([Base.DEPOT_PATH; host_deps_depot()], Sys.iswindows() ? ";" : ":")
             function run_script(script)
                 cmd = addenv(
                     `$(Base.julia_cmd()) --color=no --startup-file=no --project=$(pkgdir(Pkg)) -e $script`,
@@ -575,6 +575,31 @@ end
     base = join(["", "home", "user", ".julia", "packages", "Foo", "abcd1234", "src", "Foo.jl"], sep)
     @test Pkg.API._depot_package_slug(base) == "abcd1234"
     @test Pkg.API._depot_package_slug(join(["", "tmp", "Foo", "src", "Foo.jl"], sep)) === nothing
+end
+
+@testset "resolver backends" begin
+    isolate(loaded_depot = true) do
+        # the legacy maxsum resolver stays selectable
+        withenv("JULIA_PKG_RESOLVER" => "maxsum") do
+            Pkg.add(TEST_PKG.name)
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            Pkg.rm(TEST_PKG.name)
+        end
+        # unknown backends error
+        withenv("JULIA_PKG_RESOLVER" => "bogus") do
+            @test_throws PkgError Pkg.add(TEST_PKG.name)
+        end
+        # the SAT resolver (default) diagnoses unsatisfiable requirements
+        err = try
+            Pkg.add(PackageSpec(name = TEST_PKG.name, version = "99"))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ResolverError
+        @test occursin("cannot be satisfied", err.msg)
+        @test occursin("you require Example", err.msg)
+    end
 end
 
 end # module APITests
