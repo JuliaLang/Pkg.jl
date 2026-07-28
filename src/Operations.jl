@@ -512,11 +512,21 @@ function reset_all_compat!(proj::Project)
     return nothing
 end
 
-function collect_project(pkg::Union{PackageSpec, Nothing}, path::String, manifest_file::String, julia_version)
+function collect_project(
+        pkg::Union{PackageSpec, Nothing}, path::String, manifest_file::String, julia_version;
+        # For projects that are loaded into the env (the active project and the workspace
+        # members) the caller passes the in-memory project and its file, since the project
+        # may have modifications that have not been written to disk yet.
+        loaded::Union{Nothing, Tuple{String, Project}} = nothing
+    )
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
-    project_file = projectfile_path(path; strict = true)
-    project = project_file === nothing ? Project() : read_project(project_file)
+    project_file, project = if loaded === nothing
+        file = projectfile_path(path; strict = true)
+        file, file === nothing ? Project() : read_project(file)
+    else
+        loaded
+    end
     julia_compat = get_compat(project, "julia")
     if !isnothing(julia_compat) && !isnothing(julia_version) && !(julia_version in julia_compat)
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
@@ -584,18 +594,26 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
     deps_map = Dict{UUID, Vector{PackageSpec}}()
     weak_map = Dict{UUID, Set{UUID}}()
 
+    # The active project and the workspace projects are already loaded into the env and may
+    # have unwritten modifications (e.g. a dep that `add` just recorded), so their deps must
+    # be read from memory rather than from their project files.
+    loaded_projects = Dict{UUID, Tuple{String, Project}}(Types.project_uuid(env) => (env.project_file, env.project))
+    for (project_file, project) in env.workspace
+        loaded_projects[Types.project_uuid(project, project_file)] = (project_file, project)
+    end
+
     uuid = Types.project_uuid(env)
-    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file), env.manifest_file, julia_version)
+    deps, weakdeps = collect_project(env.pkg, dirname(env.project_file), env.manifest_file, julia_version; loaded = loaded_projects[uuid])
     deps_map[uuid] = deps
     weak_map[uuid] = weakdeps
     names[uuid] = env.pkg === nothing ? "project" : env.pkg.name
 
-    for (path, project) in env.workspace
-        uuid = Types.project_uuid(project, path)
+    for (project_file, project) in env.workspace
+        uuid = Types.project_uuid(project, project_file)
         pkg = project.name === nothing ? nothing : PackageSpec(name = project.name, uuid = uuid)
-        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version)
-        deps_map[Types.project_uuid(env)] = deps
-        weak_map[Types.project_uuid(env)] = weakdeps
+        deps, weakdeps = collect_project(pkg, dirname(project_file), env.manifest_file, julia_version; loaded = (project_file, project))
+        deps_map[uuid] = deps
+        weak_map[uuid] = weakdeps
         names[uuid] = project.name === nothing ? "project" : project.name
     end
 
@@ -641,7 +659,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             end
             pkgerror(error_msg)
         end
-        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version)
+        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded = get(loaded_projects, pkg.uuid, nothing))
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
         for dep in deps
@@ -1985,6 +2003,14 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     filter!(ctx.env.project.targets) do (target, deps)
         !isempty(filter!(in(deps_names), deps))
     end
+    # the project may have an entry in the manifest (e.g. if something depends back on it),
+    # which mirrors the project deps and therefore needs the drops removed as well
+    proj_entry = manifest_info(ctx.env.manifest, Types.project_uuid(ctx.env))
+    if proj_entry !== nothing
+        filter!(proj_entry.deps) do (_, uuid)
+            uuid ∉ drop
+        end
+    end
     # only keep reachable manifest entries
     prune_manifest(ctx.env)
     record_project_hash(ctx.env)
@@ -2263,6 +2289,12 @@ function add(
         # All packages are already in manifest with compatible versions
         # Just promote to direct dependencies without resolving
         foreach(pkg -> target_field[pkg.name] = pkg.uuid, pkgs) # update set of deps/weakdeps/extras
+
+        # keep the manifest entry of the project itself (if any) in sync with the project deps
+        proj_entry = manifest_info(ctx.env.manifest, Types.project_uuid(ctx.env))
+        if proj_entry !== nothing
+            foreach(pkg -> proj_entry.deps[pkg.name] = pkg.uuid, pkgs)
+        end
 
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
