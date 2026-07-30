@@ -703,20 +703,51 @@ end
 write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
     write_env_usage([source_file], usage_filepath)
 
-function read_usage_file(usage_file::AbstractString)
-    usage = TOML.tryparsefile(usage_file)
-    if usage isa TOML.ParserError
-        @warn "Failed to parse usage file `$usage_file`." exception = usage
-        return nothing
+"""
+    with_usage_file(f, usage_file; create, malformed)
+
+Run `f` with the parsed contents of a usage log while holding that log's pidfile lock.
+Changes made by `f` to the parsed `Dict` are atomically written back after it returns.
+Returning `nothing` from `f` leaves the file untouched and returns `nothing`.
+A missing log is created only when `create` is true; otherwise this function throws.
+For malformed TOML, `malformed = :replace`
+starts `f` with an empty log, while `malformed = :preserve` leaves the file untouched
+and returns `nothing` without invoking `f`.
+"""
+function with_usage_file(
+    f::Function,
+    usage_file::AbstractString;
+    create::Bool,
+    malformed::Symbol,
+)
+    malformed in (:replace, :preserve) ||
+        throw(ArgumentError("`malformed` must be `:replace` or `:preserve`"))
+    create && mkpath(dirname(usage_file))
+
+    return FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+        usage = if isfile(usage_file)
+            parsed = TOML.tryparsefile(usage_file)
+            if parsed isa TOML.ParserError
+                @warn "Failed to parse usage file `$usage_file`." exception = parsed
+                malformed === :preserve && return nothing
+                Dict{String, Any}()
+            else
+                parsed::Dict{String, Any}
+            end
+        elseif create
+            Dict{String, Any}()
+        else
+            throw(ArgumentError("Usage file `$usage_file` does not exist"))
+        end
+        result = f(usage)
+        result === nothing && return nothing
+        atomic_toml_write(usage_file, usage, sorted = true)
+        return result
     end
-    return usage
 end
 
-with_usage_file_lock(f::Function, usage_file::AbstractString) =
-    FileWatching.mkpidlock(f, usage_file * ".pid", stale_age = 3)
-
 function usage_time(info, usage_file::AbstractString, source_file::AbstractString)
-    if !haskey(info, "time")
+    if !(info isa AbstractDict) || !haskey(info, "time")
         @warn(
             "Usage file `$usage_file` has a missing `time` entry for `$source_file`. " *
                 "Marking as used `now()`."
@@ -735,42 +766,76 @@ function usage_time(info, usage_file::AbstractString, source_file::AbstractStrin
     end
 end
 
-function write_env_usage(source_files, usage_filepath::AbstractString)
+function usage_parents(info, usage_file::AbstractString, source_file::AbstractString)
+    parents = info isa AbstractDict ? get(info, "parent_projects", nothing) : nothing
+    if parents isa AbstractVector && all(parent -> parent isa AbstractString, parents)
+        return Set{String}(parents)
+    end
+    @warn(
+        "Usage file `$usage_file` has an invalid `parent_projects` entry for `$source_file`. " *
+            "Preserving the scratchspace conservatively."
+    )
+    return nothing
+end
+
+"""
+    foreach_usage_entry(f, usage, usage_file) -> Bool
+
+Call `f(source_file, entry)` for every usage record in the TOML-parsed `usage` log.
+Return `false` and warn if an entry is not an array of TOML tables; otherwise return
+`true` after visiting every record.
+"""
+function foreach_usage_entry(
+    f::Function,
+    usage::Dict{String, Any},
+    usage_file::AbstractString,
+)
+    for (source_file, entries) in usage
+        if !(entries isa AbstractVector)
+            @warn "Usage file `$usage_file` has an invalid entry for `$source_file`."
+            return false
+        end
+        for entry in entries
+            if !(entry isa Dict{String, Any})
+                @warn "Usage file `$usage_file` has an invalid usage record for `$source_file`."
+                return false
+            end
+            f(source_file, entry)
+        end
+    end
+    return true
+end
+
+function write_env_usage(
+    source_files::AbstractVector{<:AbstractString},
+    usage_filepath::AbstractString,
+)
     # Don't record ghost usage
     source_files = filter(isfile, source_files)
     isempty(source_files) && return
 
-    # Ensure that log dir exists
-    !ispath(logdir()) && mkpath(logdir())
-
     usage_file = joinpath(logdir(), usage_filepath)
     timestamp = now()
 
-    ## Atomically write usage file using process id locking
-    with_usage_file_lock(usage_file) do
-        usage = @something(
-            isfile(usage_file) ? read_usage_file(usage_file) : nothing,
-            Dict{String, Any}()
-        )
-
-        # record new usage
-        for source_file in source_files
-            usage[source_file] = [Dict("time" => timestamp)]
-        end
-
-        # keep only latest usage info
-        for k in keys(usage)
-            times = map(usage[k]) do d
-                usage_time(d, usage_file, k)
+    try
+        with_usage_file(usage_file; create = true, malformed = :replace) do usage
+            # keep only latest usage info
+            condensed_usage = Dict{String, Vector{Dict}}()
+            foreach_usage_entry(usage, usage_file) do source_file, info
+                time = usage_time(info, usage_file, source_file)
+                previous = get(condensed_usage, source_file, nothing)
+                if previous === nothing || time > only(previous)["time"]
+                    condensed_usage[source_file] = [Dict("time" => time)]
+                end
             end
-            usage[k] = [Dict("time" => maximum(times))]
+            # Record new usage after condensing so every written entry has one timestamp.
+            for source_file in source_files
+                condensed_usage[source_file] = [Dict("time" => timestamp)]
+            end
+            copy!(usage, condensed_usage)
         end
-
-        try
-            atomic_toml_write(usage_file, usage, sorted = true)
-        catch err
-            @error "Failed to write valid usage file `$usage_file`" exception = err
-        end
+    catch err
+        @error "Failed to write valid usage file `$usage_file`" exception = err
     end
     return
 end

@@ -13,7 +13,7 @@ import Base: StaleCacheKey
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped, ..manifest_rel_path
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write, ..safe_realpath
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..safe_realpath
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -648,16 +648,21 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     # Collect both last known usage dates, as well as parent projects for each scratch space
     scratch_usage_by_depot = UsageByDepotDict()
     scratch_parents_by_depot = Dict{String, Dict{String, Set{String}}}()
+    unknown_scratch_parents_by_depot = Dict{String, Set{String}}()
 
-    # Fold every recorded event in one usage log into caller-owned condensed state.
-    # A parse failure returns false so GC can stop rather than treat the log as empty.
-    function reduce_usage!(f::Function, usage_filepath)
-        parsed_usage = Types.read_usage_file(usage_filepath)
-        parsed_usage === nothing && return false
-        for (filename, infos) in parsed_usage
-            f.(Ref(filename), infos)
+    function condense_index_usage(usage_file::String)
+        return Types.with_usage_file(usage_file; create = false, malformed = :preserve) do entries
+            usage = UsageDict()
+            valid_usage = Types.foreach_usage_entry(entries, usage_file) do filename, info
+                time = Types.usage_time(info, usage_file, filename)
+                usage[filename] = max(get(usage, filename, DateTime(0)), time)
+            end
+            valid_usage || return nothing
+            filter!(((path, _),) -> Pkg.isfile_nothrow(path), usage)
+            empty!(entries)
+            merge!(entries, Dict(path => [Dict("time" => time)] for (path, time) in usage))
+            return usage
         end
-        return true
     end
 
     # Read and rewrite each existing usage log as one locked transaction. This prevents
@@ -668,22 +673,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         # the manifest log with that condensed representation.
         manifest_usage_file = joinpath(logdir(depot), "manifest_usage.toml")
         manifest_usage_result = if isfile(manifest_usage_file)
-            Types.with_usage_file_lock(manifest_usage_file) do
-                usage = UsageDict()
-                reduce_usage!(manifest_usage_file) do filename, info
-                    time = Types.usage_time(info, manifest_usage_file, filename)
-                    usage[filename] = max(get(usage, filename, DateTime(0)), time)
-                end || return nothing
-                filter!(((path, time),) -> Pkg.isfile_nothrow(path), usage)
-                condensed_usage =
-                    Dict(path => [Dict("time" => time)] for (path, time) in usage)
-                atomic_toml_write(
-                    manifest_usage_file,
-                    condensed_usage,
-                    sorted = true
-                )
-                return usage
-            end
+            condense_index_usage(manifest_usage_file)
         else
             UsageDict()
         end
@@ -694,22 +684,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         # Apply the same latest-timestamp condensation to extant Artifacts.toml files.
         artifact_usage_file = joinpath(logdir(depot), "artifact_usage.toml")
         artifact_usage_result = if isfile(artifact_usage_file)
-            Types.with_usage_file_lock(artifact_usage_file) do
-                usage = UsageDict()
-                reduce_usage!(artifact_usage_file) do filename, info
-                    time = Types.usage_time(info, artifact_usage_file, filename)
-                    usage[filename] = max(get(usage, filename, DateTime(0)), time)
-                end || return nothing
-                filter!(((path, time),) -> Pkg.isfile_nothrow(path), usage)
-                condensed_usage =
-                    Dict(path => [Dict("time" => time)] for (path, time) in usage)
-                atomic_toml_write(
-                    artifact_usage_file,
-                    condensed_usage,
-                    sorted = true
-                )
-                return usage
-            end
+            condense_index_usage(artifact_usage_file)
         else
             UsageDict()
         end
@@ -721,20 +696,26 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         # and parents, and atomically rewrite the remaining live associations.
         scratch_usage_file = joinpath(logdir(depot), "scratch_usage.toml")
         scratch_usage_result = if isfile(scratch_usage_file)
-            Types.with_usage_file_lock(scratch_usage_file) do
+            Types.with_usage_file(scratch_usage_file; create = false, malformed = :preserve) do entries
                 usage = UsageDict()
                 parents = Dict{String, Set{String}}()
-                reduce_usage!(scratch_usage_file) do filename, info
+                unknown_parents = Set{String}()
+                valid_usage = Types.foreach_usage_entry(entries, scratch_usage_file) do filename, info
                     time = Types.usage_time(info, scratch_usage_file, filename)
                     usage[filename] = max(get(usage, filename, DateTime(0)), time)
-                    for parent in info["parent_projects"]
-                        push!(get!(Set{String}, parents, filename), parent)
+                    entry_parents = Types.usage_parents(info, scratch_usage_file, filename)
+                    if entry_parents === nothing
+                        push!(unknown_parents, filename)
+                    else
+                        union!(get!(Set{String}, parents, filename), entry_parents)
                     end
-                end || return nothing
+                end
+                valid_usage || return nothing
                 filter!(((path, time),) -> Pkg.isdir_nothrow(path), usage)
                 filter!(pair -> first(pair) in keys(usage), parents)
-                expanded_usage = Dict{String, Vector{Dict}}()
+                expanded_usage = Dict{String, Any}()
                 for (path, time) in usage
+                    path in unknown_parents && continue
                     parent_paths = parents[path]
                     filter!(Pkg.isfile_nothrow, parent_paths)
                     isempty(parent_paths) && continue
@@ -747,22 +728,32 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
                 end
                 filter!(pair -> first(pair) in keys(expanded_usage), usage)
                 filter!(pair -> first(pair) in keys(expanded_usage), parents)
-                atomic_toml_write(scratch_usage_file, expanded_usage, sorted = true)
-                return (usage, parents)
+                # Retain records with unknown parents unchanged: they cannot safely be
+                # condensed or considered orphaned until a later valid writer repairs them.
+                for path in unknown_parents
+                    haskey(entries, path) && (expanded_usage[path] = entries[path])
+                end
+                empty!(entries)
+                merge!(entries, expanded_usage)
+                return (usage, parents, unknown_parents)
             end
         else
-            (UsageDict(), Dict{String, Set{String}}())
+            (UsageDict(), Dict{String, Set{String}}(), Set{String}())
         end
         scratch_usage_result === nothing && return
-        scratch_usage, scratch_parents = scratch_usage_result
+        scratch_usage, scratch_parents, unknown_scratch_parents = scratch_usage_result
         scratch_usage_by_depot[depot] = scratch_usage
         scratch_parents_by_depot[depot] = scratch_parents
+        unknown_scratch_parents_by_depot[depot] = unknown_scratch_parents
     end
 
     # Combine the per-depot live paths for the mark-and-sweep phase below.
     all_manifest_tomls = Set(f for (_, files) in manifest_usage_by_depot for f in keys(files))
     all_artifact_tomls = Set(f for (_, files) in artifact_usage_by_depot for f in keys(files))
     all_scratch_dirs = Set(f for (_, dirs) in scratch_usage_by_depot for f in keys(dirs))
+    all_unknown_scratch_parents = Set(
+        f for (_, paths) in unknown_scratch_parents_by_depot for f in paths
+    )
 
     function process_manifest_pkgs(path)
         # Read the manifest in
@@ -832,6 +823,8 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     end
 
     function process_scratchspace(path, pkgs_to_delete)
+        path in all_unknown_scratch_parents && return [path]
+
         # Find all parents of this path
         parents = String[]
 

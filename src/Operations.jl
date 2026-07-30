@@ -16,7 +16,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path, atomic_toml_write
+import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path
 
 #########
 # Utils #
@@ -1562,7 +1562,7 @@ function download_artifacts(
     end
 
 
-    return write_env_usage(used_artifact_tomls, "artifact_usage.toml")
+    return write_env_usage(collect(used_artifact_tomls), "artifact_usage.toml")
 end
 
 function download_artifacts(
@@ -1943,28 +1943,23 @@ const PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 
 function write_scratch_usage(scratch::AbstractString, parent_project::AbstractString)
-    !ispath(logdir()) && mkpath(logdir())
     usage_file = joinpath(logdir(), "scratch_usage.toml")
-    Types.with_usage_file_lock(usage_file) do
-        usage = @something(
-            isfile(usage_file) ? Types.read_usage_file(usage_file) : nothing,
-            Dict{String, Any}()
-        )
-        parents = Set{String}([parent_project])
-        for info in get(usage, scratch, [])
-            union!(parents, get(info, "parent_projects", String[]))
+    try
+        Types.with_usage_file(usage_file; create = true, malformed = :replace) do usage
+            parents = Set{String}([parent_project])
+            for info in get(usage, scratch, [])
+                existing_parents = Types.usage_parents(info, usage_file, scratch)
+                existing_parents === nothing || union!(parents, existing_parents)
+            end
+            usage[scratch] = [
+                Dict(
+                    "time" => Dates.now(),
+                    "parent_projects" => collect(parents),
+                ),
+            ]
         end
-        usage[scratch] = [
-            Dict(
-                "time" => Dates.now(),
-                "parent_projects" => collect(parents),
-            ),
-        ]
-        try
-            atomic_toml_write(usage_file, usage, sorted = true)
-        catch err
-            @error "Failed to write valid usage file `$usage_file`" exception = err
-        end
+    catch err
+        @error "Failed to write valid usage file `$usage_file`" exception = err
     end
     return
 end

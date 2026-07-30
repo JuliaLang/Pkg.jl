@@ -699,15 +699,19 @@ end
 
 # Ensure usage logs are synchronized and malformed entries are handled conservatively.
 @testset "usage logs" begin
-    # Check missing files throw and the usage lock serializes concurrent updates.
+    # Check usage-file transactions handle missing files and serialize updates.
     isolate() do
-        @test_throws Exception Pkg.Types.read_usage_file(tempname())
+        @test_throws ArgumentError (
+            Pkg.Types.with_usage_file(tempname(); create = false, malformed = :preserve) do _
+                error("a missing usage file should not invoke its callback")
+            end
+        )
 
         inside_lock = Threads.Atomic{Int}(0)
         overlaps = Threads.Atomic{Int}(0)
         lock_file = tempname()
         @sync for _ in 1:8
-            Threads.@spawn Pkg.Types.with_usage_file_lock(lock_file) do
+            Threads.@spawn Pkg.Types.with_usage_file(lock_file; create = true, malformed = :replace) do _
                 if Threads.atomic_add!(inside_lock, 1) != 0
                     Threads.atomic_add!(overlaps, 1)
                 end
@@ -717,7 +721,35 @@ end
         end
         @test overlaps[] == 0
 
+        write(lock_file, "invalid = [")
+        @test_logs (:warn, r"Failed to parse usage file") begin
+            @test isnothing(
+                Pkg.Types.with_usage_file(lock_file; create = false, malformed = :preserve) do _
+                    error("a preserved malformed usage file should not invoke its callback")
+                end
+            )
+        end
+        @test read(lock_file, String) == "invalid = ["
+        @test_logs (:warn, r"Failed to parse usage file") begin
+            Pkg.Types.with_usage_file(lock_file; create = true, malformed = :replace) do usage
+                usage["repaired"] = [Dict("time" => now())]
+            end
+        end
+        @test haskey(TOML.parsefile(lock_file), "repaired")
+
+        source_file = tempname()
+        touch(source_file)
         mkpath(Pkg.logdir())
+        for filename in ("manifest_usage.toml", "artifact_usage.toml")
+            usage_path = joinpath(Pkg.logdir(), filename)
+            write(usage_path, "invalid = [")
+            @test_logs(
+                (:warn, r"Failed to parse usage file"),
+                Pkg.Types.write_env_usage(source_file, filename),
+            )
+            @test haskey(TOML.parsefile(usage_path), source_file)
+        end
+
         usage_file = joinpath(Pkg.logdir(), "scratch_usage.toml")
         first_scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "first")
         second_scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "second")
@@ -770,6 +802,22 @@ end
         @test isempty(TOML.parsefile(joinpath(Pkg.logdir(), "artifact_usage.toml")))
     end
 
+    # Check GC preserves a usage log with structurally invalid records.
+    for filename in ("manifest_usage.toml", "artifact_usage.toml")
+        isolate() do
+            mkpath(Pkg.logdir())
+            usage_file = joinpath(Pkg.logdir(), filename)
+            open(usage_file, "w") do io
+                TOML.print(io, Dict(tempname() => "not an array of usage records"))
+            end
+            original = read(usage_file, String)
+
+            @test_logs (:warn, r"invalid entry") Pkg.gc(io = devnull)
+
+            @test read(usage_file, String) == original
+        end
+    end
+
     # Check GC repairs a missing timestamp without deleting the scratchspace.
     isolate() do
         scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "hash")
@@ -807,6 +855,30 @@ end
 
         @test isdir(scratch)
         @test haskey(only(TOML.parsefile(usage_file)[scratch]), "time")
+    end
+
+    # Check GC preserves a scratchspace when its parents cannot be decoded.
+    isolate() do
+        scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "hash")
+        mkpath(scratch)
+        mkpath(Pkg.logdir())
+        usage_file = joinpath(Pkg.logdir(), "scratch_usage.toml")
+        open(usage_file, "w") do io
+            TOML.print(io, Dict(scratch => [Dict("time" => now())]))
+        end
+
+        @test_logs (:warn, r"invalid `parent_projects` entry") Pkg.gc(io = devnull)
+
+        @test isdir(scratch)
+        @test !haskey(only(TOML.parsefile(usage_file)[scratch]), "parent_projects")
+
+        parent = tempname()
+        touch(parent)
+        @test_logs(
+            (:warn, r"invalid `parent_projects` entry"),
+            Pkg.Operations.write_scratch_usage(scratch, parent),
+        )
+        @test only(TOML.parsefile(usage_file)[scratch])["parent_projects"] == [parent]
     end
 
     # Check GC preserves scratchspaces and the log when the usage TOML cannot be parsed.
