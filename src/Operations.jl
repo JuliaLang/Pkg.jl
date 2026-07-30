@@ -9,14 +9,14 @@ using Random: randstring
 import LibGit2, Dates, TOML
 
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
-import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
+import ..depots, ..depots1, ..logdir, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
     artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
 using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path
+import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path, atomic_toml_write
 
 #########
 # Utils #
@@ -1942,6 +1942,33 @@ end
 const PkgUUID = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 
+function write_scratch_usage(scratch::AbstractString, parent_project::AbstractString)
+    !ispath(logdir()) && mkpath(logdir())
+    usage_file = joinpath(logdir(), "scratch_usage.toml")
+    Types.with_usage_file_lock(usage_file) do
+        usage = @something(
+            isfile(usage_file) ? Types.read_usage_file(usage_file) : nothing,
+            Dict{String, Any}()
+        )
+        parents = Set{String}([parent_project])
+        for info in get(usage, scratch, [])
+            union!(parents, get(info, "parent_projects", String[]))
+        end
+        usage[scratch] = [
+            Dict(
+                "time" => Dates.now(),
+                "parent_projects" => collect(parents),
+            ),
+        ]
+        try
+            atomic_toml_write(usage_file, usage, sorted = true)
+        catch err
+            @error "Failed to write valid usage file `$usage_file`" exception = err
+        end
+    end
+    return
+end
+
 builddir(source_path::String) = joinpath(source_path, "deps")
 buildfile(source_path::String) = joinpath(builddir(source_path), "build.jl")
 function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_reresolve::Bool = true)
@@ -2010,14 +2037,7 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_r
                 create_cachedir_tag(joinpath(depots1(), "scratchspaces"))
                 log_file = joinpath(scratch, "build.log")
                 # Associate the logfile with the package being built
-                dict = Dict{String, Any}()
-                inner_dict = Dict{String, Any}()
-                inner_dict["time"] = Dates.now()
-                inner_dict["parent_projects"] = [projectfile_path(source_path)]
-                dict[scratch] = [inner_dict]
-                open(joinpath(depots1(), "logs", "scratch_usage.toml"), "a") do io
-                    TOML.print(io, dict)
-                end
+                write_scratch_usage(scratch, projectfile_path(source_path))
             else
                 log_file = splitext(build_file)[1] * ".log"
             end

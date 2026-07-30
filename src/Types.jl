@@ -703,6 +703,38 @@ end
 write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
     write_env_usage([source_file], usage_filepath)
 
+function read_usage_file(usage_file::AbstractString)
+    usage = TOML.tryparsefile(usage_file)
+    if usage isa TOML.ParserError
+        @warn "Failed to parse usage file `$usage_file`." exception = usage
+        return nothing
+    end
+    return usage
+end
+
+with_usage_file_lock(f::Function, usage_file::AbstractString) =
+    FileWatching.mkpidlock(f, usage_file * ".pid", stale_age = 3)
+
+function usage_time(info, usage_file::AbstractString, source_file::AbstractString)
+    if !haskey(info, "time")
+        @warn(
+            "Usage file `$usage_file` has a missing `time` entry for `$source_file`. " *
+                "Marking as used `now()`."
+        )
+        return Dates.now()
+    end
+    return try
+        Dates.DateTime(info["time"])
+    catch err
+        @warn(
+            "Usage file `$usage_file` has an invalid `time` entry for `$source_file`. " *
+                "Marking as used `now()`.",
+            exception = err
+        )
+        Dates.now()
+    end
+end
+
 function write_env_usage(source_files, usage_filepath::AbstractString)
     # Don't record ghost usage
     source_files = filter(isfile, source_files)
@@ -715,17 +747,11 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
     timestamp = now()
 
     ## Atomically write usage file using process id locking
-    FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
-        usage = if isfile(usage_file)
-            try
-                TOML.parsefile(usage_file)
-            catch err
-                @warn "Failed to parse usage file `$usage_file`, ignoring." err
-                Dict{String, Any}()
-            end
-        else
+    with_usage_file_lock(usage_file) do
+        usage = @something(
+            isfile(usage_file) ? read_usage_file(usage_file) : nothing,
             Dict{String, Any}()
-        end
+        )
 
         # record new usage
         for source_file in source_files
@@ -735,13 +761,7 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
         # keep only latest usage info
         for k in keys(usage)
             times = map(usage[k]) do d
-                if haskey(d, "time")
-                    Dates.DateTime(d["time"])
-                else
-                    # if there's no time entry because of a write failure be conservative and mark it as being used now
-                    @debug "Usage file `$usage_filepath` has a missing `time` entry for `$k`. Marking as used `now()`"
-                    Dates.now()
-                end
+                usage_time(d, usage_file, k)
             end
             usage[k] = [Dict("time" => maximum(times))]
         end

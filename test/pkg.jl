@@ -697,6 +697,112 @@ end
     end
 end
 
+# Ensure usage logs are synchronized and malformed entries are handled conservatively.
+@testset "usage logs" begin
+    # Check missing files throw and the usage lock serializes concurrent updates.
+    isolate() do
+        @test_throws Exception Pkg.Types.read_usage_file(tempname())
+
+        inside_lock = Threads.Atomic{Int}(0)
+        overlaps = Threads.Atomic{Int}(0)
+        lock_file = tempname()
+        @sync for _ in 1:8
+            Threads.@spawn Pkg.Types.with_usage_file_lock(lock_file) do
+                if Threads.atomic_add!(inside_lock, 1) != 0
+                    Threads.atomic_add!(overlaps, 1)
+                end
+                yield()
+                Threads.atomic_sub!(inside_lock, 1)
+            end
+        end
+        @test overlaps[] == 0
+
+        mkpath(Pkg.logdir())
+        usage_file = joinpath(Pkg.logdir(), "scratch_usage.toml")
+        first_scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "first")
+        second_scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "second")
+        first_parent = tempname()
+        new_parents = [tempname() for _ in 1:8]
+        other_parent = tempname()
+        open(usage_file, "w") do io
+            TOML.print(
+                io,
+                Dict(
+                    first_scratch => [
+                        Dict(
+                            "time" => now(),
+                            "parent_projects" => [first_parent],
+                        ),
+                    ],
+                    second_scratch => [
+                        Dict(
+                            "time" => now(),
+                            "parent_projects" => [other_parent],
+                        ),
+                    ],
+                );
+                sorted = true
+            )
+        end
+
+        @sync for parent in new_parents
+            Threads.@spawn Pkg.Operations.write_scratch_usage(first_scratch, parent)
+        end
+
+        usage = TOML.parsefile(usage_file)
+        @test Set(only(usage[first_scratch])["parent_projects"]) == Set([first_parent; new_parents])
+        @test only(usage[second_scratch])["parent_projects"] == [other_parent]
+    end
+
+    # Check GC safely condenses manifest and artifact usage logs.
+    isolate() do
+        mkpath(Pkg.logdir())
+        unused_path = tempname()
+        for filename in ("manifest_usage.toml", "artifact_usage.toml")
+            open(joinpath(Pkg.logdir(), filename), "w") do io
+                TOML.print(io, Dict(unused_path => [Dict("time" => now())]))
+            end
+        end
+
+        Pkg.gc(io = devnull)
+
+        @test isempty(TOML.parsefile(joinpath(Pkg.logdir(), "manifest_usage.toml")))
+        @test isempty(TOML.parsefile(joinpath(Pkg.logdir(), "artifact_usage.toml")))
+    end
+
+    # Check GC repairs a missing timestamp without deleting the scratchspace.
+    isolate() do
+        scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "hash")
+        mkpath(scratch)
+        parent = tempname()
+        touch(parent)
+        mkpath(Pkg.logdir())
+        usage_file = joinpath(Pkg.logdir(), "scratch_usage.toml")
+        open(usage_file, "w") do io
+            TOML.print(io, Dict(scratch => [Dict("parent_projects" => [parent])]))
+        end
+
+        @test_logs (:warn, r"missing `time` entry") Pkg.gc(io = devnull)
+
+        @test isdir(scratch)
+        @test haskey(only(TOML.parsefile(usage_file)[scratch]), "time")
+    end
+
+    # Check GC preserves scratchspaces and the log when the usage TOML cannot be parsed.
+    isolate() do
+        scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "hash")
+        mkpath(scratch)
+        mkpath(Pkg.logdir())
+        usage_file = joinpath(Pkg.logdir(), "scratch_usage.toml")
+        write(usage_file, "invalid = [")
+
+        @test_logs (:warn, r"Failed to parse usage file") Pkg.gc(io = devnull)
+
+        @test isdir(scratch)
+        @test read(usage_file, String) == "invalid = ["
+    end
+end
+
 if isdefined(Base.Filesystem, :delayed_delete_ref)
     @testset "Pkg.gc for delayed deletes" begin
         mktempdir() do root
