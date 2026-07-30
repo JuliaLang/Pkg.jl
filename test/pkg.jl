@@ -788,6 +788,27 @@ end
         @test haskey(only(TOML.parsefile(usage_file)[scratch]), "time")
     end
 
+    # Check GC repairs an invalid timestamp without deleting the scratchspace.
+    isolate() do
+        scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "hash")
+        mkpath(scratch)
+        parent = tempname()
+        touch(parent)
+        mkpath(Pkg.logdir())
+        usage_file = joinpath(Pkg.logdir(), "scratch_usage.toml")
+        open(usage_file, "w") do io
+            TOML.print(
+                io,
+                Dict(scratch => [Dict("time" => "not a timestamp", "parent_projects" => [parent])])
+            )
+        end
+
+        @test_logs (:warn, r"invalid `time` entry") Pkg.gc(io = devnull)
+
+        @test isdir(scratch)
+        @test haskey(only(TOML.parsefile(usage_file)[scratch]), "time")
+    end
+
     # Check GC preserves scratchspaces and the log when the usage TOML cannot be parsed.
     isolate() do
         scratch = joinpath(Pkg.depots1(), "scratchspaces", "uuid", "hash")
