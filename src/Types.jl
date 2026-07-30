@@ -715,11 +715,11 @@ starts `f` with an empty log, while `malformed = :preserve` leaves the file unto
 and returns `nothing` without invoking `f`.
 """
 function with_usage_file(
-    f::Function,
-    usage_file::AbstractString;
-    create::Bool,
-    malformed::Symbol,
-)
+        f::Function,
+        usage_file::AbstractString;
+        create::Bool,
+        malformed::Symbol,
+    )
     malformed in (:replace, :preserve) ||
         throw(ArgumentError("`malformed` must be `:replace` or `:preserve`"))
     create && mkpath(dirname(usage_file))
@@ -786,10 +786,10 @@ Return `false` and warn if an entry is not an array of TOML tables; otherwise re
 `true` after visiting every record.
 """
 function foreach_usage_entry(
-    f::Function,
-    usage::Dict{String, Any},
-    usage_file::AbstractString,
-)
+        f::Function,
+        usage::Dict{String, Any},
+        usage_file::AbstractString,
+    )
     for (source_file, entries) in usage
         if !(entries isa AbstractVector)
             @warn "Usage file `$usage_file` has an invalid entry for `$source_file`."
@@ -807,9 +807,9 @@ function foreach_usage_entry(
 end
 
 function write_env_usage(
-    source_files::AbstractVector{<:AbstractString},
-    usage_filepath::AbstractString,
-)
+        source_files::AbstractVector{<:AbstractString},
+        usage_filepath::AbstractString,
+    )
     # Don't record ghost usage
     source_files = filter(isfile, source_files)
     isempty(source_files) && return

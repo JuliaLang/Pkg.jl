@@ -750,9 +750,14 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     # Combine the per-depot live paths for the mark-and-sweep phase below.
     all_manifest_tomls = Set(f for (_, files) in manifest_usage_by_depot for f in keys(files))
     all_artifact_tomls = Set(f for (_, files) in artifact_usage_by_depot for f in keys(files))
-    all_scratch_dirs = Set(f for (_, dirs) in scratch_usage_by_depot for f in keys(dirs))
     all_unknown_scratch_parents = Set(
         f for (_, paths) in unknown_scratch_parents_by_depot for f in paths
+    )
+    # Unknown-parent records are deliberately excluded from the condensed usage map,
+    # but must still enter marking so `process_scratchspace` can preserve them.
+    all_scratch_dirs = union(
+        Set(f for (_, dirs) in scratch_usage_by_depot for f in keys(dirs)),
+        all_unknown_scratch_parents,
     )
 
     function process_manifest_pkgs(path)
