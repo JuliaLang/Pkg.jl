@@ -247,11 +247,19 @@ function Project(raw::Dict; file = nothing)
 end
 
 function read_project(f_or_io::Union{String, IO})
+    # Capture the comments of the project file (when the TOML stdlib supports
+    # it) so that they can be written back out by `write_project`
+    comments = TOML_COMMENTS_SUPPORTED ? TOML.Comments() : nothing
     raw = try
         if f_or_io isa IO
-            TOML.parse(read(f_or_io, String))
+            str = read(f_or_io, String)
+            comments === nothing ? TOML.parse(str) : TOML.parse(str; comments)
+        elseif isfile(f_or_io)
+            # The comment-capturing path bypasses the shared parser cache;
+            # project files are small so the extra parse is cheap
+            comments === nothing ? parse_toml(f_or_io) : TOML.parsefile(f_or_io; comments)
         else
-            isfile(f_or_io) ? parse_toml(f_or_io) : return Project()
+            return Project()
         end
     catch e
         if e isa TOML.ParserError
@@ -259,7 +267,9 @@ function read_project(f_or_io::Union{String, IO})
         end
         pkgerror("Errored when reading $f_or_io, got: ", sprint(showerror, e))
     end
-    return Project(raw; file = f_or_io isa IO ? nothing : f_or_io)
+    project = Project(raw; file = f_or_io isa IO ? nothing : f_or_io)
+    project.comments = comments
+    return project
 end
 
 
@@ -335,8 +345,8 @@ function write_project(env::EnvCache, skip_readonly_check::Bool = false)
     return write_project(env.project, env.project_file)
 end
 write_project(project::Project, project_file::AbstractString) =
-    write_project(destructure(project), project_file)
-function write_project(io::IO, project::Dict)
+    write_project(destructure(project), project_file; comments = project.comments)
+function write_project(io::IO, project::Dict; comments::Union{TOMLComments, Nothing} = nothing)
     inline_tables = Base.IdSet{Dict}()
     if haskey(project, "sources")
         for source in values(project["sources"])
@@ -344,14 +354,16 @@ function write_project(io::IO, project::Dict)
             push!(inline_tables, source)
         end
     end
-    TOML.print(io, project; inline_tables, sorted = true, by = key -> (project_key_order(key), key)) do x
+    # `comments` is only ever non-`nothing` when the TOML stdlib supports the kwarg
+    kws = comments === nothing ? (;) : (; comments)
+    TOML.print(io, project; inline_tables, sorted = true, by = key -> (project_key_order(key), key), kws...) do x
         x isa UUID || x isa VersionNumber || pkgerror("unhandled type `$(typeof(x))`")
         return string(x)
     end
     return nothing
 end
-function write_project(project::Dict, project_file::AbstractString)
-    str = sprint(write_project, project)
+function write_project(project::Dict, project_file::AbstractString; comments::Union{TOMLComments, Nothing} = nothing)
+    str = sprint(io -> write_project(io, project; comments))
     mkpath(dirname(project_file))
-    return write(project_file, str)
+    return atomic_write(project_file, str)
 end

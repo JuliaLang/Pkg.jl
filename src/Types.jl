@@ -10,7 +10,7 @@ import Base.string
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, create_cachedir_tag, normalize_path_for_toml
+import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, atomic_write, create_cachedir_tag, normalize_path_for_toml
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
@@ -55,6 +55,11 @@ end
 # See loading.jl
 const TOML_CACHE = Base.TOMLCache(Base.TOML.Parser{Dates}())
 const TOML_LOCK = ReentrantLock()
+
+# Whether the TOML stdlib supports capturing comments (Julia 1.14+, JuliaLang/julia#42697).
+# When it does, Pkg preserves the comments of Project.toml files across writes.
+const TOML_COMMENTS_SUPPORTED = isdefined(TOML, :Comments)
+const TOMLComments = TOML_COMMENTS_SUPPORTED ? TOML.Comments : Nothing
 # Some functions mutate the returning Dict so return a copy of the cached value here
 parse_toml(toml_file::AbstractString) =
     Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
@@ -252,6 +257,11 @@ struct AppInfo
 end
 Base.@kwdef mutable struct Project
     other::Dict{String, Any} = Dict{String, Any}()
+    # The comments of the project file, preserved across writes.
+    # Excluded from `==` and `hash` (like the raw data in `other` is for
+    # `PackageEntry`) so that comments never affect whether an environment
+    # is considered modified.
+    comments::Union{TOMLComments, Nothing} = nothing
     # Fields
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
@@ -275,8 +285,9 @@ Base.@kwdef mutable struct Project
     workspace::Dict{String, Any} = Dict{String, Any}()
     readonly::Bool = false
 end
-Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
-Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init = h)
+const _project_comparison_fields = filter(!=(:comments), collect(fieldnames(Project)))
+Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, _project_comparison_fields)
+Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in _project_comparison_fields], init = h)
 
 
 Base.@kwdef mutable struct PackageEntry

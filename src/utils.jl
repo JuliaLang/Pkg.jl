@@ -188,6 +188,28 @@ function atomic_toml_write(path::String, data; kws...)
     end
 end
 
+"""
+    atomic_write(path::String, contents)
+
+Write `contents` to a file atomically by first writing to a temporary file and
+then moving it into place, like [`atomic_toml_write`](@ref).
+"""
+function atomic_write(path::String, contents)
+    dir = dirname(path)
+    isempty(dir) && (dir = pwd())
+
+    temp_path, temp_io = mktemp(dir)
+    return try
+        write(temp_io, contents)
+        close(temp_io)
+        mv(temp_path, path; force = true)
+    catch
+        close(temp_io)
+        rm(temp_path; force = true)
+        rethrow()
+    end
+end
+
 ## ordering of UUIDs ##
 if VERSION < v"1.2.0-DEV.269"  # Defined in Base as of #30947
     Base.isless(a::UUID, b::UUID) = a.value < b.value

@@ -197,7 +197,9 @@ function _resolve(manifest::Manifest, pkgname = nothing)
             cp(original_project_file, projectfile; force = true)
             chmod(projectfile, 0o644)  # Make the copied project file writable
 
-            project_data = TOML.parsefile(projectfile)
+            comments = Pkg.Types.TOML_COMMENTS_SUPPORTED ? TOML.Comments() : nothing
+            project_data = comments === nothing ? TOML.parsefile(projectfile) :
+                TOML.parsefile(projectfile; comments)
 
             # Paths inside the depot are written relative to the app environment
             # so that the depot can be relocated
@@ -243,7 +245,9 @@ function _resolve(manifest::Manifest, pkgname = nothing)
                 isempty(sources) && delete!(project_data, "sources")
             end
 
-            atomic_toml_write(projectfile, project_data)
+            # Writes atomically and preserves Pkg's project key ordering,
+            # inline [sources] tables and (on Julia 1.14+) comments
+            write_project(project_data, projectfile; comments)
         else
             pkgerror("could not find project file for package $pkg")
         end
