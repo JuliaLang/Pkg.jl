@@ -245,8 +245,8 @@ function _resolve(manifest::Manifest, pkgname = nothing)
                 isempty(sources) && delete!(project_data, "sources")
             end
 
-            # Writes atomically and preserves Pkg's project key ordering,
-            # inline [sources] tables and (on Julia 1.14+) comments
+            # Preserves Pkg's project key ordering, inline [sources] tables
+            # and (on Julia 1.14+) comments
             write_project(project_data, projectfile; comments)
         else
             pkgerror("could not find project file for package $pkg")

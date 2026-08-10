@@ -365,5 +365,5 @@ end
 function write_project(project::Dict, project_file::AbstractString; comments::Union{TOMLComments, Nothing} = nothing)
     str = sprint(io -> write_project(io, project; comments))
     mkpath(dirname(project_file))
-    return atomic_write(project_file, str)
+    return write(project_file, str)
 end
