@@ -55,11 +55,6 @@ end
 # See loading.jl
 const TOML_CACHE = Base.TOMLCache(Base.TOML.Parser{Dates}())
 const TOML_LOCK = ReentrantLock()
-
-# Whether the TOML stdlib supports capturing comments (Julia 1.14+, JuliaLang/julia#42697).
-# When it does, Pkg preserves the comments of Project.toml files across writes.
-const TOML_COMMENTS_SUPPORTED = isdefined(TOML, :Comments)
-const TOMLComments = TOML_COMMENTS_SUPPORTED ? TOML.Comments : Nothing
 # Some functions mutate the returning Dict so return a copy of the cached value here
 parse_toml(toml_file::AbstractString) =
     Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
@@ -261,7 +256,7 @@ Base.@kwdef mutable struct Project
     # Excluded from `==` and `hash` (like the raw data in `other` is for
     # `PackageEntry`) so that comments never affect whether an environment
     # is considered modified.
-    comments::Union{TOMLComments, Nothing} = nothing
+    comments::Union{TOML.Comments, Nothing} = nothing
     # Fields
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
