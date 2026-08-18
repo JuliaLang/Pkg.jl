@@ -197,7 +197,8 @@ function _resolve(manifest::Manifest, pkgname = nothing)
             cp(original_project_file, projectfile; force = true)
             chmod(projectfile, 0o644)  # Make the copied project file writable
 
-            project_data = TOML.parsefile(projectfile)
+            comments = TOML.Comments()
+            project_data = TOML.parsefile(projectfile; comments)
 
             # Paths inside the depot are written relative to the app environment
             # so that the depot can be relocated
@@ -243,7 +244,8 @@ function _resolve(manifest::Manifest, pkgname = nothing)
                 isempty(sources) && delete!(project_data, "sources")
             end
 
-            atomic_toml_write(projectfile, project_data)
+            # Preserves Pkg's project key ordering, inline [sources] tables and comments
+            write_project(project_data, projectfile; comments)
         else
             pkgerror("could not find project file for package $pkg")
         end
