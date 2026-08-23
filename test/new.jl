@@ -2411,6 +2411,20 @@ end
             @test pkg.is_tracking_registry
         end
     end
+    # free developed package when the active project is itself a package (#4686)
+    isolate(loaded_depot = true) do
+        cd_tempdir() do dir
+            Pkg.generate("MyPkg")
+            Pkg.activate("MyPkg")
+            Pkg.develop("Example")
+            Pkg.free("Example")
+            Pkg.dependencies(exuuid) do pkg
+                @test pkg.name == "Example"
+                @test pkg.is_tracking_registry
+            end
+            @test !haskey(Pkg.project().sources, "Example")
+        end
+    end
     # free should error when called on packages tracking unregistered packages
     isolate(loaded_depot = true) do
         Pkg.add(url = "https://github.com/00vareladavid/Unregistered.jl")
@@ -3409,6 +3423,33 @@ end
             manifest_b = Pkg.Types.read_manifest("Cycle_B/Manifest.toml")
             @test cycle_a_uuid in keys(manifest_b)
             @test_broken !(cycle_b_uuid in keys(manifest_b))
+        end
+    end
+end
+
+@testset "manifest entry of the active project tracks its deps" begin
+    isolate(loaded_depot = true) do
+        cd_tempdir() do dir
+            Pkg.generate("MyProject")
+            Pkg.activate("MyProject")
+            uuid = Pkg.Types.read_project(joinpath("MyProject", "Project.toml")).uuid
+            manifest() = Pkg.Types.read_manifest(joinpath("MyProject", "Manifest.toml"))
+            project_deps() = sort!(collect(keys(manifest()[uuid].deps)))
+            Pkg.resolve()
+            @test project_deps() == String[]
+            # the entry must be updated by the same operation that adds the dep, not the next one
+            Pkg.add("JSON")
+            @test project_deps() == ["JSON"]
+            @test "Unicode" in keys(manifest()[json_uuid].deps)
+            Pkg.add("Example")
+            @test project_deps() == ["Example", "JSON"]
+            # promoting an indirect dep skips resolving entirely
+            Pkg.add("Unicode")
+            @test project_deps() == ["Example", "JSON", "Unicode"]
+            # a stale entry would keep JSON reachable and thus unpruned
+            Pkg.rm("JSON")
+            @test project_deps() == ["Example", "Unicode"]
+            @test !haskey(manifest(), json_uuid)
         end
     end
 end
