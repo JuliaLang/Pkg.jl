@@ -1,0 +1,12 @@
+name = "CustomMetadata"
+uuid = "7c4d59f0-8e61-4f62-92c9-bbd24b94131d"
+version = "0.1.0"
+custom_field = "custom value"
+
+[tool_metadata]
+string = "value"
+number = 42
+array = ["one", "two"]
+
+[tool_metadata.nested]
+enabled = true
