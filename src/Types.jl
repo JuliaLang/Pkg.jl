@@ -252,6 +252,11 @@ struct AppInfo
 end
 Base.@kwdef mutable struct Project
     other::Dict{String, Any} = Dict{String, Any}()
+    # The comments of the project file, preserved across writes.
+    # Excluded from `==` and `hash` (like the raw data in `other` is for
+    # `PackageEntry`) so that comments never affect whether an environment
+    # is considered modified.
+    comments::Union{TOML.Comments, Nothing} = nothing
     # Fields
     name::Union{String, Nothing} = nothing
     uuid::Union{UUID, Nothing} = nothing
@@ -275,8 +280,9 @@ Base.@kwdef mutable struct Project
     workspace::Dict{String, Any} = Dict{String, Any}()
     readonly::Bool = false
 end
-Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Project))
-Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in fieldnames(Project)], init = h)
+const _project_comparison_fields = filter(!=(:comments), collect(fieldnames(Project)))
+Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, _project_comparison_fields)
+Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in _project_comparison_fields], init = h)
 
 
 Base.@kwdef mutable struct PackageEntry
