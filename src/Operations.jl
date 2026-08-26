@@ -1003,6 +1003,7 @@ function deps_graph(
     end
 
     # Collect all weak dependency UUIDs from fixed packages
+    # (weak deps of registry packages and stdlibs are added during graph traversal below)
     all_weak_uuids = Set{UUID}()
     for fx in values(fixed)
         union!(all_weak_uuids, fx.weak)
@@ -1072,6 +1073,7 @@ function deps_graph(
                     for other_uuid in stdlib_info.weakdeps
                         push!(uuids, other_uuid)
                         push!(weak_deps_set, other_uuid)
+                        push!(all_weak_uuids, other_uuid)
                     end
                     stdlib_weak_deps[vrange] = weak_deps_set
                     stdlib_weak_compat[vrange] = Dict{UUID, VersionSpec}()
@@ -1137,10 +1139,12 @@ function deps_graph(
                     end
 
                     # Collect all dependency UUIDs for discovery
-                    for deps_dict in (info.deps, info.weak_deps)
-                        for (vrange, deps_set) in deps_dict
-                            union!(uuids, deps_set)
-                        end
+                    for (vrange, deps_set) in info.deps
+                        union!(uuids, deps_set)
+                    end
+                    for (vrange, deps_set) in info.weak_deps
+                        union!(uuids, deps_set)
+                        union!(all_weak_uuids, deps_set)
                     end
                 end
 
@@ -1183,7 +1187,7 @@ function deps_graph(
     if !isempty(unavailable_weak_uuids)
         fixed_filtered = Dict{UUID, Resolve.Fixed}()
         for (uuid, fx) in fixed
-            filtered_requires = Requires()
+            filtered_requires = Resolve.Requires()
             for (req_uuid, req_spec) in fx.requires
                 if !(req_uuid in unavailable_weak_uuids)
                     filtered_requires[req_uuid] = req_spec
