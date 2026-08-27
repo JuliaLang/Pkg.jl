@@ -1,0 +1,3 @@
+module RepoWithSourcedRegistryDep
+using Example
+end

@@ -238,6 +238,44 @@ temp_pkg_dir() do project_path
             end
         end
     end
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4750
+    # When a repo-tracked package has a subpackage in [sources] that is also a
+    # standalone registered package, adding both should not error with
+    # "could not find source path for package"
+    @testset "registry dep not overridden by parent's [sources] (#4750)" begin
+        isolate() do
+            mktempdir() do tmp
+                # Prepare the test package that has Example in [sources] as a path dep
+                repo_path = joinpath(tmp, "RepoWithSourcedRegistryDep")
+                cp(joinpath(@__DIR__, "test_packages", "RepoWithSourcedRegistryDep"), repo_path)
+                Utils.ensure_test_package_user_writable(repo_path)
+                git_init_and_commit(repo_path)
+                repo_url = make_file_url(repo_path)
+
+                # Activate a temp env and add both:
+                # - Example from the registry
+                # - RepoWithSourcedRegistryDep from a repo URL
+                # This should not error even though RepoWithSourcedRegistryDep has
+                # Example = {path = "lib/Example"} in its [sources] section
+                Pkg.activate(temp = true)
+                Pkg.add(
+                    [
+                        Pkg.PackageSpec(name = "Example"),
+                        Pkg.PackageSpec(url = repo_url),
+                    ]
+                )
+
+                dep_info_by_name = Dict(info.name => info for info in values(Pkg.dependencies()))
+                @test haskey(dep_info_by_name, "Example")
+                @test haskey(dep_info_by_name, "RepoWithSourcedRegistryDep")
+                # Example should be from the registry (not tracking a path)
+                @test !dep_info_by_name["Example"].is_tracking_path
+                @test dep_info_by_name["Example"].version isa VersionNumber
+                # RepoWithSourcedRegistryDep should be tracking the repo
+                @test dep_info_by_name["RepoWithSourcedRegistryDep"].git_source == repo_url
+            end
+        end
+    end
 end
 
 end # module

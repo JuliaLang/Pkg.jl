@@ -629,7 +629,7 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     return developed
 end
 
-function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version)
+function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version, all_pkgs::Vector{PackageSpec} = pkgs)
     deps_map = Dict{UUID, Vector{PackageSpec}}()
     weak_map = Dict{UUID, Set{UUID}}()
 
@@ -705,6 +705,21 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             names[dep.uuid] = dep.name
             dep_uuid = dep.uuid
             if !is_tracking_registry(dep) && dep_uuid !== nothing && !(dep_uuid in seen)
+                # If the dep has a path/repo from a parent package's [sources] section,
+                # but the same UUID is already in the top-level pkgs list as a
+                # registry-tracking package, respect the registry version.
+                # This handles the case where e.g. KernelAbstractions has
+                # KernelInterface in [sources] with a local path, but the user's
+                # environment wants KernelInterface from the registry.
+                existing_in_all = findfirst(p -> p.uuid == dep_uuid, all_pkgs)
+                if existing_in_all !== nothing && is_tracking_registry(all_pkgs[existing_in_all])
+                    # The dep is sourced from a parent's [sources], but the user's
+                    # environment already tracks it from the registry — skip.
+                    if !haskey(pkg_by_uuid, dep_uuid)
+                        pkg_by_uuid[dep_uuid] = all_pkgs[existing_in_all]
+                    end
+                    continue
+                end
                 # Only recursively collect path sources if the path actually exists
                 # Repo sources (with URL/rev) are always collected
                 if is_tracking_path(dep)
@@ -805,7 +820,7 @@ function resolve_versions!(
     end
     # this also sets pkg.version for fixed packages
     pkgs_fixed = filter(!is_tracking_registry, pkgs)
-    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version)
+    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version, pkgs)
     for new_pkg in new_fixed_pkgs
         any(x -> x.uuid == new_pkg.uuid, pkgs) && continue
         push!(pkgs, new_pkg)
