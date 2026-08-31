@@ -249,6 +249,65 @@ temp_pkg_dir() do project_path
             end
         end
     end
+
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4750
+    # A `[sources]` entry in a dependency's project file must not take over a package that
+    # the environment being resolved already tracks itself (here: from a registry).
+    @testset "dependency [sources] don't hijack a registered direct dep (#4750)" begin
+        isolate() do
+            mktempdir() do tmp
+                example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+                main_uuid = UUID("00000000-0000-0000-0000-000000004750")
+                main = joinpath(tmp, "MainPkg")
+
+                # MainPkg ships a copy of the registered package `Example` in a subdirectory
+                # and points at it with `[sources]`, like KernelAbstractions does for
+                # KernelInterface.
+                mkpath(joinpath(main, "src"))
+                mkpath(joinpath(main, "lib", "Example", "src"))
+                write(
+                    joinpath(main, "Project.toml"), """
+                    name = "MainPkg"
+                    uuid = "$main_uuid"
+                    version = "0.1.0"
+
+                    [deps]
+                    Example = "$example_uuid"
+
+                    [sources]
+                    Example = {path = "lib/Example"}
+                    """
+                )
+                write(joinpath(main, "src", "MainPkg.jl"), "module MainPkg\nusing Example\nend")
+                write(
+                    joinpath(main, "lib", "Example", "Project.toml"), """
+                    name = "Example"
+                    uuid = "$example_uuid"
+                    version = "999.0.0-dev"
+                    """
+                )
+                write(joinpath(main, "lib", "Example", "src", "Example.jl"), "module Example end")
+                git_init_and_commit(main)
+
+                Pkg.activate(joinpath(tmp, "env"))
+                # Adding the registered `Example` alongside `MainPkg` used to error with
+                # "could not find source path for package Example based on manifest ..."
+                Pkg.add([
+                    PackageSpec(name = "Example", uuid = example_uuid),
+                    PackageSpec(url = make_file_url(main)),
+                ])
+                manifest = Pkg.Types.read_manifest(joinpath(tmp, "env", "Manifest.toml"))
+                # `Example` stays tracked by the registry, not by MainPkg's `[sources]` path
+                # (the vendored copy carries an impossible version so a regression that
+                # resolves to it is also caught by the version check below)
+                @test manifest[example_uuid].path === nothing
+                @test manifest[example_uuid].tree_hash !== nothing
+                @test manifest[example_uuid].version < v"999"
+                @test !haskey(Pkg.project().sources, "Example")
+                @test manifest[main_uuid].repo.source !== nothing
+            end
+        end
+    end
 end
 
 end # module

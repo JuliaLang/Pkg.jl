@@ -629,7 +629,13 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     return developed
 end
 
-function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version)
+function collect_fixed!(
+        env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version;
+        # UUIDs of packages that the environment being resolved already has a source for,
+        # including the ones that are tracking a registry. A `[sources]` entry in a
+        # dependency's project file must not take over such a package, see #4750.
+        env_uuids::Set{UUID} = Set{UUID}()
+    )
     deps_map = Dict{UUID, Vector{PackageSpec}}()
     weak_map = Dict{UUID, Set{UUID}}()
 
@@ -663,7 +669,8 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         pkg_by_uuid[pkg.uuid] = pkg
     end
     new_fixed_pkgs = PackageSpec[]
-    seen = Set(keys(pkg_by_uuid))
+    seen = Set{UUID}(keys(pkg_by_uuid))
+    union!(seen, env_uuids)
     while !isempty(pkg_queue)
         pkg = popfirst!(pkg_queue)
         pkg.uuid === nothing && continue
@@ -805,7 +812,12 @@ function resolve_versions!(
     end
     # this also sets pkg.version for fixed packages
     pkgs_fixed = filter(!is_tracking_registry, pkgs)
-    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version)
+    env_uuids = Set{UUID}()
+    for pkg in pkgs
+        pkg.uuid === nothing && continue
+        push!(env_uuids, pkg.uuid)
+    end
+    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version; env_uuids)
     for new_pkg in new_fixed_pkgs
         any(x -> x.uuid == new_pkg.uuid, pkgs) && continue
         push!(pkgs, new_pkg)
