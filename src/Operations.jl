@@ -631,9 +631,8 @@ end
 
 function collect_fixed!(
         env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version;
-        # UUIDs of packages that the environment being resolved already has a source for,
-        # including the ones that are tracking a registry. A `[sources]` entry in a
-        # dependency's project file must not take over such a package, see #4750.
+        # A `[sources]` entry in a dependency's project file must not take over such a
+        # package for which the environment already has a source for, see #4750.
         env_uuids::Set{UUID} = Set{UUID}()
     )
     deps_map = Dict{UUID, Vector{PackageSpec}}()
