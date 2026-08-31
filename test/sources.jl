@@ -292,10 +292,12 @@ temp_pkg_dir() do project_path
                 Pkg.activate(joinpath(tmp, "env"))
                 # Adding the registered `Example` alongside `MainPkg` used to error with
                 # "could not find source path for package Example based on manifest ..."
-                Pkg.add([
-                    PackageSpec(name = "Example", uuid = example_uuid),
-                    PackageSpec(url = make_file_url(main)),
-                ])
+                Pkg.add(
+                    [
+                        PackageSpec(name = "Example", uuid = example_uuid),
+                        PackageSpec(url = make_file_url(main)),
+                    ]
+                )
                 manifest = Pkg.Types.read_manifest(joinpath(tmp, "env", "Manifest.toml"))
                 # `Example` stays tracked by the registry, not by MainPkg's `[sources]` path
                 # (the vendored copy carries an impossible version so a regression that
