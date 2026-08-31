@@ -1,6 +1,7 @@
 using .Utils
 using Test
 using UUIDs
+import LibGit2
 
 @testset "weak deps" begin
     he_root = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "HasExtensions.jl")
@@ -154,6 +155,93 @@ using UUIDs
             # because it's only a weak dependency
             Pkg.develop(path = test_pkg_path)
             @test haskey(Pkg.dependencies(), UUID("10000000-0000-0000-0000-000000000001"))
+        end
+    end
+
+    # Adding a package from a registry should also work when its weak dependency is only
+    # registered in a registry that is not available (e.g. a private registry)
+    isolate(loaded_depot = false) do
+        mktempdir() do dir
+            pub_uuid = "10000000-0000-0000-0000-000000000002"
+            priv_weak_uuid = "00000000-0000-0000-0000-000000000002"
+
+            pkg_repo_path = joinpath(dir, "PubPkg")
+            mkpath(joinpath(pkg_repo_path, "src"))
+            write(
+                joinpath(pkg_repo_path, "Project.toml"), """
+                name = "PubPkg"
+                uuid = "$pub_uuid"
+                version = "0.1.0"
+
+                [weakdeps]
+                PrivWeak = "$priv_weak_uuid"
+
+                [extensions]
+                PrivExt = "PrivWeak"
+
+                [compat]
+                PrivWeak = "0.1"
+                """
+            )
+            write(
+                joinpath(pkg_repo_path, "src", "PubPkg.jl"), """
+                module PubPkg
+                end
+                """
+            )
+            git_init_and_commit(pkg_repo_path)
+            pkg_tree_hash = LibGit2.with(LibGit2.GitRepo(pkg_repo_path)) do repo
+                string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.head(repo))))
+            end
+
+            # A registry containing PubPkg, where PubPkg's weak dependency PrivWeak
+            # is not registered here (nor anywhere else reachable)
+            regpath = joinpath(dir, "PubReg")
+            mkpath(joinpath(regpath, "PubPkg"))
+            regpath_toml = replace(regpath, "\\" => "/")
+            pkg_repo_path_toml = replace(pkg_repo_path, "\\" => "/")
+            write(
+                joinpath(regpath, "Registry.toml"), """
+                name = "PubReg"
+                uuid = "20000000-0000-0000-0000-000000000002"
+                repo = "$regpath_toml"
+                [packages]
+                $pub_uuid = { name = "PubPkg", path = "PubPkg" }
+                """
+            )
+            write(
+                joinpath(regpath, "PubPkg", "Package.toml"), """
+                name = "PubPkg"
+                uuid = "$pub_uuid"
+                repo = "$pkg_repo_path_toml"
+                """
+            )
+            write(
+                joinpath(regpath, "PubPkg", "Versions.toml"), """
+                ["0.1.0"]
+                git-tree-sha1 = "$pkg_tree_hash"
+                """
+            )
+            write(
+                joinpath(regpath, "PubPkg", "WeakDeps.toml"), """
+                [0]
+                PrivWeak = "$priv_weak_uuid"
+                """
+            )
+            write(
+                joinpath(regpath, "PubPkg", "WeakCompat.toml"), """
+                [0]
+                PrivWeak = "0.1"
+                """
+            )
+            git_init_and_commit(regpath)
+
+            Pkg.Registry.add(url = regpath)
+            Pkg.activate(; temp = true)
+            Pkg.add(name = "PubPkg", uuid = UUID(pub_uuid))
+            @test haskey(Pkg.dependencies(), UUID(pub_uuid))
+            Pkg.instantiate()
+            Pkg.resolve()
         end
     end
 end
