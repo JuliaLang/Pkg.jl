@@ -5,7 +5,8 @@
 module PlatformEngines
 
 using SHA, Downloads, Tar, Dates, Printf
-using ArgTools: FileSpec
+using ArgTools: FileSpec, arg_write
+using Base.ScopedValues: ScopedValue, @with
 import ...Pkg: Pkg, TOML, pkg_server, depots1, can_fancyprint, stderr_f, atomic_toml_write
 using ..MiniProgressBars
 using Base.BinaryPlatforms, p7zip_jll, Zstd_jll
@@ -288,6 +289,60 @@ function get_metadata_headers(url::AbstractString)
     return headers
 end
 
+"""
+    DownloadCancellation()
+
+Tracks the downloads that are currently in flight inside a
+[`with_download_cancellation`](@ref) scope so that they can all be aborted at once.
+"""
+struct DownloadCancellation
+    lock::ReentrantLock
+    events::Set{Base.Event}
+    cancelled::Base.RefValue{Bool}
+end
+DownloadCancellation() = DownloadCancellation(ReentrantLock(), Set{Base.Event}(), Ref(false))
+
+const DOWNLOAD_CANCELLATION = ScopedValue{Union{Nothing, DownloadCancellation}}(nothing)
+
+"""
+    with_download_cancellation(f, cancellation::DownloadCancellation)
+
+Run `f`, registering every download started within it, including the ones started on
+tasks spawned by `f`, with `cancellation`.
+"""
+with_download_cancellation(f, cancellation::DownloadCancellation) =
+    @with(DOWNLOAD_CANCELLATION => cancellation, f())
+
+"""
+    cancel_downloads(cancellation::DownloadCancellation)
+
+Abort the downloads that are still in flight in `cancellation`'s scope, and make any
+download started in it from now on fail immediately rather than begin transferring.
+"""
+function cancel_downloads(cancellation::DownloadCancellation)
+    return @lock cancellation.lock begin
+        cancellation.cancelled[] = true
+        for event in cancellation.events
+            notify(event)
+        end
+        empty!(cancellation.events)
+    end
+end
+
+function register_download!(cancellation::DownloadCancellation)
+    event = Base.Event()
+    @lock cancellation.lock begin
+        # a download started after the cancellation is not worth beginning
+        cancellation.cancelled[] ? notify(event) : push!(cancellation.events, event)
+    end
+    return event
+end
+register_download!(::Nothing) = nothing
+
+unregister_download!(cancellation::DownloadCancellation, event::Base.Event) =
+    @lock cancellation.lock delete!(cancellation.events, event)
+unregister_download!(::Nothing, ::Nothing) = nothing
+
 function download(
         url::AbstractString,
         dest::Union{AbstractString, FileSpec};
@@ -327,9 +382,18 @@ function download(
     else
         nothing
     end
+    cancellation = DOWNLOAD_CANCELLATION[]
+    interrupt = register_download!(cancellation)
     return try
-        Downloads.download(url, dest; headers, progress)
+        # `Downloads.download` cannot be interrupted once the transfer has started, so do
+        # what it would do for us around `Downloads.request`, which takes an interrupt event.
+        arg_write(dest) do output
+            response = Downloads.request(url; output, headers, progress, interrupt)
+            Downloads.Curl.status_ok(response) && return output
+            throw(Downloads.RequestError(url, Downloads.Curl.CURLE_OK, "", response))
+        end
     finally
+        unregister_download!(cancellation, interrupt)
         do_fancy && end_progress(io, bar)
     end
 end

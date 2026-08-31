@@ -1537,20 +1537,26 @@ function download_artifacts(
         end
         sema = Base.Semaphore(ctx.num_concurrent_downloads)
         interrupted = Ref{Bool}(false)
+        cancellation = PlatformEngines.DownloadCancellation()
         try
-            @sync for f in values(download_jobs)
-                interrupted[] && break
-                Base.acquire(sema)
-                Threads.@spawn try
-                    f()
-                catch e
-                    e isa InterruptException && (interrupted[] = true)
-                    put!(errors, e)
-                finally
-                    Base.release(sema)
+            PlatformEngines.with_download_cancellation(cancellation) do
+                @sync for f in values(download_jobs)
+                    interrupted[] && break
+                    Base.acquire(sema)
+                    Threads.@spawn try
+                        f()
+                    catch e
+                        e isa InterruptException && (interrupted[] = true)
+                        put!(errors, e)
+                    finally
+                        Base.release(sema)
+                    end
                 end
             end
         finally
+            # An interrupt unwinds the task waiting above, but the downloads it spawned
+            # would otherwise keep transferring in the background until they finished.
+            PlatformEngines.cancel_downloads(cancellation)
             # `t_print` loops until `is_done[]`, so if we leave via an interrupt or an
             # error it would otherwise keep drawing the progress bar over the prompt
             # forever, and never restore the cursor it hid.
