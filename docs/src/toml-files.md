@@ -19,6 +19,11 @@ The project file describes the project on a high level, for example, the package
 dependencies and compatibility constraints are listed in the project file. The file entries
 are described below.
 
+!!! note
+    Pkg preserves unknown top-level fields and tables when it rewrites
+    `Project.toml`, allowing external tools to use them for project metadata.
+    Preservation applies to the TOML data, but not to its textual formatting
+    or ordering.
 
 ### The `authors` field
 
