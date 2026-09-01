@@ -287,6 +287,9 @@ This structure is particularly beneficial for developers using a monorepo approa
 Workspaces can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
+!!! warn Projects located using symbolic links
+    When a project in a workspace is activated and you try to load a package, Pkg recursively searches directories higher up for the Manifest.toml that sits alonside the root Project.toml for the workspace. Pkg reads the Manifest.toml to determine the location of the requested package code. If, however, you activate the child project using a symbolic link, you break the lookup mechanism, causing the package manager to complain that the package you seek cannot be found. If you must use a symbolic link, such as "symlink/to/project_dir", be sure to wrap it as real path, as in `Pkg.activate(realdir("symlink/to/project_dir"))`.
+
 ### The `[extras]` section (legacy)
 
 !!! warning
