@@ -14,6 +14,7 @@ end
 import Random
 import TOML
 using Dates
+using ArtifactDownloads
 
 export @pkg_str
 export PackageSpec
@@ -36,27 +37,13 @@ function depots1(depot_list::Union{String, Vector{String}} = depots())
     end
 end
 
-function pkg_server()
-    server = get(ENV, "JULIA_PKG_SERVER", "https://pkg.julialang.org")
-    isempty(server) && return nothing
-    startswith(server, r"\w+://") || (server = "https://$server")
-    return rstrip(server, '/')
-end
+pkg_server() = ArtifactDownloads.pkg_server()
 
 logdir(depot = depots1()) = joinpath(depot, "logs")
 devdir(depot = depots1()) = get(ENV, "JULIA_PKG_DEVDIR", joinpath(depot, "dev"))
 envdir(depot = depots1()) = joinpath(depot, "environments")
 
-function create_cachedir_tag(cache_dir::AbstractString)
-    return try
-        tag_file = joinpath(cache_dir, "CACHEDIR.TAG")
-        if !isfile(tag_file)
-            write(tag_file, "Signature: 8a477f597d28d172789f06886806bc55\n# This file is a cache directory tag created by Julia Pkg.\n# See https://bford.info/cachedir/\n")
-        end
-    catch
-        # Ignore errors to avoid failing operations on read-only filesystems
-    end
-end
+import ArtifactDownloads: create_cachedir_tag
 const UPDATED_REGISTRY_THIS_SESSION = Ref(false)
 const OFFLINE_MODE = Ref(false)
 const RESPECT_SYSIMAGE_VERSIONS = Ref(true)
@@ -105,9 +92,10 @@ whether to show tips in REPL format (`pkg> add Foo`) or API format (`Pkg.add("Fo
 in_repl_mode() = @something(Base.ScopedValues.get(IN_REPL_MODE), false)
 
 include("utils.jl")
-include("MiniProgressBars.jl")
+# The progress bars and the tarball download/verify/unpack engine live in ArtifactDownloads
+const MiniProgressBars = ArtifactDownloads.MiniProgressBars
+const PlatformEngines = ArtifactDownloads.PlatformEngines
 include("GitTools.jl")
-include("PlatformEngines.jl")
 include("Versions.jl")
 include("Registry/Registry.jl")
 include("Types.jl")

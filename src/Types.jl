@@ -14,6 +14,7 @@ import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pk
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
+import ArtifactDownloads: write_env_usage
 
 import Base: SHA1
 using SHA
@@ -706,60 +707,6 @@ function workspace_resolve_hash(env::EnvCache)
 end
 
 
-write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
-    write_env_usage([source_file], usage_filepath)
-
-function write_env_usage(source_files, usage_filepath::AbstractString)
-    # Don't record ghost usage
-    source_files = filter(isfile, source_files)
-    isempty(source_files) && return
-
-    # Ensure that log dir exists
-    !ispath(logdir()) && mkpath(logdir())
-
-    usage_file = joinpath(logdir(), usage_filepath)
-    timestamp = now()
-
-    ## Atomically write usage file using process id locking
-    FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
-        usage = if isfile(usage_file)
-            try
-                TOML.parsefile(usage_file)
-            catch err
-                @warn "Failed to parse usage file `$usage_file`, ignoring." err
-                Dict{String, Any}()
-            end
-        else
-            Dict{String, Any}()
-        end
-
-        # record new usage
-        for source_file in source_files
-            usage[source_file] = [Dict("time" => timestamp)]
-        end
-
-        # keep only latest usage info
-        for k in keys(usage)
-            times = map(usage[k]) do d
-                if haskey(d, "time")
-                    Dates.DateTime(d["time"])
-                else
-                    # if there's no time entry because of a write failure be conservative and mark it as being used now
-                    @debug "Usage file `$usage_filepath` has a missing `time` entry for `$k`. Marking as used `now()`"
-                    Dates.now()
-                end
-            end
-            usage[k] = [Dict("time" => maximum(times))]
-        end
-
-        try
-            atomic_toml_write(usage_file, usage, sorted = true)
-        catch err
-            @error "Failed to write valid usage file `$usage_file`" exception = err
-        end
-    end
-    return
-end
 
 function read_package(path::String)
     project = read_project(path)
