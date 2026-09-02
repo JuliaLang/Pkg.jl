@@ -8,13 +8,12 @@ import Random
 using Dates
 import LibGit2
 import Logging
-import FileWatching
 
 import Base: StaleCacheKey
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, .._autoprecompilation_enabled_scoped, ..manifest_rel_path
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write, ..safe_realpath
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..safe_realpath
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -649,145 +648,117 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     # Collect both last known usage dates, as well as parent projects for each scratch space
     scratch_usage_by_depot = UsageByDepotDict()
     scratch_parents_by_depot = Dict{String, Dict{String, Set{String}}}()
+    unknown_scratch_parents_by_depot = Dict{String, Set{String}}()
 
-    # Load manifest files from all depots
+    function condense_index_usage(usage_file::String)
+        return Types.with_usage_file(usage_file; create = false, malformed = :preserve) do entries
+            usage = UsageDict()
+            valid_usage = Types.foreach_usage_entry(entries, usage_file) do filename, info
+                time = Types.usage_time(info, usage_file, filename)
+                usage[filename] = max(get(usage, filename, DateTime(0)), time)
+            end
+            valid_usage || return nothing
+            filter!(((path, _),) -> Pkg.isfile_nothrow(path), usage)
+            empty!(entries)
+            merge!(entries, Dict(path => [Dict("time" => time)] for (path, time) in usage))
+            return usage
+        end
+    end
+
+    # Read and rewrite each existing usage log as one locked transaction. This prevents
+    # GC from replacing a concurrent writer's update with a stale condensed snapshot.
+    # Logs that do not yet exist remain absent and are not rewritten by this GC pass.
     for depot in gc_depots
-        # When a manifest/artifact.toml is installed/used, we log it within the
-        # `manifest_usage.toml` files within `write_env_usage()` and `bind_artifact!()`
-        function reduce_usage!(f::Function, usage_filepath)
-            if !isfile(usage_filepath)
-                return
-            end
-
-            for (filename, infos) in parse_toml(usage_filepath)
-                f.(Ref(filename), infos)
-            end
-            return
+        # Keep the latest timestamp for every manifest that still exists, then replace
+        # the manifest log with that condensed representation.
+        manifest_usage_file = joinpath(logdir(depot), "manifest_usage.toml")
+        manifest_usage_result = if isfile(manifest_usage_file)
+            condense_index_usage(manifest_usage_file)
+        else
+            UsageDict()
         end
+        manifest_usage_result === nothing && return
+        manifest_usage = manifest_usage_result::UsageDict
+        manifest_usage_by_depot[depot] = manifest_usage
 
-        # Extract usage data from this depot, (taking only the latest state for each
-        # tracked manifest/artifact.toml), then merge the usage values from each file
-        # into the overall list across depots to create a single, coherent view across
-        # all depots.
-        usage = UsageDict()
-        let usage = usage
-            reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
-                # For Manifest usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
-            end
+        # Apply the same latest-timestamp condensation to extant Artifacts.toml files.
+        artifact_usage_file = joinpath(logdir(depot), "artifact_usage.toml")
+        artifact_usage_result = if isfile(artifact_usage_file)
+            condense_index_usage(artifact_usage_file)
+        else
+            UsageDict()
         end
-        manifest_usage_by_depot[depot] = usage
+        artifact_usage_result === nothing && return
+        artifact_usage = artifact_usage_result::UsageDict
+        artifact_usage_by_depot[depot] = artifact_usage
 
-        usage = UsageDict()
-        let usage = usage
-            reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
-                # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
-            end
-        end
-        artifact_usage_by_depot[depot] = usage
-
-        # track last-used
-        usage = UsageDict()
-        parents = Dict{String, Set{String}}()
-        let usage = usage
-            reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
-                # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
-                if !haskey(parents, filename)
-                    parents[filename] = Set{String}()
+        # Merge scratch timestamps and parent projects, discard missing scratchspaces
+        # and parents, and atomically rewrite the remaining live associations.
+        scratch_usage_file = joinpath(logdir(depot), "scratch_usage.toml")
+        scratch_usage_result = if isfile(scratch_usage_file)
+            Types.with_usage_file(scratch_usage_file; create = false, malformed = :preserve) do entries
+                usage = UsageDict()
+                parents = Dict{String, Set{String}}()
+                unknown_parents = Set{String}()
+                valid_usage = Types.foreach_usage_entry(entries, scratch_usage_file) do filename, info
+                    time = Types.usage_time(info, scratch_usage_file, filename)
+                    usage[filename] = max(get(usage, filename, DateTime(0)), time)
+                    entry_parents = Types.usage_parents(info, scratch_usage_file, filename)
+                    if entry_parents === nothing
+                        push!(unknown_parents, filename)
+                    else
+                        union!(get!(Set{String}, parents, filename), entry_parents)
+                    end
                 end
-                for parent in info["parent_projects"]
-                    push!(parents[filename], parent)
+                valid_usage || return nothing
+                filter!(((path, time),) -> Pkg.isdir_nothrow(path), usage)
+                filter!(pair -> first(pair) in keys(usage), parents)
+                expanded_usage = Dict{String, Any}()
+                for (path, time) in usage
+                    path in unknown_parents && continue
+                    parent_paths = parents[path]
+                    filter!(Pkg.isfile_nothrow, parent_paths)
+                    isempty(parent_paths) && continue
+                    expanded_usage[path] = [
+                        Dict(
+                            "time" => time,
+                            "parent_projects" => collect(parent_paths),
+                        ),
+                    ]
                 end
-            end
-        end
-        scratch_usage_by_depot[depot] = usage
-        scratch_parents_by_depot[depot] = parents
-    end
-
-    # Next, figure out which files are still existent
-    all_manifest_tomls = unique(f for (_, files) in manifest_usage_by_depot for f in keys(files))
-    all_artifact_tomls = unique(f for (_, files) in artifact_usage_by_depot for f in keys(files))
-    all_scratch_dirs = unique(f for (_, dirs) in scratch_usage_by_depot for f in keys(dirs))
-    all_scratch_parents = Set{String}()
-    for (depot, parents) in scratch_parents_by_depot
-        for parent in values(parents)
-            union!(all_scratch_parents, parent)
-        end
-    end
-
-    all_manifest_tomls = Set(filter(Pkg.isfile_nothrow, all_manifest_tomls))
-    all_artifact_tomls = Set(filter(Pkg.isfile_nothrow, all_artifact_tomls))
-    all_scratch_dirs = Set(filter(Pkg.isdir_nothrow, all_scratch_dirs))
-    all_scratch_parents = Set(filter(Pkg.isfile_nothrow, all_scratch_parents))
-
-    # Immediately write these back as condensed toml files
-    function write_condensed_toml(f::Function, usage_by_depot, fname)
-        for (depot, usage) in usage_by_depot
-            # Run through user-provided filter/condenser
-            usage = f(depot, usage)
-
-            # Write out the TOML file for this depot
-            usage_path = joinpath(logdir(depot), fname)
-            if !(isempty(usage)::Bool) || isfile(usage_path)
-                let usage = usage
-                    atomic_toml_write(usage_path, usage, sorted = true)
+                filter!(pair -> first(pair) in keys(expanded_usage), usage)
+                filter!(pair -> first(pair) in keys(expanded_usage), parents)
+                # Retain records with unknown parents unchanged: they cannot safely be
+                # condensed or considered orphaned until a later valid writer repairs them.
+                for path in unknown_parents
+                    haskey(entries, path) && (expanded_usage[path] = entries[path])
                 end
+                empty!(entries)
+                merge!(entries, expanded_usage)
+                return (usage, parents, unknown_parents)
             end
+        else
+            (UsageDict(), Dict{String, Set{String}}(), Set{String}())
         end
-        return
+        scratch_usage_result === nothing && return
+        scratch_usage, scratch_parents, unknown_scratch_parents = scratch_usage_result
+        scratch_usage_by_depot[depot] = scratch_usage
+        scratch_parents_by_depot[depot] = scratch_parents
+        unknown_scratch_parents_by_depot[depot] = unknown_scratch_parents
     end
 
-    # Write condensed Manifest usage
-    let all_manifest_tomls = all_manifest_tomls
-        write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
-            # Keep only manifest usage markers that are still existent
-            let usage = usage
-                filter!(((k, v),) -> k in all_manifest_tomls, usage)
-
-                # Expand it back into a dict-of-dicts
-                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
-            end
-        end
-    end
-
-    # Write condensed Artifact usage
-    let all_artifact_tomls = all_artifact_tomls
-        write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
-            let usage = usage
-                filter!(((k, v),) -> k in all_artifact_tomls, usage)
-                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
-            end
-        end
-    end
-
-    # Write condensed scratch space usage
-    let all_scratch_parents = all_scratch_parents, all_scratch_dirs = all_scratch_dirs
-        write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
-            # Keep only scratch directories that still exist
-            filter!(((k, v),) -> k in all_scratch_dirs, usage)
-
-            # Expand it back into a dict-of-dicts
-            expanded_usage = Dict{String, Vector{Dict}}()
-            for (k, v) in usage
-                # Drop scratch spaces whose parents are all non-existent
-                parents = scratch_parents_by_depot[depot][k]
-                filter!(p -> p in all_scratch_parents, parents)
-                if isempty(parents)
-                    continue
-                end
-
-                expanded_usage[k] = [
-                    Dict(
-                        "time" => v,
-                        "parent_projects" => collect(parents),
-                    ),
-                ]
-            end
-            return expanded_usage
-        end
-    end
+    # Combine the per-depot live paths for the mark-and-sweep phase below.
+    all_manifest_tomls = Set(f for (_, files) in manifest_usage_by_depot for f in keys(files))
+    all_artifact_tomls = Set(f for (_, files) in artifact_usage_by_depot for f in keys(files))
+    all_unknown_scratch_parents = Set(
+        f for (_, paths) in unknown_scratch_parents_by_depot for f in paths
+    )
+    # Unknown-parent records are deliberately excluded from the condensed usage map,
+    # but must still enter marking so `process_scratchspace` can preserve them.
+    all_scratch_dirs = union(
+        Set(f for (_, dirs) in scratch_usage_by_depot for f in keys(dirs)),
+        all_unknown_scratch_parents,
+    )
 
     function process_manifest_pkgs(path)
         # Read the manifest in
@@ -857,6 +828,8 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     end
 
     function process_scratchspace(path, pkgs_to_delete)
+        path in all_unknown_scratch_parents && return [path]
+
         # Find all parents of this path
         parents = String[]
 
