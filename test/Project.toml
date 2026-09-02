@@ -18,6 +18,9 @@ Tar = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
+[sources]
+ParallelTestRunner = {url = "https://github.com/JuliaTesting/ParallelTestRunner.jl", rev = "main"}
+
 [compat]
 Aqua = "0.8.10"
 HistoricalStdlibVersions = "2"
