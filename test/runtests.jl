@@ -49,10 +49,17 @@ module PkgTestsInner
     include("pkg_server_proxy.jl")
 
     test_files = [
-        "new.jl",
         "pkg.jl",
-        "repl.jl",
         "api.jl",
+        "add.jl",
+        "update.jl",
+        "pkgtest.jl",
+        "concurrent.jl",
+        "repl.jl",
+        "status.jl",
+        "develop.jl",
+        "repo.jl",
+        "project_files.jl",
         "registry.jl",
         "subdir.jl",
         "extensions.jl",

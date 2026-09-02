@@ -3,7 +3,6 @@
 module OperationsTest
 import ..Pkg # ensure we are using the correct Pkg
 
-import Random: randstring
 import LibGit2
 using Test
 using UUIDs
@@ -12,9 +11,6 @@ using TOML
 
 using Pkg
 using Pkg.Types
-
-import Random: randstring
-import LibGit2
 
 using ..Utils
 
@@ -337,24 +333,6 @@ temp_pkg_dir() do project_path
         end
     end
 
-    @testset "stdlibs as direct dependency" begin
-        uuid_pkg = (name = "CRC32c", uuid = UUID("8bf52ea8-c179-5cab-976a-9e18b702a9bc"))
-        Pkg.add("CRC32c")
-        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        Pkg.update()
-        # Disable until fixed in Base
-        # Pkg.test("CRC32c")
-        Pkg.rm("CRC32c")
-    end
-
-    @testset "package name in resolver errors" begin
-        try
-            Pkg.add(PackageSpec(; name = TEST_PKG.name, version = v"55"))
-        catch e
-            @test occursin(TEST_PKG.name, sprint(showerror, e))
-        end
-    end
-
     @testset "protocols" begin
         mktempdir() do devdir
             withenv("JULIA_PKG_DEVDIR" => devdir) do
@@ -485,53 +463,6 @@ temp_pkg_dir() do project_path
             Pkg.add("Random")
         end
     end
-
-    @testset "adding nonexisting packages" begin
-        nonexisting_pkg = randstring(14)
-        @test_throws PkgError Pkg.add(nonexisting_pkg)
-        @test_throws PkgError Pkg.update(nonexisting_pkg)
-    end
-
-    Pkg.rm(TEST_PKG.name)
-
-    @testset "add julia" begin
-        @test_throws PkgError Pkg.add("julia")
-    end
-end
-
-temp_pkg_dir() do project_path
-    @testset "libgit2 downloads" begin
-        Pkg.add(TEST_PKG.name; use_git_for_all_downloads = true)
-        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        @eval import $(Symbol(TEST_PKG.name))
-        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
-        Pkg.rm(TEST_PKG.name)
-    end
-
-    @testset "up in Project without manifest" begin
-        mktempdir() do dir
-            cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
-            cd(joinpath(dir, "UnregisteredWithProject")) do
-                with_current_env() do
-                    Pkg.update()
-                    @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                end
-            end
-        end
-    end
-end
-
-temp_pkg_dir() do project_path
-    @testset "libgit2 downloads" begin
-        Pkg.add(TEST_PKG.name; use_git_for_all_downloads = true)
-        @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-        Pkg.rm(TEST_PKG.name)
-    end
-    @testset "tarball downloads" begin
-        Pkg.add("JSON"; use_only_tarballs_for_downloads = true)
-        @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
-        Pkg.rm("JSON")
-    end
 end
 
 temp_pkg_dir() do project_path
@@ -590,16 +521,6 @@ temp_pkg_dir() do project_path
             @test !isinstalled((name = "FooBar", uuid = UUID(uuid)))
         end # cd project_path
     end # @testset
-end
-
-temp_pkg_dir() do project_path
-    @testset "invalid repo url" begin
-        cd(project_path) do
-            @test_throws PkgError Pkg.add("https://github.com")
-            Pkg.generate("FooBar")
-            @test_throws PkgError Pkg.add("./Foobar")
-        end
-    end
 end
 
 temp_pkg_dir() do project_path
@@ -736,27 +657,6 @@ end
     end
 end
 
-@testset "canonicalized relative paths in manifest" begin
-    mktempdir() do tmp
-        cd(tmp) do
-            write(
-                "Manifest.toml",
-                """
-                [[Foo]]
-                path = "bar/Foo"
-                uuid = "824dc81a-29a7-11e9-3958-fba342a32644"
-                version = "0.1.0"
-                """
-            )
-            manifest = Pkg.Types.read_manifest("Manifest.toml")
-            package = manifest[Base.UUID("824dc81a-29a7-11e9-3958-fba342a32644")]
-            @test package.path == (Sys.iswindows() ? "bar\\Foo" : "bar/Foo")
-            Pkg.Types.write_manifest(manifest, "Manifest.toml")
-            @test occursin("path = \"bar/Foo\"", read("Manifest.toml", String))
-        end
-    end
-end
-
 @testset "building project should fix version of deps" begin
     temp_pkg_dir() do project_path
         dep_pkg = joinpath(@__DIR__, "test_packages", "BuildProjectFixedDeps")
@@ -852,23 +752,6 @@ import Markdown
     d = Dict(Pkg.REPLMode.canonical_names())
     @test d["add"].help isa Markdown.MD
     @test d["registry add"].help isa Markdown.MD
-end
-
-@testset "up should prune manifest" begin
-    example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
-    unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
-    temp_pkg_dir() do project_path
-        mktempdir() do tmp
-            copy_test_package(tmp, "Unpruned")
-            Pkg.activate(joinpath(tmp, "Unpruned"))
-            Pkg.update()
-            manifest = Pkg.Types.Context().env.manifest
-            package_example = get(manifest, example_uuid, nothing)
-            @test package_example !== nothing
-            @test package_example.version > v"0.4.0"
-            @test get(manifest, unicode_uuid, nothing) === nothing
-        end
-    end
 end
 
 @testset "undo redo functionality" begin

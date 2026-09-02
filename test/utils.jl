@@ -184,10 +184,17 @@ function isolate_and_pin_registry(fn::Function; registry_url::String, registry_c
     isolate(loaded_depot = false, linked_reg = true) do
         this_gen_reg_path = joinpath(first(Base.DEPOT_PATH), "registries", "General")
         rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
-        cmd = `git clone $(registry_url) $(this_gen_reg_path)`
-        run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
+        # Fetch only the pinned commit: a full clone of the registry history
+        # takes minutes, while a depth-1 fetch of one commit takes seconds.
+        mkpath(this_gen_reg_path)
         cd(this_gen_reg_path) do
-            run(pipeline(`git checkout $(registry_commit)`, stdout = stdout_f(), stderr = stderr_f()))
+            for cmd in (
+                    `git init --quiet .`,
+                    `git fetch --quiet --depth=1 $(registry_url) $(registry_commit)`,
+                    `git checkout --quiet FETCH_HEAD`,
+                )
+                run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
+            end
         end
         fn()
     end
