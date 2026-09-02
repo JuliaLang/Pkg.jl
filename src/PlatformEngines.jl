@@ -285,6 +285,11 @@ function get_metadata_headers(url::AbstractString)
         any(hdr == k for (k, v) in headers) && continue
         push!(headers, hdr => val)
     end
+
+    # HyperLogLog Over RSA: anonymous unique-client counting (fails open)
+    hll = Pkg.HLL_RSA.hll_header(url, server, server_dir)
+    hll === nothing || push!(headers, hll)
+
     return headers
 end
 
