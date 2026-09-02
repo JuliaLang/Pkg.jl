@@ -11,7 +11,8 @@ using UUIDs
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url
+    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url,
+    host_deps_depot
 
 const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
 
@@ -21,6 +22,12 @@ const REGISTRY_DEPOT = joinpath(CACHE_DIRECTORY, "registry_depot")
 const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
+
+# The depot that hosts the dev Pkg's non-stdlib deps (Resolver and its deps).
+# Subprocesses that load the dev Pkg with an isolated JULIA_DEPOT_PATH need it
+# appended so code loading can find them.
+host_deps_depot() =
+    abspath(joinpath(dirname(Base.pathof(Pkg.SATResolve.Resolver)), "..", "..", "..", ".."))
 
 function copy_this_pkg_cache(new_depot)
     for p in ("Pkg", "REPLExt")

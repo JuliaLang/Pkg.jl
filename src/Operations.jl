@@ -9,6 +9,7 @@ using Random: randstring
 import LibGit2, Dates, TOML
 
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
+import ..SATResolve
 import ..depots, ..depots1, ..devdir, ..set_readonly, ..Types.PackageEntry
 import ..Artifacts: ensure_artifact_installed, artifact_names, extract_all_hashes,
     artifact_exists, select_downloadable_artifacts, mv_temp_dir_retries
@@ -772,6 +773,15 @@ function get_compat_workspace(env, name)
     return compat
 end
 
+# Which resolver backend to use: the SAT-based resolver from Resolver.jl
+# (default) or the legacy maxsum resolver in `Resolve`.
+function resolver_backend()
+    backend = get(ENV, "JULIA_PKG_RESOLVER", "sat")
+    backend == "sat" && return :sat
+    backend == "maxsum" && return :maxsum
+    return pkgerror("unknown resolver backend `$(backend)` in JULIA_PKG_RESOLVER; expected `sat` or `maxsum`")
+end
+
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
@@ -779,7 +789,8 @@ end
 # all versioned packages should have a `tree_hash`
 function resolve_versions!(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
-        installed_only::Bool, preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
+        installed_only::Bool, preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}();
+        diagnose_unsat::Bool = true
     )
     installed_only = installed_only || OFFLINE_MODE[]
 
@@ -853,12 +864,20 @@ function resolve_versions!(
     unbind_stdlibs = julia_version === VERSION
     reqs = Resolve.Requires(pkg.uuid => is_stdlib(pkg.uuid, julia_version) && unbind_stdlibs ? VersionSpec("*") : VersionSpec(pkg.version) for pkg in pkgs)
     deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
-    graph = Resolve.Graph(
-        deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
-        pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version, preferred_versions
-    )
-    Resolve.simplify_graph!(graph)
-    vers = Resolve.resolve(graph)
+    if resolver_backend() === :sat
+        vers = SATResolve.resolve_versions(
+            deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
+            pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, julia_version, preferred_versions;
+            diagnose_unsat
+        )
+    else
+        graph = Resolve.Graph(
+            deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
+            pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version, preferred_versions
+        )
+        Resolve.simplify_graph!(graph)
+        vers = Resolve.resolve(graph)
+    end
 
     # Fixup jlls that got their build numbers stripped
     vers_fix = copy(vers)
@@ -2286,29 +2305,31 @@ function tiered_resolve(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
         try_all_installed::Bool; preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
     )
+    # an unsatisfiable intermediate tier is expected and retried at a looser
+    # preserve level, so only diagnose a failure of the final tier
     if try_all_installed
         try # do not modify existing subgraph and only add installed versions of the new packages
             @debug "tiered_resolve: trying PRESERVE_ALL_INSTALLED"
-            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version; preferred_versions)
+            return targeted_resolve(env, registries, pkgs, PRESERVE_ALL_INSTALLED, julia_version; preferred_versions, diagnose_unsat = false)
         catch err
             err isa Resolve.ResolverError || rethrow()
         end
     end
     try # do not modify existing subgraph
         @debug "tiered_resolve: trying PRESERVE_ALL"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version; preferred_versions)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_ALL, julia_version; preferred_versions, diagnose_unsat = false)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try # do not modify existing direct deps
         @debug "tiered_resolve: trying PRESERVE_DIRECT"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version; preferred_versions)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_DIRECT, julia_version; preferred_versions, diagnose_unsat = false)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
     try
         @debug "tiered_resolve: trying PRESERVE_SEMVER"
-        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version; preferred_versions)
+        return targeted_resolve(env, registries, pkgs, PRESERVE_SEMVER, julia_version; preferred_versions, diagnose_unsat = false)
     catch err
         err isa Resolve.ResolverError || rethrow()
     end
@@ -2318,7 +2339,8 @@ end
 
 function targeted_resolve(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel,
-        julia_version; preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
+        julia_version; preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}(),
+        diagnose_unsat::Bool = true
     )
     if preserve == PRESERVE_ALL || preserve == PRESERVE_ALL_INSTALLED
         pkgs = load_all_deps(env, pkgs; preserve)
@@ -2327,7 +2349,7 @@ function targeted_resolve(
     end
     check_registered(registries, pkgs)
 
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED, preferred_versions)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED, preferred_versions; diagnose_unsat)
     return pkgs, deps_map
 end
 
