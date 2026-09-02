@@ -50,13 +50,30 @@ function copy_this_pkg_cache(new_depot)
     return
 end
 
+# Unpack the registry tarball (some 60k small files). Creating that many files
+# through `Tar.extract` takes minutes on Windows, so let 7z do it there.
+function unpack_registry(tarball::AbstractString, dir::AbstractString)
+    if Sys.iswindows()
+        mkpath(dir)
+        extract = Pkg.PlatformEngines.get_extract_cmd(tarball)
+        run(pipeline(pipeline(extract, `$(Pkg.PlatformEngines.exe7z()) x -si -ttar -o$dir -y -bso0 -bsp0`), stdout = stdout_f(), stderr = stderr_f()))
+    else
+        Pkg.PlatformEngines.unpack(tarball, dir)
+    end
+    return
+end
+
 function check_init_reg()
     isfile(joinpath(REGISTRY_DIR, "Registry.toml")) && return
     mkpath(REGISTRY_DIR)
     if Pkg.Registry.registry_use_pkg_server()
         url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
         @info "Downloading General registry from $url"
-        Pkg.PlatformEngines.download_verify_unpack(url, nothing, REGISTRY_DIR, ignore_existence = true, io = stderr_f())
+        mktempdir() do tmp
+            tarball = joinpath(tmp, "General.tar")
+            Pkg.PlatformEngines.download_verify(url, nothing, tarball; quiet_download = true)
+            unpack_registry(tarball, REGISTRY_DIR)
+        end
         tree_info_file = joinpath(REGISTRY_DIR, ".tree_info.toml")
         hash = Pkg.Registry.pkg_server_url_hash(url)
         write(tree_info_file, "git-tree-sha1 = " * repr(string(hash)))
