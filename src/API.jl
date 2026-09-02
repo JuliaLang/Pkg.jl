@@ -1256,15 +1256,15 @@ function precompile(
     end
 
     return activate(dirname(ctx.env.project_file)) do
-        io = if ctx.io isa IOContext{IO} && !isa(ctx.io.io, Base.PipeEndpoint)
-            # precompile does quite a bit of output and using the IOContext{IO} can cause
-            # some slowdowns, the important part here is to not specialize the whole
-            # precompile function on the io.
-            # But don't unwrap the IOContext if it is a PipeEndpoint, as that would
-            # cause the output to lose color.
-            ctx.io.io
-        else
+        # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
+        # `IOContext{IO}` and takes `ctx.io` as is. Before that it specialized on the
+        # stream, and only the unwrapped variants come precompiled, apart from a pipe,
+        # which keeps the wrapper for its colour.
+        io = if isdefined(Base.Precompilation, :unstable_iocontext) ||
+                !(ctx.io isa IOContext{IO}) || ctx.io.io isa Base.PipeEndpoint
             ctx.io
+        else
+            ctx.io.io
         end
         pkgs_name = String[pkg.name for pkg in pkgs]
         # Allow user to press 'd' to detach when running interactively
