@@ -3173,13 +3173,127 @@ function run_sandboxed_tests!(
     return
 end
 
+# Code run by each child process: test a single package against the parent environment.
+function gen_parallel_test_code(
+        pkg::PackageSpec; coverage, julia_args::Cmd, test_args::Cmd,
+        force_latest_compatible_version::Bool,
+        allow_earlier_backwards_compatible_versions::Bool,
+        allow_reresolve::Bool
+    )
+    return """
+    import Pkg
+    Pkg.test(
+        Pkg.PackageSpec(name = $(repr(pkg.name)), uuid = Base.UUID($(repr(string(pkg.uuid)))));
+        coverage = $(repr(coverage)),
+        julia_args = Cmd($(repr(collect(String, julia_args.exec)))),
+        test_args = Cmd($(repr(collect(String, test_args.exec)))),
+        force_latest_compatible_version = $(repr(force_latest_compatible_version)),
+        allow_earlier_backwards_compatible_versions = $(repr(allow_earlier_backwards_compatible_versions)),
+        allow_reresolve = $(repr(allow_reresolve)),
+    )
+    """
+end
+
+# Set up a precompilation jobserver shared by the child test processes so their codegen
+# threads draw on one machine-wide CPU budget instead of each child claiming a whole
+# machine's worth at once. Returns the pool state; only a `:created` pool is owned here
+# and needs tearing down. A pinned per-worker thread count (`JULIA_IMAGE_THREADS`) bypasses
+# the shared budget, matching the precompiler. Julia versions without the jobserver give
+# `:none`.
+function setup_parallel_test_jobserver!()
+    isdefined(Base.Precompilation, :setup_precompile_jobserver!) || return :none
+    haskey(ENV, "JULIA_IMAGE_THREADS") && return :none
+    default_budget = Sys.EFFECTIVE_CPU_THREADS + 1
+    budget = max(1, something(tryparse(Int, get(ENV, "JULIA_PRECOMPILE_THREADS", "")), default_budget))
+    return Base.Precompilation.setup_precompile_jobserver!(budget)
+end
+
+# Run the tests for several packages concurrently, one child `Pkg.test` process per
+# package, with at most `ntasks` running at a time. Each child's combined output is
+# captured into its own in-memory buffer; the buffers are concatenated in package order
+# once every child has finished, so there is no interleaving and no shared IO to guard.
+function test_parallel!(
+        ctx::Context, pkgs::Vector{PackageSpec},
+        pkgs_errored::Vector{Tuple{String, Base.Process}};
+        ntasks::Int, coverage, julia_args::Cmd, test_args::Cmd,
+        force_latest_compatible_version::Bool,
+        allow_earlier_backwards_compatible_versions::Bool,
+        allow_reresolve::Bool
+    )
+    project = dirname(ctx.env.project_file)
+    color = get(ctx.io, :color, false)::Bool
+
+    # Each task records its child in its own slot so a Ctrl-C can tear them all down.
+    # Distinct indices are written from distinct tasks, so no lock is needed.
+    procs = Vector{Union{Nothing, Base.Process}}(nothing, length(pkgs))
+
+    printpkgstyle(
+        ctx.io, :Testing,
+        "Running tests for $(length(pkgs)) packages with up to $(ntasks) parallel tasks"
+    )
+    flush(ctx.io)
+
+    # The pool must exist before the children spawn so they inherit it through the
+    # environment variable that `setup_precompile_jobserver!` writes.
+    jobserver = setup_parallel_test_jobserver!()
+
+    local results
+    try
+        results = asyncmap(enumerate(pkgs); ntasks) do (i, pkg)
+            code = gen_parallel_test_code(
+                pkg; coverage, julia_args, test_args,
+                force_latest_compatible_version,
+                allow_earlier_backwards_compatible_versions,
+                allow_reresolve,
+            )
+            # `Base.julia_cmd()` reconstructs the parent's flags (depwarn, inline,
+            # optimization, track-allocation, ...) for the child. Color is set explicitly
+            # because the child's output is captured into a buffer, where terminal
+            # detection would otherwise turn it off.
+            cmd = `$(Base.julia_cmd()) --color=$(color ? "yes" : "no") --project=$project --eval $code`
+            buf = IOBuffer()
+            p = run(pipeline(ignorestatus(cmd); stdout = buf, stderr = buf), wait = false)
+            procs[i] = p
+            wait(p)
+            (pkg.name, p, String(take!(buf)))
+        end
+    catch err
+        # On interrupt (or any failure of the orchestration) make sure no child is left
+        # behind. Terminate everything still running, escalating to SIGKILL if needed.
+        # `kill` checks liveness itself and is a no-op on an already-exited process.
+        for p in procs
+            isnothing(p) || kill(p)
+        end
+        deadline = time() + 4
+        for p in procs
+            isnothing(p) || timedwait(() -> process_exited(p), deadline - time()) === :timed_out && kill(p, Base.SIGKILL)
+        end
+        if err isa InterruptException
+            printpkgstyle(ctx.io, :Testing, "Tests interrupted. Exiting the test process", color = Base.error_color())
+        end
+        rethrow()
+    else
+        # Print each package's captured output in order, then aggregate failures.
+        for (name, p, output) in results
+            print(ctx.io, output)
+            success(p) || push!(pkgs_errored, (name, p))
+        end
+        flush(ctx.io)
+    finally
+        # Only tear down a pool this call created; a `:joined` pool is owned elsewhere.
+        jobserver === :created && Base.Precompilation.teardown_precompile_jobserver!()
+    end
+    return
+end
+
 function test(
         ctx::Context, pkgs::Vector{PackageSpec};
         coverage = false, julia_args::Cmd = ``, test_args::Cmd = ``,
         test_fn = nothing,
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
-        allow_reresolve::Bool = true
+        allow_reresolve::Bool = true,
+        ntasks::Int = 1
     )
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
@@ -3217,7 +3331,23 @@ function test(
 
     # sandbox
     pkgs_errored = Tuple{String, Base.Process}[]
+    # When more than one package is being tested, run each package's tests in its own
+    # child `Pkg.test` process, up to `ntasks` at a time (see `test_parallel!`). Each
+    # child does its own instantiate/resolve/precompile/run in a separate process, so the
+    # process-global state touched during sandboxing never races. `test_fn` is a closure
+    # that cannot cross the process boundary, so its presence keeps the run serial.
+    parallel = ntasks > 1 && length(pkgs) > 1 && test_fn === nothing
+    if parallel
+        test_parallel!(
+            ctx, pkgs, pkgs_errored;
+            ntasks, coverage, julia_args, test_args,
+            force_latest_compatible_version,
+            allow_earlier_backwards_compatible_versions,
+            allow_reresolve,
+        )
+    end
     for (pkg, source_path) in zip(pkgs, source_paths)
+        parallel && break
         # If the test is in our "workspace", no need to create a temp env etc, just activate and run the tests
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             proj = Base.locate_project_file(abspath(testdir(source_path)))

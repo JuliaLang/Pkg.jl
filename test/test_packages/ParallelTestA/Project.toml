@@ -1,0 +1,9 @@
+name = "ParallelTestA"
+uuid = "5a8f3e21-0b6c-4d7e-9a1f-2c3b4d5e6f70"
+version = "0.1.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

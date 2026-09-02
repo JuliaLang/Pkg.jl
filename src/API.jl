@@ -568,6 +568,7 @@ function test(
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
         allow_reresolve::Bool = true,
+        ntasks::Int = 1,
         kwargs...
     )
     julia_args = Cmd(julia_args)
@@ -594,6 +595,7 @@ function test(
         force_latest_compatible_version,
         allow_earlier_backwards_compatible_versions,
         allow_reresolve,
+        ntasks,
     )
     return
 end

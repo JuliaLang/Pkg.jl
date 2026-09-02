@@ -1040,6 +1040,28 @@ end
     end
 end
 
+@testset "parallel testing" begin
+    temp_pkg_dir() do project_path
+        mktempdir() do dir
+            pkgnames = ["ParallelTestA", "ParallelTestB"]
+            for name in pkgnames
+                cp(joinpath(@__DIR__, "test_packages", name), joinpath(dir, name))
+            end
+            with_temp_env() do
+                Pkg.develop([Pkg.PackageSpec(path = joinpath(dir, name)) for name in pkgnames])
+                mktempdir() do sync_dir
+                    # Each package's test process blocks until it sees the other start
+                    # (see the packages' runtests.jl), so testing only succeeds if the
+                    # processes ran concurrently. A serial run would time out and fail.
+                    withenv("PKG_PARALLEL_SYNC_DIR" => sync_dir) do
+                        @test Pkg.test(pkgnames; ntasks = 2) === nothing
+                    end
+                end
+            end
+        end
+    end
+end
+
 import Pkg.Resolve.range_compressed_versionspec
 @testset "range_compressed_versionspec" begin
     pool = [v"1.0.0", v"1.1.0", v"1.2.0", v"1.2.1", v"2.0.0", v"2.0.1", v"3.0.0", v"3.1.0"]
