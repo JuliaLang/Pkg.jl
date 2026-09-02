@@ -135,8 +135,10 @@ temp_pkg_dir() do project_path
             cd(path) do
                 with_current_env() do
                     Pkg.resolve()
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPath'`))
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using ProjectPathDep'`))
+                    # no Pkg code runs in the subprocesses, so don't inherit coverage
+                    julia = `$(Base.julia_cmd()) --startup-file=no --code-coverage=none`
+                    @test success(run(`$(julia) --project -e 'using ProjectPath'`))
+                    @test success(run(`$(julia) --project -e 'using ProjectPathDep'`))
                 end
             end
         end

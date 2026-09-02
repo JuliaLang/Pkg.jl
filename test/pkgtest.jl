@@ -280,9 +280,12 @@ end
                             end
                         end
                     """
+                    # The subprocess only calls `Pkg.test`, which is covered
+                    # in-process; with coverage enabled it would have to
+                    # compile Pkg from scratch.
                     @test Utils.show_output_if_command_errors(
                         addenv(
-                            `$(Base.julia_cmd()) --project=$(path) --startup-file=no -e "$script"`,
+                            `$(Base.julia_cmd()) --project=$(path) --startup-file=no --code-coverage=none -e "$script"`,
                             "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
                         )
                     )

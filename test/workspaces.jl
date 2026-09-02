@@ -149,20 +149,23 @@ temp_pkg_dir() do project_path
 
                 # Test that the subprojects are working
                 depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+                # The subprocesses run no Pkg code; with coverage enabled they
+                # could not use native code for the packages they load.
+                julia = `$(Base.julia_cmd()) --startup-file=no --code-coverage=none`
                 withenv("JULIA_DEPOT_PATH" => depot_path_string) do
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
+                    @test success(run(`$(julia) --project="test" test/runtests.jl`))
+                    @test success(run(`$(julia) --project -e 'using MonorepoSub'`))
+                    @test success(run(`$(julia) --project="PrivatePackage" -e 'using PrivatePackage'`))
+                    @test success(run(`$(julia) --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
 
                     rm("Manifest.toml")
                     Pkg.activate(".")
                     Pkg.resolve()
                     # Resolve should have fixed the manifest so that everything above works from the existing project files
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="test" test/runtests.jl`))
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project -e 'using MonorepoSub'`))
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage" -e 'using PrivatePackage'`))
-                    @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
+                    @test success(run(`$(julia) --project="test" test/runtests.jl`))
+                    @test success(run(`$(julia) --project -e 'using MonorepoSub'`))
+                    @test success(run(`$(julia) --project="PrivatePackage" -e 'using PrivatePackage'`))
+                    @test success(run(`$(julia) --project="PrivatePackage/test" PrivatePackage/test/runtests.jl`))
                 end
             end
         end
