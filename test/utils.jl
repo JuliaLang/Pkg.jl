@@ -119,7 +119,10 @@ function populate_loaded_depot!()
     return
 end
 
-function isolate(fn::Function; loaded_depot = false, linked_reg = true)
+# The helpers taking a `do` block are called with hundreds of distinct closures
+# across the test suite; `@nospecialize` keeps them from being compiled once per
+# closure type (each specialization took 0.2-0.5 s).
+function isolate(@nospecialize(fn::Function); loaded_depot = false, linked_reg = true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -187,7 +190,7 @@ function isolate(fn::Function; loaded_depot = false, linked_reg = true)
     end
 end
 
-function isolate_and_pin_registry(fn::Function; registry_url::String, registry_commit::String)
+function isolate_and_pin_registry(@nospecialize(fn::Function); registry_url::String, registry_commit::String)
     isolate(loaded_depot = false, linked_reg = true) do
         this_gen_reg_path = joinpath(first(Base.DEPOT_PATH), "registries", "General")
         rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
@@ -208,7 +211,7 @@ function isolate_and_pin_registry(fn::Function; registry_url::String, registry_c
     return nothing
 end
 
-function temp_pkg_dir(fn::Function; rm = true, linked_reg = true)
+function temp_pkg_dir(@nospecialize(fn::Function); rm = true, linked_reg = true)
     old_load_path = copy(LOAD_PATH)
     old_depot_path = copy(DEPOT_PATH)
     old_home_project = Base.HOME_PROJECT[]
@@ -265,7 +268,7 @@ function temp_pkg_dir(fn::Function; rm = true, linked_reg = true)
     end
 end
 
-function cd_tempdir(f; rm = true)
+function cd_tempdir(@nospecialize(f); rm = true)
     tmp = realpath(mktempdir())
     cd(tmp) do
         f(tmp)
@@ -290,7 +293,7 @@ function write_build(path, content)
     return write(build_filename, content)
 end
 
-function with_current_env(f)
+function with_current_env(@nospecialize(f))
     prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(".")
     return try
@@ -300,7 +303,7 @@ function with_current_env(f)
     end
 end
 
-function with_temp_env(f, env_name::AbstractString = "Dummy"; rm = true)
+function with_temp_env(@nospecialize(f), env_name::AbstractString = "Dummy"; rm = true)
     prev_active = Base.ACTIVE_PROJECT[]
     env_path = joinpath(realpath(mktempdir()), env_name)
     Pkg.generate(env_path)
@@ -320,7 +323,7 @@ function with_temp_env(f, env_name::AbstractString = "Dummy"; rm = true)
     end
 end
 
-function with_pkg_env(fn::Function, path::AbstractString = "."; change_dir = false)
+function with_pkg_env(@nospecialize(fn::Function), path::AbstractString = "."; change_dir = false)
     prev_active = Base.ACTIVE_PROJECT[]
     Pkg.activate(path)
     return try
