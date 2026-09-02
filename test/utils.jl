@@ -31,14 +31,21 @@ const REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "registries", "General")
 
 const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 
+# The compile cache of the Pkg under test, recorded before any test modifies
+# `DEPOT_PATH`. Julia processes spawned by the tests (and precompile workers
+# for packages that depend on Pkg) can only load Pkg from the cache if it is in
+# a depot they can see; precompiling Pkg is disallowed during the tests.
+const COMPILED_SUBDIR = joinpath("compiled", "v$(VERSION.major).$(VERSION.minor)")
+const THIS_PKG_COMPILE_CACHE = joinpath(Base.DEPOT_PATH[1], COMPILED_SUBDIR)
+
 function copy_this_pkg_cache(new_depot)
     for p in ("Pkg", "REPLExt")
-        subdir = joinpath("compiled", "v$(VERSION.major).$(VERSION.minor)")
-        source = joinpath(Base.DEPOT_PATH[1], subdir, p)
+        source = joinpath(THIS_PKG_COMPILE_CACHE, p)
         isdir(source) || continue # doesn't exist if using shipped Pkg (e.g. Julia CI)
-        dest = joinpath(new_depot, subdir, p)
+        dest = joinpath(new_depot, COMPILED_SUBDIR, p)
+        isdir(dest) && samefile(source, dest) && continue # already the depot with the cache
         mkpath(dirname(dest))
-        cp(source, dest)
+        cp(source, dest; force = true)
     end
     return
 end
@@ -391,6 +398,9 @@ function add_this_pkg(; platform = Base.BinaryPlatforms.HostPlatform())
             path = pkg_dir,
         )
         Pkg.develop(spec; platform)
+        # Packages depending on Pkg are precompiled in a subprocess, which
+        # must find Pkg's cache in the (usually fresh) primary depot.
+        copy_this_pkg_cache(Base.DEPOT_PATH[1])
     finally
         Pkg.respect_sysimage_versions(true)
     end

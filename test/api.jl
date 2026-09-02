@@ -255,8 +255,14 @@ import .FakeTerminals.FakeTerminal
 
             @testset "pidlocked precompile" begin
                 proj = joinpath(pwd(), "packages", "SlowPrecompile")
+                # The two processes must both reach `Pkg.precompile` while the
+                # 10 s precompilation of `SlowPrecompile` is running. Without
+                # `--code-coverage=none`, a coverage run (as on CI) makes each
+                # process compile Pkg from scratch, which takes long enough
+                # under load that the second one arrives after the first has
+                # finished.
                 cmd = addenv(
-                    `$(Base.julia_cmd()) --color=no --startup-file=no --project="$(pkgdir(Pkg))" -e "
+                    `$(Base.julia_cmd()) --color=no --startup-file=no --code-coverage=none --project="$(pkgdir(Pkg))" -e "
                 using Pkg
                 Pkg.activate(\"$(escape_string(proj))\")
                 Pkg.precompile()
