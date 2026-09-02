@@ -28,14 +28,11 @@ Pkg._auto_gc_enabled[] = false
 #
 
 @testset "Depot setup" begin
+    # This runs against `isolate`'s private target depot: the shared loaded
+    # depot used by `isolate(loaded_depot = true)` is populated up front by
+    # `Utils.populate_loaded_depot!` in the test runner instead.
     isolate() do
-        # Lets make sure we start with a clean slate.
-        rm(LOADED_DEPOT; force = true, recursive = true)
-        mkdir(LOADED_DEPOT)
-        # And set the loaded depot as our working depot.
-        empty!(DEPOT_PATH)
-        push!(DEPOT_PATH, LOADED_DEPOT)
-        Base.append_bundled_depot_path!(DEPOT_PATH)
+        depot = first(DEPOT_PATH)
         # Now we double check we have a clean slate.
         @test isempty(Pkg.dependencies())
         # A simple `add` should set up some things for us:
@@ -47,8 +44,8 @@ Pkg._auto_gc_enabled[] = false
         @test reg.name == "General"
         @test reg.uuid == general_uuid
         # - Check that CACHEDIR.TAG files exist in cache directories
-        @test isfile(joinpath(LOADED_DEPOT, "registries", "CACHEDIR.TAG"))
-        @test isfile(joinpath(LOADED_DEPOT, "packages", "CACHEDIR.TAG"))
+        @test isfile(joinpath(depot, "registries", "CACHEDIR.TAG"))
+        @test isfile(joinpath(depot, "packages", "CACHEDIR.TAG"))
         # - The package should be installed correctly.
         source053, source053_time = nothing, nothing
         Pkg.dependencies(exuuid) do pkg
@@ -93,7 +90,7 @@ Pkg._auto_gc_enabled[] = false
         end
         # Now check packages which track repos instead of registered versions
         Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "v0.5.3")
-        @test isfile(joinpath(LOADED_DEPOT, "clones", "CACHEDIR.TAG"))
+        @test isfile(joinpath(depot, "clones", "CACHEDIR.TAG"))
         Pkg.dependencies(exuuid) do pkg
             @test !pkg.is_tracking_registry
             @test isdir(pkg.source)
@@ -127,23 +124,7 @@ Pkg._auto_gc_enabled[] = false
         @test reg.name == "General"
         @test reg.uuid == general_uuid
         @test mtime(source053) == source053_time
-        # Now we clean up so that `isolate` can reuse the loaded depot properly
-        rm(joinpath(LOADED_DEPOT, "environments"); force = true, recursive = true)
-        rm(joinpath(LOADED_DEPOT, "clones"); force = true, recursive = true)
-        rm(joinpath(LOADED_DEPOT, "logs"); force = true, recursive = true)
-        rm(joinpath(LOADED_DEPOT, "dev"); force = true, recursive = true)
-        for (root, dirs, files) in walkdir(LOADED_DEPOT)
-            for file in files
-                filepath = joinpath(root, file)
-                fmode = filemode(filepath)
-                try
-                    chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
-                catch
-                end
-            end
-        end
     end
-    copy_this_pkg_cache(LOADED_DEPOT)
 end
 
 function kill_with_info(p)

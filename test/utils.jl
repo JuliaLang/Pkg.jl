@@ -13,7 +13,16 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
     list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url
 
-const CACHE_DIRECTORY = realpath(mktempdir(; cleanup = true))
+# The cache directory is shared between the test-runner main process and its
+# worker processes: the first process to include this file creates the
+# directory and publishes it in ENV, so that the registry download and the
+# loaded depot are shared by all (parallel) test processes.
+const CACHE_DIRECTORY = let dir = get(ENV, "PKG_TESTS_CACHE_DIR", "")
+    if isempty(dir) || !isdir(dir)
+        dir = ENV["PKG_TESTS_CACHE_DIR"] = mktempdir(; cleanup = true)
+    end
+    realpath(dir)
+end
 
 const LOADED_DEPOT = joinpath(CACHE_DIRECTORY, "loaded_depot")
 
@@ -61,6 +70,46 @@ function check_init_reg()
         end
     end
     return isfile(joinpath(REGISTRY_DIR, "Registry.toml")) || error("Registry did not install properly")
+end
+
+# Populate the shared loaded depot with the packages used by tests that run
+# with `isolate(loaded_depot = true)`, so those don't have to download them.
+# Called once by the test runner before any tests run; the workers of a
+# parallel run share the result through `CACHE_DIRECTORY`.
+function populate_loaded_depot!()
+    isdir(joinpath(LOADED_DEPOT, "packages")) && return # already populated
+    isolate() do
+        empty!(DEPOT_PATH)
+        push!(DEPOT_PATH, LOADED_DEPOT)
+        Base.append_bundled_depot_path!(DEPOT_PATH)
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.add(name = "Example", version = "0.5.1")
+        Pkg.add(name = "Example", version = "0.5.0")
+        Pkg.add(name = "Example") # latest
+        Pkg.add(name = "Example", version = "0.3.0")
+        Pkg.add(name = "Example", version = "0.3.3")
+        Pkg.add(name = "JSON", version = "0.18.0")
+        Pkg.add(name = "JSON", version = "0.20.0")
+        # Keep only the package store and registry: environments and logs are
+        # created per test in the target depot.
+        rm(joinpath(LOADED_DEPOT, "environments"); force = true, recursive = true)
+        rm(joinpath(LOADED_DEPOT, "logs"); force = true, recursive = true)
+        # Make the files read-only so tests can't accidentally modify them.
+        for (root, _, files) in walkdir(LOADED_DEPOT)
+            for file in files
+                filepath = joinpath(root, file)
+                fmode = filemode(filepath)
+                try
+                    chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+                catch
+                end
+            end
+        end
+    end
+    # Allow julia subprocesses using the loaded depot to load this Pkg from
+    # cache (precompilation of Pkg is disallowed during tests).
+    copy_this_pkg_cache(LOADED_DEPOT)
+    return
 end
 
 function isolate(fn::Function; loaded_depot = false, linked_reg = true)
