@@ -64,6 +64,12 @@ jobs:
           # See https://github.com/actions/virtual-environments/issues/712
           echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
           echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
+      - name: Exclude the workspace, temp dir and depot from Windows Defender
+        # Real-time scanning makes creating many small files (registries,
+        # package sources, clones) several times slower on the runners.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE", "$env:TEMP", "$env:USERPROFILE\.julia", "$env:RUNNER_TEMP"
       - uses: actions/checkout@v6
       - uses: julia-actions/setup-julia@v3
         with:
