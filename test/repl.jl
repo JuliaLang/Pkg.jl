@@ -8,6 +8,7 @@ using Pkg.Types: manifest_info, EnvCache, Context
 import Pkg.Types.PkgError
 using UUIDs
 using Test
+import Markdown
 using TOML
 import LibGit2
 import REPL
@@ -1531,6 +1532,14 @@ end
             Pkg.API._compat(test_ctx; input_io)
         end
     end
+end
+
+@testset "REPL command doc generation" begin
+    # test that the way doc building extracts
+    # docstrings for Pkg REPL commands work
+    d = Dict(Pkg.REPLMode.canonical_names())
+    @test d["add"].help isa Markdown.MD
+    @test d["registry add"].help isa Markdown.MD
 end
 
 end # module

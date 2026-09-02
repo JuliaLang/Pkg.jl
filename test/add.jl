@@ -942,4 +942,159 @@ end
     end
 end
 
+@testset "add: wrong UUID for a registered name" begin
+    isolate(loaded_depot = true) do
+        try
+            Pkg.add(Pkg.PackageSpec(name = "Example", uuid = UUID(UInt128(2))))
+            @test false # to fail if add doesn't error
+        catch e
+            @test e isa PkgError
+            errstr = sprint(showerror, e)
+            @test occursin("expected package `Example [00000000]` to be registered", errstr)
+            @test occursin("You may have provided the wrong UUID for package Example.", errstr)
+            @test occursin("Found the following UUIDs for that name:", errstr)
+            @test occursin("- 7876af07-990d-54b4-ab0e-23690620f79a from registry: General", errstr)
+        end
+    end
+end
+
+@testset "add: by VersionNumber and VersionRange" begin
+    isolate(loaded_depot = true) do
+        # VersionNumber
+        Pkg.add(Pkg.PackageSpec("Example", v"0.3"))
+        @test @inferred(Pkg.dependencies())[exuuid].version == v"0.3"
+        Pkg.add(Pkg.PackageSpec("Example", v"0.3.1"))
+        @test Pkg.dependencies()[exuuid].version == v"0.3.1"
+        Pkg.rm("Example")
+
+        # VersionRange
+        Pkg.add(Pkg.PackageSpec("Example", Pkg.Types.VersionSpec(Pkg.Types.VersionRange("0.3.0-0.3.2"))))
+        @test Pkg.dependencies()[exuuid].version == v"0.3.2"
+        # Check that adding another packages doesn't upgrade other packages
+        Pkg.add("Test")
+        @test Pkg.dependencies()[exuuid].version == v"0.3.2"
+    end
+end
+
+@testset "issue #913" begin
+    temp_pkg_dir() do project_path
+        Pkg.activate(project_path)
+        Pkg.add(Pkg.PackageSpec(name = "Example", rev = "master"))
+        @test isinstalled(TEST_PKG)
+        rm.(joinpath.(project_path, ["Project.toml", "Manifest.toml"]))
+        Pkg.add(Pkg.PackageSpec(name = "Example", rev = "master")) # should not fail
+        @test isinstalled(TEST_PKG)
+    end
+end
+# PR #1784 - Remove trailing slash from URL.
+@testset "URL with trailing slash" begin
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            Pkg.add(Pkg.PackageSpec(url = "https://github.com/JuliaLang/Example.jl.git/"))
+            @test isinstalled("Example")
+        end
+    end
+end
+
+@testset "Suggest `Pkg.develop` instead of `Pkg.add`" begin
+    isolate() do
+        mktempdir() do tmp_dir
+            touch(joinpath(tmp_dir, "Project.toml"))
+            @test_throws Pkg.Types.PkgError Pkg.add(; path = tmp_dir)
+        end
+    end
+end
+
+@testset "Issue #3069" begin
+    with_temp_env() do
+        p = Pkg.PackageSpec(; path = "test_packages/Example")
+        @test_throws Pkg.Types.PkgError("Package PackageSpec(\n  path = test_packages/Example\n  version = *\n) has neither name nor uuid") Pkg.Types.ensure_resolved(Pkg.Types.Context(), Pkg.Types.Manifest(), [p])
+    end
+end
+
+@testset "check_registered error paths" begin
+    # Test the "no registries have been installed" error path
+    isolate(loaded_depot = false, linked_reg = false) do
+        with_temp_env() do
+            # Ensure we have no registries available
+            @test isempty(Pkg.Registry.reachable_registries())
+
+            # Should install General registry automatically
+            Pkg.add("Example")
+
+            Pkg.Registry.rm("General")
+            @test isempty(Pkg.Registry.reachable_registries())
+        end
+    end
+
+    # Test the "expected package to be registered" error path with a custom unregistered package
+    isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
+            with_temp_env() do
+                # Create a fake package with a manifest that references an unregistered UUID
+                fake_pkg_path = copy_test_package(tempdir, "UnregisteredUUID")
+                Pkg.activate(fake_pkg_path)
+
+                # This should fail with "expected package to be registered" error
+                @test_throws r"expected package.*to be registered" begin
+                    Pkg.add("JSON")  # This will fail because Example UUID in manifest is unregistered
+                end
+            end
+        end
+    end
+end
+# issue #2291: relative paths in manifests should be resolved relative to manifest location
+@testset "relative path resolution from different directories (issue #2291)" begin
+    isolate() do
+        mktempdir() do dir
+            # Create a local package with a git repo
+            pkg_path = joinpath(dir, "LocalPackage")
+            mkpath(joinpath(pkg_path, "src"))
+            write(
+                joinpath(pkg_path, "Project.toml"), """
+                name = "LocalPackage"
+                uuid = "00000000-0000-0000-0000-000000000001"
+                version = "0.1.0"
+                """
+            )
+            write(
+                joinpath(pkg_path, "src", "LocalPackage.jl"), """
+                module LocalPackage
+                greet() = "Hello from LocalPackage!"
+                end
+                """
+            )
+
+            # Initialize git repo
+            LibGit2.with(LibGit2.init(pkg_path)) do repo
+                LibGit2.add!(repo, "*")
+                LibGit2.commit(repo, "Initial commit"; author = TEST_SIG, committer = TEST_SIG)
+            end
+
+            # Create a project in a subdirectory and add the package with relative path
+            project_path = joinpath(dir, "project")
+            mkpath(project_path)
+            cd(project_path) do
+                Pkg.activate(".")
+                Pkg.add(Pkg.PackageSpec(path = "../LocalPackage"))
+
+                # Verify the package was added with relative path
+                manifest = Pkg.Types.read_manifest(joinpath(project_path, "Manifest.toml"))
+                pkg_entry = manifest[UUID("00000000-0000-0000-0000-000000000001")]
+                @test pkg_entry.repo.source == "../LocalPackage"
+            end
+
+            # Now change to parent directory and try to update - this should work
+            cd(dir) do
+                Pkg.activate("project")
+                Pkg.update()  # This should not fail
+                # Check the package is installed by looking it up in dependencies
+                pkg_info = Pkg.dependencies()[UUID("00000000-0000-0000-0000-000000000001")]
+                @test pkg_info.name == "LocalPackage"
+                @test isinstalled(Pkg.PackageSpec(uuid = UUID("00000000-0000-0000-0000-000000000001"), name = "LocalPackage"))
+            end
+        end
+    end
+end
+
 end # module

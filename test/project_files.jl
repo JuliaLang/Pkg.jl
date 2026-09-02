@@ -143,4 +143,63 @@ temp_pkg_dir() do project_path
     end
 end
 
+temp_pkg_dir() do project_path
+    @testset "valid project file names" begin
+        extract_uuid(toml_path) = begin
+            uuid = ""
+            for line in eachline(toml_path)
+                m = match(r"uuid = \"(.+)\"", line)
+                if m !== nothing
+                    uuid = m.captures[1]
+                    break
+                end
+            end
+            return uuid
+        end
+
+        cd(project_path) do
+            target_dir = mktempdir()
+            uuid = nothing
+            mktempdir() do tmp
+                cd(tmp) do
+                    pkg_name = "FooBar"
+                    # create a project and grab its uuid
+                    Pkg.generate(pkg_name)
+                    uuid = extract_uuid(joinpath(pkg_name, "Project.toml"))
+                    # activate project env
+                    Pkg.activate(abspath(pkg_name))
+                    # add an example project to populate manifest file
+                    Pkg.add("Example")
+                    # change away from default names
+                    ## note: this is written awkwardly because a `mv` here causes failures on AppVeyor
+                    cp(joinpath(pkg_name, "src"), joinpath(target_dir, "src"))
+                    cp(joinpath(pkg_name, "Project.toml"), joinpath(target_dir, "JuliaProject.toml"))
+                    cp(joinpath(pkg_name, "Manifest.toml"), joinpath(target_dir, "JuliaManifest.toml"))
+                end
+            end
+            Pkg.activate()
+            # make sure things still work
+            Pkg.REPLMode.pkgstr("dev $target_dir")
+            @test isinstalled((name = "FooBar", uuid = UUID(uuid)))
+            Pkg.rm("FooBar")
+            @test !isinstalled((name = "FooBar", uuid = UUID(uuid)))
+        end # cd project_path
+    end # @testset
+end
+#issue #876
+@testset "targets should survive add/rm" begin
+    temp_pkg_dir() do project_path
+        cd_tempdir() do tmpdir
+            cp(joinpath(@__DIR__, "project", "good", "pkg.toml"), "Project.toml")
+            mkdir("src")
+            touch("src/Pkg.jl")
+            targets = deepcopy(Pkg.Types.read_project("Project.toml").targets)
+            Pkg.activate(".")
+            Pkg.add("Example")
+            Pkg.rm("Example")
+            @test targets == Pkg.Types.read_project("Project.toml").targets
+        end
+    end
+end
+
 end # module

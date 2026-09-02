@@ -1,6 +1,7 @@
 module UpdateTests
 
-using Test, UUIDs
+using Test
+using TOML, UUIDs
 import ..Pkg, LibGit2
 using Pkg.Types: PkgError
 using Pkg.Resolve: ResolverError
@@ -875,6 +876,214 @@ end
             # Operations should work again
             @test_nowarn Pkg.add("Random")
             @test_nowarn Pkg.rm("Random")
+        end
+    end
+end
+
+temp_pkg_dir() do project_path
+    cd(project_path) do
+        tmp = mktempdir()
+        depo1 = mktempdir()
+        depo2 = mktempdir()
+        cd(tmp) do;
+            @testset "instantiating updated repo" begin
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo1)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                LibGit2.close(LibGit2.clone("https://github.com/JuliaLang/Example.jl", "Example.jl"))
+                mkdir("machine1")
+                cd("machine1")
+                Pkg.activate(".")
+                Pkg.add(Pkg.PackageSpec(path = "../Example.jl"))
+                cd("..")
+                cp("machine1", "machine2")
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo2)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                cd("machine2")
+                Pkg.activate(".")
+                Pkg.instantiate()
+                cd("..")
+                cd("Example.jl")
+                open("README.md", "a") do io
+                    print(io, "Hello")
+                end
+                LibGit2.with(LibGit2.GitRepo(".")) do repo
+                    LibGit2.add!(repo, "*")
+                    LibGit2.commit(repo, "changes"; author = TEST_SIG, committer = TEST_SIG)
+                end
+                cd("../machine1")
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo1)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                Pkg.activate(".")
+                Pkg.update()
+                cd("..")
+                cp("machine1/Manifest.toml", "machine2/Manifest.toml"; force = true)
+                cd("machine2")
+                empty!(DEPOT_PATH)
+                pushfirst!(DEPOT_PATH, depo2)
+                Base.append_bundled_depot_path!(DEPOT_PATH)
+                Pkg.activate(".")
+                Pkg.instantiate()
+            end
+        end
+        Base.rm.([tmp, depo1, depo2]; force = true, recursive = true)
+    end
+end
+
+@testset "undo redo functionality" begin
+    unicode_uuid = UUID("4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5")
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            Pkg.activate(project_path)
+            # Example
+            Pkg.add(TEST_PKG.name)
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            #
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            # Example
+            Pkg.redo()
+            # Example, Unicode
+            Pkg.add("Unicode")
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            # Example
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), unicode_uuid)
+            #
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            # Example, Unicode
+            Pkg.redo()
+            Pkg.redo()
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            @test haskey(Pkg.dependencies(), unicode_uuid)
+            # Should not add states since they are nops
+            Pkg.add("Unicode")
+            Pkg.add("Unicode")
+            # Example
+            Pkg.undo()
+            @test !haskey(Pkg.dependencies(), unicode_uuid)
+            # Example, Unicode
+            Pkg.redo()
+            @test haskey(Pkg.dependencies(), unicode_uuid)
+
+            # Example
+            Pkg.undo()
+
+            prev_project = Base.active_project()
+            mktempdir() do tmp
+                Pkg.activate(tmp)
+                Pkg.add("Example")
+                Pkg.undo()
+                @test !haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            end
+            Pkg.activate(prev_project)
+
+            # Check that undo state persists after swapping projects
+            # Example, Unicode
+            Pkg.redo()
+            @test haskey(Pkg.dependencies(), unicode_uuid)
+
+        end
+    end
+end
+
+@testset "subdir functionality" begin
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            mktempdir() do tmp
+                repodir = git_init_package(tmp, joinpath(@__DIR__, "test_packages", "MainRepo"))
+                # Add with subdir
+                subdir_uuid = UUID("6fe4e069-dcb0-448a-be67-3a8bf3404c58")
+                Pkg.add(url = repodir, subdir = "SubDir")
+                pkgdir = abspath(joinpath(dirname(Base.find_package("SubDir")), ".."))
+
+                # Update with subdir in manifest
+                Pkg.update()
+                # Test instantiate with subdir
+                rm(pkgdir; recursive = true)
+                Pkg.instantiate()
+                @test isinstalled("SubDir")
+                Pkg.rm("SubDir")
+
+                # Dev of local path with subdir
+                Pkg.develop(path = repodir, subdir = "SubDir")
+                @test Pkg.dependencies()[subdir_uuid].source == joinpath(repodir, "SubDir")
+            end
+        end
+    end
+end
+
+@testset "Issue #3147" begin
+    isolate() do
+
+        @testset "Pkg.add" begin
+            Pkg.activate(temp = true)
+            mktempdir() do tmp_dir
+                LibGit2.close(LibGit2.clone("https://github.com/JuliaLang/Example.jl", tmp_dir))
+                Pkg.develop(path = tmp_dir)
+                Pkg.pin("Example")
+                Pkg.add("Example")
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version > v"0.5.3"
+            end
+            Pkg.rm("Example")
+
+            Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "29aa1b4")
+            Pkg.pin("Example")
+            Pkg.add("Example")
+            info = Pkg.dependencies()[TEST_PKG.uuid]
+            @test info.is_pinned
+            @test !info.is_tracking_path
+            @test info.is_tracking_repo
+            @test info.version == v"0.5.3"
+            Pkg.rm("Example")
+        end
+
+        @testset "Pkg.update" begin
+            Pkg.activate(temp = true)
+            mktempdir() do tmp_dir
+                ver = v"0.5.3"
+                repo = LibGit2.clone("https://github.com/JuliaLang/Example.jl", tmp_dir)
+                tag = LibGit2.GitObject(repo, "v$ver")
+                hash = string(LibGit2.target(tag))
+                LibGit2.checkout!(repo, hash)
+                LibGit2.close(repo)
+                Pkg.develop(path = tmp_dir)
+                Pkg.pin("Example")
+                Pkg.update("Example")  # pkg should remain pinned
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == ver
+
+                # modify the pkg version manually, to mimic developing this pkg
+                dev_ver = VersionNumber(ver.major, ver.minor, ver.patch + 1)
+                fn = joinpath(tmp_dir, "Project.toml")
+                toml = TOML.parse(read(fn, String))
+                toml["version"] = string(dev_ver)
+                open(io -> TOML.print(io, toml), fn, "w")
+                Pkg.update("Example")  # noop since Pkg.is_fully_pinned(...) is true
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == ver
+
+                Pkg.pin("Example")  # pinning a 2ⁿᵈ time updates versions in the manifest
+                info = Pkg.dependencies()[TEST_PKG.uuid]
+                @test info.is_pinned
+                @test info.is_tracking_path
+                @test !info.is_tracking_repo
+                @test info.version == dev_ver
+            end
+            Pkg.rm("Example")
         end
     end
 end

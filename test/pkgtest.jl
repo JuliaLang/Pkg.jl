@@ -329,4 +329,124 @@ end
     end
 end
 
+@testset "test: coverage" begin
+    isolate() do
+        Pkg.add("Example")
+        pkgdir = dirname(Base.locate_package(Base.PkgId(exuuid, "Example")))
+        @test !isnothing(pkgdir)
+        recursive_rm_cov_files(pkgdir) # clean out cov files from previous test runs
+
+        @test !any(endswith(".cov"), readdir(pkgdir)) # should be no cov files to start with
+        Pkg.test("Example"; coverage = true)
+        @test any(endswith(".cov"), readdir(pkgdir))
+    end
+    # A coverage path is passed through as an LCOV tracefile. Running the test
+    # process with `--code-coverage=<tracefile>` is very slow, so only check
+    # the flags that would be passed to it.
+    flags = Pkg.Operations.gen_subprocess_flags("/pkg"; coverage = "tracefile.info", julia_args = ``)
+    @test "--code-coverage=tracefile.info" in flags.exec
+    flags = Pkg.Operations.gen_subprocess_flags("/pkg"; coverage = true, julia_args = ``)
+    @test "--code-coverage=@/pkg" in flags.exec
+    flags = Pkg.Operations.gen_subprocess_flags("/pkg"; coverage = false, julia_args = ``)
+    @test "--code-coverage=none" in flags.exec
+end
+
+temp_pkg_dir() do project_path
+    @testset "test should instantiate" begin
+        mktempdir() do dir
+            cp(joinpath(@__DIR__, "test_packages", "UnregisteredWithProject"), joinpath(dir, "UnregisteredWithProject"))
+            cd(joinpath(dir, "UnregisteredWithProject")) do
+                with_current_env() do
+                    Pkg.add("Test") # test https://github.com/JuliaLang/Pkg.jl/issues/324
+                    Pkg.test()
+                end
+            end
+        end
+    end
+end
+
+@testset "building project should fix version of deps" begin
+    temp_pkg_dir() do project_path
+        dep_pkg = joinpath(@__DIR__, "test_packages", "BuildProjectFixedDeps")
+        Pkg.activate(dep_pkg)
+        Pkg.build()
+        @test isfile(joinpath(dep_pkg, "deps", "artifact"))
+    end
+end
+
+@testset "Pkg.test process failure" begin
+    temp_pkg_dir() do project_path
+        mktempdir() do dir
+            cp(joinpath(@__DIR__, "test_packages", "TestFailure"), joinpath(dir, "TestFailure"))
+            cd(joinpath(dir, "TestFailure")) do
+                with_current_env() do
+                    Sys.isunix() && @testset "signal: KILL" begin
+                        withenv("TEST_SIGNAL" => "KILL") do
+                            try
+                                Pkg.test()
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == "Package TestFailure errored during testing (received signal: KILL)"
+                            end
+                        end
+                    end
+
+                    # # The following test is broken on macOS
+                    # Sys.islinux() && @testset "signal: QUIT" begin
+                    #     withenv("TEST_SIGNAL" => "QUIT") do
+                    #         try
+                    #             Pkg.test()
+                    #             @test false
+                    #         catch err
+                    #             @test err isa PkgError
+                    #             @test err.msg == "Package TestFailure errored during testing (exit code: 131)"
+                    #         end
+                    #     end
+                    # end
+
+                    @testset "exit code: 1" begin
+                        withenv("TEST_EXITCODE" => "1") do
+                            try
+                                Pkg.test()
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == "Package TestFailure errored during testing"
+                            end
+                        end
+                    end
+
+                    @testset "exit code: 2" begin
+                        withenv("TEST_EXITCODE" => "2") do
+                            try
+                                Pkg.test()
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == "Package TestFailure errored during testing (exit code: 2)"
+                            end
+                        end
+                    end
+
+                    @testset "multiple failures" begin
+                        withenv("TEST_EXITCODE" => "3") do
+                            try
+                                Pkg.test(["TestFailure", "TestFailure"])
+                                @test false
+                            catch err
+                                @test err isa PkgError
+                                @test err.msg == """
+                                    Packages errored during testing:
+                                    • TestFailure (exit code: 3)
+                                    • TestFailure (exit code: 3)"""
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 end # module

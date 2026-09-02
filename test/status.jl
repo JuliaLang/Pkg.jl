@@ -422,4 +422,17 @@ end
     end
 end
 
+@testset "issue #1180: broken toml-files in HEAD" begin
+    temp_pkg_dir() do dir
+        cd(dir) do
+            write("Project.toml", "[deps]\nExample = \n")
+            git_init_and_commit(dir)
+            write("Project.toml", "[deps]\nExample = \"7876af07-990d-54b4-ab0e-23690620f79a\"\n")
+            Pkg.activate(dir)
+            io = PipeBuffer() # IO is required to avoid short-circuit in Pkg.status
+            @test_logs (:warn, r"could not read project from HEAD") Pkg.status(diff = true; io)
+        end
+    end
+end
+
 end # module

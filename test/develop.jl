@@ -379,4 +379,128 @@ end
     end
 end
 
+@testset "develop: build, test and free a developed package" begin
+    isolate() do
+        Pkg.add(name = "Example", version = v"0.5.3")
+        old_v = Pkg.dependencies()[exuuid].version
+        @test old_v == v"0.5.3"
+        Pkg.rm("Example")
+        mktempdir() do devdir
+            withenv("JULIA_PKG_DEVDIR" => devdir) do
+                @test_throws PkgError Pkg.develop(Pkg.PackageSpec(url = "bleh", rev = "blurg"))
+                Pkg.develop("Example")
+                @test isinstalled(TEST_PKG)
+                @test Pkg.dependencies()[exuuid].version > old_v
+                test_pkg_main_file = joinpath(devdir, "Example", "src", "Example.jl")
+                @test isfile(test_pkg_main_file)
+                # Pkg #152
+                write(
+                    test_pkg_main_file,
+                    """
+                    module Example
+                        export hello, domath
+                        const example2path = joinpath(@__DIR__, "..", "deps", "deps.jl")
+                        if !isfile(example2path)
+                            error("Example is not installed correctly")
+                        end
+                        hello(who::String) = "Hello, \$who"
+                        domath(x::Number) = x + 5
+                    end
+                    """
+                )
+                mkpath(joinpath(devdir, "Example", "deps"))
+                write(
+                    joinpath(devdir, "Example", "deps", "build.jl"),
+                    """
+                    touch("deps.jl")
+                    """
+                )
+                exa_proj = joinpath(devdir, "Example", "Project.toml")
+                proj_str = read(exa_proj, String)
+                compat_onwards = split(proj_str, "[compat]")[2]
+                open(exa_proj, "w") do io
+                    println(
+                        io, """
+                        name = "Example"
+                        uuid = "$(exuuid)"
+                        version = "100.0.0"
+
+                        [compat]
+                        $compat_onwards
+                        """
+                    )
+                end
+                Pkg.resolve()
+                @test Pkg.dependencies()[exuuid].version == v"100.0.0"
+                Pkg.build("Example")
+                @test isfile(joinpath(devdir, "Example", "deps", "deps.jl"))
+                Pkg.test("Example")
+                Pkg.free("Example")
+                @test Pkg.dependencies()[exuuid].version < v"100.0.0"
+                @test Pkg.dependencies()[exuuid].version >= old_v
+            end
+        end
+    end
+end
+
+@testset "issue #2191: better diagnostic for missing package" begin
+    temp_pkg_dir() do project_path
+        cd_tempdir() do tmpdir
+            Pkg.activate(".")
+
+            # Create a package A that depends on package B
+            Pkg.generate("A")
+            Pkg.generate("B")
+            git_init_and_commit("A")
+            git_init_and_commit("B")
+
+            # Add B as a dependency of A
+            cd("A") do
+                Pkg.develop(Pkg.PackageSpec(path = "../B"))
+            end
+
+            # Now remove the B directory to simulate the missing package scenario
+            rm("B", recursive = true)
+
+            # Try to perform an operation that would trigger the missing package error
+            cd("A") do
+                try
+                    Pkg.resolve()
+                    @test false # a PkgError should be thrown"
+                catch e
+                    @test e isa PkgError
+                    error_msg = sprint(showerror, e)
+                    # Check that the improved error message contains helpful information
+                    @test occursin("This package is referenced in the manifest file:", error_msg)
+                end
+            end
+        end
+    end
+end
+
+@testset "issue #1066: package with colliding name/uuid exists in project" begin
+    temp_pkg_dir() do project_path
+        cd_tempdir() do tmpdir
+            Pkg.activate(".")
+            Pkg.generate("A")
+            cd(mkdir("packages")) do
+                Pkg.generate("A")
+                git_init_and_commit("A")
+            end
+            Pkg.generate("B")
+            project = Pkg.Types.read_project("A/Project.toml")
+            project.name = "B"
+            Pkg.Types.write_project(project, "B/Project.toml")
+            git_init_and_commit("B")
+            Pkg.develop(Pkg.PackageSpec(path = abspath("A")))
+            # package with same name but different uuid exist in project
+            @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("packages", "A")))
+            @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("packages", "A")))
+            # package with same uuid but different name exist in project
+            @test_throws PkgError Pkg.develop(Pkg.PackageSpec(path = abspath("B")))
+            @test_throws PkgError Pkg.add(Pkg.PackageSpec(path = abspath("B")))
+        end
+    end
+end
+
 end # module
