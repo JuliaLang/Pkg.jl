@@ -190,22 +190,33 @@ function isolate(@nospecialize(fn::Function); loaded_depot = false, linked_reg =
     end
 end
 
+# Run `fn` in an isolated depot whose General registry is pinned to `registry_commit`.
+# Only that commit is fetched (a full clone of the registry history takes
+# minutes), and the registry is installed compressed, the way the package
+# server delivers it: Pkg reads it into memory, which avoids checking out
+# the tens of thousands of registry files (minutes on Windows).
 function isolate_and_pin_registry(@nospecialize(fn::Function); registry_url::String, registry_commit::String)
     isolate(loaded_depot = false, linked_reg = true) do
-        this_gen_reg_path = joinpath(first(Base.DEPOT_PATH), "registries", "General")
-        rm(this_gen_reg_path; force = true) # delete the symlinked registry directory
-        # Fetch only the pinned commit: a full clone of the registry history
-        # takes minutes, while a depth-1 fetch of one commit takes seconds.
-        mkpath(this_gen_reg_path)
-        cd(this_gen_reg_path) do
-            for cmd in (
-                    `git init --quiet .`,
-                    `git fetch --quiet --depth=1 $(registry_url) $(registry_commit)`,
-                    `git checkout --quiet FETCH_HEAD`,
-                )
-                run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
-            end
+        registries = joinpath(first(Base.DEPOT_PATH), "registries")
+        rm(joinpath(registries, "General"); force = true) # delete the symlinked registry directory
+        mkpath(registries)
+        mktempdir() do clone
+            git(cmd) = run(pipeline(`git -C $clone $cmd`, stdout = stdout_f(), stderr = stderr_f()))
+            git(`init --quiet .`)
+            git(`fetch --quiet --depth=1 $(registry_url) $(registry_commit)`)
+            git(`archive --format=tar.gz --output=$(joinpath(registries, "General.tar.gz")) FETCH_HEAD`)
+            tree_hash = readchomp(`git -C $clone rev-parse "FETCH_HEAD^{tree}"`)
+            write(
+                joinpath(registries, "General.toml"), """
+                git-tree-sha1 = "$tree_hash"
+                uuid = "$GENERAL_UUID"
+                path = "General.tar.gz"
+                """
+            )
         end
+        # Pkg would otherwise replace the pinned registry with the current one
+        # from the package server on the first operation.
+        Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
         fn()
     end
     return nothing

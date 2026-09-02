@@ -494,7 +494,10 @@ end
 
 if Pkg.Registry.registry_use_pkg_server()
     @testset "compressed registry" begin
-        for unpack in (true, nothing)
+        # Unpacking the General registry takes minutes on Windows (three
+        # times here: two adds and one update), so only the compressed
+        # variant runs there; the unpacked code path is platform independent.
+        for unpack in (Sys.iswindows() ? (nothing,) : (true, nothing))
             withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack) do
                 temp_pkg_dir(; linked_reg = false) do depot
                     # These get restored by temp_pkg_dir
