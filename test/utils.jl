@@ -204,15 +204,25 @@ function isolate_and_pin_registry(@nospecialize(fn::Function); registry_url::Str
             git(cmd) = run(pipeline(`git -C $clone $cmd`, stdout = stdout_f(), stderr = stderr_f()))
             git(`init --quiet .`)
             git(`fetch --quiet --depth=1 $(registry_url) $(registry_commit)`)
-            git(`archive --format=tar.gz --output=$(joinpath(registries, "General.tar.gz")) FETCH_HEAD`)
+            tarball = joinpath(registries, "General.tar.gz")
+            git(`archive --format=tar.gz --output=$tarball FETCH_HEAD`)
             tree_hash = readchomp(`git -C $clone rev-parse "FETCH_HEAD^{tree}"`)
-            write(
-                joinpath(registries, "General.toml"), """
-                git-tree-sha1 = "$tree_hash"
-                uuid = "$GENERAL_UUID"
-                path = "General.tar.gz"
-                """
-            )
+            if Pkg.Registry.registry_read_from_tarball()
+                write(
+                    joinpath(registries, "General.toml"), """
+                    git-tree-sha1 = "$tree_hash"
+                    uuid = "$GENERAL_UUID"
+                    path = "General.tar.gz"
+                    """
+                )
+            else
+                # Compressed registries are only read when a package server is
+                # used; otherwise install the registry as a directory.
+                regdir = joinpath(registries, "General")
+                Pkg.PlatformEngines.unpack(tarball, regdir)
+                write(joinpath(regdir, ".tree_info.toml"), "git-tree-sha1 = \"$tree_hash\"\n")
+                rm(tarball)
+            end
         end
         # Pkg would otherwise replace the pinned registry with the current one
         # from the package server on the first operation.
