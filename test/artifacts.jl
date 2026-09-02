@@ -888,4 +888,47 @@ if Sys.iswindows()
         end
     end
 end
+
+# New artifacts are recorded with the default (byte-correct) symlink tree hash, but
+# older Pkg versions recorded the legacy (character-count) hash. Verification must accept
+# both so artifacts from either era keep installing. `create_artifact` also exposes a
+# `legacy_symlink_size` kwarg to reproduce the old hash for old-Julia compatibility.
+if !Sys.iswindows()
+    @testset "tree hash verification: legacy symlink fallback" begin
+        import Pkg.GitTools
+        mktempdir() do dir
+            # symlink target with a multi-byte UTF-8 character
+            symlink("schön", joinpath(dir, "link"))
+            corrected = SHA1(GitTools.tree_hash(dir))                            # default
+            legacy = SHA1(GitTools.tree_hash(dir; legacy_symlink_size = true))   # old behavior
+            @test corrected != legacy
+
+            # both the byte-correct (default) and the legacy hash are accepted
+            @test Pkg.Artifacts.tree_hash_matches(dir, corrected)
+            @test Pkg.Artifacts.tree_hash_matches(dir, legacy)
+            # an unrelated hash is not
+            @test !Pkg.Artifacts.tree_hash_matches(dir, SHA1("0123456789012345678901234567890123456789"))
+        end
+    end
+
+    @testset "create_artifact legacy_symlink_size kwarg" begin
+        import Pkg.GitTools
+        with_artifacts_directory(mktempdir()) do
+            # default: byte-correct hash
+            h_default = create_artifact() do path
+                symlink("schön", joinpath(path, "link"))
+            end
+            # opt-in: legacy character-count hash, for old-Julia compatibility
+            h_legacy = create_artifact(; legacy_symlink_size = true) do path
+                symlink("schön", joinpath(path, "link"))
+            end
+            @test h_default != h_legacy
+            mktempdir() do dir
+                symlink("schön", joinpath(dir, "link"))
+                @test h_default == SHA1(GitTools.tree_hash(dir))
+                @test h_legacy == SHA1(GitTools.tree_hash(dir; legacy_symlink_size = true))
+            end
+        end
+    end
+end
 end # module

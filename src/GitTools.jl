@@ -292,14 +292,25 @@ function gitmode(path::AbstractString)
 end
 
 """
-    blob_hash(HashType::Type, path::AbstractString)
+    blob_hash(HashType::Type, path::AbstractString; legacy_symlink_size::Bool = false)
 
 Calculate the git blob hash of a given path.
+
+For a symlink the git blob content is the link target, and the blob header records its
+length *in bytes*, matching canonical git. Older versions of this function used the
+number of *characters* (`length(readlink(path))`) instead, which is wrong whenever the
+target contains non-ASCII (multi-byte UTF-8) characters. Pass `legacy_symlink_size =
+true` to reproduce that historical behavior, e.g. to verify or reproduce artifact tree
+hashes recorded by older Pkg versions.
 """
-function blob_hash(::Type{HashType}, path::AbstractString) where {HashType}
+function blob_hash(::Type{HashType}, path::AbstractString; legacy_symlink_size::Bool = false) where {HashType}
     ctx = HashType()
     if islink(path)
-        datalen = length(readlink(path))
+        link = readlink(path)
+        # The git blob header must be the byte length of the content. `length` counts
+        # characters, not bytes, so it is wrong for non-ASCII targets; `sizeof` gives
+        # the correct byte count. `legacy_symlink_size` keeps the old behavior.
+        datalen = legacy_symlink_size ? length(link) : sizeof(link)
     else
         datalen = filesize(path)
     end
@@ -331,7 +342,7 @@ function blob_hash(::Type{HashType}, path::AbstractString) where {HashType}
     # Finish it off and return the digest!
     return SHA.digest!(ctx)
 end
-blob_hash(path::AbstractString) = blob_hash(SHA1_CTX, path)
+blob_hash(path::AbstractString; legacy_symlink_size::Bool = false) = blob_hash(SHA1_CTX, path; legacy_symlink_size)
 
 """
     contains_files(root::AbstractString)
@@ -352,11 +363,15 @@ end
 
 
 """
-    tree_hash(HashType::Type, root::AbstractString)
+    tree_hash(HashType::Type, root::AbstractString; legacy_symlink_size::Bool = false)
 
 Calculate the git tree hash of a given path.
+
+`legacy_symlink_size` is forwarded to `blob_hash`; see there for details. It
+defaults to `false` (the byte-correct, git-matching hashing). Pass `true` to reproduce
+the historical character-count symlink hashing used by older Pkg versions.
 """
-function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, Nothing} = nothing, indent::Int = 0) where {HashType}
+function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, Nothing} = nothing, indent::Int = 0, legacy_symlink_size::Bool = false) where {HashType}
     entries = Tuple{String, Vector{UInt8}, GitMode}[]
     for f in sort(readdir(root; join = true); by = f -> gitmode(f) == mode_dir ? f * "/" : f)
         # Skip `.git` directories
@@ -375,7 +390,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, 
             if debug_out !== nothing
                 child_stream = IOBuffer()
             end
-            hash = tree_hash(HashType, filepath; debug_out = child_stream, indent = indent + 1)
+            hash = tree_hash(HashType, filepath; debug_out = child_stream, indent = indent + 1, legacy_symlink_size)
             if debug_out !== nothing
                 indent_str = "| "^indent
                 println(debug_out, "$(indent_str)+ [D] $(basename(filepath)) - $(bytes2hex(hash))")
@@ -383,7 +398,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, 
                 println(debug_out, indent_str)
             end
         else
-            hash = blob_hash(HashType, filepath)
+            hash = blob_hash(HashType, filepath; legacy_symlink_size)
             if debug_out !== nothing
                 indent_str = "| "^indent
                 mode_str = mode == mode_normal ? "F" : "X"
@@ -407,7 +422,7 @@ function tree_hash(::Type{HashType}, root::AbstractString; debug_out::Union{IO, 
     end
     return SHA.digest!(ctx)
 end
-tree_hash(root::AbstractString; debug_out::Union{IO, Nothing} = nothing) = tree_hash(SHA.SHA1_CTX, root; debug_out)
+tree_hash(root::AbstractString; debug_out::Union{IO, Nothing} = nothing, legacy_symlink_size::Bool = false) = tree_hash(SHA.SHA1_CTX, root; debug_out, legacy_symlink_size)
 
 function check_valid_HEAD(repo)
     return try
