@@ -111,9 +111,10 @@ module PkgTestsInner
                     haskey(ENV, "CI") ? joinpath(Utils.CACHE_DIRECTORY, "pkg_server_cache") :
                         joinpath(first(Base.DEPOT_PATH), "scratchspaces", "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "pkg_server_cache")
                 end
-                PkgServerProxy.start!(upstream = Pkg.pkg_server(), cache_dir = proxy_cache)
-                Utils.check_init_reg()
-                Utils.populate_loaded_depot!()
+                t_proxy = @elapsed PkgServerProxy.start!(upstream = Pkg.pkg_server(), cache_dir = proxy_cache)
+                t_registry = @elapsed Utils.check_init_reg()
+                t_depot = @elapsed Utils.populate_loaded_depot!()
+                return (; t_proxy, t_registry, t_depot)
             end
         end
     end
@@ -144,7 +145,10 @@ module PkgTestsInner
             end
         end
 
-        args.list === nothing && setup_shared_test_state()
+        if args.list === nothing
+            t_setup = @elapsed setup_times = setup_shared_test_state()
+            @info "Shared test state set up" total = t_setup pkg_server_proxy = setup_times.t_proxy registry = setup_times.t_registry loaded_depot = setup_times.t_depot
+        end
 
         # Run once per worker process, in its `Main`
         init_worker_code = quote
