@@ -74,6 +74,7 @@ jobs:
         with:
           coverage: true
           depwarn: error
+          test_args: '--verbose'
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
