@@ -466,7 +466,7 @@ end
                 mkpath(joinpath(parent, name))
                 api, args, opts = first(Pkg.REPLMode.pkgstr("add \"$parent/$name\""))
                 @test api == Pkg.add
-                @test args == [Pkg.PackageSpec(; path = "$parent/$name")]
+                @test args == [Pkg.PackageSpec(; path = normpath("$parent/$name"))]
                 @test isempty(opts)
             end
             dir1, name1 = "two space dir", "name1"
@@ -475,7 +475,7 @@ end
             mkpath(joinpath(dir2, name2))
             api, args, opts = first(Pkg.REPLMode.pkgstr("add '$dir1/$name1' \"$dir2/$name2\""))
             @test api == Pkg.add
-            @test args == [Pkg.PackageSpec(; path = "$dir1/$name1"), Pkg.PackageSpec(; path = "$dir2/$name2")]
+            @test args == [Pkg.PackageSpec(; path = normpath("$dir1/$name1")), Pkg.PackageSpec(; path = normpath("$dir2/$name2"))]
             @test isempty(opts)
         end
     end

@@ -134,7 +134,10 @@ module PkgTestsInner
             testsuite[chopsuffix(f, ".jl")] = quote
                 @with Pkg.DEFAULT_IO => Main.PKG_TEST_IO begin
                     Logging.with_logger(Logging.ConsoleLogger(Main.PKG_TEST_IO)) do
-                        include($path)
+                        ts = @testset $f begin
+                            include($path)
+                        end
+                        Main.print_testset_times(Main.PKG_TEST_IO, ts)
                     end
                 end
                 Main.PKG_TEST_IO === devnull || flush(Main.PKG_TEST_IO)
@@ -153,6 +156,19 @@ module PkgTestsInner
             # Per-worker destination for Pkg output during tests
             const PKG_TEST_IO = let logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
                 logdir === nothing ? devnull : open(joinpath(logdir, "Pkg-worker-$(getpid()).log"), "a")
+            end
+            # Record the time of every top-level testset of a test file in the
+            # worker log, so that slow tests can be found from the CI logs.
+            using Test: Test
+            function print_testset_times(io::IO, ts::Test.DefaultTestSet)
+                io === devnull && return
+                println(io, "==== Testset times for `", ts.description, "`")
+                for r in ts.results
+                    r isa Test.DefaultTestSet || continue
+                    t = r.time_end === nothing ? NaN : r.time_end - r.time_start
+                    println(io, "  ", rpad(r.description, 70), " ", lpad(round(t; digits = 1), 7), " s")
+                end
+                return
             end
             # make sure we're in an active project and that it's clean
             Pkg.activate(; temp = true, io = PKG_TEST_IO)

@@ -70,6 +70,12 @@ jobs:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
       - uses: julia-actions/cache@v3
+      - name: Use two test workers on macOS
+        # The macOS runners have little free memory, so the test runner
+        # would use a single worker. Two workers fit if each is restarted
+        # once its RSS grows past 1.5 GiB.
+        if: runner.os == 'macOS'
+        run: echo "JULIA_TEST_MAXRSS_MB=1500" >> ${GITHUB_ENV}
       - uses: julia-actions/julia-runtest@v1
         with:
           # Coverage is disabled: with `--code-coverage` julia cannot use the
@@ -78,7 +84,7 @@ jobs:
           # which roughly doubles the time of the test suite.
           coverage: false
           depwarn: error
-          test_args: '--verbose'
+          test_args: ${{ runner.os == 'macOS' && '--verbose --jobs=2' || '--verbose' }}
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
