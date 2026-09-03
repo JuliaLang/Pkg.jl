@@ -219,7 +219,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
             auth_info["expires_at"] = expires_at
         end
     end
-    atomic_toml_write(auth_file, auth_info, sorted = true)
+    atomic_toml_write(auth_file, auth_info, sorted = true, private = true)
     access_token = auth_info["access_token"]::String
     return "Authorization" => "Bearer $access_token"
 end
