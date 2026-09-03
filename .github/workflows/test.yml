@@ -90,7 +90,7 @@ jobs:
         # which roughly doubles the time of the test suite.
         run: julia --color=yes -e 'using Pkg; Pkg.activate("."); Pkg.test(; coverage = false, julia_args = ["--check-bounds=yes", "--depwarn=error"], test_args = split(ENV["PKG_TEST_ARGS"]))'
         env:
-          PKG_TEST_ARGS: ${{ runner.os == 'macOS' && '--verbose --jobs=3' || '--verbose' }}
+          PKG_TEST_ARGS: ${{ runner.os == 'macOS' && '--jobs=3' || '' }}
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
       - uses: actions/upload-artifact@v7
