@@ -67,4 +67,33 @@ end
     @test ps_versioned.version == "1.0.0"
 end
 
+@testset "atomic_toml_write" begin
+    mktempdir() do dir
+        path = joinpath(dir, "Foo.toml")
+        Pkg.atomic_toml_write(path, Dict("a" => "b"))
+        @test Pkg.TOML.parsefile(path) == Dict("a" => "b")
+        # no temporary files or directories are left behind
+        @test readdir(dir) == ["Foo.toml"]
+
+        # files are written with the default permissions of the process, not with
+        # `mktemp`'s 0o600, since e.g. registry files may need to be readable by others
+        reference = joinpath(dir, "reference")
+        close(open(reference, "w"))
+        @test filemode(path) & 0o777 == filemode(reference) & 0o777
+
+        private_path = joinpath(dir, "Private.toml")
+        Pkg.atomic_toml_write(private_path, Dict("a" => "b"), private = true)
+        # Windows has no real file modes, `chmod` there only toggles the read-only bit
+        if !Sys.iswindows()
+            @test filemode(private_path) & 0o777 == 0o600
+
+            # the permissions of an existing file are preserved
+            chmod(path, 0o664)
+            Pkg.atomic_toml_write(path, Dict("a" => "c"))
+            @test filemode(path) & 0o777 == 0o664
+            @test Pkg.TOML.parsefile(path) == Dict("a" => "c")
+        end
+    end
+end
+
 end # module
