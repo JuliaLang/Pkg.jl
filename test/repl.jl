@@ -1085,7 +1085,7 @@ end
 
 # Autocompletions
 @testset "tab completion while offline" begin
-    temp_pkg_dir() do project_path
+    temp_pkg_dir(; linked_reg = false) do project_path # starts without registries
         cd(project_path) do
             # No registry and no network connection
             Pkg.offline()

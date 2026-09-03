@@ -401,7 +401,7 @@ end
 end
 
 @testset "allow_reresolve parameter" begin
-    isolate(loaded_depot = false) do;
+    isolate(loaded_depot = false, linked_reg = false) do; # starts without registries
         mktempdir() do tempdir
             Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
             # AllowReresolveTest has Example v0.5.1 which is yanked in the test registry.
