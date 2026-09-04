@@ -294,6 +294,37 @@ using Test
         end
     end
 
+    @testset "windows shim quoting (#4741)" begin
+        julia = "C:\\Users\\test user\\.julia\\juliaup\\julia-1.12.6+0.x64.w64.mingw32\\bin\\julia.exe"
+        content = Pkg.Apps.windows_shim(julia, "Rot13", pwd(), String[])
+        # julia_cmd must be stored unquoted; the call sites add the quotes
+        @test occursin("set \"julia_cmd=$julia\"", content)
+        @test occursin("\"%julia_cmd%\"", content)
+        @test !occursin("julia_cmd=\"", content)
+        # a literal `%` is doubled for the batch parser
+        content = Pkg.Apps.windows_shim("C:\\julia %20\\bin\\julia.exe", "Rot13", pwd(), String[])
+        @test occursin("set \"julia_cmd=C:\\julia %%20\\bin\\julia.exe\"", content)
+    end
+
+    if Sys.iswindows()
+        # Run a shim whose julia executable path contains a space (#4741)
+        isolate(loaded_depot = true) do
+            mktempdir() do tmpdir
+                mock_dir = joinpath(tmpdir, "dir with space")
+                mkpath(mock_dir)
+                mock_julia = joinpath(mock_dir, "julia.bat")
+                write(mock_julia, "@echo off\r\necho MOCK_JULIA_EXECUTED %*\r\n")
+                app = Pkg.Types.AppInfo("spacequote", nothing, nothing, String[], Dict{String, Any}())
+                Pkg.Apps.generate_shim("SpaceQuote", app, tmpdir, mock_julia)
+                shim = joinpath(first(DEPOT_PATH), "bin", "spacequote.bat")
+                @test isfile(shim)
+                out = read(`$shim arg1`, String)
+                @test contains(out, "MOCK_JULIA_EXECUTED")
+                @test contains(out, "arg1")
+            end
+        end
+    end
+
     isolate(loaded_depot = true) do
         Pkg.Registry.add("General")
         Pkg.Apps.add(name = "Runic", version = "1.5.1")

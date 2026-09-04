@@ -15,9 +15,12 @@ import Pkg.Registry
 public add, rm, status, update, develop
 
 app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
+app_env_dir(pkgname) = joinpath(app_env_folder(), pkgname)
 app_manifest_file() = joinpath(app_env_folder(), "AppManifest.toml")
 julia_bin_path() = joinpath(first(DEPOT_PATH), "bin")
 julia_executable() = joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
+shim_filename(name) = name * (Sys.iswindows() ? ".bat" : "")
+shim_path(name) = joinpath(julia_bin_path(), shim_filename(name))
 
 app_context() = Context(env = EnvCache(joinpath(app_env_folder(), "Project.toml")))
 
@@ -69,7 +72,7 @@ end
 
 function rm_shim(name; kwargs...)
     validate_app_name(name)
-    return Base.rm(joinpath(julia_bin_path(), name * (Sys.iswindows() ? ".bat" : "")); kwargs...)
+    return Base.rm(shim_path(name); kwargs...)
 end
 
 function get_project(sourcepath)
@@ -97,8 +100,7 @@ end
 
 function check_apps_in_path(apps)
     for app_name in keys(apps)
-        which_name = app_name * (Sys.iswindows() ? ".bat" : "")
-        which_result = Sys.which(which_name)
+        which_result = Sys.which(shim_filename(app_name))
         if which_result === nothing
             @warn """
             App '$app_name' was installed but is not available in PATH.
@@ -107,7 +109,7 @@ function check_apps_in_path(apps)
             break  # Only show warning once per installation
         else
             # Check for collisions
-            expected_path = joinpath(julia_bin_path(), app_name * (Sys.iswindows() ? ".bat" : ""))
+            expected_path = shim_path(app_name)
             if which_result != expected_path
                 @warn """
                 App '$app_name' collision detected:
@@ -119,6 +121,12 @@ function check_apps_in_path(apps)
         end
     end
     return
+end
+
+# PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be a VersionSpec
+function package_entry(pkg::PackageSpec, project, path)
+    version = project.version isa VersionNumber ? project.version : nothing
+    return PackageEntry(; apps = project.apps, name = pkg.name, version, tree_hash = pkg.tree_hash, path, repo = pkg.repo, uuid = pkg.uuid)
 end
 
 function get_max_version_register(pkg::PackageSpec, regs)
@@ -186,7 +194,7 @@ function _resolve(manifest::Manifest, pkgname = nothing)
 
         # TODO: Add support for existing manifest
 
-        projectfile = joinpath(app_env_folder(), pkg.name, "Project.toml")
+        projectfile = joinpath(app_env_dir(pkg.name), "Project.toml")
 
         sourcepath = source_path(app_manifest_file(), pkg)
         original_project_file = projectfile_path(sourcepath)
@@ -251,7 +259,7 @@ function _resolve(manifest::Manifest, pkgname = nothing)
         end
 
         # Create a manifest with the manifest entry
-        Pkg.activate(joinpath(app_env_folder(), pkg.name)) do
+        Pkg.activate(app_env_dir(pkg.name)) do
             ctx = Context()
             ctx.env.manifest.deps[uuid] = pkg
             Pkg.resolve(ctx)
@@ -316,16 +324,12 @@ function _add(pkg::PackageSpec)
         new = Pkg.Operations.download_source(ctx, pkgs)
     end
 
-    # Run Pkg.build()?
-
-    Base.rm(joinpath(app_env_folder(), pkg.name); force = true, recursive = true)
+    Base.rm(app_env_dir(pkg.name); force = true, recursive = true)
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
     reconcile_shims(manifest, pkg, project)
     # TODO: Wrong if package itself has a sourcepath?
-    # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be VersionSpec
-    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version isa VersionNumber ? project.version : nothing, tree_hash = pkg.tree_hash, path = pkg.path, repo = pkg.repo, uuid = pkg.uuid)
-    manifest.deps[pkg.uuid] = entry
+    manifest.deps[pkg.uuid] = package_entry(pkg, project, pkg.path)
 
     _resolve(manifest, pkg.name)
     if new === true || (new isa Set{UUID} && pkg.uuid in new)
@@ -367,7 +371,7 @@ function _develop(pkg::PackageSpec)
     handle_package_input!(pkg)
     ctx = app_context()
     handle_repo_develop!(ctx, pkg, #=shared =# true)
-    Base.rm(joinpath(app_env_folder(), pkg.name); force = true, recursive = true)
+    Base.rm(app_env_dir(pkg.name); force = true, recursive = true)
     sourcepath = abspath(source_path(ctx.env.manifest_file, pkg))
     project = get_project(sourcepath)
 
@@ -379,11 +383,9 @@ function _develop(pkg::PackageSpec)
         pkg.repo.source = nothing
     end
 
-    # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be VersionSpec
-    entry = PackageEntry(; apps = project.apps, name = pkg.name, version = project.version isa VersionNumber ? project.version : nothing, tree_hash = pkg.tree_hash, path = sourcepath, repo = pkg.repo, uuid = pkg.uuid)
     manifest = ctx.env.manifest
     reconcile_shims(manifest, pkg, project)
-    manifest.deps[pkg.uuid] = entry
+    manifest.deps[pkg.uuid] = package_entry(pkg, project, sourcepath)
 
     # For dev, we don't create an app environment - just point shims directly to the dev'd project
     write_manifest(manifest, app_manifest_file())
@@ -521,7 +523,7 @@ function precompile(pkg::Union{Nothing, String} = nothing)
         end
         # Developed apps run directly from their project, tracked ones from the app environment
         env_dir = info.path !== nothing ? abspath(source_path(app_manifest_file(), info)) :
-            joinpath(app_env_folder(), info.name)
+            app_env_dir(info.name)
         Pkg.activate(env_dir) do
             Pkg.instantiate()
             Pkg.precompile()
@@ -572,7 +574,7 @@ function _rm(pkg_or_app::Union{PackageSpec, Nothing})
             rm_shim(appname; force = true)
         end
         if dep.path === nothing
-            Base.rm(joinpath(app_env_folder(), dep.name); recursive = true, force = true)
+            Base.rm(app_env_dir(dep.name); recursive = true, force = true)
         end
     else
         found = false
@@ -587,7 +589,7 @@ function _rm(pkg_or_app::Union{PackageSpec, Nothing})
             if isempty(pkg.apps)
                 delete!(manifest.deps, uuid)
                 if pkg.path === nothing
-                    Base.rm(joinpath(app_env_folder(), pkg.name); recursive = true, force = true)
+                    Base.rm(app_env_dir(pkg.name); recursive = true, force = true)
                 end
             end
         end
@@ -596,7 +598,7 @@ function _rm(pkg_or_app::Union{PackageSpec, Nothing})
         end
     end
     # XXX: What happens if something fails above and we do not write out the updated manifest?
-    Pkg.Types.write_manifest(manifest, app_manifest_file())
+    write_manifest(manifest, app_manifest_file())
     return
 end
 
@@ -628,7 +630,7 @@ end
 #########
 
 const SHIM_COMMENT = Sys.iswindows() ? "REM " : "#"
-const SHIM_VERSION = 1.3
+const SHIM_VERSION = 1.4
 const SHIM_HEADER = """$SHIM_COMMENT This file is generated by the Julia package manager.
 $SHIM_COMMENT Shim version: $SHIM_VERSION"""
 
@@ -640,7 +642,7 @@ function stacked_depots()
 end
 
 function generate_shims_for_apps(pkgname, apps, env, julia)
-    for (_, app) in apps
+    for app in values(apps)
         generate_shim(pkgname, app, env, julia)
     end
     return
@@ -653,18 +655,9 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 
     module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
 
-    filename = app.name * (Sys.iswindows() ? ".bat" : "")
-    julia_bin_filename = joinpath(julia_bin_path(), filename)
-    mkpath(dirname(julia_bin_filename))
-    content = if Sys.iswindows()
-        julia_escaped = "\"$(Base.shell_escape_wincmd(julia))\""
-        module_spec_escaped = "\"$(Base.shell_escape_wincmd(module_spec))\""
-        windows_shim(julia_escaped, module_spec_escaped, env, app.julia_flags)
-    else
-        julia_escaped = Base.shell_escape(julia)
-        module_spec_escaped = Base.shell_escape(module_spec)
-        shell_shim(julia_escaped, module_spec_escaped, env, app.julia_flags)
-    end
+    julia_bin_filename = shim_path(app.name)
+    content = Sys.iswindows() ? windows_shim(julia, module_spec, env, app.julia_flags) :
+        shell_shim(julia, module_spec, env, app.julia_flags)
     overwrite_file_if_different(julia_bin_filename, content)
     return if Sys.isunix()
         chmod(julia_bin_filename, 0o755)
@@ -672,7 +665,9 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function shell_shim(julia_escaped::String, module_spec_escaped::String, env, julia_flags::Vector{String})
+function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector{String})
+    julia_escaped = Base.shell_escape(julia)
+    module_spec_escaped = Base.shell_escape(module_spec)
     julia_flags_escaped = join(Base.shell_escape.(julia_flags), " ")
     julia_flags_part = isempty(julia_flags) ? "" : " $julia_flags_escaped"
 
@@ -742,13 +737,16 @@ function shell_shim(julia_escaped::String, module_spec_escaped::String, env, jul
     """
 end
 
-function windows_shim(
-        julia_escaped::String,
-        module_spec_escaped::String,
-        env,
-        julia_flags::Vector{String},
-    )
-    flags_escaped = join(Base.shell_escape_wincmd.(julia_flags), " ")
+# Escape a value for `set "var=..."` in a batch script: the quotes keep cmd
+# metacharacters literal so only `%` needs doubling
+function escape_batch_set_value(s::AbstractString)
+    occursin(r"[\"\r\n\0]", s) && pkgerror("cannot use $(repr(s)) in a Windows batch script")
+    return replace(s, "%" => "%%")
+end
+
+function windows_shim(julia::String, module_spec::String, env, julia_flags::Vector{String})
+    # Flags end up unquoted on the command line so escape cmd metacharacters
+    flags_escaped = join((replace(Base.shell_escape_wincmd(f), "%" => "%%") for f in julia_flags), " ")
     flags_part = isempty(julia_flags) ? "" : " $flags_escaped"
 
     depot = normpath(first(DEPOT_PATH))
@@ -756,13 +754,13 @@ function windows_shim(
     # Environments inside the depot are located relative to it so that the
     # depot can be relocated (developed projects keep their absolute path)
     load_path = if startswith(env, joinpath(depot, ""))
-        "%depot%\\$(relpath(env, depot))"
+        "%depot%\\$(escape_batch_set_value(relpath(env, depot)))"
     else
-        env
+        escape_batch_set_value(env)
     end
 
     # Stacked depots stay baked in so packages installed in them remain loadable
-    depot_path = "%depot%;" * join(d * ";" for d in stacked_depots())
+    depot_path = "%depot%;" * join(escape_batch_set_value(d) * ";" for d in stacked_depots())
 
     return """
     @echo off
@@ -773,7 +771,7 @@ function windows_shim(
     rem --- Locate the depot from the location of this script (<depot>\\bin\\<app>) so
     rem --- that a relocated depot keeps working; fall back to the install time depot
     for %%I in ("%~dp0..") do set "depot=%%~fI"
-    if not exist "%depot%\\environments\\apps\\AppManifest.toml" set "depot=$depot"
+    if not exist "%depot%\\environments\\apps\\AppManifest.toml" set "depot=$(escape_batch_set_value(depot))"
 
     rem --- Environment (no delayed expansion here to keep '!' literal) ---
     rem --- (the trailing ';' appends the default system depots) ---
@@ -781,10 +779,11 @@ function windows_shim(
     set "JULIA_DEPOT_PATH=$depot_path"
 
     rem --- Allow overriding Julia executable via environment variable ---
+    rem --- julia_cmd holds an unquoted path; the call sites add the quotes ---
     if defined JULIA_APPS_JULIA_CMD (
         set "julia_cmd=%JULIA_APPS_JULIA_CMD%"
     ) else (
-        set "julia_cmd=$julia_escaped"
+        set "julia_cmd=$(escape_batch_set_value(julia))"
     )
 
     rem --- Now enable delayed expansion for string building below ---
@@ -829,12 +828,12 @@ function windows_shim(
     if defined found_sep (
         "%julia_cmd%" ^
             --startup-file=no$flags_part !julia_args! ^
-            -m $module_spec_escaped ^
+            -m "$module_spec" ^
             !app_args!
     ) else (
         "%julia_cmd%" ^
             --startup-file=no$flags_part ^
-            -m $module_spec_escaped ^
+            -m "$module_spec" ^
             %*
     )
     """
