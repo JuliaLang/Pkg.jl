@@ -292,4 +292,89 @@ end
     end
 end
 
+# Project.toml is authored input; `resolve` and `instantiate` produce the manifest and
+# must never rewrite it. A top-level workspace [sources] entry with a deliberately
+# non-canonical path and an authored comment is the tripwire: writing the project would
+# normalize the path (`./Leaf` -> `Leaf`) and drop the comment, so any project write shows
+# up as a byte change.
+@testset "resolve/instantiate only read Project.toml" begin
+    leaf_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    mktempdir() do dir
+        # A local leaf package tracked by path from the top-level project.
+        mkpath(joinpath(dir, "Leaf", "src"))
+        write(
+            joinpath(dir, "Leaf", "Project.toml"),
+            """
+            name = "Leaf"
+            uuid = "$leaf_uuid"
+            version = "0.1.0"
+            """
+        )
+        write(joinpath(dir, "Leaf", "src", "Leaf.jl"), "module Leaf\nend\n")
+
+        # A workspace member, so this is a genuine workspace.
+        mkpath(joinpath(dir, "sub", "src"))
+        write(
+            joinpath(dir, "sub", "Project.toml"),
+            """
+            name = "Sub"
+            uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            version = "0.1.0"
+            """
+        )
+        write(joinpath(dir, "sub", "src", "Sub.jl"), "module Sub\nend\n")
+
+        # The top-level project carries [workspace] and a [sources] entry whose path is
+        # written non-canonically and is preceded by a hand-authored comment.
+        project_file = joinpath(dir, "Project.toml")
+        write(
+            project_file,
+            """
+            name = "Root"
+            uuid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+            version = "0.1.0"
+
+            [deps]
+            Leaf = "$leaf_uuid"
+
+            [workspace]
+            projects = ["sub"]
+
+            # DO-NOT-DROP: authored comment a lossy project rewrite would delete
+            [sources]
+            Leaf = {path = "./Leaf"}
+            """
+        )
+        authored = read(project_file, String)
+        manifest_file = joinpath(dir, "Manifest.toml")
+
+        cd(dir) do
+            with_current_env() do
+                Pkg.activate(".")
+
+                # `resolve` produces the manifest and must leave Project.toml untouched.
+                Pkg.resolve()
+                @test read(project_file, String) == authored
+
+                # `instantiate` with a present, consistent manifest must not rewrite it.
+                Pkg.instantiate()
+                @test read(project_file, String) == authored
+
+                # `instantiate` with no manifest falls back to `up`; still no project write.
+                rm(manifest_file; force = true)
+                Pkg.instantiate()
+                @test isfile(manifest_file)
+                @test read(project_file, String) == authored
+
+                # `instantiate(update_on_mismatch=true)` on a mismatched manifest also falls
+                # back to `up`; the manifest is refreshed but Project.toml must not change.
+                stale = replace(read(manifest_file, String), r"julia_version = \"[^\"]*\"" => "julia_version = \"0.0.0\"")
+                write(manifest_file, stale)
+                Pkg.instantiate(update_on_mismatch = true)
+                @test read(project_file, String) == authored
+            end
+        end
+    end
+end
+
 end # module

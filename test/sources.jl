@@ -11,7 +11,8 @@ temp_pkg_dir() do project_path
             path = copy_test_package(dir, "WithSources")
             cd(path) do
                 with_current_env() do
-                    Pkg.resolve()
+                    # Request project writing explicitly to sync [sources] back into Project.toml.
+                    Pkg.resolve(; skip_writing_project = false)
                     @test !isempty(Pkg.project().sources["Example"])
                     project_backup = cp("Project.toml", "Project.toml.bak"; force = true)
                     Pkg.free("Example")
@@ -21,7 +22,7 @@ temp_pkg_dir() do project_path
                     @test Pkg.project().sources["Example"] == Dict("url" => "https://github.com/JuliaLang/Example.jl/", "rev" => "78406c204b8")
                     cp("Project.toml.bak", "Project.toml"; force = true)
                     cp("BadManifest.toml", "Manifest.toml"; force = true)
-                    Pkg.resolve()
+                    Pkg.resolve(; skip_writing_project = false)
                     @test Pkg.project().sources["Example"] == Dict("rev" => "master", "url" => "https://github.com/JuliaLang/Example.jl")
                     @test Pkg.project().sources["LocalPkg"] == Dict("path" => "LocalPkg")
                 end

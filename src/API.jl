@@ -482,7 +482,7 @@ function up(
 end
 
 resolve(; io::IO = stderr_f(), kwargs...) = resolve(Context(; io); kwargs...)
-function resolve(ctx::Context; skip_writing_project::Bool = false, kwargs...)
+function resolve(ctx::Context; skip_writing_project::Bool = true, kwargs...)
     up(ctx; level = UPLEVEL_FIXED, mode = PKGMODE_MANIFEST, update_registry = false, skip_writing_project, kwargs...)
     return nothing
 end
@@ -1321,7 +1321,8 @@ function instantiate(
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
-        up(ctx; update_registry = update_registry && allow_registry_update)
+        # instantiate produces the manifest; it must not rewrite the authored Project.toml.
+        up(ctx; update_registry = update_registry && allow_registry_update, skip_writing_project = true)
         allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
@@ -1340,7 +1341,8 @@ function instantiate(
             saved_initial_snapshot[] = true
         end
         printpkgstyle(ctx.io, :Update, "manifest does not match project or Julia version, falling back to `Pkg.update()`", color = Base.info_color())
-        up(ctx; update_registry, mode = workspace ? PKGMODE_MANIFEST : PKGMODE_PROJECT)
+        # instantiate produces the manifest; it must not rewrite the authored Project.toml.
+        up(ctx; update_registry, mode = workspace ? PKGMODE_MANIFEST : PKGMODE_PROJECT, skip_writing_project = true)
         allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end

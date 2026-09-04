@@ -1,6 +1,11 @@
 Pkg v1.14 Release Notes
 =======================
 
+- `Pkg.resolve` and `Pkg.instantiate` no longer rewrite `Project.toml`. Project.toml is authored input and the
+  manifest is the derived output; these commands only produce the manifest and must not edit the project as a side
+  effect. Previously, resolving or instantiating an environment whose `Project.toml` contained a `[sources]` entry
+  (for example a top-level project in a workspace) could rewrite the file, normalizing paths and dropping comments
+  and formatting. Pass `skip_writing_project=false` to opt back into the old behavior. ([#4713])
 - `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
   `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
   or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and
