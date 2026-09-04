@@ -272,9 +272,14 @@ function load_all_deps(
     return load_direct_deps(env, pkgs; preserve = preserve)
 end
 
-function load_all_deps_loadable(env::EnvCache)
+function load_all_deps_loadable(env::EnvCache; workspace::Bool = false)
     deps = load_all_deps(env)
     keep = Set{UUID}(values(env.project.deps))
+    if workspace
+        for (_, project) in env.workspace
+            union!(keep, values(project.deps))
+        end
+    end
     prune_deps(env.manifest, keep)
     filtered = filter(pkg -> pkg.uuid in keep, deps)
     return filtered

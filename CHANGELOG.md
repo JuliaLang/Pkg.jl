@@ -1,6 +1,11 @@
 Pkg v1.14 Release Notes
 =======================
 
+- `Pkg.dependencies` and `Pkg.project` now accept a `workspace::Bool=false` keyword argument.
+  With `workspace=true`, `Pkg.dependencies` returns the dependency graphs of all projects in the
+  workspace, and `Pkg.project` returns a `ProjectInfo` whose `dependencies` field holds the merged
+  direct dependencies of the whole workspace. The default preserves the previous active-project-only
+  behavior.
 - `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
   `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
   or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and

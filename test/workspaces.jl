@@ -147,6 +147,25 @@ temp_pkg_dir() do project_path
                     @test pkg.version > v"1.1.2"
                 end
 
+                # dependencies/project with workspace reflect the whole workspace, not just the root.
+                # TestSpecificPackage is a direct dep of the `test` workspace member only, and is not
+                # reachable from the root project's dependency closure.
+                active_dep_names = Set(info.name for info in values(Pkg.dependencies()))
+                ws_dep_names = Set(info.name for info in values(Pkg.dependencies(; workspace = true)))
+                @test !("TestSpecificPackage" in active_dep_names)
+                @test "TestSpecificPackage" in ws_dep_names
+
+                root_deps = keys(Pkg.project().dependencies)
+                ws_deps = keys(Pkg.project(; workspace = true).dependencies)
+                # the active project's direct deps do not include a subproject-only dep
+                @test "Example" in root_deps
+                @test !("TestSpecificPackage" in root_deps)
+                # the workspace-merged direct deps include subproject-only deps
+                @test "Example" in ws_deps
+                @test "TestSpecificPackage" in ws_deps
+                # project() must not be mutated by the workspace merge
+                @test !("TestSpecificPackage" in keys(Pkg.project().dependencies))
+
                 # Test that the subprojects are working
                 depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
                 # The subprocesses run no Pkg code; with coverage enabled they

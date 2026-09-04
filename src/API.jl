@@ -87,9 +87,9 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
     return info
 end
 
-dependencies() = dependencies(EnvCache())
-function dependencies(env::EnvCache)
-    pkgs = Operations.load_all_deps_loadable(env)
+dependencies(; workspace::Bool = false) = dependencies(EnvCache(); workspace)
+function dependencies(env::EnvCache; workspace::Bool = false)
+    pkgs = Operations.load_all_deps_loadable(env; workspace)
     return Dict(pkg.uuid::UUID => package_info(env, pkg) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
@@ -111,15 +111,23 @@ Base.@kwdef struct ProjectInfo
     path::String
 end
 
-project() = project(EnvCache())
-function project(env::EnvCache)::ProjectInfo
+project(; workspace::Bool = false) = project(EnvCache(); workspace)
+function project(env::EnvCache; workspace::Bool = false)::ProjectInfo
     pkg = env.pkg
+    if workspace
+        deps = copy(env.project.deps)
+        for (_, wproj) in env.workspace
+            merge!(deps, wproj.deps)
+        end
+    else
+        deps = env.project.deps
+    end
     return ProjectInfo(
         name = pkg === nothing ? nothing : pkg.name,
         uuid = pkg === nothing ? nothing : pkg.uuid,
         version = pkg === nothing ? nothing : pkg.version::VersionNumber,
         ispackage = pkg !== nothing,
-        dependencies = env.project.deps,
+        dependencies = deps,
         sources = env.project.sources,
         path = env.project_file
     )
