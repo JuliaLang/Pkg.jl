@@ -45,6 +45,8 @@ compound_declarations = [
         PSA[
             :name => "instantiate",
             :api => API.instantiate,
+            :arg_count => 0 => Inf,
+            :arg_parser => parse_instantiate,
             :option_spec => [
                 PSA[:name => "project", :short_name => "p", :api => :manifest => false],
                 PSA[:name => "manifest", :short_name => "m", :api => :manifest => true],
@@ -58,6 +60,7 @@ compound_declarations = [
                     instantiate [-v|--verbose] [--workspace] [--julia_version_strict] [-u|--update_on_mismatch]
                     instantiate [-v|--verbose] [--workspace] [--julia_version_strict] [-u|--update_on_mismatch] [-m|--manifest]
                     instantiate [-v|--verbose] [--workspace] [--julia_version_strict] [-u|--update_on_mismatch] [-p|--project]
+                    instantiate [options] path...
 
                 Download all the dependencies for the current project at the version given by the project's manifest.
                 If no manifest exists or the `--project` option is given, resolve and download the dependencies compatible with the project.
@@ -66,6 +69,10 @@ compound_declarations = [
                 If `-u`/`--update_on_mismatch` is given, fall back to `pkg> update` when the manifest does not match the project or
                 was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling environments
                 where any compatible set of dependency versions is acceptable.
+
+                If one or more `path`s are given, each environment at those paths (a project file or a directory containing one)
+                is instantiated in turn, without changing the active environment. The registries are read once and shared across
+                all of them, which is more convenient and efficient than activating and instantiating each separately.
 
                 After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
                 """,

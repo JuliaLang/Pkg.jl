@@ -5,6 +5,9 @@ Pkg v1.14 Release Notes
   `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
   or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and
   helper environments where any compatible set of dependency versions is acceptable. ([#4678])
+- `Pkg.instantiate` can now instantiate several environments in one call by passing multiple paths
+  (`Pkg.instantiate("env1", "env2")`, or `pkg> instantiate env1 env2`). The registries are read from disk once and
+  shared across all environments, and the active environment is left unchanged. ([#4698])
 - `Pkg.activate` now warns when packages already loaded into the session differ
   from what the newly activated environment specifies (different version or
   source path). This makes accidental reproducibility issues and unnecessary
