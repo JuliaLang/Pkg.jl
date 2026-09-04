@@ -1,6 +1,9 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Pkg no longer creates a `[sources]` entry for a dependency that is itself a project in the same workspace. Such a
+  dependency is already located through workspace membership, so the entry was redundant. Existing `[sources]` entries
+  are still honored.
 - `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
   `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
   or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and

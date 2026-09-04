@@ -320,10 +320,10 @@ The resulting `test/Project.toml` will look like:
 [deps]
 HelloWorld = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"  # UUID from HelloWorld's Project.toml
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[sources]
-HelloWorld = {path = ".."}
 ```
+
+Note that no `[sources]` entry is written for `HelloWorld`. Because it is a project in the same
+workspace, the package manager locates it automatically, so a source would be redundant.
 
 You can now use `Test` in the test script:
 

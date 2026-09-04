@@ -1402,8 +1402,15 @@ function write_env(
         skip_writing_project::Bool = false,
         skip_readonly_check::Bool = false
     )
+    # UUIDs of the other projects in the workspace. A dependency on one of these
+    # resolves to that project's path through workspace membership, so a `[sources]`
+    # entry for it only duplicates information the workspace already provides. Honor
+    # such an entry if the user already authored one, but never synthesize a new one.
+    workspace_uuids = Set{UUID}(p.uuid for p in values(env.workspace) if p.uuid !== nothing)
+
     # Verify that the generated manifest is consistent with `sources`
     for (pkg, uuid) in env.project.deps
+        uuid in workspace_uuids && !haskey(env.original_project.sources, pkg) && continue
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing

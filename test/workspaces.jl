@@ -236,6 +236,96 @@ end
     end
 end
 
+# A dependency that is itself a workspace project is located through workspace
+# membership, so Pkg must not create a redundant `[sources]` entry for it.
+# `WorkspacePathResolution`'s SubProjectA depends on its sibling SubProjectB;
+# with the authored source removed, resolving must not write it back.
+@testset "no [sources] created for workspace-internal dependencies" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspacePathResolution")
+            cd(path) do
+                with_current_env() do
+                    project_file = joinpath("SubProjectA", "Project.toml")
+                    project = TOML.parsefile(project_file)
+                    delete!(project, "sources")
+                    Pkg.Types.write_project(project, project_file)
+
+                    Pkg.activate("SubProjectA")
+                    Pkg.resolve()
+                    @test !haskey(TOML.parsefile(project_file), "sources")
+                end
+            end
+        end
+    end
+end
+
+# Two workspace member projects that pin the same dependency to different sources
+# cannot be merged into a single manifest entry, so resolving must error clearly.
+@testset "workspace projects with conflicting [sources]" begin
+    mktempdir() do dir
+        cd(dir) do
+            shared_uuid = "22222222-2222-2222-2222-222222222222"
+            mkpath("ProjectA")
+            mkpath("ProjectB")
+            for parent in ("variant1", "variant2")
+                pkgdir = joinpath(parent, "SharedDep")
+                mkpath(joinpath(pkgdir, "src"))
+                write(
+                    joinpath(pkgdir, "Project.toml"),
+                    """
+                    name = "SharedDep"
+                    uuid = "$shared_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath(pkgdir, "src", "SharedDep.jl"), "module SharedDep\nend\n")
+            end
+            write(
+                "Project.toml",
+                """
+                name = "ConflictRoot"
+                uuid = "33333333-3333-3333-3333-333333333333"
+                version = "0.1.0"
+
+                [workspace]
+                projects = ["ProjectA", "ProjectB"]
+                """
+            )
+            write(
+                joinpath("ProjectA", "Project.toml"),
+                """
+                [deps]
+                SharedDep = "$shared_uuid"
+
+                [sources]
+                SharedDep = {path = "../variant1/SharedDep"}
+                """
+            )
+            write(
+                joinpath("ProjectB", "Project.toml"),
+                """
+                [deps]
+                SharedDep = "$shared_uuid"
+
+                [sources]
+                SharedDep = {path = "../variant2/SharedDep"}
+                """
+            )
+            with_current_env() do
+                err = try
+                    Pkg.resolve()
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa Pkg.Types.PkgError
+                @test occursin("conflicting sources", err.msg)
+            end
+        end
+    end
+end
+
 @testset "selective workspace instantiate" begin
     mktempdir() do dir
         path = copy_test_package(dir, "WorkspaceTestInstantiate")
