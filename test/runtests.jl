@@ -28,9 +28,12 @@ module PkgTestsInner
 
     ENV["JULIA_PKG_PRECOMPILE_AUTO"] = 0
     ENV["JULIA_PKG_DISALLOW_PKG_PRECOMPILATION"] = 1
+    # Disable auto-gc for the whole suite (test workers read this in `Pkg.__init__`)
+    ENV["JULIA_PKG_GC_AUTO"] = "false"
+    Pkg._auto_gc_enabled[] = false
 
     logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
-    ### Send all Pkg output to a file called Pkg.log
+    ### Send all Pkg output to log files
     islogging = logdir !== nothing
 
     if islogging
@@ -41,73 +44,182 @@ module PkgTestsInner
         default_io = devnull # or stdout
     end
 
+    # Also publishes the shared cache directory in ENV for the test workers
     include("utils.jl")
-    @with Pkg.DEFAULT_IO => default_io begin
-        Logging.with_logger((islogging || default_io == devnull) ? Logging.ConsoleLogger(default_io) : Logging.current_logger()) do
-            if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
-                s = read(`curl -sLI $(server)`, String)
-                @info "Pkg Server metadata:\n$s"
-            end
+    include("pkg_server_proxy.jl")
 
-            Utils.check_init_reg()
+    test_files = [
+        "api.jl",
+        "add.jl",
+        "update.jl",
+        "pkgtest.jl",
+        "concurrent.jl",
+        "repl.jl",
+        "status.jl",
+        "develop.jl",
+        "repo.jl",
+        "project_files.jl",
+        "gc.jl",
+        "misc.jl",
+        "registry.jl",
+        "subdir.jl",
+        "extensions.jl",
+        "binaryplatforms.jl",
+        "platformengines.jl",
+        "resolve.jl",
+        "force_latest_compatible_version.jl",
+        "manifests.jl",
+        "project_manifest.jl",
+        "project_comments.jl",
+        "sources.jl",
+        "workspaces.jl",
+        "apps.jl",
+        "stdlib_compat.jl",
+    ]
 
-            test_files = [
-                "new.jl",
-                "pkg.jl",
-                "repl.jl",
-                "api.jl",
-                "registry.jl",
-                "subdir.jl",
-                "extensions.jl",
-                "binaryplatforms.jl",
-                "platformengines.jl",
-                "resolve.jl",
-                "misc.jl",
-                "force_latest_compatible_version.jl",
-                "manifests.jl",
-                "project_manifest.jl",
-                "project_comments.jl",
-                "sources.jl",
-                "workspaces.jl",
-                "apps.jl",
-                "stdlib_compat.jl",
-            ]
+    # Only test these if the test deps are available (they aren't typically via `Base.runtests`)
+    HSV_pkgid = Base.PkgId(Base.UUID("6df8b67a-e8a0-4029-b4b7-ac196fe72102"), "HistoricalStdlibVersions")
+    if Base.locate_package(HSV_pkgid) !== nothing
+        push!(test_files, "historical_stdlib_version.jl")
+    end
+    Aqua_pkgid = Base.PkgId(Base.UUID("4c88cf16-eb10-579e-8560-4a9242c79595"), "Aqua")
+    if Base.locate_package(Aqua_pkgid) !== nothing
+        push!(test_files, "aqua.jl")
+    end
+    Preferences_pkgid = Base.PkgId(Base.UUID("21216c6a-2e73-6563-6e65-726566657250"), "Preferences")
+    if Base.locate_package(Preferences_pkgid) !== nothing
+        push!(test_files, "sandbox.jl")
+        push!(test_files, "artifacts.jl")
+    end
 
-            # Only test these if the test deps are available (they aren't typically via `Base.runtests`)
-            HSV_pkgid = Base.PkgId(Base.UUID("6df8b67a-e8a0-4029-b4b7-ac196fe72102"), "HistoricalStdlibVersions")
-            if Base.locate_package(HSV_pkgid) !== nothing
-                push!(test_files, "historical_stdlib_version.jl")
+    # Set up the state shared by all test processes, before any test runs:
+    # a caching proxy in front of the pkg server (every test process inherits
+    # `JULIA_PKG_SERVER`, so each unique resource is downloaded once per cache
+    # lifetime), plus the registry and the loaded depot, shared through
+    # `Utils.CACHE_DIRECTORY`. This keeps network traffic low and independent
+    # of the number of workers.
+    function setup_shared_test_state()
+        return @with Pkg.DEFAULT_IO => default_io begin
+            Logging.with_logger((islogging || default_io == devnull) ? Logging.ConsoleLogger(default_io) : Logging.current_logger()) do
+                if (server = Pkg.pkg_server()) !== nothing && Sys.which("curl") !== nothing
+                    s = read(`curl -sLI $(server)`, String)
+                    @info "Pkg Server metadata:\n$s"
+                end
+                proxy_cache = get(ENV, "PKG_TESTS_PKG_SERVER_CACHE_DIR") do
+                    # on CI the cache lives and dies with the run; locally it
+                    # persists in the depot so re-runs skip the downloads
+                    haskey(ENV, "CI") ? joinpath(Utils.CACHE_DIRECTORY, "pkg_server_cache") :
+                        joinpath(first(Base.DEPOT_PATH), "scratchspaces", "44cfe95a-1eb2-52ea-b672-e2afdf69b78f", "pkg_server_cache")
+                end
+                t_proxy = @elapsed PkgServerProxy.start!(upstream = Pkg.pkg_server(), cache_dir = proxy_cache)
+                t_registry = @elapsed Utils.check_init_reg()
+                t_depot = @elapsed Utils.populate_loaded_depot!()
+                return (; t_proxy, t_registry, t_depot)
             end
-            Aqua_pkgid = Base.PkgId(Base.UUID("4c88cf16-eb10-579e-8560-4a9242c79595"), "Aqua")
-            if Base.locate_package(Aqua_pkgid) !== nothing
-                push!(test_files, "aqua.jl")
-            end
-            Preferences_pkgid = Base.PkgId(Base.UUID("21216c6a-2e73-6563-6e65-726566657250"), "Preferences")
-            if Base.locate_package(Preferences_pkgid) !== nothing
-                push!(test_files, "sandbox.jl")
-                push!(test_files, "artifacts.jl")
-            end
+        end
+    end
 
-            verbose = true
-            @testset "Pkg" verbose = verbose begin
-                Pkg.activate(; temp = true) # make sure we're in an active project and that it's clean
-                try
-                    @testset "$f" verbose = verbose for f in test_files
-                        @info "==== Testing `test/$f`"
-                        flush(default_io)
-                        include(f)
+    # ParallelTestRunner is a test-only dependency, not available when running
+    # via `Base.runtests` — fall back to running the test files serially there.
+    PTR_pkgid = Base.PkgId(Base.UUID("d3525ed8-44d0-4b2c-a655-542cee43accc"), "ParallelTestRunner")
+
+    if Base.locate_package(PTR_pkgid) !== nothing
+
+        using ParallelTestRunner
+
+        args = ParallelTestRunner.parse_args(ARGS)
+
+        testsuite = Dict{String, Expr}()
+        for f in test_files
+            path = joinpath(@__DIR__, f)
+            testsuite[chopsuffix(f, ".jl")] = quote
+                @with Pkg.DEFAULT_IO => Main.PKG_TEST_IO begin
+                    Logging.with_logger(Logging.ConsoleLogger(Main.PKG_TEST_IO)) do
+                        ts = @testset $f begin
+                            include($path)
+                        end
+                        Main.print_testset_times(Main.PKG_TEST_IO, ts)
                     end
-                finally
-                    islogging && close(default_io)
-                    cd(original_wd)
+                end
+                Main.PKG_TEST_IO === devnull || flush(Main.PKG_TEST_IO)
+            end
+        end
+
+        if args.list === nothing
+            t_setup = @elapsed setup_times = setup_shared_test_state()
+            @info "Shared test state set up" total = t_setup pkg_server_proxy = setup_times.t_proxy registry = setup_times.t_registry loaded_depot = setup_times.t_depot
+        end
+
+        # Run once per worker process, in its `Main`
+        init_worker_code = quote
+            import Pkg
+            import REPL # loads REPLExt (from cache; precompiling Pkg is disallowed)
+            @assert Base.get_extension(Pkg, :REPLExt) !== nothing
+            using Logging
+            include($(joinpath(@__DIR__, "utils.jl"))) # defines Main.Utils
+            # Per-worker destination for Pkg output during tests
+            const PKG_TEST_IO = let logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
+                logdir === nothing ? devnull : open(joinpath(logdir, "Pkg-worker-$(getpid()).log"), "a")
+            end
+            # Record the time of every top-level testset of a test file in the
+            # worker log, so that slow tests can be found from the CI logs.
+            using Test: Test
+            function print_testset_times(io::IO, ts::Test.DefaultTestSet)
+                io === devnull && return
+                println(io, "==== Testset times for `", ts.description, "`")
+                for r in ts.results
+                    r isa Test.DefaultTestSet || continue
+                    t = r.time_end === nothing ? NaN : r.time_end - r.time_start
+                    println(io, "  ", rpad(r.description, 70), " ", lpad(round(t; digits = 1), 7), " s")
+                end
+                return
+            end
+            # make sure we're in an active project and that it's clean
+            Pkg.activate(; temp = true, io = PKG_TEST_IO)
+        end
+
+        # Run in each test's sandbox module: test files reference `Pkg` and
+        # `Utils` from their parent module (formerly `PkgTestsInner`)
+        init_code = quote
+            import Pkg, Logging
+            using Base.ScopedValues: @with
+            import Main: Utils
+        end
+
+        try
+            runtests(Pkg, args; testsuite, init_code, init_worker_code)
+        finally
+            islogging && close(default_io)
+            cd(original_wd)
+        end
+
+    else
+
+        setup_shared_test_state()
+        @with Pkg.DEFAULT_IO => default_io begin
+            Logging.with_logger((islogging || default_io == devnull) ? Logging.ConsoleLogger(default_io) : Logging.current_logger()) do
+                verbose = true
+                @testset "Pkg" verbose = verbose begin
+                    Pkg.activate(; temp = true) # make sure we're in an active project and that it's clean
+                    try
+                        @testset "$f" verbose = verbose for f in test_files
+                            @info "==== Testing `test/$f`"
+                            flush(default_io)
+                            include(f)
+                        end
+                    finally
+                        islogging && close(default_io)
+                        cd(original_wd)
+                    end
                 end
             end
         end
 
-        # Make sure that none of our tests have left temporary registries lying around
-        if isdir(joinpath(Base.DEPOT_PATH[1], "registries")) != original_depot_had_registries
-            @warn "Test left temporary registries in depot" Base.DEPOT_PATH[1] original_depot_had_registries
-        end
+    end
+
+    # Make sure that none of our tests have left temporary registries lying around
+    if isdir(joinpath(Base.DEPOT_PATH[1], "registries")) != original_depot_had_registries
+        @warn "Test left temporary registries in depot" Base.DEPOT_PATH[1] original_depot_had_registries
     end
 
     if haskey(ENV, "CI")

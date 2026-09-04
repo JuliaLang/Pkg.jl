@@ -288,7 +288,7 @@ end
     end
 
     # Test Registry.add and Registry.update with explicit depot values
-    temp_pkg_dir() do depot_on_path
+    temp_pkg_dir(; linked_reg = false) do depot_on_path # starts without registries
         mktempdir() do depot_off_path
             # No registries anywhere
             @test isempty(Registry.reachable_registries())
@@ -319,7 +319,7 @@ end
     # whether it was installed as a git clone or a tarball, so that
     # limits how much information we are guaranteed to get from
     # status.
-    temp_pkg_dir() do depot
+    temp_pkg_dir(; linked_reg = false) do depot # starts without registries
         Registry.add("General")
         buf = IOBuffer()
         Pkg.Registry.status(buf)
@@ -329,7 +329,7 @@ end
     end
 
     # only clone default registry if there are no registries installed at all
-    temp_pkg_dir() do depot1
+    temp_pkg_dir(; linked_reg = false) do depot1 # starts without registries
         mktempdir() do depot2
             append!(empty!(DEPOT_PATH), [depot1, depot2])
             Base.append_bundled_depot_path!(DEPOT_PATH)
@@ -429,7 +429,7 @@ end
     @testset "yanking" begin
         uuid = Base.UUID("7876af07-990d-54b4-ab0e-23690620f79a") # Example
         # Tests that Example@0.5.1 does not get installed
-        temp_pkg_dir() do env
+        temp_pkg_dir(; linked_reg = false) do env # starts without registries
             Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
             Pkg.add("Example")
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
@@ -443,7 +443,7 @@ end
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.0"
         end
         # Test that Example@0.5.1 can be obtained from an existing manifest
-        temp_pkg_dir() do env
+        temp_pkg_dir(; linked_reg = false) do env # starts without registries
             Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
             write(
                 joinpath(env, "Project.toml"), """
@@ -463,7 +463,7 @@ end
             Pkg.instantiate()
             @test manifest_info(EnvCache().manifest, uuid).version == v"0.5.1"
         end
-        temp_pkg_dir() do env
+        temp_pkg_dir(; linked_reg = false) do env # starts without registries
             Pkg.Registry.add(url = "https://github.com/JuliaRegistries/Test")
             write(
                 joinpath(env, "Project.toml"), """
@@ -494,7 +494,10 @@ end
 
 if Pkg.Registry.registry_use_pkg_server()
     @testset "compressed registry" begin
-        for unpack in (true, nothing)
+        # Unpacking the General registry takes minutes on Windows (three
+        # times here: two adds and one update), so only the compressed
+        # variant runs there; the unpacked code path is platform independent.
+        for unpack in (Sys.iswindows() ? (nothing,) : (true, nothing))
             withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack) do
                 temp_pkg_dir(; linked_reg = false) do depot
                     # These get restored by temp_pkg_dir

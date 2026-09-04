@@ -69,25 +69,35 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
-      - uses: julia-actions/julia-runtest@v1
-        with:
-          coverage: true
-          depwarn: error
+      - uses: julia-actions/cache@v3
+      - name: Use three test workers on macOS
+        # The macOS runners have little free memory, so the test runner
+        # would use a single worker. Three workers fit if each is restarted
+        # once its RSS grows past 1.2 GiB.
+        if: runner.os == 'macOS'
+        run: echo "JULIA_TEST_MAXRSS_MB=1200" >> ${GITHUB_ENV}
+      - name: Run the tests
+        # `Pkg.test` is run by the Pkg shipped with julia, with the repository
+        # activated. Loading the Pkg under test in this process instead (as
+        # `--project=.` does) compiles it once with the default options here
+        # and once more with the test options inside `Pkg.test`, ~75 s each
+        # on the macOS runner, whenever the compile cache does not match the
+        # nightly build.
+        #
+        # Coverage is disabled: with `--code-coverage` julia cannot use the
+        # native code of package images, so Pkg is compiled from scratch in
+        # every test worker and in every julia process the tests spawn,
+        # which roughly doubles the time of the test suite.
+        run: julia --color=yes -e 'using Pkg; Pkg.activate("."); Pkg.test(; coverage = false, julia_args = ["--check-bounds=yes", "--depwarn=error"], test_args = split(ENV["PKG_TEST_ARGS"]))'
         env:
+          PKG_TEST_ARGS: ${{ runner.os == 'macOS' && '--jobs=3' || '' }}
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: ${{ join(matrix.*, '-') }}_Pkg.log
-          path: ${{ github.workspace }}/Pkg.log
-      - uses: julia-actions/julia-processcoverage@v1
-        env:
-            JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
-      - uses: codecov/codecov-action@v6
-        with:
-          files: lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+          path: ${{ github.workspace }}/Pkg*.log
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 60

@@ -331,7 +331,8 @@ function _add(pkg::PackageSpec)
     if new === true || (new isa Set{UUID} && pkg.uuid in new)
         Pkg.Operations.build_versions(ctx, Set([pkg.uuid]); verbose = true)
     end
-    precompile(pkg.name)
+    # Like for the other operations, only precompile if auto-precompilation is enabled
+    Pkg.should_autoprecompile() && precompile(pkg.name)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
     return check_apps_in_path(project.apps)
