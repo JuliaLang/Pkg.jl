@@ -193,6 +193,46 @@ end
     end
 end
 
+@testset "instantiate a subset of workspace members in one batch" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceSubsetInstantiate")
+            cd(path) do
+                with_current_env() do
+                    withenv("JULIA_PKG_PRECOMPILE_AUTO" => "1") do
+                        # Resolve the whole workspace once so the shared manifest is
+                        # complete, as it would be for a committed workspace.
+                        Pkg.resolve()
+
+                        # Members `a` (Example) and `b` (Crayons) are instantiated
+                        # together; member `c` (JSON) is deliberately left out to stand
+                        # in for an excluded heavy environment.
+                        active_before = Base.active_project()
+                        Pkg.instantiate("a", "b"; io = IOBuffer())
+                        # The batch call must not change the active project.
+                        @test Base.active_project() == active_before
+                        # The shared manifest lives at the workspace root; the members
+                        # do not get their own.
+                        @test isfile("Manifest.toml")
+                        @test !isfile("a/Manifest.toml")
+                        @test !isfile("b/Manifest.toml")
+                        @test !isfile("c/Manifest.toml")
+
+                        depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+                        withenv("JULIA_DEPOT_PATH" => depot_path_string) do
+                            # The dependencies of the instantiated members are precompiled.
+                            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="a" -e 'exit(!Base.isprecompiled(Base.identify_package("Example")))'`))
+                            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="b" -e 'exit(!Base.isprecompiled(Base.identify_package("Crayons")))'`))
+                            # The excluded member's dependency is not precompiled.
+                            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="c" -e 'pkg = Base.identify_package("JSON"); exit(!isnothing(pkg) && Base.isprecompiled(pkg))'`))
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 @testset "workspace path resolution issue #4222" begin
     isolate() do
         mktempdir() do dir

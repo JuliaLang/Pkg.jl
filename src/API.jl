@@ -1266,10 +1266,19 @@ function precompile(
         else
             ctx.io.io
         end
-        pkgs_name = String[pkg.name for pkg in pkgs]
         # Allow user to press 'd' to detach when running interactively
         detachable = isinteractive()
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
+        # Target packages by `PkgId` when their UUID is known, so the precompiler
+        # identifies them directly instead of resolving names against the active
+        # project. This lets a set of packages taken from a manifest (e.g. spanning
+        # several workspace members) be precompiled even when they are not all direct
+        # dependencies of the active project.
+        precomp_pkgs = if !isempty(pkgs) && all(pkg -> pkg.uuid !== nothing && pkg.name !== nothing, pkgs)
+            Base.PkgId[Base.PkgId(pkg.uuid::UUID, pkg.name::String) for pkg in pkgs]
+        else
+            String[pkg.name for pkg in pkgs]
+        end
+        return Base.Precompilation.precompilepkgs(precomp_pkgs; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
     end
 end
 
@@ -1290,6 +1299,73 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
+
+function instantiate(path::AbstractString, paths::AbstractString...; kwargs...)
+    # Reading the registries from disk is one of the more expensive parts of setting up
+    # a context, so do it once and share the result across every environment instead of
+    # paying that cost separately for each path.
+    registries = Registry.reachable_registries()
+    envs = EnvCache[]
+    for p in (path, paths...)
+        # Accept either a path to a project file or to a directory containing one.
+        push!(envs, EnvCache(isdir(p) ? projectfile_path(p) : p))
+    end
+    # Environments that share a manifest are members of one workspace, so their
+    # packages resolve to a single consistent set of versions and can be installed
+    # and precompiled together. Group by manifest so each workspace is handled as a
+    # unit, while unrelated environments (or a single path) keep the old behavior.
+    groups = Dict{String, Vector{EnvCache}}()
+    order = String[]
+    for env in envs
+        haskey(groups, env.manifest_file) || push!(order, env.manifest_file)
+        push!(get!(Vector{EnvCache}, groups, env.manifest_file), env)
+    end
+    for key in order
+        instantiate_workspace(groups[key], registries; kwargs...)
+    end
+    return
+end
+
+# Instantiate a group of environments that share a manifest (a workspace), or a
+# single standalone environment. `copy` the registries so that any per-environment
+# registry mutation (e.g. installing a registry referenced by a manifest) does not
+# affect the shared list.
+function instantiate_workspace(
+        envs::Vector{EnvCache}, registries::Vector{Registry.RegistryInstance};
+        allow_autoprecomp::Bool = true, kwargs...
+    )
+    if length(envs) == 1
+        ctx = Context(; env = envs[1], registries = copy(registries))
+        instantiate(ctx; allow_autoprecomp, kwargs...)
+        return
+    end
+    # Install and build each member without precompiling. Because the members share
+    # a manifest, a single precompile pass over the union of their dependencies
+    # replaces the per-member passes and keeps the precompile worker queue saturated
+    # instead of draining it between members.
+    for env in envs
+        ctx = Context(; env, registries = copy(registries))
+        instantiate(ctx; allow_autoprecomp = false, kwargs...)
+    end
+    allow_autoprecomp || return
+    # Union of the members' direct dependencies, carrying the UUIDs so the precompiler
+    # can identify them from the shared manifest.
+    union_pkgs = PackageSpec[]
+    seen = Set{UUID}()
+    for env in envs, (name, uuid) in env.project.deps
+        uuid in seen && continue
+        push!(seen, uuid)
+        push!(union_pkgs, PackageSpec(; name, uuid))
+    end
+    isempty(union_pkgs) && return
+    # Precompile the union in one pass, scoped to the shared workspace manifest so every
+    # requested package is available at its manifest-pinned version regardless of which
+    # member declares it.
+    ctx = Context(; env = envs[1], registries = copy(registries))
+    Pkg._auto_precompile(ctx, union_pkgs; workspace = true, already_instantiated = true)
+    return
+end
+
 function instantiate(
         ctx::Context; manifest::Union{Bool, Nothing} = nothing,
         update_registry::Bool = true, verbose::Bool = false,
