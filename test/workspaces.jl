@@ -236,6 +236,40 @@ end
     end
 end
 
+# A member's Project.toml is only consulted while that member is the active project. Loading
+# it from elsewhere in the workspace resolves its imports from its entry in the shared root
+# manifest, so every member's entry has to match its Project.toml after each operation (#4739).
+@testset "workspace member deps are recorded in the manifest" begin
+    isolate() do
+        mktempdir() do dir
+            write(joinpath(dir, "Project.toml"), "[workspace]\nprojects = [\"A\", \"B\"]\n")
+            Pkg.generate(joinpath(dir, "A"))
+            Pkg.generate(joinpath(dir, "B"))
+
+            uuid(name) = Pkg.Types.read_project(joinpath(dir, name, "Project.toml")).uuid
+            manifest() = Pkg.Types.read_manifest(joinpath(dir, "Manifest.toml"))
+            member_deps(name) = sort!(collect(keys(manifest()[uuid(name)].deps)))
+
+            Pkg.activate(joinpath(dir, "A"))
+            Pkg.develop(path = joinpath(dir, "B"))
+            @test member_deps("A") == ["B"]
+            Pkg.add("Example")
+            @test member_deps("A") == ["B", "Example"]
+            Pkg.instantiate()
+            @test member_deps("A") == ["B", "Example"]
+            # B is a member and stays in the manifest even once nothing depends on it
+            Pkg.rm("B")
+            @test member_deps("A") == ["Example"]
+
+            # operating on one member leaves the entries of the others alone
+            Pkg.activate(joinpath(dir, "B"))
+            Pkg.add("Example")
+            @test member_deps("B") == ["Example"]
+            @test member_deps("A") == ["Example"]
+        end
+    end
+end
+
 @testset "selective workspace instantiate" begin
     mktempdir() do dir
         path = copy_test_package(dir, "WorkspaceTestInstantiate")
