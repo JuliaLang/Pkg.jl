@@ -154,6 +154,29 @@ end
     end
 end
 
+@testset "all selected artifacts must be installed" begin
+    mktempdir() do root
+        with_artifacts_directory(joinpath(root, "artifacts")) do
+            hashes = map(("first", "second")) do name
+                create_artifact() do dir
+                    write(joinpath(dir, "name"), name)
+                end
+            end
+            toml = joinpath(root, "Artifacts.toml")
+            for (name, hash) in zip(("first", "second"), hashes)
+                bind_artifact!(toml, name, hash; download_info = [("file:///unused", "0"^64)])
+            end
+            @test Pkg.Operations.check_artifacts_downloaded(root)
+            # Delete whichever entry is visited second, so the check cannot pass after
+            # inspecting only the first artifact in the dictionary.
+            artifacts = only(Pkg.Operations.collect_artifacts(root))[2]
+            missing = last(collect(values(artifacts)))["git-tree-sha1"]
+            remove_artifact(SHA1(missing))
+            @test !Pkg.Operations.check_artifacts_downloaded(root)
+        end
+    end
+end
+
 @testset "with_artifacts_directory()" begin
     mktempdir() do art_dir
         with_artifacts_directory(art_dir) do

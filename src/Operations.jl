@@ -1597,7 +1597,6 @@ function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform
             if !artifact_exists(Base.SHA1(artifacts[name]["git-tree-sha1"]))
                 return false
             end
-            break
         end
     end
     return true
