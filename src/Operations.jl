@@ -296,12 +296,33 @@ function is_instantiated(env::EnvCache, workspace::Bool = false; platform = Host
         if idx === nothing
             push!(pkgs, Types.PackageSpec(name = env.pkg.name, uuid = env.pkg.uuid, version = env.pkg.version, path = dirname(env.project_file)))
         end
-    else
-        # Make sure artifacts for project exist even if it is not a package
-        check_artifacts_downloaded(dirname(env.project_file); platform) || return false
     end
-    # Make sure all paths/artifacts exist
-    return all(pkg -> is_package_downloaded(env.manifest_file, pkg; platform), pkgs)
+    # Make sure all sources exist before running any artifact selector, since a selector
+    # may load a dependency whose source or artifacts are missing.
+    for pkg in pkgs
+        sourcepath = source_path(env.manifest_file, pkg)
+        sourcepath === nothing && return false
+        isdir(sourcepath) || return false
+    end
+    # Make sure artifacts exist, including those of the project even if it is not a package
+    pkg_info = artifact_package_info(env, [pkg.uuid => pkg for pkg in pkgs])
+    for info in pkg_info
+        info.has_selector && continue
+        check_artifacts_downloaded(info.root; platform) || return false
+    end
+    # Run selectors in dependency order and stop at the first missing artifact, so a
+    # selector never runs while a dependency it may load cannot initialize.
+    levels = selector_levels(env, pkg_info)
+    isempty(levels) && return true
+    env_key = selector_env_key(env)
+    for level in levels
+        for info in level
+            check_artifacts_downloaded(
+                info.root; platform, selector_project = env.project_file, env_key
+            ) || return false
+        end
+    end
+    return true
 end
 
 function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version, registries::Vector{Registry.RegistryInstance})
@@ -1355,7 +1376,65 @@ function install_git(
     end
 end
 
-function collect_artifacts(pkg_root::String; platform::AbstractPlatform = HostPlatform(), include_lazy::Bool = false)
+# Results of artifact selectors, keyed on the Artifacts.toml, the target platform, a
+# fingerprint of the environment the selector ran in, and hashes of the selector script
+# and Artifacts.toml. Selectors are run once per session for a given
+# environment, rather than again for every status check.
+const SELECTOR_CACHE_LOCK = Base.ReentrantLock()
+const SelectorCacheKey = Tuple{String, String, UInt, UInt, UInt}
+const SELECTOR_CACHE = Dict{SelectorCacheKey, Base.TOML.TOMLDict}()
+
+clear_selector_cache!() = @lock SELECTOR_CACHE_LOCK empty!(SELECTOR_CACHE)
+selector_cache_enabled() = get(ENV, "JULIA_PKG_SELECTOR_CACHE", "1") != "0"
+
+function run_artifact_selector(
+        selector_path::String, artifacts_toml::String, platform::AbstractPlatform;
+        selector_project::Union{Nothing, String}, env_key::Union{Nothing, UInt}
+    )
+    cache_key = if selector_project !== nothing && env_key !== nothing && selector_cache_enabled()
+        (
+            artifacts_toml, triplet(platform), env_key,
+            hash(read(selector_path)), hash(read(artifacts_toml)),
+        )
+    else
+        nothing
+    end
+    if cache_key !== nothing
+        cached = @lock SELECTOR_CACHE_LOCK get(SELECTOR_CACHE, cache_key, nothing)
+        cached === nothing || return cached
+    end
+
+    # Run at the parent's optimization level rather than -O0. A selector that loads
+    # a dependency may precompile it, and Julia only reuses a cache whose opt level
+    # is at least the requested one: an -O0 cache would be rejected by the -O2
+    # process that loads the package later and precompiled again. `--compile=min`
+    # is not part of the cache flags and stays to keep the selector itself cheap.
+    select_cmd = if selector_project === nothing
+        gen_build_code(selector_path; inherit_project = true, add_stdlib = true, optimize = true)
+    else
+        gen_build_code(
+            selector_path; project = selector_project, load_path = ["@", "@stdlib"], optimize = true
+        )
+    end
+    select_cmd = Cmd(`$select_cmd --compile=min -t1 --startup-file=no $(triplet(platform))`)
+    meta_toml = String(read(select_cmd))
+    res = TOML.tryparse(meta_toml)
+    if res isa TOML.ParserError
+        errstr = sprint(showerror, res; context = stderr)
+        pkgerror("failed to parse TOML output from running $(repr(selector_path)), got: \n$errstr")
+    end
+    artifacts = res
+    # Only successful runs are cached; a failing selector is retried on the next call.
+    cache_key === nothing || @lock SELECTOR_CACHE_LOCK SELECTOR_CACHE[cache_key] = artifacts
+    return artifacts
+end
+
+function collect_artifacts(
+        pkg_root::String;
+        platform::AbstractPlatform = HostPlatform(), include_lazy::Bool = false,
+        selector_project::Union{Nothing, String} = nothing,
+        env_key::Union{Nothing, UInt} = nothing
+    )
     # Check to see if this package has an (Julia)Artifacts.toml
     artifacts_tomls = Tuple{String, Base.TOML.TOMLDict}[]
     for f in artifact_names
@@ -1365,19 +1444,10 @@ function collect_artifacts(pkg_root::String; platform::AbstractPlatform = HostPl
 
             # If there is a dynamic artifact selector, run that in an appropriate sandbox to select artifacts
             if isfile(selector_path)
-                # Despite the fact that we inherit the project, since the in-memory manifest
-                # has not been updated yet, if we try to load any dependencies, it may fail.
-                # Therefore, this project inheritance is really only for Preferences, not dependencies.
-                # We only guarantee access to the `stdlib`, which is why we set `add_stdlib` here.
-                select_cmd = Cmd(`$(gen_build_code(selector_path; inherit_project=true, add_stdlib=true)) --compile=min -t1 --startup-file=no $(triplet(platform))`)
-                meta_toml = String(read(select_cmd))
-                res = TOML.tryparse(meta_toml)
-                if res isa TOML.ParserError
-                    errstr = sprint(showerror, res; context = stderr)
-                    pkgerror("failed to parse TOML output from running $(repr(selector_path)), got: \n$errstr")
-                else
-                    push!(artifacts_tomls, (artifacts_toml, TOML.parse(meta_toml)))
-                end
+                artifacts = run_artifact_selector(
+                    selector_path, artifacts_toml, platform; selector_project, env_key
+                )
+                push!(artifacts_tomls, (artifacts_toml, artifacts))
             else
                 # Otherwise, use the standard selector from `Artifacts`
                 artifacts = select_downloadable_artifacts(artifacts_toml; platform, include_lazy)
@@ -1397,57 +1467,25 @@ mutable struct DownloadState
     const bar::MiniProgressBar
 end
 
-function download_artifacts(
-        ctx::Context, pkgs;
-        platform::AbstractPlatform = HostPlatform(),
-        julia_version = VERSION,
-        verbose::Bool = false,
-        io::IO = stderr_f(),
-        include_lazy::Bool = false
+function install_collected_artifacts!(
+        ctx::Context, all_collected_artifacts;
+        server_registry_info, verbose::Bool, io::IO
     )
-    env = ctx.env
-    io = ctx.io
+    isempty(all_collected_artifacts) && return
+
     fancyprint = can_fancyprint(io)
-    pkg_info = Tuple{String, Union{Base.UUID, Nothing}}[]
-    pkg_uuids = Set(pkg.uuid for pkg in pkgs)
-    for (uuid, pkg) in env.manifest
-        uuid in pkg_uuids || continue
-        pkg = manifest_info(env.manifest, uuid)
-        pkg_root = source_path(env.manifest_file, pkg, julia_version)
-        pkg_root === nothing || push!(pkg_info, (pkg_root, uuid))
-    end
-    push!(pkg_info, (dirname(env.project_file), env.pkg !== nothing ? env.pkg.uuid : nothing))
-    download_jobs = Dict{SHA1, Function}()
-
-    # Check what registries the current pkg server tracks
-    # Disable if precompiling to not access internet
-    server_registry_info = if Base.JLOptions().incremental == 0
-        Registry.pkg_server_registry_info()
-    else
-        nothing
-    end
-
     print_lock = Base.ReentrantLock() # for non-fancyprint printing
-
-    download_states = Dict{SHA1, DownloadState}()
-
-    errors = Channel{Any}(Inf)
-    is_done = Ref{Bool}(false)
     ansi_moveup(n::Int) = string("\e[", n, "A")
     ansi_movecol1 = "\e[1G"
     ansi_cleartoend = "\e[0J"
     ansi_cleartoendofline = "\e[0K"
     ansi_enablecursor = "\e[?25h"
     ansi_disablecursor = "\e[?25l"
-
-    all_collected_artifacts = reduce(
-        vcat, map(
-            ((pkg_root, pkg_uuid),) ->
-            map(ca -> (ca[1], ca[2], pkg_uuid), collect_artifacts(pkg_root; platform, include_lazy)), pkg_info
-        )
-    )
-    used_artifact_tomls = Set{String}(map(ca -> ca[1], all_collected_artifacts))
-    longest_name_length = maximum(all_collected_artifacts; init = 0) do (artifacts_toml, artifacts, pkg_uuid)
+    download_jobs = Dict{SHA1, Function}()
+    download_states = Dict{SHA1, DownloadState}()
+    errors = Channel{Any}(Inf)
+    is_done = Ref(false)
+    longest_name_length = maximum(all_collected_artifacts; init = 0) do (_, artifacts, _)
         maximum(textwidth, keys(artifacts); init = 0)
     end
     for (artifacts_toml, artifacts, pkg_uuid) in all_collected_artifacts
@@ -1575,7 +1613,200 @@ function download_artifacts(
             pkgerror("Failed to install some artifacts:\n\n$(strip(str, '\n'))")
         end
     end
+    return
+end
 
+# Copy the resolved environment and its workspace ancestors. The ancestors supply
+# preferences, but all projects must use the resolved manifest in the temporary tree.
+function selector_environment(env::EnvCache)
+    manifest = deepcopy(env.manifest)
+    abspath!(env, manifest)
+    projects = map(enumerate(Base.get_projects_workspace_to_root(env.project_file))) do (i, file)
+        project = deepcopy(i == 1 ? env.project : env.workspace[file])
+        project.manifest = nothing
+        empty!(project.workspace)
+        i == 1 || (project.workspace["projects"] = ["child"])
+        # Source overrides are resolver inputs; the manifest already records their paths.
+        empty!(project.sources)
+        preferences = Pair{String, String}[]
+        for name in Base.preferences_names
+            preferences_file = joinpath(dirname(file), name)
+            isfile(preferences_file) && push!(preferences, name => read(preferences_file, String))
+        end
+        (; project, preferences)
+    end
+    return (; projects, manifest)
+end
+
+# Use content rather than the temporary location so checks after writing the user's
+# environment can reuse the selection made during installation.
+function selector_env_key(env::EnvCache)
+    (; projects, manifest) = selector_environment(env)
+    key = hash(sprint(Types.write_manifest, manifest))
+    for (; project, preferences) in projects
+        key = hash(sprint(Types.write_project, Types.destructure(project)), key)
+        for (name, content) in preferences
+            key = hash(content, hash(name, key))
+        end
+    end
+    return key
+end
+
+function with_resolved_artifact_env(f::Function, env::EnvCache)
+    return mktempdir() do tmp
+        (; projects, manifest) = selector_environment(env)
+        Types.write_manifest(manifest, manifestfile_path(tmp))
+        # Recreate the ancestry so Julia merges workspace preferences with its usual
+        # UUID mapping and precedence, without exposing unrelated stacked environments.
+        for (; project, preferences) in reverse(projects)
+            mkpath(tmp)
+            Types.write_project(project, projectfile_path(tmp))
+            for (name, content) in preferences
+                write(joinpath(tmp, name), content)
+            end
+            tmp = joinpath(tmp, "child")
+        end
+        return f(projectfile_path(dirname(tmp)))
+    end
+end
+
+const ArtifactPackageInfo = NamedTuple{
+    (:root, :uuid, :has_selector), Tuple{String, Union{UUID, Nothing}, Bool},
+}
+
+has_artifact_selector(pkg_root::String) = isfile(joinpath(pkg_root, ".pkg", "select_artifacts.jl"))
+
+# Collect the source roots whose artifacts need to be considered: every package in `pkgs`
+# (given as `uuid => pkg` pairs) with a source directory, plus the project itself even if
+# it is not a package.
+function artifact_package_info(env::EnvCache, pkgs; julia_version = VERSION)
+    pkg_info = ArtifactPackageInfo[]
+    for (uuid, pkg) in pkgs
+        pkg_root = source_path(env.manifest_file, pkg, julia_version)
+        pkg_root === nothing && continue
+        push!(pkg_info, (; root = pkg_root, uuid, has_selector = has_artifact_selector(pkg_root)))
+    end
+    project_root = dirname(env.project_file)
+    if !any(info -> info.root == project_root, pkg_info)
+        push!(
+            pkg_info, (;
+                root = project_root,
+                uuid = env.pkg !== nothing ? env.pkg.uuid : nothing,
+                has_selector = has_artifact_selector(project_root),
+            )
+        )
+    end
+    return pkg_info
+end
+
+# Group the packages with an artifact selector into levels such that no selector in a
+# level depends on a package with a selector in the same or a later level. A selector
+# dependency must be able to initialize before its consumer's hook runs.
+function selector_levels(env::EnvCache, pkg_info::Vector{ArtifactPackageInfo})
+    levels = Vector{ArtifactPackageInfo}[]
+    selector_pkg_info = Dict(info.uuid => info for info in pkg_info if info.has_selector)
+    isempty(selector_pkg_info) && return levels
+
+    selector_uuids = Set(uuid for uuid in keys(selector_pkg_info) if uuid !== nothing)
+    selector_dependencies = Dict{Union{UUID, Nothing}, Set{UUID}}()
+    for uuid in keys(selector_pkg_info)
+        roots = if uuid === nothing || Types.is_project_uuid(env, uuid)
+            values(env.project.deps)
+        else
+            values(manifest_info(env.manifest, uuid).deps)
+        end
+        dependencies = _get_deps!(Set{UUID}(), env, roots)
+        selector_dependencies[uuid] = intersect(dependencies, selector_uuids)
+        uuid !== nothing && delete!(selector_dependencies[uuid], uuid)
+    end
+
+    remaining = Set(keys(selector_pkg_info))
+    completed = Set{Union{UUID, Nothing}}()
+    while !isempty(remaining)
+        ready = filter(uuid -> selector_dependencies[uuid] ⊆ completed, remaining)
+        if isempty(ready)
+            names = sort!([selector_pkg_info[uuid].root for uuid in remaining])
+            pkgerror("artifact selectors have a cyclic dependency: $(join(names, ", "))")
+        end
+        push!(levels, sort!([selector_pkg_info[uuid] for uuid in ready]; by = info -> info.root))
+        union!(completed, ready)
+        setdiff!(remaining, ready)
+    end
+    return levels
+end
+
+function collect_package_artifacts(
+        info, used_artifact_tomls;
+        platform::AbstractPlatform, include_lazy::Bool,
+        selector_project::Union{Nothing, String} = nothing,
+        env_key::Union{Nothing, UInt} = nothing
+    )
+    artifacts = collect_artifacts(info.root; platform, include_lazy, selector_project, env_key)
+    union!(used_artifact_tomls, map(first, artifacts))
+    return map(ca -> (ca[1], ca[2], info.uuid), artifacts)
+end
+
+function download_artifacts(
+        ctx::Context, pkgs;
+        platform::AbstractPlatform = HostPlatform(),
+        julia_version = VERSION,
+        verbose::Bool = false,
+        io::IO = stderr_f(),
+        include_lazy::Bool = false
+    )
+    env = ctx.env
+    io = ctx.io
+    pkg_uuids = Set(pkg.uuid for pkg in pkgs)
+    manifest_pkgs = [uuid => manifest_info(env.manifest, uuid) for uuid in keys(env.manifest) if uuid in pkg_uuids]
+    pkg_info = artifact_package_info(env, manifest_pkgs; julia_version)
+
+    # Check what registries the current pkg server tracks
+    # Disable if precompiling to not access internet
+    server_registry_info = if Base.JLOptions().incremental == 0
+        Registry.pkg_server_registry_info()
+    else
+        nothing
+    end
+    used_artifact_tomls = Set{String}()
+
+    # A selector dependency must be able to initialize before its consumer's hook runs.
+    # Install all statically selected artifacts first, retaining parallel downloads.
+    static_pkg_info = filter(info -> !info.has_selector, pkg_info)
+    static_artifacts = reduce(
+        vcat,
+        map(
+            info -> collect_package_artifacts(
+                info, used_artifact_tomls; platform, include_lazy
+            ),
+            static_pkg_info,
+        );
+        init = []
+    )
+    install_collected_artifacts!(ctx, static_artifacts; server_registry_info, verbose, io)
+
+    levels = selector_levels(env, pkg_info)
+    if !isempty(levels)
+        env_key = selector_env_key(env)
+        with_resolved_artifact_env(env) do selector_project
+            # Run independent selectors together, but wait for each dependency level's
+            # artifacts before starting selectors that may load those packages.
+            for level in levels
+                selected_artifacts = reduce(
+                    vcat,
+                    [
+                        collect_package_artifacts(
+                                info, used_artifact_tomls;
+                                platform, include_lazy, selector_project, env_key,
+                            ) for info in level
+                    ];
+                    init = []
+                )
+                install_collected_artifacts!(
+                    ctx, selected_artifacts; server_registry_info, verbose, io
+                )
+            end
+        end
+    end
 
     return write_env_usage(used_artifact_tomls, "artifact_usage.toml")
 end
@@ -1591,8 +1822,22 @@ function download_artifacts(
     return download_artifacts(ctx, values(ctx.env.manifest); platform, julia_version, verbose, io, include_lazy)
 end
 
-function check_artifacts_downloaded(pkg_root::String; platform::AbstractPlatform = HostPlatform())
-    for (artifacts_toml, artifacts) in collect_artifacts(pkg_root; platform)
+function check_artifacts_downloaded(
+        pkg_root::String;
+        platform::AbstractPlatform = HostPlatform(), selector_project::Union{Nothing, String} = nothing,
+        env_key::Union{Nothing, UInt} = nothing
+    )
+    collected_artifacts = try
+        collect_artifacts(pkg_root; platform, selector_project, env_key)
+    catch err
+        err isa ProcessFailedException || rethrow()
+        # Dependencies may be missing, particularly during a status check. Report the
+        # package as not downloaded and let installation retry the selector after
+        # bootstrapping its dependencies.
+        @debug "Artifact selector failed" pkg_root exception = err
+        return false
+    end
+    for (artifacts_toml, artifacts) in collected_artifacts
         for name in keys(artifacts)
             if !artifact_exists(Base.SHA1(artifacts[name]["git-tree-sha1"]))
                 return false
@@ -1922,10 +2167,19 @@ function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID, 
     return order
 end
 
-function gen_build_code(build_file::String; inherit_project::Bool = false, add_stdlib::Bool = false)
+function gen_build_code(
+        build_file::String;
+        inherit_project::Bool = false, add_stdlib::Bool = false,
+        project::Union{Nothing, String} = nothing,
+        load_path::Union{Nothing, Vector{String}} = nothing,
+        optimize::Bool = false
+    )
+    inherit_project && project !== nothing && error("cannot both inherit and explicitly set a project")
     code = """
     $(Base.load_path_setup_code(false))
-    if $(add_stdlib)
+    if $(load_path !== nothing)
+        append!(empty!(Base.LOAD_PATH), $(repr(load_path)))
+    elseif $(add_stdlib)
         push!(Base.LOAD_PATH, "@stdlib")
     end
     cd($(repr(dirname(build_file))))
@@ -1934,10 +2188,11 @@ function gen_build_code(build_file::String; inherit_project::Bool = false, add_s
     # This will make it so that running Pkg.build runs the build in a session with --startup=no
     # *unless* the parent julia session is started with --startup=yes explicitly.
     startup_flag = Base.JLOptions().startupfile == 1 ? "yes" : "no"
+    project = inherit_project ? Base.active_project() : project
     return ```
-    $(Base.julia_cmd()) -O0 --color=no --history-file=no
+    $(Base.julia_cmd()) $(optimize ? `` : `-O0`) --color=no --history-file=no
     --startup-file=$startup_flag
-    $(inherit_project ? `--project=$(Base.active_project())` : ``)
+    $(project === nothing ? `` : `--project=$project`)
     --eval $code
     ```
 end
@@ -3473,11 +3728,15 @@ function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manife
     return Tuple{T, S, S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T, S, S} for uuid in all_uuids]
 end
 
-function is_package_downloaded(manifest_file::String, pkg::PackageSpec; platform = HostPlatform())
+function is_package_downloaded(
+        manifest_file::String, pkg::PackageSpec;
+        platform = HostPlatform(), selector_project::Union{Nothing, String} = nothing,
+        env_key::Union{Nothing, UInt} = nothing
+    )
     sourcepath = source_path(manifest_file, pkg)
     sourcepath === nothing && return false
     isdir(sourcepath) || return false
-    check_artifacts_downloaded(sourcepath; platform) || return false
+    check_artifacts_downloaded(sourcepath; platform, selector_project, env_key) || return false
     return true
 end
 
@@ -3607,6 +3866,16 @@ function print_status(
     no_visible_packages_heldback = true
     no_packages_heldback = true
     lpadding = 2
+    # Fingerprinting the environment is only needed to reuse cached selector results
+    env_key = if any(xs) do (_, _, new)
+            new === nothing && return false
+            root = source_path(env.manifest_file, new)
+            root !== nothing && has_artifact_selector(root)
+        end
+        selector_env_key(env)
+    else
+        nothing
+    end
 
     package_statuses = PackageStatusData[]
     for (uuid, old, new) in xs
@@ -3656,7 +3925,9 @@ function print_status(
 
         # TODO: Show extension deps for project as well?
 
-        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(env.manifest_file, new)
+        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(
+            env.manifest_file, new; selector_project = env.project_file, env_key
+        )
 
         new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
         pkg_upgradable = new_ver_avail && cinfo !== nothing && isempty(cinfo[1])

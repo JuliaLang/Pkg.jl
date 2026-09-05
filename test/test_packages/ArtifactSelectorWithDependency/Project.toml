@@ -1,0 +1,11 @@
+name = "ArtifactSelectorWithDependency"
+uuid = "7c6079c5-a915-4b4f-9520-edc242524eb1"
+version = "0.1.0"
+
+[deps]
+ArtifactSelectorDependency = "b8df255f-45df-4e3b-8d04-6a7f7496dbd4"
+Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[compat]
+ArtifactSelectorDependency = "0.2"
