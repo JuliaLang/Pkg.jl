@@ -299,4 +299,19 @@ end
 
 This ensures that the same artifact is used by your code as Pkg attempted to install.
 
-Artifact selection hooks are only allowed to use `Base`, `Artifacts`, `Libdl`, and `TOML`. They are not allowed to use any other standard libraries, and they are not allowed to use any packages (including the package to which they belong).
+Artifact selection hooks run in the environment being installed. In addition to standard libraries, a hook may load dependencies from its package's `[deps]`; Pkg makes their sources and artifacts available first and uses the exact versions in the resolved manifest. Stacked environments are not visible to the hook.
+
+To load a dependency, put the package's own directory on the load path before using it:
+
+```julia
+push!(LOAD_PATH, dirname(@__DIR__))
+using MyDependency
+```
+
+The package's `Project.toml` supplies the mapping from the dependency's name to its UUID, and the resolved manifest of the environment being installed supplies the version and location. Only dependencies listed in `[deps]` can be loaded this way; the hook should not load its own package, because its artifacts have not been selected yet.
+
+The preferences of the active project and its workspace parents apply to the hook. Preferences set in stacked environments (such as the default `@v#.#` environment) are visible to the package at runtime through `Base.get_preferences`, but not to the selection hook. Preferences that influence artifact selection should be recorded in the active project's `LocalPreferences.toml`.
+
+Loading a dependency runs its initialization code during installation, before package build scripts run. Dependencies that require `deps/build.jl` to run before they can be loaded cannot be used by hooks on a fresh installation. Hooks should therefore remain lightweight and handle dependencies that cannot initialize, particularly when installing for a platform other than the host. Pkg reads the selected artifacts from the hook's standard output, so a hook must not write anything else to `stdout`; dependencies whose initialization prints to `stdout` will corrupt the result. Diagnostics belong on `stderr`.
+
+Pkg caches successful hook results for the duration of a Julia session, keyed on the package, target platform, environment content and preferences, and the contents of `select_artifacts.jl` and `(Julia)Artifacts.toml`. Repeated operations and status checks reuse that result; changes to the environment or those files invalidate it, while system changes that are not reflected in either are picked up in the next Julia session. Hooks run at the same optimization level as the parent Julia process, so dependencies compiled while a hook runs produce cache files that can be reused when the package is loaded later. This is why precompilation output can appear while artifacts are being installed.
