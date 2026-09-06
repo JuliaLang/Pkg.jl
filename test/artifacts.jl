@@ -107,20 +107,27 @@ end
         end
     end
 
-    for (creator, known_hash) in creators
-        # Create artifact
-        hash = create_artifact_chmod(creator)
+    # Use a fresh artifacts directory: `create_artifact` keeps an existing directory
+    # for the same hash, so the verification below would otherwise inspect whatever
+    # an earlier run (or a restored CI cache) left in the depot.
+    mktempdir() do artifacts_dir
+        with_artifacts_directory(artifacts_dir) do
+            for (creator, known_hash) in creators
+                # Create artifact
+                hash = create_artifact_chmod(creator)
 
-        # Ensure it hashes to the correct gitsha:
-        @test all(hash.bytes .== hex2bytes(known_hash))
+                # Ensure it hashes to the correct gitsha:
+                @test all(hash.bytes .== hex2bytes(known_hash))
 
-        # Test that we can look it up and that it sits in the right place
-        @test basename(dirname(artifact_path(hash))) == "artifacts"
-        @test basename(artifact_path(hash)) == known_hash
-        @test artifact_exists(hash)
+                # Test that we can look it up and that it sits in the right place
+                @test dirname(artifact_path(hash)) == artifacts_dir
+                @test basename(artifact_path(hash)) == known_hash
+                @test artifact_exists(hash)
 
-        # Test that the artifact verifies
-        @test verify_artifact(hash)
+                # Test that the artifact verifies
+                @test verify_artifact(hash)
+            end
+        end
     end
 
     @testset "File permissions" begin
