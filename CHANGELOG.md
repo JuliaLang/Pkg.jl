@@ -1,6 +1,10 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Artifact selection hooks can now load dependencies from their package's `[deps]`. Pkg runs hooks against the resolved
+  manifest and installs dependency artifacts first, preventing selectors from loading stale, incompatible versions.
+  Active-project and workspace preferences are visible to hooks, hook results are cached for the duration of the
+  session, and hooks run at the parent's optimization level so that dependencies they precompile are reusable. ([#4747])
 - `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
   `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
   or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and
@@ -232,3 +236,4 @@ Pkg v1.7 Release Notes
 [#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
 [#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
+[#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747

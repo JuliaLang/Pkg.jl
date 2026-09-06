@@ -299,4 +299,13 @@ end
 
 This ensures that the same artifact is used by your code as Pkg attempted to install.
 
-Artifact selection hooks are only allowed to use `Base`, `Artifacts`, `Libdl`, and `TOML`. They are not allowed to use any other standard libraries, and they are not allowed to use any packages (including the package to which they belong).
+Hooks may use standard libraries and load their package's `[deps]` with `using MyDependency`.
+Pkg supplies the resolved dependency versions and installs their artifacts before running the hook.
+Preferences come from the active project and its workspace parents; unrelated stacked environments and the package checkout's own manifest and preferences are excluded.
+
+Hooks run before package build scripts and should not load their own package, whose artifacts have not yet been selected.
+Dependencies must be loadable without a build step, and hooks should handle initialization failures when installing for another platform.
+Keep diagnostics, including those from dependencies, on `stderr` so they do not corrupt the TOML output.
+
+Successful selections are cached for the Julia session and invalidated by changes to the environment, preferences, selector script, or artifact TOML file.
+Changes to other inputs, such as system state or included augmentation files, require a new session.
