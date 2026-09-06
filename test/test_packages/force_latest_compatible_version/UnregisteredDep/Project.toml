@@ -1,0 +1,16 @@
+name = "UnregisteredDep"
+uuid = "abc047b9-6ad4-4533-a374-d50ae908e3e9"
+authors = ["Test <test@example.com>"]
+version = "0.1.0"
+
+[deps]
+SomeUnregisteredPackage = "deadbeef-dead-beef-dead-beefdeadbeef"
+
+[compat]
+SomeUnregisteredPackage = "^1.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
