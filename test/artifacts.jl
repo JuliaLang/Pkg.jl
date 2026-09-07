@@ -390,24 +390,32 @@ end
         @test artifact_exists(selected["new"].hash)
         @test !artifact_exists(selected["old"].hash)
 
-        # The selector ran once for the resolution. Status checks in the same session,
-        # whether from the in-memory environment or from the one written to disk, reuse
-        # the cached result rather than running it again.
-        @test selector_runs() == 1
-        Pkg.status(; io = IOBuffer())
+        # The selector ran once for the resolution. Instantiating the environment written
+        # to disk reuses the cached result rather than running it again.
         @test selector_runs() == 1
         Pkg.instantiate()
         @test selector_runs() == 1
+
+        # Status never runs selectors, whether or not a result is cached, and reports the
+        # package as downloaded as soon as its source is present.
+        Pkg.Operations.clear_selector_cache!()
+        remove_artifact(selected["new"].hash)
+        status = sprint(io -> Pkg.status(; io))
+        @test selector_runs() == 1
+        @test !occursin("not downloaded", status)
+        Pkg.instantiate()
+        @test selector_runs() == 2
+        @test artifact_exists(selected["new"].hash)
 
         # Editing a development hook invalidates the cached result in the same session.
         selector_path = joinpath(selector, ".pkg", "select_artifacts.jl")
         open(selector_path, "a") do io
             println(io)
         end
-        Pkg.status(; io = IOBuffer())
-        @test selector_runs() == 2
-        Pkg.status(; io = IOBuffer())
-        @test selector_runs() == 2
+        Pkg.instantiate()
+        @test selector_runs() == 3
+        Pkg.instantiate()
+        @test selector_runs() == 3
 
         depot_env = "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
 

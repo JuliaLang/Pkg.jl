@@ -309,3 +309,4 @@ Keep diagnostics, including those from dependencies, on `stderr` so they do not 
 
 Successful selections are cached for the Julia session and invalidated by changes to the environment, preferences, selector script, or artifact TOML file.
 Changes to other inputs, such as system state or included augmentation files, require a new session.
+`Pkg.status` never runs hooks: it reports a package with a hook as downloaded once its source is present, and leaves checking the selected artifacts to `Pkg.instantiate`.

@@ -1840,8 +1840,12 @@ end
 function check_artifacts_downloaded(
         pkg_root::String;
         platform::AbstractPlatform = HostPlatform(), selector_project::Union{Nothing, String} = nothing,
-        env_key::Union{Nothing, UInt} = nothing
+        env_key::Union{Nothing, UInt} = nothing, run_selectors::Bool = true
     )
+    # Without running the selector there is no way to know which artifacts it would pick,
+    # so callers that opt out treat such packages as downloaded. Installation still runs
+    # the selector, so a missing selection is corrected there.
+    run_selectors || !has_artifact_selector(pkg_root) || return true
     collected_artifacts = try
         collect_artifacts(pkg_root; platform, selector_project, env_key)
     catch err
@@ -3743,13 +3747,12 @@ end
 
 function is_package_downloaded(
         manifest_file::String, pkg::PackageSpec;
-        platform = HostPlatform(), selector_project::Union{Nothing, String} = nothing,
-        env_key::Union{Nothing, UInt} = nothing
+        platform = HostPlatform(), run_selectors::Bool = true
     )
     sourcepath = source_path(manifest_file, pkg)
     sourcepath === nothing && return false
     isdir(sourcepath) || return false
-    check_artifacts_downloaded(sourcepath; platform, selector_project, env_key) || return false
+    check_artifacts_downloaded(sourcepath; platform, run_selectors) || return false
     return true
 end
 
@@ -3879,16 +3882,6 @@ function print_status(
     no_visible_packages_heldback = true
     no_packages_heldback = true
     lpadding = 2
-    # Fingerprinting the environment is only needed to reuse cached selector results
-    env_key = if any(xs) do (_, _, new)
-            new === nothing && return false
-            root = source_path(env.manifest_file, new)
-            root !== nothing && has_artifact_selector(root)
-        end
-        selector_env_key(env)
-    else
-        nothing
-    end
 
     package_statuses = PackageStatusData[]
     for (uuid, old, new) in xs
@@ -3938,9 +3931,10 @@ function print_status(
 
         # TODO: Show extension deps for project as well?
 
-        pkg_downloaded = !is_instantiated(new) || is_package_downloaded(
-            env.manifest_file, new; selector_project = env.project_file, env_key
-        )
+        # Status must stay cheap, so it never spawns artifact selectors: a package with a
+        # selector counts as downloaded once its source is present.
+        pkg_downloaded = !is_instantiated(new) ||
+            is_package_downloaded(env.manifest_file, new; run_selectors = false)
 
         new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
         pkg_upgradable = new_ver_avail && cinfo !== nothing && isempty(cinfo[1])
