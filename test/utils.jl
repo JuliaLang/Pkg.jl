@@ -62,10 +62,16 @@ end
 #
 # Without a package server the registry is cloned once into the shared
 # registry depot, and `DEFAULT_REGISTRIES[1]` points there so that Pkg symlinks
-# (or copies, for `linked_reg = false`) it into the test depots on first use.
+# it into the test depots on first use. Registry updates in those depots fetch
+# into the shared clone through the link, so the depots that want a copy of the
+# registry instead (`linked_reg = false`) get it from a second clone that is
+# never updated: copying the shared clone while another test process fetches
+# into it fails on the files git replaces during the fetch.
 registry_is_compressed() = Pkg.Registry.registry_read_from_tarball()
 
 const SHARED_REGISTRIES_DIR = joinpath(REGISTRY_DEPOT, "registries")
+const PRISTINE_REGISTRY_DIR = joinpath(REGISTRY_DEPOT, "pristine", "General")
+const GENERAL_URL = "https://github.com/JuliaRegistries/General.git"
 
 function check_init_reg()
     if registry_is_compressed()
@@ -78,7 +84,14 @@ function check_init_reg()
         end
         return
     end
-    isfile(joinpath(REGISTRY_DIR, "Registry.toml")) && return
+    if !isfile(joinpath(REGISTRY_DIR, "Registry.toml"))
+        init_registry_clone()
+    end
+    isfile(joinpath(PRISTINE_REGISTRY_DIR, "Registry.toml")) || init_pristine_registry()
+    return
+end
+
+function init_registry_clone()
     mkpath(REGISTRY_DIR)
     if Pkg.Registry.registry_use_pkg_server()
         url = Pkg.Registry.pkg_server_registry_urls()[GENERAL_UUID]
@@ -93,7 +106,7 @@ function check_init_reg()
                 LibGit2.with(
                     Pkg.GitTools.clone(
                         stderr_f(),
-                        "https://github.com/JuliaRegistries/General.git",
+                        GENERAL_URL,
                         REGISTRY_DIR,
                         credentials = creds
                     )
@@ -104,6 +117,22 @@ function check_init_reg()
         end
     end
     return isfile(joinpath(REGISTRY_DIR, "Registry.toml")) || error("Registry did not install properly")
+end
+
+# The clone that unlinked test depots copy. A local clone hardlinks the object
+# store, so this costs a checkout rather than a second download; the remote is
+# pointed back at the upstream repository so that copies of it update like a
+# regular clone. An unpacked (non-git) registry is simply copied.
+function init_pristine_registry()
+    mkpath(dirname(PRISTINE_REGISTRY_DIR))
+    if isdir(joinpath(REGISTRY_DIR, ".git"))
+        LibGit2.with(LibGit2.clone(REGISTRY_DIR, PRISTINE_REGISTRY_DIR)) do repo
+            LibGit2.set_remote_url(repo, "origin", GENERAL_URL)
+        end
+    else
+        cp(REGISTRY_DIR, PRISTINE_REGISTRY_DIR)
+    end
+    return
 end
 
 # Install the shared compressed General registry into `depot`, the way Pkg
@@ -194,7 +223,7 @@ function isolate(@nospecialize(fn::Function); loaded_depot = false, linked_reg =
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
         if !registry_is_compressed()
             Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
-            Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
+            Pkg.Registry.DEFAULT_REGISTRIES[1].path = linked_reg ? REGISTRY_DIR : PRISTINE_REGISTRY_DIR
             Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         end
         Pkg.REPLMode.TEST_MODE[] = false
@@ -310,7 +339,7 @@ function temp_pkg_dir(@nospecialize(fn::Function); rm = true, linked_reg = true)
         Base.ACTIVE_PROJECT[] = nothing
         if !registry_is_compressed()
             Pkg.Registry.DEFAULT_REGISTRIES[1].url = nothing
-            Pkg.Registry.DEFAULT_REGISTRIES[1].path = REGISTRY_DIR
+            Pkg.Registry.DEFAULT_REGISTRIES[1].path = linked_reg ? REGISTRY_DIR : PRISTINE_REGISTRY_DIR
             Pkg.Registry.DEFAULT_REGISTRIES[1].linked = linked_reg
         end
         withenv(
