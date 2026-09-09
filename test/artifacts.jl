@@ -6,6 +6,7 @@ import Pkg.Artifacts: pack_platform!, unpack_platform, with_artifacts_directory,
 import Pkg.Operations: count_artifacts, artifact_suffix
 using TOML, Dates, SHA
 import Base: SHA1
+import LibGit2
 
 using ..Utils
 using Preferences
@@ -509,6 +510,84 @@ end
         @test selector_runs() == runs_before + 1
     end
 end
+@testset "offline resolution does not run artifact selectors" begin
+    temp_pkg_dir() do project_path
+        # A registered package with a selector that records every run
+        pkg_uuid = "7c1e3b2a-9d4f-4e6b-8a5c-2f0d1e9b3c04"
+        pkg_repo_path = joinpath(project_path, "OfflineSelector")
+        mkpath(joinpath(pkg_repo_path, "src"))
+        mkpath(joinpath(pkg_repo_path, ".pkg"))
+        write(
+            joinpath(pkg_repo_path, "Project.toml"), """
+            name = "OfflineSelector"
+            uuid = "$pkg_uuid"
+            version = "0.1.0"
+            """
+        )
+        write(joinpath(pkg_repo_path, "src", "OfflineSelector.jl"), "module OfflineSelector end\n")
+        write(joinpath(pkg_repo_path, "Artifacts.toml"), "")
+        selector_runs_file = joinpath(project_path, "selector_runs")
+        selector_runs() = isfile(selector_runs_file) ? countlines(selector_runs_file) : 0
+        write(
+            joinpath(pkg_repo_path, ".pkg", "select_artifacts.jl"), """
+            open($(repr(selector_runs_file)), "a") do io
+                println(io, "run")
+            end
+            """
+        )
+        git_init_and_commit(pkg_repo_path)
+        pkg_tree_hash = LibGit2.with(LibGit2.GitRepo(pkg_repo_path)) do repo
+            string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.head(repo))))
+        end
+
+        regpath = joinpath(project_path, "OfflineReg")
+        mkpath(joinpath(regpath, "OfflineSelector"))
+        regpath_toml = replace(regpath, "\\" => "/")
+        pkg_repo_path_toml = replace(pkg_repo_path, "\\" => "/")
+        write(
+            joinpath(regpath, "Registry.toml"), """
+            name = "OfflineReg"
+            uuid = "3a2b1c0d-4e5f-4a6b-9c8d-7e6f5a4b3c05"
+            repo = "$regpath_toml"
+            [packages]
+            $pkg_uuid = { name = "OfflineSelector", path = "OfflineSelector" }
+            """
+        )
+        write(
+            joinpath(regpath, "OfflineSelector", "Package.toml"), """
+            name = "OfflineSelector"
+            uuid = "$pkg_uuid"
+            repo = "$pkg_repo_path_toml"
+            """
+        )
+        write(
+            joinpath(regpath, "OfflineSelector", "Versions.toml"), """
+            ["0.1.0"]
+            git-tree-sha1 = "$pkg_tree_hash"
+            """
+        )
+        git_init_and_commit(regpath)
+        Pkg.Registry.add(url = regpath)
+
+        Pkg.activate(project_path)
+        Pkg.add("OfflineSelector")
+        @test selector_runs() == 1
+
+        # Offline resolution only considers installed versions. Deciding whether a
+        # registered version is installed must not run its selector, which would
+        # execute outside any resolved environment. The environment does not change,
+        # so the installation check afterwards reuses the cached selection.
+        Pkg.offline()
+        try
+            Pkg.update()
+        finally
+            Pkg.offline(false)
+        end
+        @test Pkg.dependencies()[Base.UUID(pkg_uuid)].version == v"0.1.0"
+        @test selector_runs() == 1
+    end
+end
+
 
 @testset "with_artifacts_directory()" begin
     mktempdir() do art_dir

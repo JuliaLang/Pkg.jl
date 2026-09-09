@@ -1139,7 +1139,10 @@ function deps_graph(
                         Registry.isyanked(info, v) && continue
                         if installed_only
                             pkg_spec = PackageSpec(name = pkg.name, uuid = pkg.uuid, version = v, tree_hash = Registry.treehash(info, v))
-                            is_package_downloaded(env.manifest_file, pkg_spec) || continue
+                            # Resolution has not happened yet, so there is no environment to run
+                            # artifact selectors in; a version with a selector counts as installed
+                            # once its source is present. Installing it still runs the selector.
+                            is_package_downloaded(env.manifest_file, pkg_spec; run_selectors = false) || continue
                         end
 
                         # Skip package version that are not the same as external packages in sysimage
