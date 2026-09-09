@@ -320,6 +320,50 @@ end
     end
 end
 
+@testset "artifact selectors cannot load their own package" begin
+    mktempdir() do root
+        # The active project makes the hook's package loadable, but its artifacts are
+        # selected by that very hook, so loading it must fail rather than pick up
+        # whatever artifacts happen to be installed.
+        pkg = joinpath(root, "SelfLoader")
+        pkg_uuid = "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c05"
+        mkpath(joinpath(pkg, "src"))
+        mkpath(joinpath(pkg, ".pkg"))
+        write(
+            joinpath(pkg, "Project.toml"), """
+            name = "SelfLoader"
+            uuid = "$pkg_uuid"
+            [deps]
+            TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+            """
+        )
+        write(joinpath(pkg, "src", "SelfLoader.jl"), "module SelfLoader end\n")
+        artifacts_toml = joinpath(pkg, "Artifacts.toml")
+        write(artifacts_toml, "")
+        selector = joinpath(pkg, ".pkg", "select_artifacts.jl")
+        write(joinpath(root, "Project.toml"), "[deps]\nSelfLoader = \"$pkg_uuid\"\n")
+        write(
+            joinpath(root, "Manifest.toml"), """
+            manifest_format = "2.0"
+            [[deps.SelfLoader]]
+            uuid = "$pkg_uuid"
+            path = "SelfLoader"
+            """
+        )
+        env = Pkg.Types.EnvCache(joinpath(root, "Project.toml"))
+        function select(hook)
+            write(selector, hook)
+            return Pkg.Operations.with_resolved_artifact_env(env) do project
+                Pkg.Operations.run_artifact_selector(
+                    selector, artifacts_toml, HostPlatform(); selector_project = project, env_key = nothing
+                )
+            end
+        end
+        @test select("using TOML\nTOML.print(Dict(\"ok\" => true))\n") == Dict("ok" => true)
+        @test_throws ProcessFailedException select("using SelfLoader, TOML\nTOML.print(Dict(\"ok\" => true))\n")
+    end
+end
+
 @testset "artifact selectors use resolved dependencies" begin
     temp_pkg_dir() do project_path
         for package in (

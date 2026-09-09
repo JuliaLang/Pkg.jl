@@ -1413,11 +1413,13 @@ function run_artifact_selector(
         # Give the hook's dependency names precedence over the active project's.
         # List workspace ancestors explicitly: Julia only inherits ancestor preferences
         # automatically for the first load path entry.
-        deps_project = write_selector_deps_project(dirname(dirname(selector_path)), tmp, project)
+        pkg_root = dirname(dirname(selector_path))
+        deps_project = write_selector_deps_project(pkg_root, tmp, project)
         projects = project === nothing ? ["@"] : Base.get_projects_workspace_to_root(project)
         select_cmd = gen_build_code(
             selector_path; inherit_project = selector_project === nothing, project = selector_project,
-            load_path = [deps_project; projects; "@stdlib"], optimize = true
+            load_path = [deps_project; projects; "@stdlib"], optimize = true,
+            epilogue = selector_self_load_check(pkg_root)
         )
         select_cmd = Cmd(`$select_cmd --compile=min -t1 --startup-file=no $(triplet(platform))`)
         String(read(select_cmd))
@@ -1430,6 +1432,23 @@ function run_artifact_selector(
     # Only successful runs are cached; a failing selector is retried on the next call.
     cache_key === nothing || @lock SELECTOR_CACHE_LOCK SELECTOR_CACHE[cache_key] = artifacts
     return artifacts
+end
+
+# A hook runs before its package's artifacts are selected, so loading that package
+# cannot work reliably: it fails when the artifacts are missing and silently uses stale
+# ones otherwise. The package may be loadable through the active project, so the hook
+# process checks after the selection that it did not load the package.
+function selector_self_load_check(pkg_root::String)
+    project_file = projectfile_path(pkg_root; strict = true)
+    project_file === nothing && return ""
+    (; name, uuid) = Types.read_project(project_file)
+    (name === nothing || uuid === nothing) && return ""
+    return """
+    if haskey(Base.loaded_modules, Base.PkgId(Base.UUID($(repr(string(uuid)))), $(repr(name))))
+        println(stderr, "ERROR: the artifact selector of $name loaded $name itself. Selectors run before the artifacts of their package are selected, so they must not load the package; only its dependencies and standard libraries may be loaded.")
+        exit(1)
+    end
+    """
 end
 
 # Combine the package's dependency names with the resolved manifest, excluding any
@@ -2194,7 +2213,8 @@ function gen_build_code(
         inherit_project::Bool = false,
         project::Union{Nothing, String} = nothing,
         load_path::Union{Nothing, Vector{String}} = nothing,
-        optimize::Bool = false
+        optimize::Bool = false,
+        epilogue::String = ""
     )
     inherit_project && project !== nothing && error("cannot both inherit and explicitly set a project")
     code = """
@@ -2204,6 +2224,7 @@ function gen_build_code(
     end
     cd($(repr(dirname(build_file))))
     include($(repr(build_file)))
+    $epilogue
     """
     # This will make it so that running Pkg.build runs the build in a session with --startup=no
     # *unless* the parent julia session is started with --startup=yes explicitly.

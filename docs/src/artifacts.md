@@ -303,7 +303,7 @@ Hooks may use standard libraries and load their package's `[deps]` with `using M
 Pkg supplies the resolved dependency versions and installs their artifacts before running the hook.
 Preferences come from the active project and its workspace parents; unrelated stacked environments and the package checkout's own manifest and preferences are excluded.
 
-Hooks run before package build scripts and should not load their own package, whose artifacts have not yet been selected.
+Hooks run before package build scripts and cannot load their own package, whose artifacts have not yet been selected; Pkg reports an error when a hook does.
 Dependencies must be loadable without a build step, and hooks should handle initialization failures when installing for another platform.
 Keep diagnostics, including those from dependencies, on `stderr` so they do not corrupt the TOML output.
 
