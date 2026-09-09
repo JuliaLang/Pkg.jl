@@ -10,6 +10,7 @@ projects = ["test", "docs"]
 
 [deps]
 ArgTools = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
+ArtifactDownloads = "6ee59702-05f1-4877-b811-03813c0d76c5"
 Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
@@ -35,6 +36,7 @@ REPLExt = "REPL"
 
 [compat]
 ArgTools = "1.2"
+ArtifactDownloads = "1.14"
 Artifacts = "1.11"
 Dates = "1.11"
 Downloads = "1.7"
@@ -51,5 +53,5 @@ TOML = "1"
 Tar = "1.10"
 UUIDs = "1.11"
 Zstd_jll = "1.5.7"
-julia = "1.12"
+julia = "1.14"
 p7zip_jll = "17.5"
