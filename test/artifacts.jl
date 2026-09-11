@@ -1342,6 +1342,8 @@ Pkg.can_fancyprint(io::CapturedIO) = io.fancy
             # and nothing keeps redrawing it over the prompt
             sleep(0.5)
             @test isempty(take!(io))
+            # the transfer itself was aborted rather than left running in the background
+            @test timedwait(() -> isready(srv.disconnected), 60) == :ok
             srv.close()
             # the abandoned download job winds down and cleans up after itself
             artifacts_dir = joinpath(DEPOT_PATH[1], "artifacts")

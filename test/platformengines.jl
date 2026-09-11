@@ -2,7 +2,7 @@ module PlatformEngineTests
 import ..Pkg # ensure we are using the correct Pkg
 
 using Test, Pkg.PlatformEngines, Pkg.BinaryPlatforms, SHA, Sockets
-using ..Utils: list_tarball_files
+using ..Utils: list_tarball_files, http_server, stalling_http_server
 
 function auth_refresh_server(response::String)
     server = listen(Sockets.localhost, 0)
@@ -215,6 +215,90 @@ end
     mktempdir() do tmp
         PlatformEngines.download("https://api.github.com/repos/JuliaPackaging/BinaryProvider.jl/tarball/c2a4fc38f29eb81d66e3322e585d0199722e5d71", joinpath(tmp, "BinaryProvider"); verbose = true)
         @test isfile(joinpath(tmp, "BinaryProvider"))
+    end
+end
+
+# `download` runs on top of `Downloads.request` so that it can be cancelled, and has to
+# turn the response into the same result `Downloads.download` would give.
+@testset "download response handling" begin
+    Downloads = PlatformEngines.Downloads
+    body = "artifact bytes"
+    srv = http_server() do sock, target
+        if target == "/found"
+            write(sock, "HTTP/1.1 200 OK\r\nContent-Length: $(ncodeunits(body))\r\nConnection: close\r\n\r\n", body)
+        else
+            write(sock, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        end
+    end
+    try
+        mktempdir() do dir
+            dest = joinpath(dir, "download")
+            @test PlatformEngines.download("$(srv.url)/found", dest) == dest
+            @test read(dest, String) == body
+            err = try
+                PlatformEngines.download("$(srv.url)/missing", dest)
+            catch e
+                e
+            end
+            @test err isa Downloads.RequestError
+            @test err.response.status == 404
+            @test !isfile(dest) # the partial download is removed
+        end
+    finally
+        srv.close()
+    end
+    mktempdir() do dir
+        # nothing is listening on that port anymore
+        dest = joinpath(dir, "download")
+        @test_throws Downloads.RequestError PlatformEngines.download("$(srv.url)/found", dest)
+        @test !isfile(dest)
+    end
+end
+
+@testset "Download cancellation" begin
+    Downloads = PlatformEngines.Downloads
+    srv = stalling_http_server()
+    try
+        mktempdir() do dir
+            dest = joinpath(dir, "download")
+            cancellation = PlatformEngines.DownloadCancellation()
+            # like the artifact download jobs, the download runs on a task spawned in the scope
+            t = PlatformEngines.with_download_cancellation(cancellation) do
+                Threads.@spawn PlatformEngines.download(srv.url, dest)
+            end
+            take!(srv.requested) # the transfer is under way
+            @test length(cancellation.events) == 1
+
+            PlatformEngines.cancel_downloads(cancellation)
+            @test timedwait(() -> istaskdone(t), 60) == :ok
+            err = try
+                fetch(t)
+            catch e
+                e
+            end
+            @test err isa TaskFailedException && err.task.result isa Downloads.RequestError
+            @test !isfile(dest)
+            @test isempty(cancellation.events)
+            # the server sees the client go away rather than a transfer that runs on
+            @test timedwait(() -> isready(srv.disconnected), 60) == :ok
+
+            # a download started in the scope after the cancellation fails instead of
+            # beginning a transfer that nobody is waiting for
+            t = PlatformEngines.with_download_cancellation(cancellation) do
+                Threads.@spawn PlatformEngines.download(srv.url, dest)
+            end
+            @test timedwait(() -> istaskdone(t), 60) == :ok
+            err = try
+                fetch(t)
+            catch e
+                e
+            end
+            @test err isa TaskFailedException && err.task.result isa Downloads.RequestError
+            @test !isfile(dest)
+            @test isempty(cancellation.events)
+        end
+    finally
+        srv.close()
     end
 end
 
