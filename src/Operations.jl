@@ -2935,9 +2935,22 @@ function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.Registry
     return pkgs, deps_map
 end
 
+# Registry weak dependencies conservatively identify possible extensions.
+function pkg_may_have_extensions(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec)
+    pkg.version isa VersionNumber || return true
+    for reg in registries
+        reg_pkg = get(reg, pkg.uuid, nothing)
+        isnothing(reg_pkg) && continue
+        info = Registry.registry_info(reg, reg_pkg)
+        any(((vr, wd),) -> pkg.version ∈ vr && !isempty(wd), info.weak_deps) && return true
+    end
+    return false
+end
+
 function up(
         ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
-        skip_writing_project::Bool = false, preserve::Union{Nothing, PreserveLevel} = nothing
+        skip_writing_project::Bool = false, preserve::Union{Nothing, PreserveLevel} = nothing,
+        download_loadable_only::Bool = false
     )
 
     requested_pkgs = pkgs
@@ -2964,9 +2977,24 @@ function up(
         deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
-    new_apply = download_source(ctx)
-    fixups_from_projectfile!(ctx)
-    download_artifacts(ctx, julia_version = ctx.julia_version)
+    if download_loadable_only
+        loadable_uuids = Set{UUID}(pkg.uuid for pkg in load_all_deps_loadable(ctx.env))
+        manifest_pkgs = load_all_deps(ctx.env)
+        source_pkgs = filter(manifest_pkgs) do pkg
+            pkg.uuid in loadable_uuids && return true
+            is_tracking_registry(pkg) || return true
+            return pkg_may_have_extensions(ctx.registries, pkg)
+        end
+        artifact_pkgs = filter(pkg -> pkg.uuid in loadable_uuids, manifest_pkgs)
+        downloaded = download_source(ctx, source_pkgs)
+        new_apply = intersect(downloaded, loadable_uuids)
+        fixups_from_projectfile!(ctx)
+        download_artifacts(ctx, artifact_pkgs; julia_version = ctx.julia_version)
+    else
+        new_apply = download_source(ctx)
+        fixups_from_projectfile!(ctx)
+        download_artifacts(ctx, julia_version = ctx.julia_version)
+    end
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io, hidden_upgrades_info = true)
 
