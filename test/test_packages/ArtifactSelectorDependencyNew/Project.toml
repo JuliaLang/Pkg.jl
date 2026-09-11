@@ -1,0 +1,6 @@
+name = "ArtifactSelectorDependency"
+uuid = "b8df255f-45df-4e3b-8d04-6a7f7496dbd4"
+version = "0.2.0"
+
+[deps]
+Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
