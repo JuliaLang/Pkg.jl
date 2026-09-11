@@ -631,6 +631,7 @@ const project = API.project
 
 """
     Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false, update_on_mismatch=false)
+    Pkg.instantiate(paths::AbstractString...; kwargs...)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -642,6 +643,10 @@ redirecting to the `build.log` file.
 If no `Project.toml` exist in the current active project, create one with all the
 dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
+
+When passed paths to project files or directories, instantiate each environment without
+changing the active environment. Registries are loaded once and keyword arguments apply
+to every environment. Paths sharing a workspace are precompiled together.
 
 `update_on_mismatch=true` falls back to [`Pkg.update`](@ref) when the existing manifest cannot
 be used as-is — for example, when the project's dependencies or compat bounds have changed
@@ -655,6 +660,9 @@ See more and how to disable auto-precompilation at [Environment Precompilation](
 
 !!! compat "Julia 1.12"
     The `julia_version_strict` keyword argument requires at least Julia 1.12.
+
+!!! compat "Julia 1.14"
+    Passing `paths` requires at least Julia 1.14.
 
 """
 const instantiate = API.instantiate
@@ -1047,10 +1055,10 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false, workspace = false)
     return if should_autoprecompile()
         # Auto precompile runs in foreground with detachable support
-        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded, already_instantiated, workspace)
     end
 end
 

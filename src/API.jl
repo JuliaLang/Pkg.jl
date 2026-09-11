@@ -1266,10 +1266,15 @@ function precompile(
         else
             ctx.io.io
         end
-        pkgs_name = String[pkg.name for pkg in pkgs]
         # Allow user to press 'd' to detach when running interactively
         detachable = isinteractive()
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
+        # PkgIds can identify packages outside the active project's direct dependencies.
+        precomp_pkgs = if !isempty(pkgs) && all(pkg -> pkg.uuid !== nothing && pkg.name !== nothing, pkgs)
+            Base.PkgId[Base.PkgId(pkg.uuid::UUID, pkg.name::String) for pkg in pkgs]
+        else
+            String[pkg.name for pkg in pkgs]
+        end
+        return Base.Precompilation.precompilepkgs(precomp_pkgs; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
     end
 end
 
@@ -1290,6 +1295,53 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
+
+function instantiate(path::AbstractString, paths::AbstractString...; kwargs...)
+    registries = Registry.reachable_registries()
+    envs = EnvCache[]
+    for p in (path, paths...)
+        push!(envs, EnvCache(isdir(p) ? projectfile_path(p) : p))
+    end
+    groups = Dict{String, Vector{EnvCache}}()
+    order = String[]
+    for env in envs
+        haskey(groups, env.manifest_file) || push!(order, env.manifest_file)
+        push!(get!(Vector{EnvCache}, groups, env.manifest_file), env)
+    end
+    for key in order
+        instantiate_workspace(groups[key], registries; kwargs...)
+    end
+    return
+end
+
+function instantiate_workspace(
+        envs::Vector{EnvCache}, registries::Vector{Registry.RegistryInstance};
+        allow_autoprecomp::Bool = true, kwargs...
+    )
+    if length(envs) == 1
+        ctx = Context(; env = envs[1], registries)
+        instantiate(ctx; allow_autoprecomp, kwargs...)
+        return
+    end
+    precompile_ctx = nothing
+    for env in envs
+        ctx = Context(; env, registries)
+        instantiate(ctx; allow_autoprecomp = false, kwargs...)
+        precompile_ctx === nothing && (precompile_ctx = ctx)
+    end
+    allow_autoprecomp || return
+    union_pkgs = PackageSpec[]
+    seen = Set{UUID}()
+    for env in envs, (name, uuid) in env.project.deps
+        uuid in seen && continue
+        push!(seen, uuid)
+        push!(union_pkgs, PackageSpec(; name, uuid))
+    end
+    isempty(union_pkgs) && return
+    Pkg._auto_precompile(precompile_ctx, union_pkgs; workspace = true, already_instantiated = true)
+    return
+end
+
 function instantiate(
         ctx::Context; manifest::Union{Bool, Nothing} = nothing,
         update_registry::Bool = true, verbose::Bool = false,
