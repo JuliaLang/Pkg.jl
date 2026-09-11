@@ -644,11 +644,9 @@ If no `Project.toml` exist in the current active project, create one with all th
 dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
-When passed one or more `paths` (each a path to a project file or to a directory
-containing one), each environment is instantiated in turn. The registries are read
-from disk once and shared across all of the environments, which is more convenient
-and efficient than activating and instantiating each environment separately. All
-keyword arguments are forwarded to each instantiation.
+When passed one or more `paths` to project files or directories, instantiate each
+environment in turn without changing the active environment. Registries are loaded
+once and keyword arguments apply to every environment.
 
 `update_on_mismatch=true` falls back to [`Pkg.update`](@ref) when the existing manifest cannot
 be used as-is — for example, when the project's dependencies or compat bounds have changed

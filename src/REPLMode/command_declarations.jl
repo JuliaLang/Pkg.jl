@@ -70,9 +70,8 @@ compound_declarations = [
                 was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling environments
                 where any compatible set of dependency versions is acceptable.
 
-                If one or more `path`s are given, each environment at those paths (a project file or a directory containing one)
-                is instantiated in turn, without changing the active environment. The registries are read once and shared across
-                all of them, which is more convenient and efficient than activating and instantiating each separately.
+                If paths to project files or directories are given, instantiate each environment without changing the active
+                environment. Registries are loaded once and options apply to every environment.
 
                 After packages have been installed the project will be precompiled. For more information see `pkg> ?precompile`.
                 """,

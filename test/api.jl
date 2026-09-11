@@ -248,16 +248,11 @@ import .FakeTerminals.FakeTerminal
                 active_before = Base.active_project()
                 envs = ("packages/Dep7", "packages/Dep8")
                 manifests = joinpath.(envs, "Manifest.toml")
-                # Remove the manifests left over from the previous testset so the
-                # assertions below verify that this call recreates them.
                 rm.(manifests, force = true)
-                # Instantiating several environments in one call should not change
-                # the active project.
-                Pkg.instantiate(envs...; io = iob)
+                Pkg.instantiate(joinpath(envs[1], "Project.toml"), envs[2]; io = iob)
                 @test Base.active_project() == active_before
                 @test all(isfile, manifests)
 
-                # The REPL form `pkg> instantiate path...` should behave the same.
                 rm.(manifests, force = true)
                 Pkg.REPLMode.pkgstr("instantiate $(envs[1]) $(envs[2])")
                 @test Base.active_project() == active_before
