@@ -2935,9 +2935,7 @@ function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.Registry
     return pkgs, deps_map
 end
 
-# Whether a package version might provide extensions, determined from the registry's
-# weak dependencies without needing the package source. Used when scoping which sources
-# must be downloaded so the shared manifest still records extension info correctly.
+# Registry weak dependencies conservatively identify possible extensions.
 function pkg_may_have_extensions(registries::Vector{Registry.RegistryInstance}, pkg::PackageSpec)
     pkg.version isa VersionNumber || return true
     for reg in registries
@@ -2980,10 +2978,6 @@ function up(
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
     if download_loadable_only
-        # Resolve the whole workspace so the shared manifest stays consistent, but only
-        # fetch sources for the active project's loadable dependencies. Sources are also
-        # kept for packages that may provide extensions (so the manifest records their weak
-        # deps and extensions) and for packages tracked by path or repo (sources are local).
         loadable_uuids = Set{UUID}(pkg.uuid for pkg in load_all_deps_loadable(ctx.env))
         manifest_pkgs = load_all_deps(ctx.env)
         source_pkgs = filter(manifest_pkgs) do pkg
@@ -2992,7 +2986,8 @@ function up(
             return pkg_may_have_extensions(ctx.registries, pkg)
         end
         artifact_pkgs = filter(pkg -> pkg.uuid in loadable_uuids, manifest_pkgs)
-        new_apply = download_source(ctx, source_pkgs)
+        downloaded = download_source(ctx, source_pkgs)
+        new_apply = intersect(downloaded, loadable_uuids)
         fixups_from_projectfile!(ctx)
         download_artifacts(ctx, artifact_pkgs; julia_version = ctx.julia_version)
     else
