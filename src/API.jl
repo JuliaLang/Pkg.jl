@@ -422,15 +422,20 @@ function append_all_pkgs!(pkgs, ctx, mode; workspace::Bool = false)
             push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
         end
         if workspace
+            uuid_to_idx = Dict{UUID, Int}()
+            for (i, pkg) in pairs(pkgs)
+                isnothing(pkg.uuid) || get!(uuid_to_idx, pkg.uuid, i)
+            end
             for (project_file, project) in ctx.env.workspace
                 for (name::String, uuid::UUID) in project.deps
                     path, repo = get_path_repo(project, project_file, ctx.env.manifest_file, name)
-                    existing = findfirst(p -> p.uuid == uuid, pkgs)
+                    existing = get(uuid_to_idx, uuid, nothing)
                     if existing !== nothing
                         Operations.merge_pkg_source!(pkgs[existing], path, repo)
                         continue
                     end
                     push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
+                    uuid_to_idx[uuid] = length(pkgs)
                 end
             end
         end
