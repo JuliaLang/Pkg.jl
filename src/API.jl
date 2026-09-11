@@ -1268,11 +1268,7 @@ function precompile(
         end
         # Allow user to press 'd' to detach when running interactively
         detachable = isinteractive()
-        # Target packages by `PkgId` when their UUID is known, so the precompiler
-        # identifies them directly instead of resolving names against the active
-        # project. This lets a set of packages taken from a manifest (e.g. spanning
-        # several workspace members) be precompiled even when they are not all direct
-        # dependencies of the active project.
+        # PkgIds can identify packages outside the active project's direct dependencies.
         precomp_pkgs = if !isempty(pkgs) && all(pkg -> pkg.uuid !== nothing && pkg.name !== nothing, pkgs)
             Base.PkgId[Base.PkgId(pkg.uuid::UUID, pkg.name::String) for pkg in pkgs]
         else
