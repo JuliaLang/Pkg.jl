@@ -165,26 +165,39 @@ end
 
 
 """
-    atomic_toml_write(path::String, data; kws...)
+    atomic_toml_write(path::String, data; private::Bool = false, kws...)
 
 Write TOML data to a file atomically by first writing to a temporary file and then moving it into place.
-This prevents "teared" writes if the process is interrupted or if multiple processes write to the same file.
+This prevents "teared" writes if the process is interrupted or if multiple
+processes write to the same file. If `private` is set the file is given `0o600`
+permissions.
 
 The `kws` are passed to `TOML.print`.
 """
-function atomic_toml_write(path::String, data; kws...)
+function atomic_toml_write(path::String, data; private::Bool = false, kws...)
     dir = dirname(path)
     isempty(dir) && (dir = pwd())
 
-    temp_path, temp_io = mktemp(dir)
-    return try
-        TOML.print(temp_io, data; kws...)
-        close(temp_io)
+    mode = if private
+        0o600
+    elseif isfile(path)
+        # Keep the permissions of an existing file, like `open(path, "w")` would
+        filemode(path) & 0o777
+    else
+        nothing
+    end
+
+    # The temp dir is next to the destination so that the move is an atomic rename. `mktemp`
+    # is not used since it always creates files with mode 0o600, which `mv` would preserve.
+    return mktempdir(dir) do temp_dir
+        temp_path = joinpath(temp_dir, basename(path))
+        open(temp_path, "w") do temp_io
+            TOML.print(temp_io, data; kws...)
+        end
+        if mode !== nothing
+            chmod(temp_path, mode)
+        end
         mv(temp_path, path; force = true)
-    catch
-        close(temp_io)
-        rm(temp_path; force = true)
-        rethrow()
     end
 end
 
