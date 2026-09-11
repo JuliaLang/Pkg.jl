@@ -369,15 +369,15 @@ function __init__()
     else
         atreplinit() do repl
             if isinteractive() && repl isa REPL.LineEditREPL
-                # Do not call `REPL.setup_interface` here — it will be called
-                # by `run_frontend`, which respects user options set in other
-                # `atreplinit` hooks (e.g. `auto_insert_closing_bracket`).
-                @async begin
-                    while !isdefined(repl, :interface)
-                        sleep(0.1)
+                # Let run_frontend build keymaps after all atreplinit hooks run.
+                errormonitor(
+                    @async begin
+                        while !isdefined(repl, :interface)
+                            sleep(0.01)
+                        end
+                        repl_init(repl)
                     end
-                    repl_init(repl)
-                end
+                )
             end
         end
     end
