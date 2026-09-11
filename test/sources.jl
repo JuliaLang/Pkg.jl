@@ -310,6 +310,101 @@ temp_pkg_dir() do project_path
             end
         end
     end
+
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4089
+    # A `[sources]` entry may list a local `path` as well as a `url`/`rev` to fall back on
+    @testset "[sources] path with a repo to fall back on (#4089)" begin
+        mktempdir() do dir
+            path = copy_test_package(dir, "WithSources")
+            local_pkg = joinpath(path, "LocalPkg")
+            local_uuid = UUID("fcf55292-0d03-4e8a-9e0b-701580031fc3")
+            remote_uuid = UUID("00000000-0000-0000-0000-000000004089")
+
+            # `LocalPkg` is checked out in the environment and has a clone to fall back on,
+            # while `RemotePkg` only exists as a clone. Since the two say different things
+            # in `greet`, loading them shows which of the two sources is really in use.
+            local_url = make_file_url(git_init_package(dir, local_pkg))
+            remote_pkg = joinpath(dir, "RemotePkg")
+            mkpath(joinpath(remote_pkg, "src"))
+            write(
+                joinpath(remote_pkg, "Project.toml"), """
+                name = "RemotePkg"
+                uuid = "$(remote_uuid)"
+                version = "0.1.0"
+                """
+            )
+            write(
+                joinpath(remote_pkg, "src", "RemotePkg.jl"), """
+                module RemotePkg
+                greet() = "Hello World from url!"
+                end
+                """
+            )
+            git_init_and_commit(remote_pkg)
+            remote_url = make_file_url(remote_pkg)
+
+            local_source(url) = Dict("path" => "LocalPkg", "url" => url, "rev" => "HEAD")
+            remote_source = Dict("path" => "RemotePkg", "url" => remote_url, "rev" => "HEAD")
+            # `RemotePkg` lists a path that is not there, so only its repo can be used
+            function set_project(local_url)
+                return write(
+                    joinpath(path, "Project.toml"), """
+                    [deps]
+                    LocalPkg = "$(local_uuid)"
+                    RemotePkg = "$(remote_uuid)"
+
+                    [sources]
+                    LocalPkg = {path = "LocalPkg", url = "$(local_url)", rev = "HEAD"}
+                    RemotePkg = {path = "RemotePkg", url = "$(remote_url)", rev = "HEAD"}
+                    """
+                )
+            end
+            set_project(local_url)
+
+            cd(path) do
+                with_current_env() do
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+
+                    # `LocalPkg` is checked out, so its `path` takes precedence over the repo
+                    @test manifest[local_uuid].path == "LocalPkg"
+                    @test manifest[local_uuid].repo.source === nothing
+                    # `RemotePkg` is not, so it is tracked by its repo instead
+                    @test manifest[remote_uuid].path === nothing
+                    @test manifest[remote_uuid].repo.source == remote_url
+                    # ... and neither entry loses the source it does not use
+                    @test Pkg.project().sources["LocalPkg"] == local_source(local_url)
+                    @test Pkg.project().sources["RemotePkg"] == remote_source
+
+                    # the source that wins is the one that is loaded
+                    @test include_string(Module(), "using LocalPkg; LocalPkg.greet()") == "Hello World!"
+                    @test include_string(Module(), "using RemotePkg; RemotePkg.greet()") == "Hello World from url!"
+
+                    # with the checkout gone, `LocalPkg` falls back on its repo as well
+                    rm(local_pkg; recursive = true)
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    @test manifest[local_uuid].path === nothing
+                    @test manifest[local_uuid].repo.source == local_url
+                    @test Pkg.project().sources["LocalPkg"] == local_source(local_url)
+
+                    # neither source can be used
+                    wrong_url = make_file_url(joinpath(dir, "NoSuchPkg"))
+                    set_project(wrong_url)
+                    rm("Manifest.toml")
+                    err = try
+                        Pkg.resolve()
+                    catch e
+                        e
+                    end
+                    @test err isa Pkg.Types.PkgError
+                    @test occursin("neither source listed for `LocalPkg`", err.msg)
+                    @test occursin("path `LocalPkg`, url `$(wrong_url)`", err.msg)
+                    @test occursin("NoSuchPkg", err.msg)
+                end
+            end
+        end
+    end
 end
 
 end # module

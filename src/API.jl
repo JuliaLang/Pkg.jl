@@ -17,6 +17,7 @@ import ..Operations, ..GitTools, ..Pkg, ..Registry
 import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..atomic_toml_write, ..safe_realpath
 using ..Types, ..TOML
 using ..Types: VersionTypes
+using ..Types: has_repo_fallback
 using Base.BinaryPlatforms
 import ..stderr_f, ..stdout_f
 using ..Artifacts: artifact_paths
@@ -201,22 +202,27 @@ function update_source_if_set(env, pkg)
     project = env.project
     source = get(project.sources, pkg.name, nothing)
     if source !== nothing
-        if pkg.repo == GitRepo()
+        # An entry that lists a `path` as well as a repo to fall back on keeps both keys:
+        # it is only rewritten below if `pkg` carries a source that the entry does not give
+        entry_path, entry_repo = has_repo_fallback(source) ?
+            get_path_repo(project, env.project_file, env.manifest_file, pkg.name) :
+            (nothing, GitRepo())
+        if pkg.repo == GitRepo() && (pkg.path === nothing || pkg.path != entry_path)
             delete!(project.sources, pkg.name)
         else
             # This should probably not modify the dicts directly...
-            if pkg.repo.source !== nothing
+            if pkg.repo.source !== nothing && pkg.repo.source != entry_repo.source
                 source["url"] = pkg.repo.source
                 delete!(source, "path")
             end
-            if pkg.repo.rev !== nothing
+            if pkg.repo.rev !== nothing && pkg.repo.rev != entry_repo.rev
                 source["rev"] = pkg.repo.rev
                 delete!(source, "path")
             end
             if pkg.repo.subdir !== nothing
                 source["subdir"] = pkg.repo.subdir
             end
-            if pkg.path !== nothing
+            if pkg.path !== nothing && pkg.path != entry_path
                 source["path"] = pkg.path
                 delete!(source, "url")
                 delete!(source, "rev")

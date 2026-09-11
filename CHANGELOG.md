@@ -11,6 +11,9 @@ Pkg v1.14 Release Notes
   recompilation easier to spot. ([#4679])
 - During package source installation, Pkg now reports when a package has an Artifacts.toml but no artifacts match the
   current platform. ([#4646])
+- A `[sources]` entry may now give both a local `path` *and* a repo `url`/`rev` to fall back on. The path is used if it
+  exists and the repository otherwise, so a local checkout can shadow the repository without the entry being edited.
+  ([#4764])
 
 Pkg v1.13 Release Notes
 =======================
@@ -232,3 +235,4 @@ Pkg v1.7 Release Notes
 [#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
 [#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
+[#4764]: https://github.com/JuliaLang/Pkg.jl/issues/4764

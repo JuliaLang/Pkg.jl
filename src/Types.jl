@@ -1417,7 +1417,9 @@ function write_env(
                 @assert entry.repo.subdir == repo.subdir
             end
         end
-        if entry !== nothing
+        # NB: an entry that lists both a `path` and a repo (`url`/`rev`) is left as it is
+        #     (which of the two is in use is decided by whether the path exists)
+        if entry !== nothing && !has_repo_fallback(get(env.project.sources, pkg, nothing))
             if entry.path !== nothing
                 # Convert path from manifest-relative to project-relative before writing
                 project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
