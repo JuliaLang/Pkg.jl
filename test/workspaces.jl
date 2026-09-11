@@ -242,6 +242,7 @@ end
     mktempdir() do dir
         cd(dir) do
             shared_uuid = "22222222-2222-2222-2222-222222222222"
+            shared_id = UUID(shared_uuid)
             mkpath("ProjectA")
             mkpath("ProjectB")
             for parent in ("variant1", "variant2")
@@ -257,6 +258,17 @@ end
                 )
                 write(joinpath(pkgdir, "src", "SharedDep.jl"), "module SharedDep\nend\n")
             end
+            function write_member(name, source = nothing)
+                source_section = if source === nothing
+                    ""
+                else
+                    "\n[sources]\nSharedDep = $source\n"
+                end
+                return write(
+                    joinpath(name, "Project.toml"),
+                    "[deps]\nSharedDep = \"$shared_uuid\"\n$source_section"
+                )
+            end
             write(
                 "Project.toml",
                 """
@@ -268,35 +280,46 @@ end
                 projects = ["ProjectA", "ProjectB"]
                 """
             )
-            write(
-                joinpath("ProjectA", "Project.toml"),
-                """
-                [deps]
-                SharedDep = "$shared_uuid"
-
-                [sources]
-                SharedDep = {path = "../variant1/SharedDep"}
-                """
-            )
-            write(
-                joinpath("ProjectB", "Project.toml"),
-                """
-                [deps]
-                SharedDep = "$shared_uuid"
-
-                [sources]
-                SharedDep = {path = "../variant2/SharedDep"}
-                """
-            )
+            write_member("ProjectA", "{path = \"../variant1/SharedDep\"}")
+            write_member("ProjectB", "{path = \"../variant2/SharedDep\"}")
             with_current_env() do
-                err = try
-                    Pkg.resolve()
-                    nothing
-                catch e
-                    e
+                @test_throws r"conflicting sources.*paths" Pkg.resolve()
+
+                # A source inherited by ProjectB from the manifest must not
+                # conflict with, or take precedence over, ProjectA's declaration.
+                write_member("ProjectB")
+                Pkg.resolve()
+                @test Pkg.Types.read_manifest("Manifest.toml")[shared_id].path == "variant1/SharedDep"
+                write_member("ProjectA", "{path = \"../variant2/SharedDep\"}")
+                Pkg.resolve()
+                @test Pkg.Types.read_manifest("Manifest.toml")[shared_id].path == "variant2/SharedDep"
+
+                # Equivalent absolute and relative paths are not conflicting.
+                absolute_path = abspath("variant2/SharedDep")
+                write_member("ProjectB", "{path = $(repr(absolute_path))}")
+                Pkg.resolve()
+
+                write_member(
+                    "ProjectA",
+                    "{url = \"https://example.com/A.jl\", rev = \"main\", subdir = \"A\"}"
+                )
+                write_member(
+                    "ProjectB",
+                    "{url = \"https://example.com/B.jl\", rev = \"dev\", subdir = \"B\"}"
+                )
+                @test_throws r"conflicting sources.*repositories.*revisions.*subdirectories" begin
+                    Pkg.Operations.load_direct_deps(Pkg.Types.Context().env)
                 end
-                @test err isa Pkg.Types.PkgError
-                @test occursin("conflicting sources", err.msg)
+
+                # Source fields declared by different members are merged.
+                write_member("ProjectA", "{url = \"https://example.com/SharedDep.jl\"}")
+                write_member(
+                    "ProjectB",
+                    "{url = \"https://example.com/SharedDep.jl\", subdir = \"packages/SharedDep\"}"
+                )
+                deps = Pkg.Operations.load_direct_deps(Pkg.Types.Context().env)
+                shared = only(filter(pkg -> pkg.uuid == shared_id, deps))
+                @test shared.repo.subdir == "packages/SharedDep"
             end
         end
     end

@@ -159,32 +159,36 @@ function merge_pkg_source!(pkg::PackageSpec, path::Union{Nothing, String}, repo:
     if pkg.repo.rev === nothing && repo.rev !== nothing
         pkg.repo.rev = repo.rev
     end
+    if pkg.repo.subdir === nothing && repo.subdir !== nothing
+        pkg.repo.subdir = repo.subdir
+    end
     return
 end
 merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
     merge_pkg_source!(target, source.path, source.repo)
 
-# In a workspace the same package can be a direct dependency of several projects,
-# each of which may point it at a source via `[sources]`. Merging those entries
-# only makes sense if they agree; otherwise the resulting source would depend on
-# the order the projects happen to be iterated in, so reject the configuration.
-function assert_no_conflicting_sources(pkgs)
-    paths = Set{String}()
+function assert_no_conflicting_sources(pkgs, manifest_file::String)
+    length(pkgs) <= 1 && return
+    paths = Dict{String, String}()
     repo_sources = Set{String}()
     revs = Set{String}()
     subdirs = Set{String}()
     for pkg in pkgs
-        isnothing(pkg.path) || push!(paths, pkg.path)
+        if pkg.path !== nothing
+            normalized = normpath(abspath(dirname(manifest_file), pkg.path))
+            paths[normalized] = pkg.path
+        end
         isnothing(pkg.repo.source) || push!(repo_sources, pkg.repo.source)
         isnothing(pkg.repo.rev) || push!(revs, pkg.repo.rev)
         isnothing(pkg.repo.subdir) || push!(subdirs, pkg.repo.subdir)
     end
     conflicts = String[]
-    if !isempty(paths) && (!isempty(repo_sources) || !isempty(revs))
+    if !isempty(paths) && !isempty(repo_sources)
         push!(conflicts, "both a path and a repository")
     end
+    !isempty(paths) && !isempty(revs) && push!(conflicts, "both a path and a revision")
     showvals(vals) = join((repr(v) for v in sort!(collect(vals))), ", ")
-    length(paths) > 1 && push!(conflicts, "paths $(showvals(paths))")
+    length(paths) > 1 && push!(conflicts, "paths $(showvals(values(paths)))")
     length(repo_sources) > 1 && push!(conflicts, "repositories $(showvals(repo_sources))")
     length(revs) > 1 && push!(conflicts, "revisions $(showvals(revs))")
     length(subdirs) > 1 && push!(conflicts, "subdirectories $(showvals(subdirs))")
@@ -196,20 +200,33 @@ function assert_no_conflicting_sources(pkgs)
     )
 end
 
+function collect_project_sources!(sources, project, project_file, manifest_file)
+    for (name, uuid) in project.deps
+        path, repo = get_path_repo(project, project_file, manifest_file, name)
+        path === nothing && repo == GitRepo() && continue
+        push!(get!(() -> PackageSpec[], sources, uuid), PackageSpec(; uuid, name, path, repo))
+    end
+    return
+end
+
 function load_direct_deps(
         env::EnvCache, pkgs::Vector{PackageSpec} = PackageSpec[];
         preserve::PreserveLevel = PRESERVE_DIRECT
     )
+    project_sources = Dict{UUID, Vector{PackageSpec}}()
+    collect_project_sources!(project_sources, env.project, env.project_file, env.manifest_file)
     pkgs_direct = load_project_deps(env.project, env.project_file, env.manifest, env.manifest_file, pkgs; preserve)
 
     for (path, project) in env.workspace
+        collect_project_sources!(project_sources, project, path, env.manifest_file)
         append!(pkgs_direct, load_project_deps(project, path, env.manifest, env.manifest_file, pkgs; preserve))
     end
+
+    foreach(sources -> assert_no_conflicting_sources(sources, env.manifest_file), values(project_sources))
 
     unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
     for uuid in unique_uuids
         idxs = findall(pkg -> pkg.uuid == uuid, pkgs_direct)
-        assert_no_conflicting_sources(view(pkgs_direct, idxs))
         pkg = pkgs_direct[idxs[1]]
         idx_to_drop = Int[]
         for i in Iterators.drop(idxs, 1)
@@ -220,7 +237,17 @@ function load_direct_deps(
         deleteat!(pkgs_direct, idx_to_drop)
     end
 
-    return vcat(pkgs, pkgs_direct)
+    all_pkgs = vcat(pkgs, pkgs_direct)
+    for (uuid, sources) in project_sources
+        idx = findfirst(pkg -> pkg.uuid == uuid, all_pkgs)
+        idx === nothing && continue
+        declared = PackageSpec(; uuid)
+        foreach(source -> merge_pkg_source!(declared, source), sources)
+        # Explicit project sources override manifest fallbacks, which may be stale.
+        all_pkgs[idx].path = declared.path
+        all_pkgs[idx].repo = declared.repo
+    end
+    return all_pkgs
 end
 
 function load_project_deps(
