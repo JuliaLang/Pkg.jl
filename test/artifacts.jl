@@ -810,6 +810,69 @@ end
     end
 end
 
+# Pkg only draws progress bars on a terminal. This stands in for one, capturing the output
+# in a buffer that can be inspected; the lock is there because the progress bar is drawn
+# from its own task.
+struct CapturedIO <: IO
+    fancy::Bool
+    buf::IOBuffer
+    lock::ReentrantLock
+end
+CapturedIO(; fancy::Bool) = CapturedIO(fancy, IOBuffer(), ReentrantLock())
+Base.write(io::CapturedIO, b::UInt8) = @lock io.lock write(io.buf, b)
+Base.unsafe_write(io::CapturedIO, p::Ptr{UInt8}, n::UInt) = @lock io.lock unsafe_write(io.buf, p, n)
+Base.take!(io::CapturedIO) = @lock io.lock take!(io.buf)
+Pkg.can_fancyprint(io::CapturedIO) = io.fancy
+
+@testset "interrupting artifact installation" begin
+    ansi_enablecursor = "\e[?25h"
+    @testset "fancyprint = $fancy" for fancy in (false, true)
+        srv = stalling_http_server()
+        temp_pkg_dir() do project_path
+            write(
+                joinpath(project_path, "Artifacts.toml"), """
+                [stalled]
+                git-tree-sha1 = "$("0"^40)"
+
+                    [[stalled.download]]
+                    sha256 = "$("0"^64)"
+                    url = "$(srv.url)/stalled.tar.gz"
+                """
+            )
+            Pkg.activate(project_path)
+            io = CapturedIO(; fancy)
+            t = @async Pkg.instantiate(; io)
+            @test timedwait(() -> isready(srv.requested) || istaskdone(t), 120) == :ok
+            istaskdone(t) && wait(t) # failed before reaching the download; show why
+            # `t` is now parked waiting for the download. This is what `^C` does to it.
+            @test istaskstarted(t) && !istaskdone(t)
+            schedule(t, InterruptException(); error = true)
+
+            @test timedwait(() -> istaskdone(t), 60) == :ok
+            err = try
+                wait(t)
+            catch e
+                e
+            end
+            @test err isa TaskFailedException && err.task.result isa InterruptException
+            output = String(take!(io))
+            if fancy
+                @test occursin("Installing artifacts", output)
+                # the progress bar was torn down, cursor restored, before the interrupt propagated
+                @test endswith(output, ansi_enablecursor)
+            end
+            # and nothing keeps redrawing it over the prompt
+            sleep(0.5)
+            @test isempty(take!(io))
+            srv.close()
+            # the abandoned download job winds down and cleans up after itself
+            artifacts_dir = joinpath(DEPOT_PATH[1], "artifacts")
+            leftovers() = isdir(artifacts_dir) ? filter(!=("CACHEDIR.TAG"), readdir(artifacts_dir)) : String[]
+            @test timedwait(() -> isempty(leftovers()), 60) == :ok
+        end
+    end
+end
+
 @testset "installing artifacts when symlinks are copied" begin
     # copy symlinks to simulate the typical Microsoft Windows user experience where
     # developer mode is not enabled (no admin rights)
