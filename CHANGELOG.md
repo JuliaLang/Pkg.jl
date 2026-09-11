@@ -6,6 +6,8 @@ Pkg v1.14 Release Notes
   Active-project and workspace preferences are visible to hooks, hook results are cached for the duration of the
   session, `Pkg.status` and offline resolution no longer run hooks, hooks run at the parent's optimization level
   so that dependencies they precompile are reusable, and a hook that loads its own package is an error. ([#4747])
+- Pkg no longer creates redundant `[sources]` entries for dependencies that are projects in the same workspace.
+  Existing entries are still honored.
 - `Pkg.instantiate` now accepts an `update_on_mismatch::Bool` keyword argument (and a corresponding `-u` /
   `--update_on_mismatch` REPL flag) that falls back to `Pkg.update()` when the manifest does not match the project
   or was resolved with a different Julia minor version, instead of warning or erroring. Useful for tooling and

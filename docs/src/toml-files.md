@@ -183,7 +183,7 @@ Sources are read and applied in the following situations:
 
 1. **Active environment**: When resolving dependencies for the currently active environment, sources from the environment's `Project.toml` override registry information for direct dependencies.
 
-2. **Automatic addition**: When you add a package by URL (e.g., `pkg> add https://github.com/...`) or develop a package (e.g., `pkg> dev Example`), Pkg automatically adds an entry to `[sources]` for that package in your active environment's `Project.toml`.
+2. **Automatic addition**: When you add a package by URL (e.g., `pkg> add https://github.com/...`) or develop a package (e.g., `pkg> dev Example`), Pkg automatically adds an entry to `[sources]` for that package in your active environment's `Project.toml`. The exception is a dependency that is itself another project in the same workspace which can be located without a `[sources]` entry.
 
 3. **Recursive collection**: When a package is added by URL or path, Pkg recursively collects `[sources]` entries from that package's dependencies. This allows private dependency chains to resolve without registry metadata. For example:
    - If you `add` Package A by URL, and Package A has a `[sources]` entry for Package B

@@ -1402,8 +1402,12 @@ function write_env(
         skip_writing_project::Bool = false,
         skip_readonly_check::Bool = false
     )
+    workspace_uuids = Set{UUID}(p.uuid for p in values(env.workspace) if p.uuid !== nothing)
+
     # Verify that the generated manifest is consistent with `sources`
     for (pkg, uuid) in env.project.deps
+        # Preserve user-authored sources, but do not synthesize redundant workspace paths.
+        uuid in workspace_uuids && !haskey(env.original_project.sources, pkg) && continue
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
