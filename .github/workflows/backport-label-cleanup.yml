@@ -29,7 +29,7 @@ jobs:
 
       - name: Checkout Backporter
         if: steps.extract.outputs.version != ''
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: KristofferC/Backporter
           ref: master
