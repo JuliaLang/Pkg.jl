@@ -7,11 +7,13 @@ import Pkg: stdout_f, stderr_f
 using Tar
 using TOML
 using UUIDs
+using Sockets
 
 export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
-    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url
+    list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url,
+    http_server, stalling_http_server
 
 # The cache directory is shared between the test-runner main process and its
 # worker processes: the first process to include this file creates the
@@ -551,6 +553,72 @@ function recursive_rm_cov_files(rootdir::String)
         end
     end
     return
+end
+
+# A minimal HTTP/1.1 server on a free localhost port. `respond(sock, target)` is called on
+# its own task for every request once the request line and headers have been consumed,
+# and writes the whole response; the connection is closed when it returns. `close` shuts
+# down the server and every connection it still holds open.
+function http_server(respond::Function)
+    server = listen(Sockets.localhost, 0)
+    url = "http://$(Sockets.localhost):$(Int(last(getsockname(server))))"
+    sockets = TCPSocket[]
+    @async while isopen(server)
+        sock = try
+            accept(server)
+        catch
+            break # closed
+        end
+        push!(sockets, sock)
+        handler = @async try
+            request_line = readline(sock)
+            while !isempty(rstrip(readline(sock)))
+            end
+            words = split(request_line)
+            length(words) >= 2 && respond(sock, String(words[2]))
+        catch
+            # a connection torn down by `close` is not a failure
+            isopen(sock) && rethrow()
+        finally
+            close(sock)
+        end
+        Base.errormonitor(handler)
+    end
+    return (; url, close = () -> (foreach(close, sockets); close(server)))
+end
+
+# Answers every request with the headers and the start of a body that then trickles in far
+# too slowly to ever complete, but fast enough that curl does not give up on it, so the
+# transfer stays in flight until it is cancelled. `requested` gets one item per transfer
+# under way and `disconnected` one per client that hangs up.
+function stalling_http_server()
+    requested = Channel{Nothing}(Inf)
+    disconnected = Channel{Nothing}(Inf)
+    server = http_server() do sock, target
+        write(sock, "HTTP/1.1 200 OK\r\nContent-Type: application/gzip\r\nContent-Length: 1048576\r\nConnection: close\r\n\r\n")
+        write(sock, zeros(UInt8, 4096))
+        flush(sock)
+        put!(requested, nothing)
+        trickle = @async try
+            while true
+                sleep(0.25)
+                write(sock, zeros(UInt8, 64))
+                flush(sock)
+            end
+        catch
+            # the socket was closed
+        end
+        try
+            while !eof(sock)
+                readavailable(sock)
+            end
+        finally
+            close(sock)
+            wait(trickle)
+        end
+        return put!(disconnected, nothing)
+    end
+    return (; server.url, requested, disconnected, server.close)
 end
 
 # Convert a path into a file URL.
