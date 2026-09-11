@@ -3468,13 +3468,114 @@ function run_sandboxed_tests!(
     return
 end
 
+# Code run by each child process: test a single package against the parent environment.
+function gen_parallel_test_code(
+        pkg::PackageSpec; coverage, julia_args::Cmd, test_args::Cmd,
+        force_latest_compatible_version::Bool,
+        allow_earlier_backwards_compatible_versions::Bool,
+        allow_reresolve::Bool
+    )
+    pkg_project = dirname(dirname(pathof(Pkg)))
+    return """
+    pushfirst!(LOAD_PATH, $(repr(pkg_project)))
+    import Pkg
+    Pkg.test(
+        Pkg.PackageSpec(name = $(repr(pkg.name)), uuid = Base.UUID($(repr(string(pkg.uuid)))));
+        coverage = $(repr(coverage)),
+        julia_args = Cmd($(repr(collect(String, julia_args.exec)))),
+        test_args = Cmd($(repr(collect(String, test_args.exec)))),
+        force_latest_compatible_version = $(repr(force_latest_compatible_version)),
+        allow_earlier_backwards_compatible_versions = $(repr(allow_earlier_backwards_compatible_versions)),
+        allow_reresolve = $(repr(allow_reresolve)),
+    )
+    """
+end
+
+# Share one precompilation CPU budget across child test processes when supported.
+function setup_parallel_test_jobserver!()
+    isdefined(Base.Precompilation, :setup_precompile_jobserver!) || return :none
+    haskey(ENV, "JULIA_IMAGE_THREADS") && return :none
+    default_budget = Sys.EFFECTIVE_CPU_THREADS + 1
+    budget = max(1, something(tryparse(Int, get(ENV, "JULIA_PRECOMPILE_THREADS", "")), default_budget))
+    return Base.Precompilation.setup_precompile_jobserver!(budget)
+end
+
+# Run each package in a child process, preserving package order in the output.
+function test_parallel!(
+        ctx::Context, pkgs::Vector{PackageSpec},
+        pkgs_errored::Vector{Tuple{String, Base.Process}};
+        ntasks::Int, coverage, julia_args::Cmd, test_args::Cmd,
+        force_latest_compatible_version::Bool,
+        allow_earlier_backwards_compatible_versions::Bool,
+        allow_reresolve::Bool
+    )
+    project = dirname(ctx.env.project_file)
+    color = get(ctx.io, :color, false)::Bool
+
+    procs = Vector{Union{Nothing, Base.Process}}(nothing, length(pkgs))
+
+    printpkgstyle(
+        ctx.io, :Testing,
+        "Running tests for $(length(pkgs)) packages with up to $(ntasks) parallel tasks"
+    )
+    flush(ctx.io)
+
+    jobserver = setup_parallel_test_jobserver!()
+    try
+        mktempdir() do output_dir
+            results = try
+                asyncmap(enumerate(pkgs); ntasks) do (i, pkg)
+                    code = gen_parallel_test_code(
+                        pkg; coverage, julia_args, test_args,
+                        force_latest_compatible_version,
+                        allow_earlier_backwards_compatible_versions,
+                        allow_reresolve,
+                    )
+                    cmd = `$(Base.julia_cmd()) --color=$(color ? "yes" : "no") --project=$project --eval $code`
+                    output_file = joinpath(output_dir, "$i.log")
+                    p = open(output_file, "w") do output
+                        process = run(pipeline(ignorestatus(cmd); stdout = output, stderr = output), wait = false)
+                        procs[i] = process
+                        wait(process)
+                        process
+                    end
+                    (pkg.name, p, output_file)
+                end
+            catch err
+                for p in procs
+                    isnothing(p) || kill(p)
+                end
+                deadline = time() + 4
+                for p in procs
+                    isnothing(p) && continue
+                    timeout = max(0.0, deadline - time())
+                    timedwait(() -> process_exited(p), timeout) === :timed_out && kill(p, Base.SIGKILL)
+                end
+                if err isa InterruptException
+                    printpkgstyle(ctx.io, :Testing, "Tests interrupted. Exiting the test process", color = Base.error_color())
+                end
+                rethrow()
+            end
+            for (name, p, output_file) in results
+                write(ctx.io, read(output_file))
+                success(p) || push!(pkgs_errored, (name, p))
+            end
+            flush(ctx.io)
+        end
+    finally
+        jobserver === :created && Base.Precompilation.teardown_precompile_jobserver!()
+    end
+    return
+end
+
 function test(
         ctx::Context, pkgs::Vector{PackageSpec};
         coverage = false, julia_args::Cmd = ``, test_args::Cmd = ``,
         test_fn = nothing,
         force_latest_compatible_version::Bool = false,
         allow_earlier_backwards_compatible_versions::Bool = true,
-        allow_reresolve::Bool = true
+        allow_reresolve::Bool = true,
+        ntasks::Int = 1
     )
     Pkg.instantiate(ctx; allow_autoprecomp = false) # do precomp later within sandbox
 
@@ -3512,7 +3613,19 @@ function test(
 
     # sandbox
     pkgs_errored = Tuple{String, Base.Process}[]
+    # A test_fn closure cannot cross the child-process boundary.
+    parallel = ntasks > 1 && length(pkgs) > 1 && test_fn === nothing
+    if parallel
+        test_parallel!(
+            ctx, pkgs, pkgs_errored;
+            ntasks, coverage, julia_args, test_args,
+            force_latest_compatible_version,
+            allow_earlier_backwards_compatible_versions,
+            allow_reresolve,
+        )
+    end
     for (pkg, source_path) in zip(pkgs, source_paths)
+        parallel && break
         # If the test is in our "workspace", no need to create a temp env etc, just activate and run the tests
         if testdir(source_path) in dirname.(keys(ctx.env.workspace))
             proj = Base.locate_project_file(abspath(testdir(source_path)))

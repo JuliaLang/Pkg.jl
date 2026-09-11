@@ -392,6 +392,8 @@ const update = API.up
   - `allow_reresolve::Bool=true`: allow Pkg to reresolve the package versions in the test environment
   - `julia_args::Union{Cmd, Vector{String}}`: options to be passed the test process.
   - `test_args::Union{Cmd, Vector{String}}`: test arguments (`ARGS`) available in the test process.
+  - `ntasks::Int=1`: when more than one package is tested, the maximum number of packages to test
+    concurrently. Output is grouped by package. Has no effect for one package or with `test_fn`.
 
 !!! compat "Julia 1.9"
     `allow_reresolve` requires at least Julia 1.9.
