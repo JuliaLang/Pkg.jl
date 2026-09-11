@@ -292,4 +292,75 @@ end
     end
 end
 
+@testset "resolve/instantiate only read Project.toml" begin
+    leaf_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    mktempdir() do dir
+        mkpath(joinpath(dir, "Leaf", "src"))
+        write(
+            joinpath(dir, "Leaf", "Project.toml"),
+            """
+            name = "Leaf"
+            uuid = "$leaf_uuid"
+            version = "0.1.0"
+            """
+        )
+        write(joinpath(dir, "Leaf", "src", "Leaf.jl"), "module Leaf\nend\n")
+
+        mkpath(joinpath(dir, "sub", "src"))
+        write(
+            joinpath(dir, "sub", "Project.toml"),
+            """
+            name = "Sub"
+            uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+            version = "0.1.0"
+            """
+        )
+        write(joinpath(dir, "sub", "src", "Sub.jl"), "module Sub\nend\n")
+
+        project_file = joinpath(dir, "Project.toml")
+        write(
+            project_file,
+            """
+            name = "Root"
+            uuid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+            version = "0.1.0"
+
+            [deps]
+            Leaf = "$leaf_uuid"
+
+            [workspace]
+            projects = ["sub"]
+
+            # DO-NOT-DROP: authored comment a lossy project rewrite would delete
+            [sources]
+            Leaf = {path = "./Leaf"}
+            """
+        )
+        authored = read(project_file, String)
+        manifest_file = joinpath(dir, "Manifest.toml")
+
+        cd(dir) do
+            with_current_env() do
+                Pkg.activate(".")
+
+                Pkg.resolve()
+                @test read(project_file, String) == authored
+
+                Pkg.instantiate()
+                @test read(project_file, String) == authored
+
+                rm(manifest_file; force = true)
+                Pkg.instantiate()
+                @test isfile(manifest_file)
+                @test read(project_file, String) == authored
+
+                stale = replace(read(manifest_file, String), r"julia_version = \"[^\"]*\"" => "julia_version = \"0.0.0\"")
+                write(manifest_file, stale)
+                Pkg.instantiate(update_on_mismatch = true)
+                @test read(project_file, String) == authored
+            end
+        end
+    end
+end
+
 end # module
