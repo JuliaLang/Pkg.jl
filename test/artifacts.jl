@@ -1290,21 +1290,25 @@ end
 
 # Pkg only draws progress bars on a terminal. This stands in for one, capturing the output
 # in a buffer that can be inspected; the lock is there because the progress bar is drawn
-# from its own task.
+# from its own task. Like a real terminal, it refuses writes once the scope they are
+# attempted in has been cancelled.
 struct CapturedIO <: IO
     fancy::Bool
     buf::IOBuffer
     lock::ReentrantLock
 end
 CapturedIO(; fancy::Bool) = CapturedIO(fancy, IOBuffer(), ReentrantLock())
-Base.write(io::CapturedIO, b::UInt8) = @lock io.lock write(io.buf, b)
-Base.unsafe_write(io::CapturedIO, p::Ptr{UInt8}, n::UInt) = @lock io.lock unsafe_write(io.buf, p, n)
+checkcancel() = Base.checkcancel(Base.default_cancel_token())
+Base.write(io::CapturedIO, b::UInt8) = (checkcancel(); @lock io.lock write(io.buf, b))
+Base.unsafe_write(io::CapturedIO, p::Ptr{UInt8}, n::UInt) = (checkcancel(); @lock io.lock unsafe_write(io.buf, p, n))
 Base.take!(io::CapturedIO) = @lock io.lock take!(io.buf)
 Pkg.can_fancyprint(io::CapturedIO) = io.fancy
 
 @testset "interrupting artifact installation" begin
     ansi_enablecursor = "\e[?25h"
-    @testset "fancyprint = $fancy" for fancy in (false, true)
+    # `^C` cancels the scope the evaluation runs in; an `InterruptException` thrown into the
+    # task is how it used to arrive, and what other code may still do
+    @testset "$interrupt, fancyprint = $fancy" for interrupt in (:exception, :cancellation), fancy in (false, true)
         srv = stalling_http_server()
         temp_pkg_dir() do project_path
             write(
@@ -1319,12 +1323,21 @@ Pkg.can_fancyprint(io::CapturedIO) = io.fancy
             )
             Pkg.activate(project_path)
             io = CapturedIO(; fancy)
-            t = @async Pkg.instantiate(; io)
+            if interrupt == :exception
+                t = @async Pkg.instantiate(; io)
+            else
+                src = Base.CancellationTokenSource()
+                t = @async Base.ScopedValues.@with(Base.CANCEL_TOKEN => Base.CancellationToken(src), Pkg.instantiate(; io))
+            end
             @test timedwait(() -> isready(srv.requested) || istaskdone(t), 120) == :ok
             istaskdone(t) && wait(t) # failed before reaching the download; show why
             # `t` is now parked waiting for the download. This is what `^C` does to it.
             @test istaskstarted(t) && !istaskdone(t)
-            schedule(t, InterruptException(); error = true)
+            if interrupt == :exception
+                schedule(t, InterruptException(); error = true)
+            else
+                Base.cancel!(src)
+            end
 
             @test timedwait(() -> istaskdone(t), 60) == :ok
             err = try
@@ -1332,7 +1345,12 @@ Pkg.can_fancyprint(io::CapturedIO) = io.fancy
             catch e
                 e
             end
-            @test err isa TaskFailedException && err.task.result isa InterruptException
+            @test err isa TaskFailedException
+            if interrupt == :exception
+                @test err.task.result isa InterruptException
+            else
+                @test err.task.result isa Base.CancellationRequest || err.task.result isa CompositeException
+            end
             output = String(take!(io))
             if fancy
                 @test occursin("Installing artifacts", output)
