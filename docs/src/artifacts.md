@@ -250,7 +250,7 @@ function augment_platform!(p::Platform)
     # Open libcuda explicitly, so it gets `dlclose()`'ed after we're done
     dlopen("libcuda") do lib
         # find symbol to ask for driver version; if we can't find it, just silently continue
-        cuDriverGetVersion = dlsym(lib, "cuDriverGetVersion"; throw_error=false)
+        cuDriverGetVersion = dlsym(lib, "cuDriverGetVersion"; throw_error = false)
         if cuDriverGetVersion !== nothing
             # Interrogate CUDA driver for driver version:
             driverVersion = Ref{Cint}()
@@ -294,6 +294,7 @@ include("../.pkg/platform_augmentation.jl")
 function __init__()
     p = augment_platform!(HostPlatform())
     global my_artifact_dir = @artifact_str("MyArtifact", p)
+    return
 end
 ```
 

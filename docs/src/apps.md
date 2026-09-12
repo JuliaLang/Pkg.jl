@@ -68,6 +68,7 @@ module MyMultiApp
 
 function @main(ARGS)
     println("Main app: ", join(ARGS, " "))
+    return 0
 end
 
 include("CLI.jl")
@@ -81,6 +82,7 @@ module CLI
 
 function @main(ARGS)
     println("CLI submodule: ", join(ARGS, " "))
+    return 0
 end
 
 end # module CLI
