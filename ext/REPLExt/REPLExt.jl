@@ -131,14 +131,29 @@ function do_cmds(repl::REPL.AbstractREPL, commands::Union{String, Vector{Command
     end
 end
 
+# Run the commands of one `pkg>` input line on the REPL backend, as `julia>` input is: the
+# backend runs each evaluation in a `^C` episode of its own, which is what a `^C` cancels.
+# Run on the REPL's frontend task instead, as these commands used to be, a `^C` while one
+# runs has nothing to cancel and is ignored. The backend also marks itself as the foreground
+# task for the duration, for the interactive features that need to own stdin, such as the
+# precompile keyboard menu (JuliaLang/julia#61698).
+function run_cmds(repl::REPL.AbstractREPL, input::String)
+    backend = REPL.backend(repl)
+    if backend === nothing # a REPL without a backend, as some tests set up
+        return Base.@as_foreground_task do_cmds(repl, input)
+    end
+    response = REPL.call_on_backend(() -> do_cmds(repl, input), backend)
+    # `do_cmds` reports its own errors; what reaches here escaped it, such as the
+    # evaluation's cancellation, which makes even that reporting throw
+    REPL.print_response(repl, response, false, REPL.hascolor(repl))
+    return nothing
+end
+
 function on_done(s, buf, ok, repl)
     ok || return REPL.transition(s, :abort)
     input = String(take!(buf))
     REPL.reset(repl)
-    # Mark this task as the foreground task while running the Pkg command so that
-    # interactive features (e.g. the precompile keyboard menu) recognize it as the
-    # task currently owning stdin. See JuliaLang/julia#61698.
-    Base.@as_foreground_task do_cmds(repl, input)
+    run_cmds(repl, input)
     REPL.prepare_next(repl)
     REPL.reset_state(s)
     # The command may have changed the active project (e.g. `activate`), so
@@ -288,7 +303,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         printstyled(ctx.io, " └ "; color = :green)
         Base.prompt(stdin, ctx.io, "(y/n/o)", default = "y")
     catch err
-        if err isa InterruptException # if ^C is entered
+        if Pkg.is_interrupt(err) # if ^C is entered
             println(ctx.io)
             return false
         end
@@ -331,7 +346,7 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         choice = try
             TerminalMenus.request("Select environment:", menu, cursor = default)
         catch err
-            if err isa InterruptException # if ^C is entered
+            if Pkg.is_interrupt(err) # if ^C is entered
                 println(ctx.io)
                 return false
             end

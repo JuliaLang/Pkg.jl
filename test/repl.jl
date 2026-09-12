@@ -13,6 +13,8 @@ using TOML
 import LibGit2
 import REPL
 const REPLExt = Base.get_extension(Pkg, :REPLExt)
+include("FakeTerminals.jl")
+import .FakeTerminals.FakeTerminal
 
 using ..Utils
 
@@ -1542,6 +1544,65 @@ end
     d = Dict(Pkg.REPLMode.canonical_names())
     @test d["add"].help isa Markdown.MD
     @test d["registry add"].help isa Markdown.MD
+end
+
+# A `^C` cancels the scope of the evaluation the REPL backend is running, so a `pkg>` command
+# has to run there rather than on the REPL's frontend task, where nothing would be cancelled.
+@testset "interrupting a pkg REPL command" begin
+    srv = stalling_http_server()
+    old_test_mode = Pkg.REPLMode.TEST_MODE[]
+    Pkg.REPLMode.TEST_MODE[] = false
+    backend = REPL.REPLBackend()
+    backend_task = @async REPL.start_repl_backend(backend)
+    try
+        temp_pkg_dir() do project_path
+            pkg_dir = joinpath(project_path, "Stalled")
+            mkpath(joinpath(pkg_dir, "src"))
+            write(joinpath(pkg_dir, "src", "Stalled.jl"), "module Stalled end\n")
+            write(
+                joinpath(pkg_dir, "Project.toml"), """
+                name = "Stalled"
+                uuid = "3b7ee1a4-5c3e-4c0b-9b6a-4d2b1f4a5e6c"
+                version = "0.1.0"
+                """
+            )
+            write(
+                joinpath(pkg_dir, "Artifacts.toml"), """
+                [stalled]
+                git-tree-sha1 = "$("0"^40)"
+
+                    [[stalled.download]]
+                    sha256 = "$("0"^64)"
+                    url = "$(srv.url)/stalled.tar.gz"
+                """
+            )
+            git_init_and_commit(pkg_dir) # `add` of a path wants a repository
+            Pkg.activate(project_path)
+            repl = REPL.LineEditREPL(FakeTerminal(IOBuffer(), IOBuffer(), IOBuffer()), true)
+            repl.backendref = REPL.REPLBackendRef(backend)
+            t = @async REPLExt.run_cmds(repl, "add $(pkg_dir)")
+            @test timedwait(() -> isready(srv.requested) || istaskdone(t), 120) == :ok
+            istaskdone(t) && wait(t)
+            # the backend runs the command in an episode; this is what the SIGINT handler does to it
+            src = Base._sigint_episode[][1]
+            @test src !== nothing
+            src === nothing || Base.cancel!(src)
+            @test timedwait(() -> istaskdone(t), 60) == :ok
+            @test !istaskfailed(t) # the interruption is reported, not thrown
+            @test occursin("CancellationRequest", String(take!(repl.t.err_stream)))
+            @test Base._sigint_episode[][1] === nothing # closed again, the backend is idle
+            # and the transfer was aborted rather than left running in the background
+            @test timedwait(() -> isready(srv.disconnected), 60) == :ok
+            srv.close()
+            artifacts_dir = joinpath(DEPOT_PATH[1], "artifacts")
+            leftovers() = isdir(artifacts_dir) ? filter(!=("CACHEDIR.TAG"), readdir(artifacts_dir)) : String[]
+            @test timedwait(() -> isempty(leftovers()), 60) == :ok
+        end
+    finally
+        Pkg.REPLMode.TEST_MODE[] = old_test_mode
+        put!(backend.repl_channel, (nothing, -1)) # stop the backend
+        wait(backend_task)
+    end
 end
 
 end # module
