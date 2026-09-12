@@ -131,6 +131,9 @@ end
 function source_path(manifest_file::String, pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION)
     return pkg.tree_hash !== nothing ? find_installed(pkg.name, pkg.uuid, pkg.tree_hash) :
         pkg.path !== nothing ? normpath(joinpath(dirname(manifest_file), pkg.path)) :
+        # a stdlib tracking a repo (a `[sources]` url) lives in the checkout of that repo,
+        # which is `nothing` until the repo has been fetched, not the bundled stdlib
+        pkg.repo.source !== nothing ? nothing :
         is_or_was_stdlib(pkg.uuid, julia_version) ? Types.stdlib_path(pkg.name) :
         nothing
 end
