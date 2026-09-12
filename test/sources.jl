@@ -156,6 +156,36 @@ temp_pkg_dir() do project_path
 
     # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4337
     # Switching between path and repo sources should not cause assertion error
+    @testset "[sources] url for a stdlib, resolved from scratch" begin
+        # `source_path` used to answer with the bundled stdlib for a stdlib tracking a repo, so
+        # the repo was never fetched and the manifest entry had a source but no tree hash
+        mktempdir() do tmp
+            cd(tmp) do
+                base64_uuid = UUID("2a0f44e3-6c83-55bd-87e4-b1978d98bd5f")
+                cp(joinpath(Sys.STDLIB, "Base64"), "Base64")
+                chmod("Base64", 0o755; recursive = true)
+                git_init_and_commit("Base64")
+                write(
+                    "Project.toml", """
+                    [deps]
+                    Base64 = "$base64_uuid"
+
+                    [sources]
+                    Base64 = { url = "$(make_file_url(abspath("Base64")))" }
+                    """
+                )
+                with_current_env() do
+                    Pkg.instantiate()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    @test manifest[base64_uuid].tree_hash !== nothing
+                    @test manifest[base64_uuid].repo.source !== nothing
+                    @test Pkg.dependencies()[base64_uuid].source != Pkg.Types.stdlib_path("Base64")
+                    Pkg.instantiate() # and again, with the manifest in place
+                end
+            end
+        end
+    end
+
     @testset "switching between path and repo sources (#4337)" begin
         mktempdir() do tmp
             cd(tmp) do
