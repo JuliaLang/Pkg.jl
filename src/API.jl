@@ -1219,7 +1219,8 @@ function precompile(
         ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool = false,
         strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
         _from_loading::Bool = false, configs::Union{Base.Precompilation.Config, Vector{Base.Precompilation.Config}} = (`` => Base.CacheFlags()),
-        workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false, kwargs...
+        workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false,
+        skip_dependents::Bool = true, force::Bool = false, force_stdlibs::Bool = false, kwargs...
     )
     # Handle background precompilation control options via Base
     if monitor
@@ -1269,7 +1270,10 @@ function precompile(
         pkgs_name = String[pkg.name for pkg in pkgs]
         # Allow user to press 'd' to detach when running interactively
         detachable = isinteractive()
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
+        return Base.Precompilation.precompilepkgs(
+            pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable,
+            skip_dependents, force, force_stdlibs
+        )
     end
 end
 
