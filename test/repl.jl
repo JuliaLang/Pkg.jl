@@ -151,6 +151,12 @@ end
 
         api, args, opts = first(Pkg.pkg"add a/path/with/@/deal/with/it")
         @test normpath(args[1].path) == normpath("a/path/with/@/deal/with/it")
+        # Add the dependencies of other environments.
+        api, args, opts = first(Pkg.pkg"add --from @v1.13 ./env ~/env/Project.toml")
+        @test api == Pkg.add
+        @test isempty(args)
+        @test opts == Dict(:from => ["@v1.13", "./env", "~/env/Project.toml"])
+        @test_throws PkgError Pkg.pkg"add --from"
 
         # github branch rewriting
         api, args, opts = first(Pkg.pkg"add https://github.com/JuliaLang/Pkg.jl/tree/aa/gitlab")
@@ -1224,6 +1230,14 @@ end
             touch("README.md")
             c, r = test_complete("add RE")
             @test !("README.md" in c)
+
+            # `add --from` completes shared environments and local paths
+            mkpath(joinpath(DEPOT_PATH[1], "environments", "someenv"))
+            c, r = test_complete("add --from @some")
+            @test "@someenv" in c
+            c, r = test_complete("add --from tes")
+            @test Sys.iswindows() ? ("testdir\\" in c) : ("testdir/" in c)
+            @test !("Example" in c)
 
             # Expand homedir and
             if !Sys.iswindows()
