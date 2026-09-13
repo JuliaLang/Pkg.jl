@@ -860,7 +860,7 @@ end
         catch e
             @test e isa ResolverError
             # `\S*` in regex below will allow for ANSI color escape codes in the logs
-            @test occursin(r"possible versions are: \S*0\.5\.1\S* or uninstalled", e.msg)
+            @test occursin(r"(possible|available) versions are: \S*0\.5\.1", e.msg)
         end
         Pkg.offline(false)
     end
@@ -936,7 +936,7 @@ end
         """
         cmd = addenv(
             `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
-            "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+            "JULIA_DEPOT_PATH" => join([DEPOT_PATH; Utils.host_deps_depot()], Sys.iswindows() ? ";" : ":")
         )
         @test Utils.show_output_if_command_errors(cmd)
     end
