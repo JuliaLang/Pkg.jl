@@ -19,7 +19,7 @@ function get_exception_and_message(f::Function)
 end
 
 const exception_type_1 = Pkg.Resolve.ResolverError
-const message_1 = "Unsatisfiable requirements detected for package"
+const message_1 = "Unsatisfiable requirements detected"
 const message_2 = "Dependency does not have a [compat] entry"
 
 const test_package_parent_dir = joinpath(
