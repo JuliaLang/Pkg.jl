@@ -49,6 +49,33 @@ function copy_this_pkg_cache(new_depot)
         mkpath(dirname(dest))
         cp(source, dest; force = true)
     end
+    # Dependencies of this Pkg that were not loaded from the bundled depots, such as
+    # a stdlib tracked from a repo or path in the manifest while developing it, are
+    # compiled next to Pkg and the Pkg cache is only valid together with them. A
+    # source checkout in the depot goes along, since the cache records it relative
+    # to the depot and the subprocesses would otherwise fall back to the stdlib.
+    packages_dir = joinpath(dirname(dirname(THIS_PKG_COMPILE_CACHE)), "packages")
+    for (id, origin) in Base.pkgorigins
+        cachefile = origin.cachepath
+        cachefile === nothing && continue
+        startswith(cachefile, THIS_PKG_COMPILE_CACHE) || continue
+        id.name in ("Pkg", "REPLExt") && continue
+        dest = joinpath(new_depot, COMPILED_SUBDIR, id.name)
+        isdir(dest) && samefile(dirname(cachefile), dest) && continue
+        mkpath(dest)
+        for f in (cachefile, Base.ocachefile_from_cachefile(cachefile))
+            isfile(f) && cp(f, joinpath(dest, basename(f)); force = true)
+        end
+        source = origin.path
+        if source !== nothing && startswith(source, packages_dir)
+            name, slug = splitpath(relpath(source, packages_dir))[1:2]
+            source_dir = joinpath(packages_dir, name, slug)
+            dest_dir = joinpath(new_depot, "packages", name, slug)
+            isdir(dest_dir) && continue
+            mkpath(dirname(dest_dir))
+            cp(source_dir, dest_dir)
+        end
+    end
     return
 end
 
