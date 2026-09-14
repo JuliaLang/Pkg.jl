@@ -236,9 +236,6 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
                 depth > 0 && push!(args, "--depth=$depth")
                 push!(args, remoteurl, only(refspecs))
                 cmd = `git $args`
-                # Capture stderr so that a failed fetch (e.g. a refspec that matches nothing on
-                # the remote, which the caller may recover from) does not spam the terminal, and
-                # so that the actual git error message ends up in the thrown error instead.
                 errbuf = IOBuffer()
                 try
                     run(pipeline(cmd; stdout = devnull, stderr = errbuf))
