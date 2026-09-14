@@ -1041,18 +1041,27 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if obj_branch === nothing
                 fetched = true
                 rev_or_hash_str = string(rev_or_hash)
-                # For pull requests, fetch the specific PR ref
-                if startswith(rev_or_hash_str, "pull/") && endswith(rev_or_hash_str, "/head")
-                    pr_number = rev_or_hash_str[6:(end - 5)]  # Extract number from "pull/X/head"
-                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs, depth = 1)
-                    # For branch names, fetch only the specific branch
-                elseif !looks_like_commit_hash(rev_or_hash_str)
-                    specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
-                else
-                    # For commit hashes, fetch all branches including the older commits
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
+                # The restricted fetches below may fail outright instead of being a no-op when
+                # the requested ref does not exist on the remote (CLI git exits with
+                # "couldn't find remote ref" for e.g. a tag fetched as a branch, whereas LibGit2
+                # silently fetches nothing). Treat such a failure like "not found" so that the
+                # broader fallback fetch further down gets a chance to locate the rev.
+                try
+                    # For pull requests, fetch the specific PR ref
+                    if startswith(rev_or_hash_str, "pull/") && endswith(rev_or_hash_str, "/head")
+                        pr_number = rev_or_hash_str[6:(end - 5)]  # Extract number from "pull/X/head"
+                        pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
+                        GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs, depth = 1)
+                        # For branch names, fetch only the specific branch
+                    elseif !looks_like_commit_hash(rev_or_hash_str)
+                        specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
+                        GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
+                    else
+                        # For commit hashes, fetch all branches including the older commits
+                        GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
+                    end
+                catch err
+                    err isa PkgError || rethrow()
                 end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
                 # If still not found, try with broader refspec as fallback
