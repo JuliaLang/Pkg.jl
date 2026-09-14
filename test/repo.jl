@@ -68,7 +68,7 @@ for v in (nothing, "true")
                         tagged_commit = LibGit2.with(LibGit2.GitRepo(pkg_path)) do repo
                             LibGit2.add!(repo, "*")
                             commit = LibGit2.commit(repo, "tagged commit"; author = TEST_SIG, committer = TEST_SIG)
-                            LibGit2.tag_create(repo, "v1.0.0", commit)
+                            LibGit2.tag_create(repo, "v1.0.0", commit; sig = TEST_SIG)
                             commit
                         end
                         tagged_tree = LibGit2.with(LibGit2.GitRepo(pkg_path)) do repo
