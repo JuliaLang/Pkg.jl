@@ -716,6 +716,21 @@ end
         @test api == Pkg.precompile
         @test arg == ["Foo", "Bar"]
         @test isempty(opts)
+
+        api, arg, opts = first(Pkg.pkg"precompile --noskip")
+        @test api == Pkg.precompile
+        @test isempty(arg)
+        @test opts == Dict(:skip_dependents => false)
+
+        api, arg, opts = first(Pkg.pkg"precompile --force Foo")
+        @test api == Pkg.precompile
+        @test arg == ["Foo"]
+        @test opts == Dict(:force => true)
+
+        api, arg, opts = first(Pkg.pkg"precompile --forceall")
+        @test api == Pkg.precompile
+        @test isempty(arg)
+        @test opts == Dict(:force_stdlibs => true)
     end
 end
 
