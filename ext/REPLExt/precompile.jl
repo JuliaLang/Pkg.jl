@@ -15,8 +15,8 @@ let
         __init__()
         Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
         Base.ScopedValues.@with Pkg.DEFAULT_IO => Pkg.unstableio(devnull) begin
-            withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
-                tmp = Pkg._run_precompilation_script_setup()
+            tmp, pkg_server = Pkg._run_precompilation_script_setup()
+            withenv("JULIA_PKG_SERVER" => pkg_server, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
                 cd(tmp) do
                     try_prompt_pkg_add(Symbol[:notapackage])
                     promptf()
