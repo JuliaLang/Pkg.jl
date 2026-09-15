@@ -549,9 +549,26 @@ function load_stdlib()
             push!(UPGRADABLE_STDLIBS_UUIDS, UUID(uuid))
             continue
         end
-        deps = UUID.(values(get(project, "deps", Dict{String, Any}())))
-        weakdeps = UUID.(values(get(project, "weakdeps", Dict{String, Any}())))
-        stdlib[UUID(uuid)] = StdlibInfo(name, Base.UUID(uuid), version, deps, weakdeps)
+        deps_dict = get(project, "deps", Dict{String, Any}())::Dict{String, Any}
+        weakdeps_dict = get(project, "weakdeps", Dict{String, Any}())::Dict{String, Any}
+        deps = UUID.(values(deps_dict))
+        weakdeps = UUID.(values(weakdeps_dict))
+        # Convert the `[compat]` section (name -> version spec) into UUID -> VersionSpec
+        # so that custom distros bundling arbitrary stdlibs honor these bounds when resolving.
+        compat = Dict{UUID, VersionSpec}()
+        for (dep_name, spec) in get(project, "compat", Dict{String, Any}())::Dict{String, Any}
+            dep_uuid = if dep_name == "julia"
+                Registry.JULIA_UUID
+            elseif haskey(deps_dict, dep_name)
+                UUID(deps_dict[dep_name]::String)
+            elseif haskey(weakdeps_dict, dep_name)
+                UUID(weakdeps_dict[dep_name]::String)
+            else
+                continue # compat entry that doesn't correspond to a (weak)dep
+            end
+            compat[dep_uuid] = semver_spec(spec::String)
+        end
+        stdlib[UUID(uuid)] = StdlibInfo(name, Base.UUID(uuid), version, deps, weakdeps, compat)
     end
     return stdlib
 end
