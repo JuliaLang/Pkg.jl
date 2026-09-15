@@ -236,6 +236,118 @@ end
     end
 end
 
+@testset "no [sources] created for workspace-internal dependencies" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspacePathResolution")
+            cd(path) do
+                with_current_env() do
+                    project_file = joinpath("SubProjectA", "Project.toml")
+                    Pkg.activate("SubProjectA")
+                    Pkg.resolve()
+                    @test TOML.parsefile(project_file)["sources"]["SubProjectB"] == Dict("path" => "../SubProjectB")
+
+                    project = TOML.parsefile(project_file)
+                    delete!(project, "sources")
+                    Pkg.Types.write_project(project, project_file)
+
+                    Pkg.resolve()
+                    @test !haskey(TOML.parsefile(project_file), "sources")
+                end
+            end
+        end
+    end
+end
+
+# Two workspace member projects that pin the same dependency to different sources
+# cannot be merged into a single manifest entry, so resolving must error clearly.
+@testset "workspace projects with conflicting [sources]" begin
+    mktempdir() do dir
+        cd(dir) do
+            shared_uuid = "22222222-2222-2222-2222-222222222222"
+            shared_id = UUID(shared_uuid)
+            mkpath("ProjectA")
+            mkpath("ProjectB")
+            for parent in ("variant1", "variant2")
+                pkgdir = joinpath(parent, "SharedDep")
+                mkpath(joinpath(pkgdir, "src"))
+                write(
+                    joinpath(pkgdir, "Project.toml"),
+                    """
+                    name = "SharedDep"
+                    uuid = "$shared_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath(pkgdir, "src", "SharedDep.jl"), "module SharedDep\nend\n")
+            end
+            function write_member(name, source = nothing)
+                source_section = if source === nothing
+                    ""
+                else
+                    "\n[sources]\nSharedDep = $source\n"
+                end
+                return write(
+                    joinpath(name, "Project.toml"),
+                    "[deps]\nSharedDep = \"$shared_uuid\"\n$source_section"
+                )
+            end
+            write(
+                "Project.toml",
+                """
+                name = "ConflictRoot"
+                uuid = "33333333-3333-3333-3333-333333333333"
+                version = "0.1.0"
+
+                [workspace]
+                projects = ["ProjectA", "ProjectB"]
+                """
+            )
+            write_member("ProjectA", "{path = \"../variant1/SharedDep\"}")
+            write_member("ProjectB", "{path = \"../variant2/SharedDep\"}")
+            with_current_env() do
+                @test_throws r"conflicting sources.*paths" Pkg.resolve()
+
+                # A source inherited by ProjectB from the manifest must not
+                # conflict with, or take precedence over, ProjectA's declaration.
+                write_member("ProjectB")
+                Pkg.resolve()
+                @test Pkg.Types.read_manifest("Manifest.toml")[shared_id].path == "variant1/SharedDep"
+                write_member("ProjectA", "{path = \"../variant2/SharedDep\"}")
+                Pkg.resolve()
+                @test Pkg.Types.read_manifest("Manifest.toml")[shared_id].path == "variant2/SharedDep"
+
+                # Equivalent absolute and relative paths are not conflicting.
+                absolute_path = abspath("variant2/SharedDep")
+                write_member("ProjectB", "{path = $(repr(absolute_path))}")
+                Pkg.resolve()
+
+                write_member(
+                    "ProjectA",
+                    "{url = \"https://example.com/A.jl\", rev = \"main\", subdir = \"A\"}"
+                )
+                write_member(
+                    "ProjectB",
+                    "{url = \"https://example.com/B.jl\", rev = \"dev\", subdir = \"B\"}"
+                )
+                @test_throws r"conflicting sources.*repositories.*revisions.*subdirectories" begin
+                    Pkg.Operations.load_direct_deps(Pkg.Types.Context().env)
+                end
+
+                # Source fields declared by different members are merged.
+                write_member("ProjectA", "{url = \"https://example.com/SharedDep.jl\"}")
+                write_member(
+                    "ProjectB",
+                    "{url = \"https://example.com/SharedDep.jl\", subdir = \"packages/SharedDep\"}"
+                )
+                deps = Pkg.Operations.load_direct_deps(Pkg.Types.Context().env)
+                shared = only(filter(pkg -> pkg.uuid == shared_id, deps))
+                @test shared.repo.subdir == "packages/SharedDep"
+            end
+        end
+    end
+end
+
 @testset "selective workspace instantiate" begin
     mktempdir() do dir
         path = copy_test_package(dir, "WorkspaceTestInstantiate")
