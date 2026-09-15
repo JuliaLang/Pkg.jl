@@ -50,7 +50,10 @@ function Base.:(==)(a::PackageInfo, b::PackageInfo)
         a.source == b.source && a.dependencies == b.dependencies
 end
 
-function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
+function package_info(
+        env::EnvCache, pkg::PackageSpec;
+        is_direct_dep::Bool = pkg.uuid in values(env.project.deps)
+    )::PackageInfo
     entry = manifest_info(env.manifest, pkg.uuid)
     if entry === nothing
         pkgerror(
@@ -58,10 +61,13 @@ function package_info(env::EnvCache, pkg::PackageSpec)::PackageInfo
             " (use `resolve` to populate the manifest)"
         )
     end
-    return package_info(env, pkg, entry)
+    return package_info(env, pkg, entry; is_direct_dep)
 end
 
-function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::PackageInfo
+function package_info(
+        env::EnvCache, pkg::PackageSpec, entry::PackageEntry;
+        is_direct_dep::Bool = pkg.uuid in values(env.project.deps)
+    )::PackageInfo
     git_source = pkg.repo.source === nothing ? nothing :
         isurl(pkg.repo.source::String) ? pkg.repo.source::String :
         safe_realpath(manifest_rel_path(env, pkg.repo.source::String))
@@ -74,7 +80,7 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
         name = pkg.name,
         version = pkg.version != VersionSpec() ? pkg.version : nothing,
         tree_hash = pkg.tree_hash === nothing ? nothing : string(pkg.tree_hash), # TODO or should it just be a SHA?
-        is_direct_dep = pkg.uuid in values(env.project.deps),
+        is_direct_dep = is_direct_dep,
         is_pinned = pkg.pinned,
         is_tracking_path = pkg.path !== nothing,
         is_tracking_repo = pkg.repo.rev !== nothing || pkg.repo.source !== nothing,
@@ -87,10 +93,12 @@ function package_info(env::EnvCache, pkg::PackageSpec, entry::PackageEntry)::Pac
     return info
 end
 
-dependencies() = dependencies(EnvCache())
-function dependencies(env::EnvCache)
-    pkgs = Operations.load_all_deps_loadable(env)
-    return Dict(pkg.uuid::UUID => package_info(env, pkg) for pkg in pkgs)
+dependencies(; workspace::Bool = false) = dependencies(EnvCache(); workspace)
+function dependencies(env::EnvCache; workspace::Bool = false)
+    pkgs = Operations.load_all_deps_loadable(env; workspace)
+    direct_deps = Set(values(env.project.deps))
+    workspace && foreach(project -> union!(direct_deps, values(project.deps)), values(env.workspace))
+    return Dict(pkg.uuid::UUID => package_info(env, pkg; is_direct_dep = pkg.uuid in direct_deps) for pkg in pkgs)
 end
 function dependencies(fn::Function, uuid::UUID)
     dep = get(dependencies(), uuid, nothing)
@@ -111,15 +119,28 @@ Base.@kwdef struct ProjectInfo
     path::String
 end
 
-project() = project(EnvCache())
-function project(env::EnvCache)::ProjectInfo
+project(; workspace::Bool = false) = project(EnvCache(); workspace)
+function project(env::EnvCache; workspace::Bool = false)::ProjectInfo
     pkg = env.pkg
+    if workspace
+        deps = copy(env.project.deps)
+        for (_, wproj) in env.workspace
+            for (name, uuid) in wproj.deps
+                if haskey(deps, name) && deps[name] != uuid
+                    pkgerror("dependency `$name` has different UUIDs across workspace projects")
+                end
+                deps[name] = uuid
+            end
+        end
+    else
+        deps = env.project.deps
+    end
     return ProjectInfo(
         name = pkg === nothing ? nothing : pkg.name,
         uuid = pkg === nothing ? nothing : pkg.uuid,
         version = pkg === nothing ? nothing : pkg.version::VersionNumber,
         ispackage = pkg !== nothing,
-        dependencies = env.project.deps,
+        dependencies = deps,
         sources = env.project.sources,
         path = env.project_file
     )

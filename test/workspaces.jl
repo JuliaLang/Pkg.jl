@@ -147,6 +147,23 @@ temp_pkg_dir() do project_path
                     @test pkg.version > v"1.1.2"
                 end
 
+                active_dependencies = Pkg.dependencies()
+                workspace_dependencies = Pkg.dependencies(; workspace = true)
+                active_dep_names = Set(info.name for info in values(active_dependencies))
+                ws_dep_names = Set(info.name for info in values(workspace_dependencies))
+                @test !("TestSpecificPackage" in active_dep_names)
+                @test "TestSpecificPackage" in ws_dep_names
+                @test !active_dependencies[chairmarks_uuid].is_direct_dep
+                @test workspace_dependencies[chairmarks_uuid].is_direct_dep
+
+                root_deps = keys(Pkg.project().dependencies)
+                ws_deps = keys(Pkg.project(; workspace = true).dependencies)
+                @test "Example" in root_deps
+                @test !("TestSpecificPackage" in root_deps)
+                @test "Example" in ws_deps
+                @test "TestSpecificPackage" in ws_deps
+                @test !("TestSpecificPackage" in keys(Pkg.project().dependencies))
+
                 # Test that the subprojects are working
                 depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
                 # The subprocesses run no Pkg code; with coverage enabled they
@@ -287,6 +304,34 @@ end
                 ctx = Pkg.Types.Context()
                 @test Pkg.Operations.is_instantiated(ctx.env, false)   # Root project complete (has Crayons)
                 @test !Pkg.Operations.is_instantiated(ctx.env, true)   # Workspace incomplete (missing Example)
+            end
+        end
+    end
+end
+
+@testset "workspace dependency name conflicts" begin
+    mktempdir() do dir
+        mkpath(joinpath(dir, "member"))
+        write(
+            joinpath(dir, "Project.toml"),
+            """
+            [deps]
+            SharedName = "00000000-0000-0000-0000-000000000001"
+
+            [workspace]
+            projects = ["member"]
+            """
+        )
+        write(
+            joinpath(dir, "member", "Project.toml"),
+            """
+            [deps]
+            SharedName = "00000000-0000-0000-0000-000000000002"
+            """
+        )
+        cd(dir) do
+            with_current_env() do
+                @test_throws Pkg.Types.PkgError Pkg.project(; workspace = true)
             end
         end
     end
