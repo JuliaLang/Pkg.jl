@@ -236,10 +236,14 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
                 depth > 0 && push!(args, "--depth=$depth")
                 push!(args, remoteurl, only(refspecs))
                 cmd = `git $args`
+                errbuf = IOBuffer()
                 try
-                    run(pipeline(cmd; stdout = devnull))
+                    run(pipeline(cmd; stdout = devnull, stderr = errbuf))
                 catch err
-                    Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
+                    git_err = strip(String(take!(errbuf)))
+                    msg = "The command $(cmd) failed, error: $err"
+                    isempty(git_err) || (msg *= "\n$(git_err)")
+                    Pkg.Types.pkgerror(msg)
                 end
             end
         else
