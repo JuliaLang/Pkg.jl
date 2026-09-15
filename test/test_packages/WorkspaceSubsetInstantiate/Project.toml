@@ -1,0 +1,6 @@
+name = "WorkspaceSubsetInstantiate"
+uuid = "5a3e9f28-1c47-4b6d-8e2a-7f0b9c1d3e45"
+version = "0.1.0"
+
+[workspace]
+projects = ["a", "b", "c"]

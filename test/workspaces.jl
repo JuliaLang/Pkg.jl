@@ -193,6 +193,38 @@ end
     end
 end
 
+@testset "instantiate a subset of workspace members in one batch" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceSubsetInstantiate")
+            cd(path) do
+                with_current_env() do
+                    withenv("JULIA_PKG_PRECOMPILE_AUTO" => "1") do
+                        Pkg.resolve()
+
+                        active_before = Base.active_project()
+                        iob = IOBuffer()
+                        Pkg.instantiate("a", "b"; io = iob)
+                        @test Base.active_project() == active_before
+                        @test occursin("Precompil", String(take!(iob)))
+                        @test isfile("Manifest.toml")
+                        @test !isfile("a/Manifest.toml")
+                        @test !isfile("b/Manifest.toml")
+                        @test !isfile("c/Manifest.toml")
+
+                        depot_path_string = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+                        withenv("JULIA_DEPOT_PATH" => depot_path_string) do
+                            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="a" -e 'exit(!Base.isprecompiled(Base.identify_package("Example")))'`))
+                            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="b" -e 'exit(!Base.isprecompiled(Base.identify_package("Crayons")))'`))
+                            @test success(run(`$(Base.julia_cmd()) --startup-file=no --project="c" -e 'pkg = Base.identify_package("JSON"); exit(!isnothing(pkg) && Base.isprecompiled(pkg))'`))
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 @testset "workspace path resolution issue #4222" begin
     isolate() do
         mktempdir() do dir

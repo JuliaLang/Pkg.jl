@@ -553,6 +553,10 @@ function parse_activate(args::Vector{QString}, options)
     return args # this is currently invalid input for "activate"
 end
 
+function parse_instantiate(args::Vector{QString}, options)
+    return [x.isquoted ? x.raw : expanduser(x.raw) for x in args]
+end
+
 #
 # # Option Maps
 #
