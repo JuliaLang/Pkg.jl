@@ -1215,6 +1215,8 @@ function get_or_make_pkgspec(pkgspecs::Vector{PackageSpec}, ctx::Context, uuid)
     end
 end
 
+loadable_in_active_project(name::String) = !isnothing(Base.identify_package(name))
+
 function precompile(
         ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool = false,
         strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
@@ -1245,7 +1247,7 @@ function precompile(
 
     Context!(ctx; kwargs...)
     if !already_instantiated
-        instantiate(ctx; allow_autoprecomp = false, kwargs...)
+        instantiate(ctx; allow_autoprecomp = false, workspace, kwargs...)
         @debug "precompile: instantiated"
     end
 
@@ -1255,22 +1257,44 @@ function precompile(
         return
     end
 
-    return activate(dirname(ctx.env.project_file)) do
-        # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
-        # `IOContext{IO}` and takes `ctx.io` as is. Before that it specialized on the
-        # stream, and only the unwrapped variants come precompiled, apart from a pipe,
-        # which keeps the wrapper for its colour.
-        io = if isdefined(Base.Precompilation, :unstable_iocontext) ||
-                !(ctx.io isa IOContext{IO}) || ctx.io.io isa Base.PipeEndpoint
-            ctx.io
-        else
-            ctx.io.io
-        end
-        pkgs_name = String[pkg.name for pkg in pkgs]
-        # Allow user to press 'd' to detach when running interactively
-        detachable = isinteractive()
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
+    # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
+    # `IOContext{IO}` and takes `ctx.io` as is. Before that it specialized on the
+    # stream, and only the unwrapped variants come precompiled, apart from a pipe,
+    # which keeps the wrapper for its colour.
+    io = if isdefined(Base.Precompilation, :unstable_iocontext) ||
+            !(ctx.io isa IOContext{IO}) || ctx.io.io isa Base.PipeEndpoint
+        ctx.io
+    else
+        ctx.io.io
     end
+    pkgs_name = String[pkg.name for pkg in pkgs]
+    # Allow user to press 'd' to detach when running interactively
+    detachable = isinteractive()
+
+    precompile_env(project_file, names) = activate(dirname(project_file)) do
+        Base.Precompilation.precompilepkgs(names; internal_call, strict, warn_loaded, timing, _from_loading, configs, io, detachable)
+    end
+
+    if !workspace
+        return precompile_env(ctx.env.project_file, pkgs_name)
+    end
+
+    project_files = [ctx.env.project_file; sort!(collect(keys(ctx.env.workspace)))]
+    cachepaths = String[]
+    requested_somewhere = isempty(pkgs_name)
+    for project_file in project_files
+        names = activate(dirname(project_file)) do
+            isempty(pkgs_name) ? pkgs_name : filter(loadable_in_active_project, pkgs_name)
+        end
+        isempty(names) && !isempty(pkgs_name) && continue
+        requested_somewhere = true
+        ret = precompile_env(project_file, names)
+        isnothing(ret) || append!(cachepaths, ret)
+    end
+    # No project in the workspace can load any of the requested packages; go through the
+    # active project so that Base reports the unknown package the way it usually does.
+    requested_somewhere || return precompile_env(ctx.env.project_file, pkgs_name)
+    return unique!(cachepaths)
 end
 
 function precompile(f, args...; kwargs...)
@@ -1316,13 +1340,13 @@ function instantiate(
             deps[pkg.name] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
-        return instantiate(Context(); manifest = manifest, update_registry = update_registry, allow_autoprecomp = allow_autoprecomp, verbose = verbose, platform = platform, update_on_mismatch = update_on_mismatch, kwargs...)
+        return instantiate(Context(); manifest = manifest, update_registry = update_registry, verbose = verbose, platform = platform, allow_build = allow_build, allow_autoprecomp = allow_autoprecomp, workspace = workspace, julia_version_strict = julia_version_strict, update_on_mismatch = update_on_mismatch, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
         up(ctx; update_registry = update_registry && allow_registry_update)
-        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+        allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
@@ -1341,7 +1365,7 @@ function instantiate(
         end
         printpkgstyle(ctx.io, :Update, "manifest does not match project or Julia version, falling back to `Pkg.update()`", color = Base.info_color())
         up(ctx; update_registry, mode = workspace ? PKGMODE_MANIFEST : PKGMODE_PROJECT)
-        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+        allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end
 
@@ -1369,7 +1393,7 @@ function instantiate(
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env, workspace; platform)
-        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+        allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end
 
@@ -1441,7 +1465,7 @@ function instantiate(
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose = verbose)
 
-    return allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+    return allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
 end
 
 

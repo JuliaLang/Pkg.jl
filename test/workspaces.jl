@@ -292,4 +292,51 @@ end
     end
 end
 
+# https://github.com/JuliaLang/Pkg.jl/issues/4726
+@testset "workspace precompile reaches every project in the workspace" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceNestedPrecompile")
+            cd(path) do
+                with_current_env() do
+                    Pkg.activate(".")
+                    Pkg.resolve()
+
+                    iob = IOBuffer()
+                    Pkg.precompile(workspace = true, io = iob)
+                    take!(iob)
+
+                    # `Example` is a dependency of the test project of a workspace member,
+                    # so it is two levels down from the project that was precompiled.
+                    Pkg.activate("Inner/test")
+                    @test Base.isprecompiled(Base.identify_package("Example"))
+                    @test Base.isprecompiled(Base.identify_package("InnerPkg"))
+                    Pkg.precompile(io = iob)
+                    @test !occursin("Precompiling", String(take!(iob)))
+                end
+            end
+        end
+    end
+end
+
+@testset "workspace instantiate precompiles the whole workspace" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceNestedPrecompile")
+            cd(path) do
+                with_current_env() do
+                    Pkg.activate(".")
+                    withenv("JULIA_PKG_PRECOMPILE_AUTO" => 1) do
+                        Pkg.instantiate(workspace = true)
+                    end
+
+                    Pkg.activate("Inner/test")
+                    @test Base.isprecompiled(Base.identify_package("Example"))
+                    @test Base.isprecompiled(Base.identify_package("InnerPkg"))
+                end
+            end
+        end
+    end
+end
+
 end # module
