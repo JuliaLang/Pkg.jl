@@ -162,8 +162,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve = PRESERVE_TIERED, target::Symbol = :deps, prefer_loaded_versions::Bool = Pkg.in_repl_mode())
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve = PRESERVE_TIERED, target::Symbol = :deps, prefer_loaded_versions::Bool = Pkg.in_repl_mode())
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -223,15 +223,15 @@ precompiled before, or the precompile cache has been deleted by the LRU cache st
 # Examples
 ```julia
 Pkg.add("Example") # Add a package from registry
-Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
-Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
-Pkg.add("Example"; prefer_loaded_versions=true) # Prefer the version of Example already loaded in this session, if any
-Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
-Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
-Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
-Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master") # From url to remote gitrepo
-Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local gitrepo
-Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl") # With subdir
+Pkg.add("Example", target = :weakdeps) # Add a package as a weak dependency
+Pkg.add("Example", target = :extras) # Add a package to the `[extras]` list
+Pkg.add("Example"; prefer_loaded_versions = true) # Prefer the version of Example already loaded in this session, if any
+Pkg.add("Example"; preserve = Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
+Pkg.add(name = "Example", version = "0.3") # Specify version; latest release in the 0.3 series
+Pkg.add(name = "Example", version = "0.3.1") # Specify version; exact release
+Pkg.add(url = "https://github.com/JuliaLang/Example.jl", rev = "master") # From url to remote gitrepo
+Pkg.add(url = "/remote/mycompany/juliapackages/OurPackage") # From path to local gitrepo
+Pkg.add(url = "https://github.com/Company/MonoRepo", subdir = "juliapkgs/Package.jl") # With subdir
 ```
 
 After the installation of new packages the project will be precompiled. See more at [Environment Precompilation](@ref).
@@ -241,9 +241,9 @@ See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile(; strict::Bool=false, timing::Bool=false)
-    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false)
-    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(; strict::Bool = false, timing::Bool = false)
+    Pkg.precompile(pkg; strict::Bool = false, timing::Bool = false)
+    Pkg.precompile(pkgs; strict::Bool = false, timing::Bool = false)
     Pkg.precompile(f, args...; kwargs...)
 
 Precompile all or specific dependencies of the project in parallel.
@@ -347,8 +347,8 @@ See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
 const rm = API.rm
 
 """
-    Pkg.why(pkg::Union{String, Vector{String}}; workspace::Bool=false)
-    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}}; workspace::Bool=false)
+    Pkg.why(pkg::Union{String, Vector{String}}; workspace::Bool = false)
+    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}}; workspace::Bool = false)
 
 Show the reason why this package is in the manifest.
 The output is all the different ways to reach the package
@@ -361,7 +361,7 @@ If `workspace` is true, this will consider all projects in the workspace and not
 const why = API.why
 
 """
-    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false)
+    Pkg.update(; level::UpgradeLevel = UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false)
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
@@ -426,7 +426,7 @@ by starting julia with `--inline=no`. The tests can be run as if different comma
 passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
 
 ```julia
-Pkg.test("foo"; julia_args=["--inline"])
+Pkg.test("foo"; julia_args = ["--inline"])
 ```
 
 To pass some command line arguments to be used in the tests themselves, pass the arguments to the
@@ -439,13 +439,13 @@ end
 ```
 which could be enabled by testing with
 ```julia
-Pkg.test("foo"; test_args=["--extended"])
+Pkg.test("foo"; test_args = ["--extended"])
 ```
 """
 const test = API.test
 
 """
-    Pkg.gc(; collect_delay::Period=Day(7), io::IO=stderr)
+    Pkg.gc(; collect_delay::Period = Day(7), io::IO = stderr)
 
 Garbage-collect package and artifact installations by sweeping over all known
 `Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
@@ -461,9 +461,9 @@ const gc = API.gc
 
 
 """
-    Pkg.build(; verbose = false, io::IO=stderr)
-    Pkg.build(pkg::Union{String, Vector{String}}; verbose = false, io::IO=stderr)
-    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false, io::IO=stderr)
+    Pkg.build(; verbose = false, io::IO = stderr)
+    Pkg.build(pkg::Union{String, Vector{String}}; verbose = false, io::IO = stderr)
+    Pkg.build(pkgs::Union{PackageSpec, Vector{PackageSpec}}; verbose = false, io::IO = stderr)
 
 **Keyword arguments:**
   - `verbose::Bool=false`: print the build output to `stdout`/`stderr` instead of redirecting to the `build.log` file.
@@ -485,8 +485,8 @@ If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia
 const build = API.build
 
 """
-    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
-    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
+    Pkg.pin(pkg::Union{String, Vector{String}}; io::IO = stderr, all_pkgs::Bool = false, workspace::Bool = false)
+    Pkg.pin(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO = stderr, all_pkgs::Bool = false, workspace::Bool = false)
 
 Pin a package to the current version (or the one given in the `PackageSpec`) or to a certain
 git revision. A pinned package is never automatically updated: if `pkg` is tracking a path,
@@ -505,7 +505,7 @@ will be included.
 Pkg.pin("Example")
 
 # Pin a package to a specific version
-Pkg.pin(name="Example", version="0.3.1")
+Pkg.pin(name = "Example", version = "0.3.1")
 
 # Pin all packages in the project
 Pkg.pin(all_pkgs = true)
@@ -514,8 +514,8 @@ Pkg.pin(all_pkgs = true)
 const pin = API.pin
 
 """
-    Pkg.free(pkg::Union{String, Vector{String}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
-    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, all_pkgs::Bool=false, workspace::Bool=false)
+    Pkg.free(pkg::Union{String, Vector{String}}; io::IO = stderr, all_pkgs::Bool = false, workspace::Bool = false)
+    Pkg.free(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO = stderr, all_pkgs::Bool = false, workspace::Bool = false)
 
 If `pkg` is pinned, remove the pin.
 If `pkg` is tracking a path, e.g. after [`Pkg.develop`](@ref), go back to tracking registered versions.
@@ -545,8 +545,8 @@ const free = API.free
 
 
 """
-    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
-    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO=stderr, preserve=PRESERVE_TIERED, installed=false)
+    Pkg.develop(pkg::Union{String, Vector{String}}; io::IO = stderr, preserve = PRESERVE_TIERED, installed = false)
+    Pkg.develop(pkgs::Union{PackageSpec, Vector{PackageSpec}}; io::IO = stderr, preserve = PRESERVE_TIERED, installed = false)
 
 Make a package available for development by tracking it by path.
 If `pkg` is given with only a name or by a URL, the package will be downloaded
@@ -564,10 +564,10 @@ See [`Pkg.add`](@ref) for more information.
 Pkg.develop("Example")
 
 # By url
-Pkg.develop(url="https://github.com/JuliaLang/Compat.jl")
+Pkg.develop(url = "https://github.com/JuliaLang/Compat.jl")
 
 # By path
-Pkg.develop(path="MyJuliaPackages/Package.jl")
+Pkg.develop(path = "MyJuliaPackages/Package.jl")
 ```
 
 See also [`PackageSpec`](@ref), [`Pkg.add`](@ref).
@@ -630,7 +630,7 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false, update_on_mismatch=false)
+    Pkg.instantiate(; verbose = false, workspace = false, io::IO = stderr, julia_version_strict = false, update_on_mismatch = false)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
@@ -660,7 +660,7 @@ See more and how to disable auto-precompilation at [Environment Precompilation](
 const instantiate = API.instantiate
 
 """
-    Pkg.resolve(; io::IO=stderr)
+    Pkg.resolve(; io::IO = stderr)
 
 Update the current manifest with potential changes to the dependency graph
 from packages that are tracking a path.
@@ -668,8 +668,10 @@ from packages that are tracking a path.
 const resolve = API.resolve
 
 """
-    Pkg.status([pkgs...]; outdated::Bool=false, mode::PackageMode=PKGMODE_PROJECT, diff::Bool=false,
-               compat::Bool=false, extensions::Bool=false, workspace::Bool=false, io::IO=stdout)
+    Pkg.status(
+        [pkgs...]; outdated::Bool = false, mode::PackageMode = PKGMODE_PROJECT, diff::Bool = false,
+        compat::Bool = false, extensions::Bool = false, workspace::Bool = false, io::IO = stdout
+    )
 
 
 Print out the status of the project/manifest.
@@ -684,7 +686,7 @@ their maximum version and why they are not on the latest version (either due to 
 packages holding them back due to compatibility constraints, or due to compatibility in the project file).
 As an example, a status output like:
 ```julia-repl
-julia> Pkg.status(; outdated=true)
+julia> Pkg.status(; outdated = true)
 Status `Manifest.toml`
 ⌃ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
 ⌅ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
@@ -736,8 +738,8 @@ See [Compatibility](@ref) for more information on the project [compat] section.
 const compat = API.compat
 
 """
-    Pkg.activate([s::String]; shared::Bool=false, io::IO=stderr)
-    Pkg.activate(; temp::Bool=false, shared::Bool=false, io::IO=stderr)
+    Pkg.activate([s::String]; shared::Bool = false, io::IO = stderr)
+    Pkg.activate(; temp::Bool = false, shared::Bool = false, io::IO = stderr)
 
 Activate the environment at `s`, or return to the default environment if no argument is given.
 The active environment is the environment that is modified by executing package commands.
@@ -777,7 +779,7 @@ Pkg.activate("local/path")
 Pkg.activate("MyDependency")
 
 # Create and activate a temporary environment
-Pkg.activate(; temp=true)
+Pkg.activate(; temp = true)
 ```
 
 See also [`LOAD_PATH`](https://docs.julialang.org/en/v1/base/constants/#Base.LOAD_PATH).
@@ -785,7 +787,7 @@ See also [`LOAD_PATH`](https://docs.julialang.org/en/v1/base/constants/#Base.LOA
 const activate = API.activate
 
 """
-    Pkg.offline(b::Bool=true)
+    Pkg.offline(b::Bool = true)
 
 Enable (`b=true`) or disable (`b=false`) offline mode.
 
@@ -799,7 +801,7 @@ variable `JULIA_PKG_OFFLINE` to `"true"` before starting Julia.
 offline(b::Bool = true) = (OFFLINE_MODE[] = b; nothing)
 
 """
-    Pkg.respect_sysimage_versions(b::Bool=true)
+    Pkg.respect_sysimage_versions(b::Bool = true)
 
 Enable (`b=true`) or disable (`b=false`) respecting versions that are in the
 sysimage (enabled by default).
@@ -859,7 +861,7 @@ const PackageSpec = Types.PackageSpec
 """
     setprotocol!(;
         domain::AbstractString = "github.com",
-        protocol::Union{Nothing, AbstractString}=nothing
+        protocol::Union{Nothing, AbstractString} = nothing
     )
 
 Set the protocol used to access hosted packages when `add`ing a url or `develop`ing a package.

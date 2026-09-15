@@ -112,10 +112,12 @@ Example:
 
 ```julia
 # register a handler
-dispose = Pkg.PlatformEngines.register_auth_error_handler((url, svr, err) -> begin
-    PkgAuth.authenticate(svr*"/auth")
-    return true, true
-end)
+dispose = Pkg.PlatformEngines.register_auth_error_handler(
+    function (url, svr, err)
+        PkgAuth.authenticate(svr * "/auth")
+        return true, true
+    end
+)
 
 # ... client code ...
 
