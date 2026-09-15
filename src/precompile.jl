@@ -2,7 +2,28 @@ using LibGit2: LibGit2
 using Tar: Tar
 using Downloads
 
+# `file://` URL for a local path, as accepted by libcurl (and thus `Downloads`)
+function _file_url(path::AbstractString)
+    unixpath = replace(abspath(path), '\\' => '/')
+    urlpath = startswith(unixpath, '/') ? unixpath : '/' * unixpath # Windows drive letter
+    escaped = sprint() do io
+        for b in codeunits(urlpath)
+            c = Char(b)
+            if isascii(c) && (isletter(c) || isdigit(c) || c in "-._~/:")
+                write(io, c)
+            else
+                print(io, '%', uppercase(string(b, base = 16, pad = 2)))
+            end
+        end
+    end
+    return "file://" * escaped
+end
+
 # used by REPLExt too
+# Sets up a depot with a registry and a package in it, plus a fake package server
+# served over `file://` so that the pkg server code paths (registry probe, registry update,
+# package download) get precompiled without any network access. Returns the depot
+# path and the server URL to put in `JULIA_PKG_SERVER`.
 function _run_precompilation_script_setup()
     tmp = mktempdir()
     cd(tmp) do
@@ -70,6 +91,9 @@ function _run_precompilation_script_setup()
         write(
             "registries/Registry/T/TestPkg/Versions.toml",
             """
+            ["0.0.1"]
+            git-tree-sha1 = "0000000000000000000000000000000000000000"
+
             ["0.1.0"]
             git-tree-sha1 = "$tree_hash"
             """,
@@ -82,20 +106,35 @@ function _run_precompilation_script_setup()
             repo = "$(escape_string(tmp))/TestPkg.jl"
             """,
         )
+        registry_uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
         Tar.create("registries/Registry", "registries/Registry.tar")
+        registry_hash = Tar.tree_hash("registries/Registry.tar")
         cmd = `$(Pkg.PlatformEngines.exe7z()) a "registries/Registry.tar.gz" -tgzip "registries/Registry.tar"`
         run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
+        # The fake package server, with the same layout as PkgServer.jl:
+        # `/registries`, `/registry/<uuid>/<hash>` and `/package/<uuid>/<hash>`
+        server_dir = joinpath(tmp, "pkgserver")
+        mkpath(joinpath(server_dir, "registry", registry_uuid))
+        cp("registries/Registry.tar.gz", joinpath(server_dir, "registry", registry_uuid, registry_hash))
+        write(joinpath(server_dir, "registries"), "/registry/$registry_uuid/$registry_hash\n")
+        # zstd is what the real server sends to current clients, so exercise that decompression path
+        mkpath(joinpath(server_dir, "package", uuid))
+        Tar.create(p -> basename(p) != ".git", "TestPkg.jl", "TestPkg.tar")
+        cmd = `$(Pkg.PlatformEngines.exezstd()) -q -f "TestPkg.tar" -o $(joinpath(server_dir, "package", uuid, tree_hash))`
+        run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
+        # Install the registry under a stale hash so that the first registry update
+        # downloads the current one from the fake server
         write(
             "registries/Registry.toml",
             """
             git-tree-sha1 = "11b5fad51c4f98cfe0c145ceab0b8fb63fed6f81"
-            uuid = "37c07fec-e54c-4851-934c-2e3885e4053e"
+            uuid = "$registry_uuid"
             path = "Registry.tar.gz"
             """,
         )
         Base.rm("registries/Registry"; recursive = true)
     end
-    return tmp
+    return tmp, _file_url(joinpath(tmp, "pkgserver"))
 end
 
 let
@@ -103,20 +142,21 @@ let
         original_depot_path = copy(DEPOT_PATH)
         original_load_path = copy(LOAD_PATH)
 
-        Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
         @Base.ScopedValues.with Pkg.DEFAULT_IO => Pkg.unstableio(devnull) begin
             # Default 30 sec grace period means we hang 30 seconds before precompiling finishes
             Downloads.DOWNLOADER[] = Downloads.Downloader(; grace = 1.0)
 
+            tmp, pkg_server = _run_precompilation_script_setup()
+            # Everything the pkg server serves comes from the local `file://` server set up above,
+            # and the registry and the package are local too, so nothing here reaches the network.
             # We need to override JULIA_PKG_UNPACK_REGISTRY to fix https://github.com/JuliaLang/Pkg.jl/issues/3663
-            withenv("JULIA_PKG_SERVER" => nothing, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
-                tmp = _run_precompilation_script_setup()
+            withenv("JULIA_PKG_SERVER" => pkg_server, "JULIA_PKG_UNPACK_REGISTRY" => nothing) do
                 cd(tmp) do
                     withenv("JULIA_PKG_PRECOMPILE_AUTO" => 0) do
-                        Pkg.add("TestPkg")
+                        Pkg.add("TestPkg") # updates the registry and installs from the fake pkg server
                         Pkg.develop(Pkg.PackageSpec(path = "TestPkg.jl"))
                         Pkg.add(Pkg.PackageSpec(path = "TestPkg.jl/"))
-                        Pkg.update(; update_registry = false)
+                        Pkg.update()
                         Pkg.status()
                         pkgs_path = pkgdir(Pkg, "test", "test_packages")
                         # Precompile a diverse set of test packages
@@ -139,6 +179,9 @@ let
                             Pkg.activate(joinpath(pkgs_path, test_package))
                         end
                         Pkg.activate(; temp = true)
+                        # from an environment without a uuid, like the default one
+                        Pkg.add("TestPkg")
+                        Pkg.rm("TestPkg")
                         Pkg.activate()
                         Pkg.activate("TestPkg.jl")
                     end

@@ -1793,6 +1793,8 @@ function selector_levels(env::EnvCache, pkg_info::Vector{ArtifactPackageInfo})
     return levels
 end
 
+const CollectedArtifact = Tuple{String, Base.TOML.TOMLDict, Union{UUID, Nothing}}
+
 function collect_package_artifacts(
         info, used_artifact_tomls;
         platform::AbstractPlatform, include_lazy::Bool,
@@ -1801,7 +1803,8 @@ function collect_package_artifacts(
     )
     artifacts = collect_artifacts(info.root; platform, include_lazy, selector_project, env_key)
     union!(used_artifact_tomls, map(first, artifacts))
-    return map(ca -> (ca[1], ca[2], info.uuid), artifacts)
+    # Fixed eltype so that the specializations downstream do not depend on whether the project has a uuid
+    return CollectedArtifact[(artifacts_toml, artifacts, info.uuid) for (artifacts_toml, artifacts) in artifacts]
 end
 
 function download_artifacts(
@@ -1817,14 +1820,6 @@ function download_artifacts(
     pkg_uuids = Set(pkg.uuid for pkg in pkgs)
     manifest_pkgs = [uuid => manifest_info(env.manifest, uuid) for uuid in keys(env.manifest) if uuid in pkg_uuids]
     pkg_info = artifact_package_info(env, manifest_pkgs; julia_version)
-
-    # Check what registries the current pkg server tracks
-    # Disable if precompiling to not access internet
-    server_registry_info = if Base.JLOptions().incremental == 0
-        Registry.pkg_server_registry_info()
-    else
-        nothing
-    end
     used_artifact_tomls = Set{String}()
 
     # A selector dependency must be able to initialize before its consumer's hook runs.
@@ -1838,11 +1833,17 @@ function download_artifacts(
             ),
             static_pkg_info,
         );
-        init = []
+        init = CollectedArtifact[]
     )
+    levels = selector_levels(env, pkg_info)
+    # Check what registries the current pkg server tracks, but don't ask when there is nothing that could be served
+    server_registry_info = if isempty(static_artifacts) && isempty(levels)
+        nothing
+    else
+        Registry.pkg_server_registry_info()
+    end
     install_collected_artifacts!(ctx, static_artifacts; server_registry_info, verbose, io)
 
-    levels = selector_levels(env, pkg_info)
     if !isempty(levels)
         env_key = selector_env_key(env)
         with_resolved_artifact_env(env) do selector_project
@@ -1857,7 +1858,7 @@ function download_artifacts(
                                 platform, include_lazy, selector_project, env_key,
                             ) for info in level
                     ];
-                    init = []
+                    init = CollectedArtifact[]
                 )
                 install_collected_artifacts!(
                     ctx, selected_artifacts; server_registry_info, verbose, io
@@ -1980,12 +1981,7 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
     max_name = maximum(widths; init = 0)
 
     # Check what registries the current pkg server tracks
-    # Disable if precompiling to not access internet
-    server_registry_info = if Base.JLOptions().incremental == 0
-        Registry.pkg_server_registry_info()
-    else
-        nothing
-    end
+    server_registry_info = Registry.pkg_server_registry_info()
 
     # use eager throw version
     Base.Experimental.@sync begin
