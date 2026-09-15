@@ -1290,6 +1290,17 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
 end
 
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
+
+function instantiate(path::AbstractString, paths::AbstractString...; kwargs...)
+    registries = Registry.reachable_registries()
+    for p in (path, paths...)
+        project_file = isdir(p) ? projectfile_path(p) : p
+        ctx = Context(; env = EnvCache(project_file), registries)
+        instantiate(ctx; kwargs...)
+    end
+    return
+end
+
 function instantiate(
         ctx::Context; manifest::Union{Bool, Nothing} = nothing,
         update_registry::Bool = true, verbose::Bool = false,
