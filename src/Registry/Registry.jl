@@ -169,6 +169,7 @@ function is_pkg_in_pkgserver_registry(pkg_uuid::Base.UUID, server_registry_info,
 end
 
 function download_default_registries(io::IO; only_if_empty::Bool = true, depots::Union{String, Vector{String}} = depots())
+    Pkg.OFFLINE_MODE[] && return false
     # Check the specified depots for installed registries
     installed_registries = reachable_registries(; depots)
     # Only clone if there are no installed registries, unless called
@@ -512,6 +513,7 @@ function update(; name = nothing, uuid = nothing, url = nothing, path = nothing,
     end
 end
 function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = true, depots = [depots1()], update_cooldown = Second(1))
+    Pkg.OFFLINE_MODE[] && return
     registry_update_log = get_registry_update_log()
     for depot in depots
         depot_regs = isempty(regs) ? reachable_registries(; depots = depot) : regs

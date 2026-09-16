@@ -459,13 +459,13 @@ function up(
         kwargs...
     )
     Context!(ctx; kwargs...)
-    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
         return
     end
     if update_registry
+        Operations.ensure_manifest_registries!(ctx)
         Registry.download_default_registries(ctx.io)
         Operations.update_registries(ctx; force = true)
     end
