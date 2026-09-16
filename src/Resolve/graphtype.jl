@@ -305,14 +305,17 @@ mutable struct Graph
                 empty!(req)
                 Registry.query_compat_for_version_multi_registry!(vnmap, reg_result, uuid0_deps_list, uuid0_compat_list, uuid0_weak_deps_list, uuid0_weak_compat_list, uuid0_versions_per_reg, vn)
 
-                # Filter out incompatible stdlib compat entries from registry dependencies
+                # Ignore incompatible compat bounds on non-upgradable stdlibs: the stdlib
+                # only exists at one version, so an out-of-date bound would make the package
+                # unresolvable. Keep the dependency itself and accept any version, otherwise
+                # the stdlib is left out of the manifest and the package fails to load (#4801).
                 for (dep_uuid, dep_compat) in vnmap
                     if Types.is_stdlib(dep_uuid) && !(dep_uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
                         stdlib_info = get(last_stdlibs, dep_uuid, nothing)
                         stdlib_ver = stdlib_info === nothing ? nothing : stdlib_info.version
                         if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
                             @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat package = uuid_to_name[uuid0] version = vn
-                            delete!(vnmap, dep_uuid)
+                            vnmap[dep_uuid] = VersionSpec()
                         end
                     end
                 end
