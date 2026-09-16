@@ -203,6 +203,9 @@ let
                 Base.precompile(Tuple{typeof(Pkg.REPLMode.parse_package), Array{Pkg.REPLMode.QString, 1}, Base.Dict{Symbol, Any}})
                 Base.precompile(Tuple{Type{Pkg.REPLMode.Command}, Pkg.REPLMode.CommandSpec, Base.Dict{Symbol, Any}, Array{Pkg.Types.PackageSpec, 1}})
 
+                # TOML printing of usage logs goes through `invokelatest` and is not retained from the workload
+                Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:indent, :sorted, :by, :inline_tables, :comments), Tuple{Int64, Bool, typeof(Base.identity), Base.IdSet{Base.Dict{String, V} where {V}}, Nothing}}, typeof(Base.TOML.Printer.print_table), typeof(Base.identity), Base.IOStream, Base.Dict{String, Any}, Array{String, 1}})
+
                 # Manually added from trace compiling Pkg.status.
                 Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:color,), Tuple{Symbol}}, typeof(Base.printstyled), Base.IOContext{Base.GenericIOBuffer{Memory{UInt8}}}, Char})
                 Base.precompile(Tuple{typeof(Base.join), Base.GenericIOBuffer{Memory{UInt8}}, Tuple{UInt64}, Char})

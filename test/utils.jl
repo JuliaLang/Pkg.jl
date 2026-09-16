@@ -109,8 +109,12 @@ function check_init_reg()
         isfile(joinpath(SHARED_REGISTRIES_DIR, "General.toml")) || error("Registry did not install properly")
         # The test depots link to these files; guard against writes through the links
         for f in readdir(SHARED_REGISTRIES_DIR; join = true)
-            chmod(f, 0o444)
+            isfile(f) && chmod(f, 0o444)
         end
+        # Build the registry cache once here; the test depots link to it (see `link_shared_registry!`)
+        reg_info = TOML.parsefile(joinpath(SHARED_REGISTRIES_DIR, "General.toml"))
+        tarball = joinpath(SHARED_REGISTRIES_DIR, reg_info["path"])
+        Pkg.Registry.load_or_build_registry_cache(tarball, Base.SHA1(reg_info["git-tree-sha1"]))
         return
     end
     if !isfile(joinpath(REGISTRY_DIR, "Registry.toml"))
@@ -184,6 +188,15 @@ function link_shared_registry!(depot::String)
                 cp(src, dst)
             end
         end
+    end
+    # Share the registry cache as well, so that each depot does not build its own 28 MB copy
+    shared_cache = joinpath(SHARED_REGISTRIES_DIR, ".cache")
+    mkpath(shared_cache)
+    dst = joinpath(regdir, ".cache")
+    try
+        symlink(shared_cache, dst; dir_target = true)
+    catch
+        cp(shared_cache, dst)
     end
     return
 end
