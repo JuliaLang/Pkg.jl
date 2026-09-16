@@ -619,7 +619,7 @@ end
         end
         @test err isa ResolverError
         @test occursin("Unsatisfiable requirements detected — 1 conflict", err.msg)
-        @test occursin("your compat leaves DataFrames", err.msg)
+        @test occursin("your compat restricts DataFrames", err.msg)
         @test occursin("relax your compat on PrettyTables", err.msg)
         @test occursin("→ allows: DataFrames", err.msg)
     end
