@@ -231,6 +231,48 @@ end
     end
 end
 
+# Operations in a workspace project must not copy the base project's `[sources]` into
+# it, nor add a source for the base project itself (#4237)
+@testset "sources are not duplicated into workspace projects" begin
+    mktempdir() do dir
+        cd(dir) do
+            with_current_env() do
+                Pkg.generate("PathDep")
+                Pkg.generate("Extra")
+                Pkg.generate("BasePkg")
+                base_uuid = TOML.parsefile("BasePkg/Project.toml")["uuid"]
+                pathdep_uuid = TOML.parsefile("PathDep/Project.toml")["uuid"]
+                Pkg.activate("BasePkg")
+                Pkg.develop(path = "PathDep")
+                d = TOML.parsefile("BasePkg/Project.toml")
+                d["workspace"] = Dict("projects" => ["test"])
+                Pkg.Types.write_project(d, "BasePkg/Project.toml")
+                mkdir("BasePkg/test")
+                Pkg.Types.write_project(
+                    Dict("deps" => Dict("BasePkg" => base_uuid, "PathDep" => pathdep_uuid)),
+                    "BasePkg/test/Project.toml"
+                )
+                Pkg.activate("BasePkg/test")
+                Pkg.develop(path = "Extra")
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
+                project = TOML.parsefile("BasePkg/test/Project.toml")
+                @test collect(keys(project["sources"])) == ["Extra"]
+                base_project = TOML.parsefile("BasePkg/Project.toml")
+                @test base_project["sources"] == Dict("PathDep" => Dict("path" => "../PathDep"))
+                # Resolving keeps things as they are
+                Pkg.resolve()
+                project = TOML.parsefile("BasePkg/test/Project.toml")
+                @test collect(keys(project["sources"])) == ["Extra"]
+                # A source that differs from the one in the base project is still recorded
+                cp("PathDep", "PathDep2")
+                Pkg.develop(path = "PathDep2")
+                project = TOML.parsefile("BasePkg/test/Project.toml")
+                @test project["sources"]["PathDep"]["path"] == "../../PathDep2"
+            end
+        end
+    end
+end
+
 @testset "selective workspace instantiate" begin
     mktempdir() do dir
         path = copy_test_package(dir, "WorkspaceTestInstantiate")

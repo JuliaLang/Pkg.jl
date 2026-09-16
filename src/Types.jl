@@ -1423,9 +1423,30 @@ manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry, Nothing}
     return get(manifest, uuid, nothing)
 end
-# Verify that the manifest is consistent with `sources` and fill in `sources` from the manifest
-function sync_project_sources!(env::EnvCache)
+# Whether the `[sources]` entry for `name` in `project` (if any) is the source
+# recorded in the manifest entry.
+function source_matches_entry(project::Project, project_file::String, manifest_file::String, name::String, entry::PackageEntry)
+    haskey(project.sources, name) || return false
+    path, repo = get_path_repo(project, project_file, manifest_file, name)
+    if path !== nothing
+        return entry.path !== nothing && normpath(entry.path) == normpath(path)
+    end
+    entry.repo == GitRepo() && return false
+    return (repo.source === nothing || repo.source == entry.repo.source) &&
+        (repo.rev === nothing || repo.rev == entry.repo.rev) &&
+        (repo.subdir === nothing || repo.subdir == entry.repo.subdir)
+end
+
+# Record the path/repo of the direct dependencies from the manifest in the project's
+# `[sources]`, so the project keeps tracking the same source when it is re-resolved.
+# In a workspace, entries are not added for packages that are themselves projects of
+# the workspace (the workspace already locates them) and for sources that another
+# project of the workspace already declares (#4237).
+function update_project_sources!(env::EnvCache)
+    workspace_uuids = Set{UUID}(proj.uuid for proj in values(env.workspace) if proj.uuid !== nothing)
+    env.project.uuid === nothing || push!(workspace_uuids, env.project.uuid)
     for (pkg, uuid) in env.project.deps
+        # Verify that the generated manifest is consistent with `sources`
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
@@ -1439,21 +1460,31 @@ function sync_project_sources!(env::EnvCache)
                 @assert entry.repo.subdir == repo.subdir
             end
         end
-        if entry !== nothing
-            if entry.path !== nothing
-                # Convert path from manifest-relative to project-relative before writing
-                project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
-                env.project.sources[pkg] = Dict("path" => project_relative_path)
-            elseif entry.repo != GitRepo()
-                d = Dict{String, String}()
-                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
-                entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
-                entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
-                env.project.sources[pkg] = d
+        entry === nothing && continue
+        # Only existing entries are updated for workspace members and for sources that are
+        # already declared in another project of the workspace. Some commands drop the entry
+        # and rely on it being re-added here, so consult the project as it was on disk too.
+        if !haskey(env.project.sources, pkg) && !haskey(env.original_project.sources, pkg)
+            uuid in workspace_uuids && continue
+            declared_elsewhere = any(env.workspace) do (project_file, project)
+                get(project.deps, pkg, nothing) == uuid &&
+                    source_matches_entry(project, project_file, env.manifest_file, pkg, entry)
             end
+            declared_elsewhere && continue
+        end
+        if entry.path !== nothing
+            # Convert path from manifest-relative to project-relative before writing
+            project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
+            env.project.sources[pkg] = Dict("path" => project_relative_path)
+        elseif entry.repo != GitRepo()
+            d = Dict{String, String}()
+            entry.repo.source !== nothing && (d["url"] = entry.repo.source)
+            entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+            entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+            env.project.sources[pkg] = d
         end
     end
-    return
+    return env.project
 end
 
 function write_env(
@@ -1461,7 +1492,7 @@ function write_env(
         skip_writing_project::Bool = false,
         skip_readonly_check::Bool = false
     )
-    sync_project_sources!(env)
+    update_project_sources!(env)
 
     # Check if the environment is readonly before attempting to write
     if env.project.readonly && !skip_readonly_check

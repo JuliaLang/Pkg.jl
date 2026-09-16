@@ -44,6 +44,8 @@ Pkg v1.13 Release Notes
 - Added better error messages when accessing private PackageSpec.repo field. ([#4170])
 - Editing a `[sources]` entry directly in the project file (e.g. changing its `rev`) now invalidates the manifest,
   and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
+- Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
+  nor add a `[sources]` entry for a package that is itself a project of the workspace. ([#4237])
 
 Pkg v1.12 Release Notes
 =======================
@@ -210,3 +212,4 @@ Pkg v1.7 Release Notes
 [#4170]: https://github.com/JuliaLang/Pkg.jl/pull/4170
 [#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
+[#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
