@@ -59,7 +59,9 @@ function copy_this_pkg_cache(new_depot)
     # a stdlib tracked from a repo or path in the manifest while developing it, are
     # compiled next to Pkg and the Pkg cache is only valid together with them. A
     # source checkout in the depot goes along, since the cache records it relative
-    # to the depot and the subprocesses would otherwise fall back to the stdlib.
+    # to the depot and the subprocesses would otherwise fall back to the stdlib,
+    # and so do the artifacts of such a checkout (libpicosat for Resolver): a JLL
+    # errors in its `__init__` when its artifact is in no visible depot.
     packages_dir = joinpath(dirname(dirname(THIS_PKG_COMPILE_CACHE)), "packages")
     for (id, origin) in Base.pkgorigins
         cachefile = origin.cachepath
@@ -80,6 +82,16 @@ function copy_this_pkg_cache(new_depot)
             isdir(dest_dir) && continue
             mkpath(dirname(dest_dir))
             cp(source_dir, dest_dir)
+            artifacts_toml = joinpath(source_dir, "Artifacts.toml")
+            isfile(artifacts_toml) || continue
+            for (_, meta) in Pkg.Artifacts.select_downloadable_artifacts(artifacts_toml)
+                hash = Base.SHA1(meta["git-tree-sha1"])
+                Pkg.Artifacts.artifact_exists(hash) || continue
+                artifact_dest = joinpath(new_depot, "artifacts", bytes2hex(hash.bytes))
+                isdir(artifact_dest) && continue
+                mkpath(dirname(artifact_dest))
+                cp(Pkg.Artifacts.artifact_path(hash), artifact_dest)
+            end
         end
     end
     return
