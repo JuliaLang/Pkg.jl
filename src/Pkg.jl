@@ -241,14 +241,17 @@ See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile(; strict::Bool=false, timing::Bool=false)
-    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false)
-    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false)
+    Pkg.precompile(; strict::Bool=false, timing::Bool=false, workspace::Bool=false)
+    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false, workspace::Bool=false)
+    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false, workspace::Bool=false)
     Pkg.precompile(f, args...; kwargs...)
 
 Precompile all or specific dependencies of the project in parallel.
 
 Set `timing=true` to show the duration of the precompilation of each dependency.
+
+Set `workspace=true` to precompile every project in the workspace rather than only the
+active one.
 
 To delay autoprecompilation of multiple Pkg actions until the end use.
 This may be most efficient while manipulating the environment in various ways.
@@ -1048,10 +1051,10 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false, workspace = false)
     return if should_autoprecompile()
         # Auto precompile runs in foreground with detachable support
-        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated)
+        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated, workspace = workspace)
     end
 end
 
