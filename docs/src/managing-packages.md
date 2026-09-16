@@ -525,12 +525,11 @@ As packages are updated and projects are deleted, installed package versions and
 once used will inevitably become old and not used from any existing project.
 `Pkg` keeps a log of all projects used so it can go through the log and see exactly which projects still exist
 and what packages/artifacts those projects used.
-If a package or artifact is not marked as used by any project, it is added to a list of orphaned packages.
-Packages and artifacts that are in the orphan list for 30 days without being used again are deleted from the system on the next garbage collection.
-This timing is configurable via the `collect_delay` keyword argument to `Pkg.gc()`.
-A value of `0` will cause anything currently not in use to be collected immediately, skipping the orphans list entirely;
-If you are short on disk space and want to clean out as many unused packages and artifacts as possible, you may want to try this, but if you need these versions again, you will have to download them again.
-To run a typical garbage collection with default arguments, simply use the `gc` command at the `pkg>` REPL:
+Packages and artifacts that are not used by any existing project are deleted from the system on the next garbage collection.
+If you need these versions again, they will be downloaded again.
+Garbage collection also runs automatically about once a week after operations such as `up`, `pin`, `free` and `rm`;
+this can be disabled by setting the environment variable `JULIA_PKG_GC_AUTO` to `"false"`.
+To run a garbage collection manually, simply use the `gc` command at the `pkg>` REPL:
 
 ```julia-repl
 (@v1.10) pkg> gc
