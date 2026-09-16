@@ -535,9 +535,7 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
             @assert upperbound[p0] == spp[p0]
 
             # try each higher allowed version in turn (uninstalling being the last);
-            # the first one that doesn't violate any constraint wins. Only trying the
-            # next version would leave p0 stuck when that particular version conflicts
-            # with an already-bumped dependency while a later one would be fine.
+            # the first one that doesn't violate any constraint wins.
             why[p0] = :constr
             for new_s0 in (s0 + 1):spp[p0]
                 gconstr[p0][new_s0] || continue
