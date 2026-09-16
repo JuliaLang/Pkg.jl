@@ -298,7 +298,7 @@ mutable struct Graph
                         stdlib_ver = Types.stdlib_version(dep_uuid, julia_version)
                         if stdlib_ver !== nothing && !isempty(dep_compat) && !(stdlib_ver in dep_compat)
                             @debug "Ignoring incompatible stdlib compat entry" dep = get(uuid_to_name, dep_uuid, string(dep_uuid)) stdlib_ver dep_compat package = uuid_to_name[uuid0] version = vn
-                            delete!(vnmap, dep_uuid)
+                            vnmap[dep_uuid] = VersionSpec()
                         end
                     end
                 end
