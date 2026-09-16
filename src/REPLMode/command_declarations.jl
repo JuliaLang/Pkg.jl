@@ -543,14 +543,14 @@ compound_declarations = [
                 PSA[:name => "all", :api => :collect_delay => nothing],
                 PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
             ],
-            :description => "garbage collect packages not used for a significant time",
+            :description => "garbage collect packages not used by any project",
             :help => md"""
-                    gc [-v|--verbose] [--all]
+                    gc [-v|--verbose]
 
-                Free disk space by garbage collecting packages not used for a significant time.
-                The `--all` option will garbage collect all packages which can not be immediately
-                reached from any existing project.
+                Free disk space by garbage collecting packages, artifacts, repos and
+                scratchspaces that can not be reached from any existing project.
                 Use verbose mode for detailed output.
+                The `--all` option is accepted for backwards compatibility but has no effect.
                 """,
         ],
         PSA[
