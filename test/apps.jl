@@ -325,9 +325,12 @@ using Test
         end
     end
 
-    isolate(loaded_depot = true) do
-        Pkg.Registry.add("General")
+    isolate(loaded_depot = false) do
+        # depot without registries (#4808)
+        rm(joinpath(first(DEPOT_PATH), "registries"); force = true, recursive = true)
+        @test isempty(Pkg.Registry.reachable_registries())
         Pkg.Apps.add(name = "Runic", version = "1.5.1")
+        @test !isempty(Pkg.Registry.reachable_registries())
         app_manifest() = Pkg.Types.read_manifest(joinpath(first(DEPOT_PATH), "environments", "apps", "AppManifest.toml"))
         runic_version() = only(e for e in values(app_manifest().deps) if e.name == "Runic").version
         @test runic_version() == v"1.5.1"
