@@ -179,6 +179,12 @@ function complete_fixed_packages(options, partial; hint::Bool, arguments = [])
 end
 
 function complete_add_dev(options, partial, i1, i2; hint::Bool, arguments = [])
+    if get(options, :from, false) === true
+        if !isempty(partial) && first(partial) == '@'
+            return "@" .* _shared_envs()
+        end
+        return complete_local_dir(partial, i1, i2)
+    end
     comps, idx, _ = complete_local_dir(partial, i1, i2)
     if occursin(Base.Filesystem.path_separator_re, partial)
         return comps, idx, !isempty(comps)

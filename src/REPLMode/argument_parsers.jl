@@ -521,6 +521,15 @@ function parse_registry(word::AbstractString; add = false)::RegistrySpec
     return registry
 end
 
+# `add --from`: the arguments name environments (`@name`, a project file, or a directory
+# containing one) rather than packages, and are passed on through the `from` keyword.
+function parse_add(args::Vector{QString}, options)
+    get(options, :from, false) === true || return parse_package(args, options; add_or_dev = true)
+    isempty(args) && pkgerror("`add --from` requires at least one environment")
+    options[:from] = String[arg.raw for arg in args]
+    return PackageSpec[]
+end
+
 #
 # # Apps
 #

@@ -159,6 +159,20 @@ Shared environments can be activated with the `--shared` flag to `activate`:
 
 Shared environments have a `@` before their name in the Pkg REPL prompt.
 
+### Copying the dependencies of another environment
+
+The `--from` flag to `add` adds the direct dependencies of other environments instead of individual packages.
+Each argument is a shared environment given as `@name`, a path to a `Project.toml`, or a directory containing one.
+This is a convenient way to populate the default environment of a new Julia version from the previous one:
+
+```julia-repl
+(@v1.14) pkg> add --from @v1.13
+```
+
+The dependencies are resolved afresh for the active environment, so the versions may differ from the source
+environment. Packages that were added from a git repository (a URL or a local path) keep tracking that repository.
+Packages tracked by path with `develop` are skipped with a warning and need to be `develop`ed again.
+
 
 ## Environment Precompilation
 
