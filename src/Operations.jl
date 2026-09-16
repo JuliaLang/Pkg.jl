@@ -93,6 +93,7 @@ tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version
 # Try to download all registries referenced in `ctx.env.manifest.registries`.
 # Warn if some fail, but don't error (packages may still work with the registries we have).
 function ensure_manifest_registries!(ctx::Context)
+    OFFLINE_MODE[] && return
     manifest_regs = ctx.env.manifest.registries
     isempty(manifest_regs) && return
 
