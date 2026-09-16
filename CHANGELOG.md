@@ -42,6 +42,8 @@ Pkg v1.13 Release Notes
 - Fixed various edge cases in package resolution and manifest handling. ([#4307], [#4308], [#4312])
 - Improved handling of path separators across different operating systems. ([#4305])
 - Added better error messages when accessing private PackageSpec.repo field. ([#4170])
+- Editing a `[sources]` entry directly in the project file (e.g. changing its `rev`) now invalidates the manifest,
+  and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
 
 Pkg v1.12 Release Notes
 =======================
@@ -207,3 +209,4 @@ Pkg v1.7 Release Notes
 [#4305]: https://github.com/JuliaLang/Pkg.jl/pull/4305
 [#4170]: https://github.com/JuliaLang/Pkg.jl/pull/4170
 [#4287]: https://github.com/JuliaLang/Pkg.jl/pull/4287
+[#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157

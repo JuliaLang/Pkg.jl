@@ -250,6 +250,72 @@ temp_pkg_dir() do project_path
         end
     end
 
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4157
+    # Editing the `rev` of a `[sources]` entry directly in the project file must invalidate
+    # the manifest, and `resolve` must check out the new rev instead of reusing the tree hash.
+    @testset "changing the rev of a [sources] entry re-resolves the package (#4157)" begin
+        mktempdir() do tmp
+            cd(tmp) do
+                local_pkg_uuid = UUID("00000000-0000-0000-0000-000000000002")
+                mkdir("LocalPkg")
+                mkdir(joinpath("LocalPkg", "src"))
+                write(joinpath("LocalPkg", "src", "LocalPkg.jl"), "module LocalPkg end")
+                project(version) = write(
+                    joinpath("LocalPkg", "Project.toml"), """
+                    name = "LocalPkg"
+                    uuid = "$local_pkg_uuid"
+                    version = "$version"
+                    """
+                )
+                project("0.1.0")
+                rev1 = string(git_init_and_commit("LocalPkg"))
+                project("0.2.0")
+                rev2 = string(git_init_and_commit("LocalPkg"; msg = "bump version"))
+                @test rev1 != rev2
+                local_pkg_url = make_file_url(abspath("LocalPkg"))
+
+                env(rev) = write(
+                    "Project.toml", """
+                    [deps]
+                    LocalPkg = "$local_pkg_uuid"
+
+                    [sources]
+                    LocalPkg = { url = "$local_pkg_url", rev = "$rev" }
+                    """
+                )
+                env(rev1)
+                with_current_env() do
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    entry = manifest[local_pkg_uuid]
+                    tree_hash1 = entry.tree_hash
+                    project_hash1 = manifest.other["project_hash"]
+                    @test entry.version == v"0.1.0"
+                    @test entry.repo.rev == rev1
+                    @test tree_hash1 !== nothing
+
+                    # Resolving again without touching the project is a no-op
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    @test manifest[local_pkg_uuid].tree_hash == tree_hash1
+                    @test manifest.other["project_hash"] == project_hash1
+
+                    env(rev2)
+                    @test Pkg.Operations.is_manifest_current(Pkg.Types.EnvCache()) === false
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    entry = manifest[local_pkg_uuid]
+                    @test entry.version == v"0.2.0"
+                    @test entry.repo.rev == rev2
+                    @test entry.tree_hash != tree_hash1
+                    @test manifest.other["project_hash"] != project_hash1
+                    @test Pkg.Operations.is_manifest_current(Pkg.Types.EnvCache()) === true
+                    @test Pkg.dependencies()[local_pkg_uuid].version == v"0.2.0"
+                end
+            end
+        end
+    end
+
     # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4750
     # A `[sources]` entry in a dependency's project file must not take over a package that
     # the environment being resolved already tracks itself (here: from a registry).
