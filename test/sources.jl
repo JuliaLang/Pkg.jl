@@ -411,6 +411,78 @@ temp_pkg_dir() do project_path
             end
         end
     end
+
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4650
+    # The deved package's own manifest (here the workspace root manifest) is stale and
+    # records a `[sources]` path dependency as registry-tracked. The tree hash must not be
+    # carried over, or the entry ends up with both a path and a tree hash.
+    @testset "dev package whose stale manifest tracks a [sources] path dep by tree hash (#4650)" begin
+        isolate() do
+            mktempdir() do tmp
+                example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+                main_uuid = UUID("00000000-0000-0000-0000-000000004650")
+                main = joinpath(tmp, "MainPkg")
+                mkpath(joinpath(main, "src"))
+                mkpath(joinpath(tmp, "Example", "src"))
+                write(
+                    joinpath(tmp, "Project.toml"), """
+                    [workspace]
+                    projects = ["MainPkg", "Example"]
+                    """
+                )
+                # Install the registered `Example` so the stale manifest below refers to a
+                # tree hash that exists in the depot, as it does when a manifest goes stale.
+                Pkg.activate(joinpath(tmp, "scratch"))
+                Pkg.add("Example")
+                example_entry = Pkg.Types.read_manifest(joinpath(tmp, "scratch", "Manifest.toml"))[example_uuid]
+                write(
+                    joinpath(tmp, "Manifest.toml"), """
+                    manifest_format = "2.0"
+
+                    [[deps.Example]]
+                    git-tree-sha1 = "$(example_entry.tree_hash)"
+                    uuid = "$example_uuid"
+                    version = "$(example_entry.version)"
+
+                    [[deps.MainPkg]]
+                    deps = ["Example"]
+                    path = "MainPkg"
+                    uuid = "$main_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(
+                    joinpath(main, "Project.toml"), """
+                    name = "MainPkg"
+                    uuid = "$main_uuid"
+                    version = "0.1.0"
+
+                    [deps]
+                    Example = "$example_uuid"
+
+                    [sources]
+                    Example = {path = "../Example"}
+                    """
+                )
+                write(joinpath(main, "src", "MainPkg.jl"), "module MainPkg\nusing Example\nend")
+                write(
+                    joinpath(tmp, "Example", "Project.toml"), """
+                    name = "Example"
+                    uuid = "$example_uuid"
+                    version = "999.0.0-dev"
+                    """
+                )
+                write(joinpath(tmp, "Example", "src", "Example.jl"), "module Example end")
+
+                Pkg.activate(joinpath(tmp, "env"))
+                Pkg.develop(path = main)
+                manifest = Pkg.Types.read_manifest(joinpath(tmp, "env", "Manifest.toml"))
+                @test manifest[example_uuid].path == joinpath("..", "Example")
+                @test manifest[example_uuid].tree_hash === nothing
+                @test manifest[example_uuid].version == v"999.0.0-dev"
+            end
+        end
+    end
 end
 
 end # module
