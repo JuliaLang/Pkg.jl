@@ -274,29 +274,30 @@ function named(d::Diagnostics.Diagnosis, name::Function)
     return Diagnostics.Diagnosis(
         [
             Diagnostics.Conflict{String, VersionNumber}(
-                String[name(p) for p in c.reqs],
-                [
-                    Diagnostics.Line{String}(
-                        named(l.clause, name), String[name(p) for p in l.through],
-                        l.given, l.proof, l.pivot === nothing ? nothing : name(l.pivot)
-                    )
+                    String[name(p) for p in c.reqs],
+                    [
+                        Diagnostics.Line{String}(
+                            named(l.clause, name), String[name(p) for p in l.through],
+                            l.given, l.proof, l.pivot === nothing ? nothing : name(l.pivot)
+                        )
                         for l in c.lines
-                ],
-                Dict{String, Vector{VersionNumber}}(name(p) => vs for (p, vs) in c.versions),
-                Dict{String, Vector{Vector{Symbol}}}(name(p) => ks for (p, ks) in c.excluded),
-                named(c.fixes, name),
-                Tuple{Vector{Vector{Diagnostics.Action{String}}}, Vector{Diagnostics.Action{String}}}[
-                    ([[named(a, name) for a in b] for b in bs], [named(a, name) for a in us])
+                    ],
+                    Dict{String, Vector{VersionNumber}}(name(p) => vs for (p, vs) in c.versions),
+                    Dict{String, Vector{Vector{Symbol}}}(name(p) => ks for (p, ks) in c.excluded),
+                    named(c.fixes, name),
+                    Tuple{Vector{Vector{Diagnostics.Action{String}}}, Vector{Diagnostics.Action{String}}}[
+                        ([[named(a, name) for a in b] for b in bs], [named(a, name) for a in us])
                         for (bs, us) in c.blocks if !any(is_julia_action, us) && !any(b -> any(is_julia_action, b), bs)
-                ],
-                named(c.upstream, name)
-            )
+                    ],
+                    named(c.upstream, name),
+                    Dict{String, Vector{Tuple{Int, Vector{Int}}}}(name(p) => sh for (p, sh) in c.shadows)
+                )
                 for c in d.conflicts
         ],
         [
             Diagnostics.Alternative{String, VersionNumber}(
-                a.conflicts, a.avoided, [named(m, name) for m in a.menus]
-            )
+                    a.conflicts, a.avoided, [named(m, name) for m in a.menus]
+                )
                 for a in d.alternatives if !any(m -> all(f -> any(is_julia_action, f.actions), m), a.menus)
         ],
         d.others
@@ -313,8 +314,8 @@ named(sol::Dict{UUID, VersionNumber}, name::Function) =
 named(ups::Vector{<:Diagnostics.Upstream}, name::Function) =
     [
     Diagnostics.Upstream{String, VersionNumber}(
-        name(u.pkg), u.latest, name(u.dep), u.supports, u.supported, named(u.solution, name)
-    )
+            name(u.pkg), u.latest, name(u.dep), u.supports, u.supported, named(u.solution, name)
+        )
         for u in ups
 ]
 
