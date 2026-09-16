@@ -676,7 +676,23 @@ function load_workspace_weak_deps(env::EnvCache)
     return weakdeps
 end
 
-# only hash the deps and compat fields as they are the only fields that affect a resolve
+# The `[sources]` of every project in the workspace as a set of strings per package name.
+# Paths are made manifest-relative so that the result does not depend on which project
+# of the workspace is the active one.
+function load_workspace_sources(env::EnvCache)
+    sources = Dict{String, Set{String}}()
+    for (project_file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
+        for name in keys(project.sources)
+            path, repo = get_path_repo(project, project_file, env.manifest_file, name)
+            fields = (; path, url = repo.source, rev = repo.rev, subdir = repo.subdir)
+            str = join((string(k, "=", v) for (k, v) in pairs(fields) if v !== nothing), ",")
+            push!(get!(Set{String}, sources, name), str)
+        end
+    end
+    return sources
+end
+
+# only hash the deps, compat and sources fields as they are the only fields that affect a resolve
 function workspace_resolve_hash(env::EnvCache)
     # Handle deps in both [deps] and [weakdeps]
     deps = Dict{String, UUID}()
@@ -700,6 +716,16 @@ function workspace_resolve_hash(env::EnvCache)
     println(iob)
     for (name, compat) in sort!(collect(compats); by = first)
         println(iob, name, "=", compat)
+    end
+    # A changed `[sources]` entry (e.g. a new `rev`) must invalidate the manifest, see #4157.
+    # The section is only appended when there are sources so that the hash of environments
+    # without any stays the same as before it was included.
+    sources = load_workspace_sources(env)
+    if !isempty(sources)
+        println(iob)
+        for (name, source) in sort!(collect(sources); by = first)
+            println(iob, name, "=", join(sort!(collect(source)), ";"))
+        end
     end
     str = String(take!(iob))
     return bytes2hex(sha1(str))

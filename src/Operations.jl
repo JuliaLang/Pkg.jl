@@ -2838,9 +2838,31 @@ end
 # load version constraint
 # if version isa VersionNumber -> set tree_hash too
 up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel) = false
+# Whether the `[sources]` repo of a package still describes what its manifest entry recorded.
+# A `rev` (or `subdir`) that is left out of the source is filled in by `handle_repo_add!`, so
+# only compare those when the source specifies them.
+function source_repo_matches_entry(source_repo::GitRepo, entry::PackageEntry)
+    source_repo.source == entry.repo.source || return false
+    source_repo.rev === nothing || source_repo.rev == entry.repo.rev || return false
+    source_repo.subdir === nothing || source_repo.subdir == entry.repo.subdir || return false
+    return true
+end
+
 function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel)
     # With [sources], `pkg` can have a path or repo here
     entry.version !== nothing || return false # no version to set
+    # `[sources]` are keyed by name, so the entry only applies to `pkg` if the project lists
+    # `pkg` under that name (a stale manifest may hold a different package with the same name)
+    source_applies = get(ctx.env.project.deps, pkg.name, nothing) == pkg.uuid
+    if source_applies && source_path === nothing && pkg.path === nothing && source_repo.source !== nothing && !source_repo_matches_entry(source_repo, entry)
+        # The `[sources]` entry was edited directly (e.g. a new `rev`) so the tree hash recorded
+        # in the manifest is stale and the repo has to be re-resolved regardless of `level`, see #4157.
+        pkg.repo = source_repo
+        pkg.tree_hash = nothing
+        new = Types.handle_repo_add!(ctx, pkg)
+        pkg.version = entry.version
+        return new
+    end
     if entry.pinned || level == UPLEVEL_FIXED
         pkg.version = entry.version
         if pkg.path === nothing
