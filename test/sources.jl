@@ -316,6 +316,41 @@ temp_pkg_dir() do project_path
         end
     end
 
+    @testset "project hash covers [sources] filled in from the manifest" begin
+        mktempdir() do tmp
+            cd(tmp) do
+                local_pkg_uuid = UUID("00000000-0000-0000-0000-000000000003")
+                mkpath(joinpath("LocalPkg", "src"))
+                write(
+                    joinpath("LocalPkg", "Project.toml"), """
+                    name = "LocalPkg"
+                    uuid = "$local_pkg_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath("LocalPkg", "src", "LocalPkg.jl"), "module LocalPkg end")
+                git_init_and_commit("LocalPkg")
+                local_pkg_url = make_file_url(abspath("LocalPkg"))
+                is_current() = Pkg.Operations.is_manifest_current(Pkg.Types.EnvCache())
+
+                with_current_env() do
+                    Pkg.develop(path = "LocalPkg")
+                    @test Pkg.project().sources["LocalPkg"] == Dict("path" => "LocalPkg")
+                    @test is_current() === true
+                    Pkg.resolve()
+                    @test is_current() === true
+
+                    Pkg.rm("LocalPkg")
+                    Pkg.add(url = local_pkg_url)
+                    @test Pkg.project().sources["LocalPkg"]["url"] == local_pkg_url
+                    @test is_current() === true
+                    Pkg.resolve()
+                    @test is_current() === true
+                end
+            end
+        end
+    end
+
     # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4750
     # A `[sources]` entry in a dependency's project file must not take over a package that
     # the environment being resolved already tracks itself (here: from a registry).
