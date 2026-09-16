@@ -16,6 +16,8 @@ Pkg v1.14 Release Notes
   recompilation easier to spot. ([#4679])
 - During package source installation, Pkg now reports when a package has an Artifacts.toml but no artifacts match the
   current platform. ([#4646])
+- Editing a `[sources]` entry directly in the project file (e.g. changing its `rev`) now invalidates the manifest,
+  and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
 
 Pkg v1.13 Release Notes
 =======================
@@ -238,3 +240,4 @@ Pkg v1.7 Release Notes
 [#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
+[#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
