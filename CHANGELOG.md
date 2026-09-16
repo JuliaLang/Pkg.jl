@@ -18,6 +18,8 @@ Pkg v1.14 Release Notes
   current platform. ([#4646])
 - Editing a `[sources]` entry directly in the project file (e.g. changing its `rev`) now invalidates the manifest,
   and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
+- Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
+  nor add a `[sources]` entry for a package that is itself a project of the workspace. ([#4237])
 
 Pkg v1.13 Release Notes
 =======================
@@ -241,3 +243,4 @@ Pkg v1.7 Release Notes
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
+[#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
