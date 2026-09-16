@@ -210,18 +210,26 @@ function load_project_deps(
         uuid in existing_uuids && continue
         path, repo = get_path_repo(project, project_file, manifest_file, name)
         entry = manifest_info(manifest, uuid)
+        if entry === nothing
+            push!(pkgs_direct, PackageSpec(; uuid, name, path, repo))
+            continue
+        end
+        # `[sources]` takes precedence over the manifest, which may be stale: a path source
+        # discards a recorded tree hash and repo, a repo source discards a recorded path.
+        tree_hash = entry.tree_hash
+        if path !== nothing
+            tree_hash = nothing
+            repo = GitRepo()
+        else
+            repo == GitRepo() && (repo = entry.repo)
+            repo.source === nothing && (path = entry.path)
+        end
         push!(
-            pkgs_direct, entry === nothing ?
-                PackageSpec(; uuid, name, path, repo) :
-                PackageSpec(;
-                    uuid = uuid,
-                    name = name,
-                    path = path === nothing ? entry.path : path,
-                    repo = repo == GitRepo() ? entry.repo : repo,
-                    pinned = entry.pinned,
-                    tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
-                    version = load_version(entry.version, isfixed(entry), preserve),
-                )
+            pkgs_direct, PackageSpec(;
+                uuid, name, path, repo, tree_hash,
+                pinned = entry.pinned,
+                version = load_version(entry.version, isfixed(entry), preserve),
+            )
         )
     end
     return pkgs_direct
