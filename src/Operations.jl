@@ -2426,7 +2426,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
         worklist = collect(drop)
         while !isempty(worklist)
             uuid = pop!(worklist)
-            for r in get(dependents, uuid, UUID[])
+            for r in get(dependents, uuid, ())
                 if r ∉ drop
                     push!(drop, r)
                     push!(worklist, r)
@@ -3742,7 +3742,7 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
 
     # Check compatibility bounds imposed by dependents.
     isnothing(dependents) && (dependents = manifest_dependents_map(manifest))
-    for dep_uuid in get(dependents, pkg.uuid, UUID[])
+    for dep_uuid in get(dependents, pkg.uuid, ())
         is_stdlib(dep_uuid) && continue
         dep_pkg = get(manifest, dep_uuid, nothing)
         isnothing(dep_pkg) && continue
