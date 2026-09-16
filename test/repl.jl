@@ -429,6 +429,28 @@ temp_pkg_dir() do project_path
             c, r = test_complete("add Example E")
             @test !("Example" in c) # Example already specified for add command
 
+            # app names and their packages complete for app subcommands (#4804)
+            apps_dir = mkpath(joinpath(first(DEPOT_PATH), "environments", "apps"))
+            write(
+                joinpath(apps_dir, "AppManifest.toml"), """
+                manifest_format = "2.0"
+
+                [[deps.MyApp]]
+                uuid = "5a1d7a52-6f0e-4f7b-9a54-0d2b7d6e8c11"
+                version = "0.1.0"
+
+                    [deps.MyApp.apps.myapp]
+                    julia_command = "julia"
+                """
+            )
+            c, r = test_complete("app rm my")
+            @test "myapp" in c
+            c, r = test_complete("app st My")
+            @test "MyApp" in c
+            c, r = test_complete("app update MyApp my")
+            @test "myapp" in c
+            @test !("MyApp" in c) # MyApp already specified
+
             # help mode
             @test apply_completion("?ad") == "?add"
             @test apply_completion("?act") == "?activate"

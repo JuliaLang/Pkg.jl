@@ -210,7 +210,7 @@ function complete_installed_apps(options, partial; hint, arguments = [])
     apps = unique!(apps)
 
     # Filter out already-specified packages
-    specified_names = extract_specified_names(arguments, partial)
+    specified_names = extract_specified_names(arguments)
     return filter(app -> !(app in specified_names), apps)
 end
 
