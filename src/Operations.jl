@@ -2166,6 +2166,8 @@ function prune_deps(iterator, keep::Set{UUID})
 end
 
 function record_project_hash(env::EnvCache)
+    # `[sources]` is part of the hash, so update it first to match what `write_env` will write
+    Types.update_project_sources!(env)
     return env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
 end
 
