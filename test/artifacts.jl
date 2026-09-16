@@ -846,8 +846,9 @@ end
                 )
             )
 
-            # Run test harness
-            Pkg.test("ArtifactInstallation")
+            # Run the test harness with the coverage instrumentation of this
+            # process, so that the test process can load Pkg from the cache
+            Pkg.test("ArtifactInstallation"; coverage = Base.JLOptions().code_coverage != 0)
 
             # Also manually do it
             Core.eval(
