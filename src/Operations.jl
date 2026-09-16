@@ -2158,6 +2158,7 @@ function prune_deps(iterator, keep::Set{UUID})
 end
 
 function record_project_hash(env::EnvCache)
+    Types.sync_project_sources!(env) # `[sources]` are part of the hash
     return env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
 end
 
