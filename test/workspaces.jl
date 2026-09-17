@@ -237,6 +237,7 @@ end
             @test occursin("your compat in Sub2/Project.toml restricts PrettyTables", err.msg)
             @test occursin("relax your compat on PrettyTables in Sub2/Project.toml", err.msg)
             @test occursin("relax your compat on DataFrames in Sub1/Project.toml", err.msg)
+            @test occursin("drop dependency DataFrames from Sub1/Project.toml", err.msg)
             @test !occursin("your compat restricts", err.msg)
             # entries on the same package that admit nothing in common are
             # caught before resolving, and listed per file

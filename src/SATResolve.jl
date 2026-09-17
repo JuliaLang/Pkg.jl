@@ -231,6 +231,7 @@ function resolve_versions(
         preferred_versions::Dict{UUID, VersionNumber};
         pinned::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}(),
         compat_sources::Dict{String, Dict{UUID, VersionSpec}} = Dict{String, Dict{UUID, VersionSpec}}(),
+        req_sources::Dict{UUID, Vector{String}} = Dict{UUID, Vector{String}}(),
         diagnose_unsat::Bool = true,
     )
     data, rlist, compat, sourced, pin = build_pkg_data(
@@ -264,7 +265,11 @@ function resolve_versions(
     if !isempty(impossible)
         throw(ResolverError(string("Unsatisfiable requirements detected:\n", join(impossible, "\n"))))
     end
-    prob = Resolver.Problem(rlist; compat, pin, sourced...)
+    # in a workspace the requirements say which project files list them, so
+    # that a fix dropping one can say where to drop it from
+    reqs_with_sources = isempty(req_sources) ? rlist :
+        [u => get(req_sources, u, String[]) for u in rlist]
+    prob = Resolver.Problem(reqs_with_sources; compat, pin, sourced...)
     ans = Resolver.resolve(
         data, prob;
         by = priority(uuid_to_name), order = version_order(preferred_versions),
