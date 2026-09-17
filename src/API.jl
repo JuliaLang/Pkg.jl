@@ -456,6 +456,7 @@ function up(
         update_registry::Bool = true,
         skip_writing_project::Bool = false,
         workspace::Bool = false,
+        download_loadable_only::Bool = false,
         kwargs...
     )
     Context!(ctx; kwargs...)
@@ -482,7 +483,7 @@ function up(
     for pkg in pkgs
         update_source_if_set(ctx.env, pkg)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
+    Operations.up(ctx, pkgs, level; skip_writing_project, preserve, download_loadable_only)
     return
 end
 
@@ -1326,7 +1327,7 @@ function instantiate(
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
-        up(ctx; update_registry = update_registry && allow_registry_update)
+        up(ctx; update_registry = update_registry && allow_registry_update, download_loadable_only = !workspace)
         allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
@@ -1345,7 +1346,7 @@ function instantiate(
             saved_initial_snapshot[] = true
         end
         printpkgstyle(ctx.io, :Update, "manifest does not match project or Julia version, falling back to `Pkg.update()`", color = Base.info_color())
-        up(ctx; update_registry, mode = workspace ? PKGMODE_MANIFEST : PKGMODE_PROJECT)
+        up(ctx; update_registry, mode = workspace ? PKGMODE_MANIFEST : PKGMODE_PROJECT, download_loadable_only = !workspace)
         allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
         return
     end
