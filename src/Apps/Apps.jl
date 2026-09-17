@@ -123,6 +123,16 @@ function check_apps_in_path(apps)
     return
 end
 
+# Source path of a developed app, or `nothing` if the entry is not one.
+# Pkg 1.12.6 wrote registry apps with `path = "."`, which resolves to the
+# apps folder itself and must not be used as a project (#4805).
+function developed_source_path(manifest_file::String, info::PackageEntry)
+    info.path === nothing && return nothing
+    sourcepath = abspath(source_path(manifest_file, info))
+    isdir(sourcepath) && Base.Filesystem.samefile(sourcepath, app_env_folder()) && return nothing
+    return sourcepath
+end
+
 # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be a VersionSpec
 function package_entry(pkg::PackageSpec, project, path)
     version = project.version isa VersionNumber ? project.version : nothing
@@ -434,10 +444,10 @@ function _update(pkg::Union{PackageSpec, Nothing})
             continue
         end
         updated = true
-        if info.path !== nothing
+        sourcepath = developed_source_path(ctx.env.manifest_file, info)
+        if sourcepath !== nothing
             # Developed app: update the dependencies of the developed project
             # and refresh the app info from it
-            sourcepath = abspath(source_path(ctx.env.manifest_file, info))
             Pkg.activate(sourcepath) do
                 Pkg.update()
             end
@@ -519,8 +529,8 @@ function precompile(pkg::Union{Nothing, String} = nothing)
             continue
         end
         # Developed apps run directly from their project, tracked ones from the app environment
-        env_dir = info.path !== nothing ? abspath(source_path(app_manifest_file(), info)) :
-            app_env_dir(info.name)
+        sourcepath = developed_source_path(app_manifest_file(), info)
+        env_dir = sourcepath !== nothing ? sourcepath : app_env_dir(info.name)
         Pkg.activate(env_dir) do
             Pkg.instantiate()
             Pkg.precompile()
