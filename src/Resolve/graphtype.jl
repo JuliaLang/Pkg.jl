@@ -953,8 +953,7 @@ function log_event_maxsumsolved!(graph::Graph, p0::Int, s0::Int, p1::Int)
     if s0 == spp[p0] - 1
         msg = "set by the solver to its maximum version: $ver (installation is required by $other_id)"
     else
-        xver = logstr(id, pvers[p0][s0 + 1])
-        msg = "set by the solver version: $ver (version $xver would violate a dependency relation with $other_id)"
+        msg = "set by the solver to version: $ver (higher versions would violate a dependency relation with $other_id)"
     end
     other_entry = rlog.pool[pkgs[p1]]
     entry = rlog.pool[p]

@@ -743,6 +743,50 @@ end
 
     want_data = Dict("J" => v"3", "M" => v"2", "O" => v"2")
     @test resolve_tst(deps_data, reqs_data, want_data)
+
+    ## The local-optimality pass must also be able to bump a package when doing so
+    ## requires installing a whole chain of new packages: the breadth-first search
+    ## assigns a version to each new package on first contact and can only lower it
+    ## afterwards, which is not enough when a dependency found later on needs a
+    ## higher one.
+    ## ref Pkg.jl issue #4810
+    ##
+    ## Bumping A installs S and U. S pins C to its v1 on first contact; U then
+    ## installs K at its maximum v2, which needs C v2. The consistent assignment
+    ## (K at v1) can only be found by looking at the new packages as a whole.
+    deps_data = Any[
+        ["A", v"1"],
+        ["A", v"2", "S", "1"],
+        ["A", v"2", "U", "1"],
+        ["S", v"1", "C", "1"],
+        ["U", v"1", "K", "*"],
+        ["K", v"1", "C", "1"],
+        ["K", v"2", "C", "2"],
+        ["C", v"1"],
+        ["C", v"2"],
+    ]
+    reqs_data = Any[
+        ["A", "*"],
+    ]
+    graph = graph_from_data(deps_data)
+    add_reqs!(graph, reqs_from_data(reqs_data, graph))
+    simplify_graph!(graph)
+    idx2(p) = graph.data.pdict[pkguuid(p)]
+    vidx2(p, vn) = graph.data.vdict[idx2(p)][vn]
+    # a feasible but suboptimal configuration, as the maxsum solver may produce:
+    # only A is installed, at its lowest version
+    sol = copy(graph.spp)
+    sol[idx2("A")] = vidx2("A", v"1")
+    @test Resolve.verify_solution(sol, graph)
+    Resolve.enforce_optimality!(sol, graph)
+    @test sol[idx2("A")] == vidx2("A", v"2")
+    @test sol[idx2("S")] == vidx2("S", v"1")
+    @test sol[idx2("U")] == vidx2("U", v"1")
+    @test sol[idx2("K")] == vidx2("K", v"1")
+    @test sol[idx2("C")] == vidx2("C", v"1")
+
+    want_data = Dict("A" => v"2", "S" => v"1", "U" => v"1", "K" => v"1", "C" => v"1")
+    @test resolve_tst(deps_data, reqs_data, want_data)
 end
 
 @testset "realistic" begin

@@ -312,7 +312,7 @@ end
 Preliminary solver attempt: tries to maximize each version; bails out as soon as
 some non-trivial requirement is detected.
 """
-function greedysolver(graph::Graph)
+function greedysolver(graph::Graph; log_events::Bool = true)
     spp = graph.spp
     gadj = graph.gadj
     gmsk = graph.gmsk
@@ -387,8 +387,10 @@ function greedysolver(graph::Graph)
 
     pop_snapshot!(graph)
 
-    for p0 in 1:np
-        log_event_greedysolved!(graph, p0, sol[p0])
+    if log_events
+        for p0 in 1:np
+            log_event_greedysolved!(graph, p0, sol[p0])
+        end
     end
 
     return true, sol
@@ -461,6 +463,73 @@ function _uninstall_unreachable!(sol::Vector{Int}, why::Vector{Union{Symbol, Int
 end
 
 """
+Maximum number of times the local optimality pass is allowed to fall back on
+`_repair_by_propagation` for a single solution. This is only a safety net: the
+fallback is already invoked at most once per (package, version) pair.
+"""
+const MAX_OPTIMALITY_REPAIRS = 100
+
+"""
+Attempt to bump package `p0` to state `new_s0` by re-solving the graph, instead of
+by the incremental breadth-first search used in `enforce_optimality!`.
+
+This is used when the breadth-first search failed because a package that had to be
+installed from scratch was assigned a version on first contact which turned out to
+be too low for a dependency discovered later on: unlike the breadth-first search,
+constraint propagation does not depend on the order in which the packages are
+visited, so it can install a whole chain of new packages at once.
+
+The constraints are set up so that `p0` is pinned at `new_s0` and no already-installed
+package can go below its current lower bound; the returned solution is only accepted
+if it doesn't downgrade anything.
+"""
+function _repair_by_propagation(
+        sol::Vector{Int}, graph::Graph, p0::Int, new_s0::Int,
+        move_up::BitVector, lowerbound::Vector{Int}
+    )
+    np = graph.np
+    spp = graph.spp
+
+    push_snapshot!(graph)
+    # NOTE: `push_snapshot!` swaps in a copy, so `gconstr` must be read after it
+    gconstr = graph.gconstr
+
+    ok = false
+    newsol = Int[]
+    try
+        # pin the attempted bump
+        fill!(gconstr[p0], false)
+        gconstr[p0][new_s0] = true
+        # forbid downgrades of the packages which are already installed
+        for q0 in 1:np
+            q0 == p0 && continue
+            move_up[q0] || continue
+            lb0 = lowerbound[q0]
+            lb0 > 1 && (gconstr[q0][1:(lb0 - 1)] .= false)
+        end
+        simplify_graph_soft!(graph, Set{Int}([p0]), log_events = false)
+        ok, newsol = greedysolver(graph, log_events = false)
+    catch err
+        err isa ResolverError || rethrow()
+        # the constraints are contradictory: the bump is really not possible
+        ok = false
+    end
+    pop_snapshot!(graph)
+
+    # only accept a solution which doesn't downgrade anything (same invariant as
+    # the one enforced by `_resolve` across its iterations)
+    if ok
+        for q0 in 1:np
+            (sol[q0] == spp[q0] || newsol[q0] ≥ sol[q0]) && continue
+            ok = false
+            break
+        end
+    end
+
+    return ok, newsol
+end
+
+"""
 Push the given solution to a local optimum if needed: keeps increasing
 the states of the given solution as long as no constraints are violated.
 It might also install additional packages, if needed to bump the ones already
@@ -492,6 +561,10 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     # The way it's written should ensure that no package is ever downgraded (unless it was
     # originally unneeded, and then got removed, and later reinstalled to a lower version as
     # a consequence of a bump of some other package).
+    # The breadth-first search used to adjust the other packages assigns a version to each
+    # newly installed package on first contact and can only lower it afterwards; when that
+    # first choice is what makes the bump fail, we retry with `_repair_by_propagation`,
+    # which is insensitive to the visiting order.
 
     # move_up is used to keep track of which packages can move up
     # (they start installed and can be bumped) and which down (they start uninstalled and
@@ -512,6 +585,10 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
     old_sol = similar(sol)       # to detect if we made any changes
     allsols = Set{Vector{Int}}() # used to make 100% sure we avoid infinite loops
 
+    # (package, version) pairs for which the propagation fallback was already tried
+    attempted_repairs = Set{Tuple{Int, Int}}()
+    nrepairs = 0
+
     while true
         copy!(old_sol, sol)
         push!(allsols, copy(sol))
@@ -526,6 +603,10 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
         let move_up = move_up
             lowerbound .= [move_up[p0] ? sol[p0] : 1 for p0 in 1:np]
         end
+
+        # set when a bump succeeded via `_repair_by_propagation`: the solution was
+        # replaced wholesale, so the pass must be restarted from scratch
+        repaired = false
 
         for p0 in 1:np
             s0 = sol[p0]
@@ -558,6 +639,9 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
                 push!(staged, p0)
 
                 ok = true
+                # set if the failure was caused by the version which was picked on first
+                # contact for a package installed during this very bump
+                clamped = false
                 while ok && !isempty(staged)
                     for f0 in staged
                         for (j1, f1) in enumerate(gadj[f0])
@@ -585,6 +669,16 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
                             if bump ≡ nothing
                                 why[p0] = f1 # TODO: improve this? (ideally we might want the path from p0 to f1)
                                 ok = false
+                                # f1 was installed during this bump and a compatible version does
+                                # exist, but it's above the upper bound which was set when f1 was
+                                # first reached: the breadth-first search just went down the wrong
+                                # path, so it's worth re-solving with constraint propagation
+                                if !try_uninstall && !move_up[f1]
+                                    clamped = any(
+                                        v1 -> (gconstr[f1][v1] && msk[v1, sol[f0]]),
+                                        (upperbound[f1] + 1):spp[f1]
+                                    )
+                                end
                                 break
                             end
                             new_s1 = bump_range[bump]
@@ -613,8 +707,23 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
                 copy!(sol, bk_sol)
                 copy!(lowerbound, bk_lowerbound)
                 copy!(upperbound, bk_upperbound)
+
+                if clamped && nrepairs < MAX_OPTIMALITY_REPAIRS && (p0, new_s0) ∉ attempted_repairs
+                    push!(attempted_repairs, (p0, new_s0))
+                    nrepairs += 1
+                    rep_ok, newsol = _repair_by_propagation(sol, graph, p0, new_s0, move_up, lowerbound)
+                    if rep_ok && newsol ∉ allsols
+                        copy!(sol, newsol)
+                        why[p0] = 0
+                        repaired = true
+                        break
+                    end
+                end
             end
+            repaired && break
         end
+        # the solution was replaced: recompute the bounds and start over
+        repaired && continue
         sol ≠ old_sol || break
         # It might be possible in principle to contrive a situation in which
         # the solutions oscillate
