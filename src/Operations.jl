@@ -1320,14 +1320,6 @@ function download_artifacts(
     push!(pkg_info, (dirname(env.project_file), env.pkg !== nothing ? env.pkg.uuid : nothing))
     download_jobs = Dict{SHA1, Function}()
 
-    # Check what registries the current pkg server tracks
-    # Disable if precompiling to not access internet
-    server_registry_info = if Base.JLOptions().incremental == 0
-        Registry.pkg_server_registry_info()
-    else
-        nothing
-    end
-
     print_lock = Base.ReentrantLock() # for non-fancyprint printing
 
     download_states = Dict{SHA1, DownloadState}()
@@ -1348,6 +1340,14 @@ function download_artifacts(
         )
     )
     used_artifact_tomls = Set{String}(map(ca -> ca[1], all_collected_artifacts))
+
+    # Check what registries the current pkg server tracks
+    # Disable if precompiling to not access internet, and don't ask when there is nothing that could be served
+    server_registry_info = if Base.JLOptions().incremental == 0 && !isempty(all_collected_artifacts)
+        Registry.pkg_server_registry_info()
+    else
+        nothing
+    end
     longest_name_length = maximum(all_collected_artifacts; init = 0) do (artifacts_toml, artifacts, pkg_uuid)
         maximum(textwidth, keys(artifacts); init = 0)
     end
