@@ -1260,6 +1260,16 @@ function precompile(
         return
     end
 
+    # Resolve the names here rather than in Base: `Base.identify_package` only knows
+    # the deps of the active project, not the ones of the other workspace projects.
+    if !isempty(pkgs)
+        project_resolve!(ctx.env, pkgs)
+        project_deps_resolve!(ctx.env, pkgs)
+        manifest_resolve!(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx, ctx.env.manifest, pkgs)
+    end
+    pkgids = Base.PkgId[Base.PkgId(pkg.uuid, pkg.name) for pkg in pkgs]
+
     return activate(dirname(ctx.env.project_file)) do
         # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
         # `IOContext{IO}` and takes `ctx.io` as is. Before that it specialized on the
@@ -1271,10 +1281,9 @@ function precompile(
         else
             ctx.io.io
         end
-        pkgs_name = String[pkg.name for pkg in pkgs]
         # Allow user to press 'd' to detach when running interactively
         detachable = isinteractive()
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
+        return Base.Precompilation.precompilepkgs(pkgids; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
     end
 end
 

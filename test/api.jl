@@ -338,11 +338,10 @@ import .FakeTerminals.FakeTerminal
 
             Pkg.activate(temp = true)
             Pkg.precompile() # precompile an empty env should be a no-op
-            # TODO: Reenable
-            #@test_throws ErrorException Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
+            @test_throws PkgError Pkg.precompile("DoesNotExist") # fail to find a nonexistant dep in an empty env
 
             Pkg.add("Random")
-            #@test_throws ErrorException Pkg.precompile("DoesNotExist")
+            @test_throws PkgError Pkg.precompile("DoesNotExist")
             Pkg.precompile() # should be a no-op
         end
     end

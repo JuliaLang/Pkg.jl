@@ -210,6 +210,24 @@ end
     end
 end
 
+@testset "precompile deps of other workspace projects" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceTestInstantiate")
+            cd(path) do
+                with_current_env() do
+                    Pkg.instantiate(workspace = true)
+                    # Example is only a dep of the `test` project of the workspace
+                    io = IOBuffer()
+                    Pkg.precompile("Example"; workspace = true, io)
+                    @test occursin("Example", String(take!(io)))
+                    @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist"; workspace = true)
+                end
+            end
+        end
+    end
+end
+
 # Test that workspace child projects with [sources] pointing to parent work correctly
 # This was broken in 1.12.3 due to stale assertions after #4539
 @testset "workspace sources pointing to parent package" begin
