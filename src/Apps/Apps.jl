@@ -312,6 +312,9 @@ add(pkg::PackageSpec) = with_apps_lock(() -> _add(pkg))
 function _add(pkg::PackageSpec)
     handle_package_input!(pkg)
 
+    # Must run before `app_context()` since `Context` loads the registries
+    Pkg.Registry.download_default_registries(Pkg.stderr_f())
+
     ctx = app_context()
 
     Pkg.Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
