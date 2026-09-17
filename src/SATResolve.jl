@@ -333,7 +333,8 @@ function named(d::Diagnostics.Diagnosis, name::Function)
                         for (bs, us) in c.blocks if !any(is_julia_action, us) && !any(b -> any(is_julia_action, b), bs)
                     ],
                     named(c.upstream, name),
-                    Dict{String, Vector{Tuple{Int, Vector{Int}}}}(name(p) => sh for (p, sh) in c.shadows)
+                    Dict{String, Vector{Tuple{Int, Vector{Int}}}}(name(p) => sh for (p, sh) in c.shadows),
+                    Dict{String, Vector{String}}(name(p) => srcs for (p, srcs) in c.sources)
                 )
                 for c in d.conflicts
         ],

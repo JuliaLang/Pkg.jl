@@ -233,6 +233,7 @@ end
                 ]
             )
             @test err isa ResolverError
+            @test occursin("Conflict 1: DataFrames (required by Sub1/Project.toml)", err.msg)
             @test occursin("your compat in Sub1/Project.toml restricts DataFrames", err.msg)
             @test occursin("your compat in Sub2/Project.toml restricts PrettyTables", err.msg)
             @test occursin("relax your compat on PrettyTables in Sub2/Project.toml", err.msg)
