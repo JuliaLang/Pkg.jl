@@ -137,6 +137,24 @@ function complete_installed_packages(options, partial; hint::Bool, arguments = [
     return filter(pkg -> !(pkg in specified_names), packages)
 end
 
+# Packages that can be tested: the direct deps of the active project and the
+# other projects of its workspace (#4603).
+function complete_test_packages(options, partial; hint::Bool, arguments = [])
+    env = try
+        EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    packages = collect(keys(env.project.deps))
+    for project in values(env.workspace)
+        project.name === nothing && continue
+        project.name in packages || push!(packages, project.name)
+    end
+    specified_names = extract_specified_names(arguments)
+    return filter(pkg -> !(pkg in specified_names), packages)
+end
+
 function complete_all_installed_packages(options, partial; hint::Bool, arguments = [])
     env = try
         EnvCache()
