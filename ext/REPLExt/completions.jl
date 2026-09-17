@@ -131,8 +131,32 @@ function complete_installed_packages(options, partial; hint::Bool, arguments = [
     packages = mode == PKGMODE_PROJECT ?
         collect(keys(env.project.deps)) :
         unique!([entry.name for (uuid, entry) in env.manifest])
+    # `--workspace` covers the direct deps of every project in the workspace
+    if mode == PKGMODE_PROJECT && get(options, :workspace, false)
+        for project in values(env.workspace), name in keys(project.deps)
+            name in packages || push!(packages, name)
+        end
+    end
 
     # Filter out already-specified packages
+    specified_names = extract_specified_names(arguments)
+    return filter(pkg -> !(pkg in specified_names), packages)
+end
+
+# Packages that can be tested: the direct deps of the active project and the
+# other projects of its workspace (#4603).
+function complete_test_packages(options, partial; hint::Bool, arguments = [])
+    env = try
+        EnvCache()
+    catch err
+        err isa PkgError || rethrow()
+        return String[]
+    end
+    packages = collect(keys(env.project.deps))
+    for project in values(env.workspace)
+        project.name === nothing && continue
+        project.name in packages || push!(packages, project.name)
+    end
     specified_names = extract_specified_names(arguments)
     return filter(pkg -> !(pkg in specified_names), packages)
 end

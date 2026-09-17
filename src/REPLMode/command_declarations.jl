@@ -11,7 +11,7 @@ compound_declarations = [
             :option_spec => [
                 PSA[:name => "coverage", :api => :coverage => true],
             ],
-            :completions => :complete_installed_packages,
+            :completions => :complete_test_packages,
             :description => "run tests for packages",
             :help => md"""
                     test [--coverage] [pkg[=uuid]] ...

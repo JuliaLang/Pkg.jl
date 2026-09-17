@@ -1339,6 +1339,38 @@ end
     end
 end
 
+@testset "tab completion of workspace projects" begin
+    # `test` accepts the projects of the workspace, so they should be completed (#4603)
+    temp_pkg_dir() do project_path
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspacePathResolution")
+            Pkg.activate(path)
+            c, r = test_complete("test ")
+            @test "SubProjectA" in c
+            @test "SubProjectB" in c
+            c, r = test_complete("test SubProjectA Sub")
+            @test c == ["SubProjectB"]
+            # from a workspace member, the other projects of the workspace are completed
+            Pkg.activate(joinpath(path, "SubProjectA"))
+            c, r = test_complete("test Sub")
+            @test c == ["SubProjectB"]
+            # `--workspace` completes the deps of every project in the workspace
+            Pkg.activate(path)
+            c, r = test_complete("st ")
+            @test isempty(c)
+            c, r = test_complete("st --workspace ")
+            @test c == ["SubProjectB"]
+            c, r = test_complete("up --workspace Sub")
+            @test c == ["SubProjectB"]
+            c, r = test_complete("precompile --workspace Sub")
+            @test c == ["SubProjectB"]
+            Pkg.activate(joinpath(path, "SubProjectB"))
+            c, r = test_complete("st --workspace Sub")
+            @test c == ["SubProjectB"]
+        end
+    end
+end
+
 @testset "BigProject" begin
     temp_pkg_dir() do project_path
         cd(project_path) do
