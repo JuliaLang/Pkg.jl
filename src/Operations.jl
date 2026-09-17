@@ -811,6 +811,50 @@ function get_compat_workspace(env, name)
     return compat
 end
 
+# The project files of the workspace, each with its path relative to the
+# workspace root, in that order. Empty outside a workspace, where the project's
+# own file is the only source there is.
+function workspace_project_files(env::EnvCache)
+    files = Pair{String, Project}[]
+    isempty(env.workspace) && return files
+    root = dirname(abspath(Types.find_root_base_project(env.project_file)))
+    for (file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
+        push!(files, relpath(abspath(file), root) => project)
+    end
+    return sort!(files; by = first)
+end
+
+# The compat entries the workspace's project files declare for `name`, keyed
+# by file.
+function workspace_compat_sources(env::EnvCache, name::String)
+    sources = Dict{String, VersionSpec}()
+    for (file, project) in workspace_project_files(env)
+        haskey(project.compat, name) || continue
+        sources[file] = project.compat[name].val
+    end
+    return sources
+end
+
+# The workspace's project files that list `name` as a dependency.
+workspace_dep_sources(env::EnvCache, name::String) =
+    String[file for (file, project) in workspace_project_files(env) if haskey(project.deps, name)]
+
+# The error for a requirement that no version satisfies together with the
+# compat of the project(s): in a workspace, say which files declare compat
+# for the package, since the intersection alone does not tell whose entry to change.
+function compat_conflict_message(env::EnvCache, pkg::PackageSpec, compat::VersionSpec)
+    isempty(env.workspace) &&
+        return "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+    msg = "empty intersection between $(pkg.name)@$(pkg.version) and workspace compatibility $(compat)\n"
+    msg *= "The following workspace projects have compat entries for $(pkg.name):"
+    for (file, project) in workspace_project_files(env)
+        str = get_compat_str(project, pkg.name)
+        str === nothing && continue
+        msg *= "\n * $file: $(pkg.name) = $(repr(str))"
+    end
+    return msg
+end
+
 # Which resolver backend to use: the SAT-based resolver from Resolver.jl
 # (default) or the legacy maxsum resolver in `Resolve`.
 function resolver_backend()
@@ -880,20 +924,26 @@ function resolve_versions!(
     @assert length(Set(pkg.uuid::UUID for pkg in pkgs)) == length(pkgs)
 
     # check compat
+    # per workspace project file, the compat it declares and the packages it
+    # lists: the requirement specs below carry only the intersection, and a
+    # failed resolve should say which file's entry to relax or drop
+    compat_sources = Dict{String, Dict{UUID, VersionSpec}}()
+    req_sources = Dict{UUID, Vector{String}}()
     for pkg in pkgs
         compat = get_compat_workspace(env, pkg.name)
         v = intersect(pkg.version, compat)
         if isempty(v)
-            throw(
-                Resolve.ResolverError(
-                    "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
-                )
-            )
+            throw(Resolve.ResolverError(compat_conflict_message(env, pkg, compat)))
         end
         # Work around not clobbering 0.x.y+ for checked out old type of packages
         if !(pkg.version isa VersionNumber)
             pkg.version = v
         end
+        for (file, spec) in workspace_compat_sources(env, pkg.name)
+            get!(Dict{UUID, VersionSpec}, compat_sources, file)[pkg.uuid] = spec
+        end
+        files = workspace_dep_sources(env, pkg.name)
+        isempty(files) || (req_sources[pkg.uuid] = files)
     end
 
     for pkg in pkgs
@@ -916,7 +966,7 @@ function resolve_versions!(
         vers = SATResolve.resolve_versions(
             deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
             pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, julia_version, preferred_versions;
-            pinned, diagnose_unsat
+            pinned, compat_sources, req_sources, diagnose_unsat
         )
     else
         graph = Resolve.Graph(
