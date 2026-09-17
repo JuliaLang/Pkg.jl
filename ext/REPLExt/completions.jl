@@ -131,6 +131,12 @@ function complete_installed_packages(options, partial; hint::Bool, arguments = [
     packages = mode == PKGMODE_PROJECT ?
         collect(keys(env.project.deps)) :
         unique!([entry.name for (uuid, entry) in env.manifest])
+    # `--workspace` covers the direct deps of every project in the workspace
+    if mode == PKGMODE_PROJECT && get(options, :workspace, false)
+        for project in values(env.workspace), name in keys(project.deps)
+            name in packages || push!(packages, name)
+        end
+    end
 
     # Filter out already-specified packages
     specified_names = extract_specified_names(arguments)

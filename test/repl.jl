@@ -1354,6 +1354,19 @@ end
             Pkg.activate(joinpath(path, "SubProjectA"))
             c, r = test_complete("test Sub")
             @test c == ["SubProjectB"]
+            # `--workspace` completes the deps of every project in the workspace
+            Pkg.activate(path)
+            c, r = test_complete("st ")
+            @test isempty(c)
+            c, r = test_complete("st --workspace ")
+            @test c == ["SubProjectB"]
+            c, r = test_complete("up --workspace Sub")
+            @test c == ["SubProjectB"]
+            c, r = test_complete("precompile --workspace Sub")
+            @test c == ["SubProjectB"]
+            Pkg.activate(joinpath(path, "SubProjectB"))
+            c, r = test_complete("st --workspace Sub")
+            @test c == ["SubProjectB"]
         end
     end
 end
