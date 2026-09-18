@@ -82,6 +82,13 @@ const PREV_ENV_PATH = Ref{String}("")
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
 can_fancyprint(io::IO) = (usable_io(io)) && (get(ENV, "CI", nothing) != "true")
 
+# A `^C` cancels the scope the evaluation runs in rather than throwing an
+# `InterruptException` into it: waits throw `Base.CancellationRequest`, and so does any
+# I/O attempted in that scope afterwards, unless the cancellation token is unbound.
+is_interrupt(@nospecialize(e)) = e isa InterruptException || e isa Base.CancellationRequest
+# Call `f(args...)` with cancellation of the enclosing scope masked, for cleanup that has to complete.
+shield_cancellation(f, args...) = Base.ScopedValues.with(() -> f(args...), Base.CANCEL_TOKEN => nothing)
+
 _autoprecompilation_enabled::Bool = true
 const _autoprecompilation_enabled_scoped = Base.ScopedValues.ScopedValue{Bool}(true)
 autoprecompilation_enabled(state::Bool) = (global _autoprecompilation_enabled = state)
