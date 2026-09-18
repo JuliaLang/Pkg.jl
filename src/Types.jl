@@ -667,7 +667,23 @@ function load_workspace_weak_deps(env::EnvCache)
     return weakdeps
 end
 
-# only hash the deps and compat fields as they are the only fields that affect a resolve
+# The `[sources]` of every project in the workspace as a set of strings per package name.
+# Paths are made manifest-relative so that the result does not depend on which project
+# of the workspace is the active one.
+function load_workspace_sources(env::EnvCache)
+    sources = Dict{String, Set{String}}()
+    for (project_file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
+        for name in keys(project.sources)
+            path, repo = get_path_repo(project, project_file, env.manifest_file, name)
+            fields = (; path, url = repo.source, rev = repo.rev, subdir = repo.subdir)
+            str = join((string(k, "=", v) for (k, v) in pairs(fields) if v !== nothing), ",")
+            push!(get!(Set{String}, sources, name), str)
+        end
+    end
+    return sources
+end
+
+# only hash the deps, compat and sources fields as they are the only fields that affect a resolve
 function workspace_resolve_hash(env::EnvCache)
     # Handle deps in both [deps] and [weakdeps]
     deps = Dict{String, UUID}()
@@ -691,6 +707,16 @@ function workspace_resolve_hash(env::EnvCache)
     println(iob)
     for (name, compat) in sort!(collect(compats); by = first)
         println(iob, name, "=", compat)
+    end
+    # A changed `[sources]` entry (e.g. a new `rev`) must invalidate the manifest, see #4157.
+    # The section is only appended when there are sources so that the hash of environments
+    # without any stays the same as before it was included.
+    sources = load_workspace_sources(env)
+    if !isempty(sources)
+        println(iob)
+        for (name, source) in sort!(collect(sources); by = first)
+            println(iob, name, "=", join(sort!(collect(source)), ";"))
+        end
     end
     str = String(take!(iob))
     return bytes2hex(sha1(str))
@@ -1032,18 +1058,27 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             if obj_branch === nothing
                 fetched = true
                 rev_or_hash_str = string(rev_or_hash)
-                # For pull requests, fetch the specific PR ref
-                if startswith(rev_or_hash_str, "pull/") && endswith(rev_or_hash_str, "/head")
-                    pr_number = rev_or_hash_str[6:(end - 5)]  # Extract number from "pull/X/head"
-                    pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs, depth = 1)
-                    # For branch names, fetch only the specific branch
-                elseif !looks_like_commit_hash(rev_or_hash_str)
-                    specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
-                else
-                    # For commit hashes, fetch all branches including the older commits
-                    GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
+                # The restricted fetches below may fail outright instead of being a no-op when
+                # the requested ref does not exist on the remote (CLI git exits with
+                # "couldn't find remote ref" for e.g. a tag fetched as a branch, whereas LibGit2
+                # silently fetches nothing). Treat such a failure like "not found" so that the
+                # broader fallback fetch further down gets a chance to locate the rev.
+                try
+                    # For pull requests, fetch the specific PR ref
+                    if startswith(rev_or_hash_str, "pull/") && endswith(rev_or_hash_str, "/head")
+                        pr_number = rev_or_hash_str[6:(end - 5)]  # Extract number from "pull/X/head"
+                        pr_refspecs = ["+refs/pull/$(pr_number)/head:refs/cache/pull/$(pr_number)/head"]
+                        GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = pr_refspecs, depth = 1)
+                        # For branch names, fetch only the specific branch
+                    elseif !looks_like_commit_hash(rev_or_hash_str)
+                        specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
+                        GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
+                    else
+                        # For commit hashes, fetch all branches including the older commits
+                        GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = refspecs, depth = LibGit2.Consts.FETCH_DEPTH_UNSHALLOW)
+                    end
+                catch err
+                    err isa PkgError || rethrow()
                 end
                 obj_branch = get_object_or_branch(repo, rev_or_hash)
                 # If still not found, try with broader refspec as fallback
@@ -1388,13 +1423,30 @@ manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry, Nothing}
     return get(manifest, uuid, nothing)
 end
-function write_env(
-        env::EnvCache; update_undo = true,
-        skip_writing_project::Bool = false,
-        skip_readonly_check::Bool = false
-    )
-    # Verify that the generated manifest is consistent with `sources`
+# Whether the `[sources]` entry for `name` in `project` (if any) is the source
+# recorded in the manifest entry.
+function source_matches_entry(project::Project, project_file::String, manifest_file::String, name::String, entry::PackageEntry)
+    haskey(project.sources, name) || return false
+    path, repo = get_path_repo(project, project_file, manifest_file, name)
+    if path !== nothing
+        return entry.path !== nothing && normpath(entry.path) == normpath(path)
+    end
+    entry.repo == GitRepo() && return false
+    return (repo.source === nothing || repo.source == entry.repo.source) &&
+        (repo.rev === nothing || repo.rev == entry.repo.rev) &&
+        (repo.subdir === nothing || repo.subdir == entry.repo.subdir)
+end
+
+# Record the path/repo of the direct dependencies from the manifest in the project's
+# `[sources]`, so the project keeps tracking the same source when it is re-resolved.
+# In a workspace, entries are not added for packages that are themselves projects of
+# the workspace (the workspace already locates them) and for sources that another
+# project of the workspace already declares (#4237).
+function update_project_sources!(env::EnvCache)
+    workspace_uuids = Set{UUID}(proj.uuid for proj in values(env.workspace) if proj.uuid !== nothing)
+    env.project.uuid === nothing || push!(workspace_uuids, env.project.uuid)
     for (pkg, uuid) in env.project.deps
+        # Verify that the generated manifest is consistent with `sources`
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
@@ -1408,20 +1460,39 @@ function write_env(
                 @assert entry.repo.subdir == repo.subdir
             end
         end
-        if entry !== nothing
-            if entry.path !== nothing
-                # Convert path from manifest-relative to project-relative before writing
-                project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
-                env.project.sources[pkg] = Dict("path" => project_relative_path)
-            elseif entry.repo != GitRepo()
-                d = Dict{String, String}()
-                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
-                entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
-                entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
-                env.project.sources[pkg] = d
+        entry === nothing && continue
+        # Only existing entries are updated for workspace members and for sources that are
+        # already declared in another project of the workspace. Some commands drop the entry
+        # and rely on it being re-added here, so consult the project as it was on disk too.
+        if !haskey(env.project.sources, pkg) && !haskey(env.original_project.sources, pkg)
+            uuid in workspace_uuids && continue
+            declared_elsewhere = any(env.workspace) do (project_file, project)
+                get(project.deps, pkg, nothing) == uuid &&
+                    source_matches_entry(project, project_file, env.manifest_file, pkg, entry)
             end
+            declared_elsewhere && continue
+        end
+        if entry.path !== nothing
+            # Convert path from manifest-relative to project-relative before writing
+            project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
+            env.project.sources[pkg] = Dict("path" => project_relative_path)
+        elseif entry.repo != GitRepo()
+            d = Dict{String, String}()
+            entry.repo.source !== nothing && (d["url"] = entry.repo.source)
+            entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+            entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+            env.project.sources[pkg] = d
         end
     end
+    return env.project
+end
+
+function write_env(
+        env::EnvCache; update_undo = true,
+        skip_writing_project::Bool = false,
+        skip_readonly_check::Bool = false
+    )
+    update_project_sources!(env)
 
     # Check if the environment is readonly before attempting to write
     if env.project.readonly && !skip_readonly_check

@@ -93,6 +93,7 @@ tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version
 # Try to download all registries referenced in `ctx.env.manifest.registries`.
 # Warn if some fail, but don't error (packages may still work with the registries we have).
 function ensure_manifest_registries!(ctx::Context)
+    OFFLINE_MODE[] && return
     manifest_regs = ctx.env.manifest.registries
     isempty(manifest_regs) && return
 
@@ -206,18 +207,26 @@ function load_project_deps(
         findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
         path, repo = get_path_repo(project, project_file, manifest_file, name)
         entry = manifest_info(manifest, uuid)
+        if entry === nothing
+            push!(pkgs_direct, PackageSpec(; uuid, name, path, repo))
+            continue
+        end
+        # `[sources]` takes precedence over the manifest, which may be stale: a path source
+        # discards a recorded tree hash and repo, a repo source discards a recorded path.
+        tree_hash = entry.tree_hash
+        if path !== nothing
+            tree_hash = nothing
+            repo = GitRepo()
+        else
+            repo == GitRepo() && (repo = entry.repo)
+            repo.source === nothing && (path = entry.path)
+        end
         push!(
-            pkgs_direct, entry === nothing ?
-                PackageSpec(; uuid, name, path, repo) :
-                PackageSpec(;
-                    uuid = uuid,
-                    name = name,
-                    path = path === nothing ? entry.path : path,
-                    repo = repo == GitRepo() ? entry.repo : repo,
-                    pinned = entry.pinned,
-                    tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
-                    version = load_version(entry.version, isfixed(entry), preserve),
-                )
+            pkgs_direct, PackageSpec(;
+                uuid, name, path, repo, tree_hash,
+                pinned = entry.pinned,
+                version = load_version(entry.version, isfixed(entry), preserve),
+            )
         )
     end
     return pkgs_direct
@@ -1311,14 +1320,6 @@ function download_artifacts(
     push!(pkg_info, (dirname(env.project_file), env.pkg !== nothing ? env.pkg.uuid : nothing))
     download_jobs = Dict{SHA1, Function}()
 
-    # Check what registries the current pkg server tracks
-    # Disable if precompiling to not access internet
-    server_registry_info = if Base.JLOptions().incremental == 0
-        Registry.pkg_server_registry_info()
-    else
-        nothing
-    end
-
     print_lock = Base.ReentrantLock() # for non-fancyprint printing
 
     download_states = Dict{SHA1, DownloadState}()
@@ -1339,6 +1340,14 @@ function download_artifacts(
         )
     )
     used_artifact_tomls = Set{String}(map(ca -> ca[1], all_collected_artifacts))
+
+    # Check what registries the current pkg server tracks
+    # Disable if precompiling to not access internet, and don't ask when there is nothing that could be served
+    server_registry_info = if Base.JLOptions().incremental == 0 && !isempty(all_collected_artifacts)
+        Registry.pkg_server_registry_info()
+    else
+        nothing
+    end
     longest_name_length = maximum(all_collected_artifacts; init = 0) do (artifacts_toml, artifacts, pkg_uuid)
         maximum(textwidth, keys(artifacts); init = 0)
     end
@@ -1735,6 +1744,8 @@ function prune_deps(iterator, keep::Set{UUID})
 end
 
 function record_project_hash(env::EnvCache)
+    # `[sources]` is part of the hash, so update it first to match what `write_env` will write
+    Types.update_project_sources!(env)
     return env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
 end
 
@@ -2394,9 +2405,31 @@ end
 # load version constraint
 # if version isa VersionNumber -> set tree_hash too
 up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel) = false
+# Whether the `[sources]` repo of a package still describes what its manifest entry recorded.
+# A `rev` (or `subdir`) that is left out of the source is filled in by `handle_repo_add!`, so
+# only compare those when the source specifies them.
+function source_repo_matches_entry(source_repo::GitRepo, entry::PackageEntry)
+    source_repo.source == entry.repo.source || return false
+    source_repo.rev === nothing || source_repo.rev == entry.repo.rev || return false
+    source_repo.subdir === nothing || source_repo.subdir == entry.repo.subdir || return false
+    return true
+end
+
 function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel)
     # With [sources], `pkg` can have a path or repo here
     entry.version !== nothing || return false # no version to set
+    # `[sources]` are keyed by name, so the entry only applies to `pkg` if the project lists
+    # `pkg` under that name (a stale manifest may hold a different package with the same name)
+    source_applies = get(ctx.env.project.deps, pkg.name, nothing) == pkg.uuid
+    if source_applies && source_path === nothing && pkg.path === nothing && source_repo.source !== nothing && !source_repo_matches_entry(source_repo, entry)
+        # The `[sources]` entry was edited directly (e.g. a new `rev`) so the tree hash recorded
+        # in the manifest is stale and the repo has to be re-resolved regardless of `level`, see #4157.
+        pkg.repo = source_repo
+        pkg.tree_hash = nothing
+        new = Types.handle_repo_add!(ctx, pkg)
+        pkg.version = entry.version
+        return new
+    end
     if entry.pinned || level == UPLEVEL_FIXED
         pkg.version = entry.version
         if pkg.path === nothing

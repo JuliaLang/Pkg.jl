@@ -40,6 +40,13 @@ function is_local_repo(url::AbstractString)
     return false
 end
 
+# Some git servers (e.g. JGit-based ones such as Gerrit and googlesource.com) fail libgit2's
+# shallow negotiation with a `Net` error ("invalid packet line", see #4771) even though full
+# clones and fetches work fine. Such failures are retried without `depth`.
+function is_shallow_fallback_error(err)
+    return err isa LibGit2.GitError && err.class == LibGit2.Error.Net && err.code == LibGit2.Error.ERROR
+end
+
 # Check if a repository is a shallow clone
 function isshallow(repo::LibGit2.GitRepo)
     if supports_shallow_clone() && isdefined(LibGit2, :isshallow)
@@ -173,10 +180,17 @@ function clone(io::IO, url, source_path; header = nothing, credentials = nothing
             mkpath(source_path)
             # Only pass depth if shallow clones are supported and depth > 0
             if depth > 0
-                return LibGit2.clone(url, source_path; callbacks, credentials, isbare, depth, kwargs...)
-            else
-                return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
+                try
+                    # `LibGit2.clone` stores the credentials in `callbacks`, so pass a copy in case we retry
+                    return LibGit2.clone(url, source_path; callbacks = copy(callbacks), credentials, isbare, depth, kwargs...)
+                catch err
+                    is_shallow_fallback_error(err) || rethrow()
+                    @debug "Shallow clone of `$url` failed, retrying with a full clone" exception = err
+                    rm(source_path; force = true, recursive = true)
+                    mkpath(source_path)
+                end
             end
+            return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
         end
     catch err
         rm(source_path; force = true, recursive = true)
@@ -236,19 +250,28 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
                 depth > 0 && push!(args, "--depth=$depth")
                 push!(args, remoteurl, only(refspecs))
                 cmd = `git $args`
+                errbuf = IOBuffer()
                 try
-                    run(pipeline(cmd; stdout = devnull))
+                    run(pipeline(cmd; stdout = devnull, stderr = errbuf))
                 catch err
-                    Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
+                    git_err = strip(String(take!(errbuf)))
+                    msg = "The command $(cmd) failed, error: $err"
+                    isempty(git_err) || (msg *= "\n$(git_err)")
+                    Pkg.Types.pkgerror(msg)
                 end
             end
         else
             # Only pass depth if shallow clones are supported and depth > 0
             if depth > 0
-                return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, depth, kwargs...)
-            else
-                return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
+                try
+                    # `LibGit2.fetch` stores the credentials in `callbacks`, so pass a copy in case we retry
+                    return LibGit2.fetch(repo; remoteurl, callbacks = copy(callbacks), credentials, refspecs, depth, kwargs...)
+                catch err
+                    is_shallow_fallback_error(err) || rethrow()
+                    @debug "Shallow fetch from `$remoteurl` failed, retrying with a full fetch" exception = err
+                end
             end
+            return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
         end
     catch err
         err isa LibGit2.GitError || rethrow()

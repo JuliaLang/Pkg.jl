@@ -325,9 +325,12 @@ using Test
         end
     end
 
-    isolate(loaded_depot = true) do
-        Pkg.Registry.add("General")
+    isolate(loaded_depot = false) do
+        # depot without registries (#4808)
+        rm(joinpath(first(DEPOT_PATH), "registries"); force = true, recursive = true)
+        @test isempty(Pkg.Registry.reachable_registries())
         Pkg.Apps.add(name = "Runic", version = "1.5.1")
+        @test !isempty(Pkg.Registry.reachable_registries())
         app_manifest() = Pkg.Types.read_manifest(joinpath(first(DEPOT_PATH), "environments", "apps", "AppManifest.toml"))
         runic_version() = only(e for e in values(app_manifest().deps) if e.name == "Runic").version
         @test runic_version() == v"1.5.1"
@@ -340,6 +343,25 @@ using Test
         Pkg.Apps.update("runic")
         # unknown app/package name errors
         @test_throws Pkg.Types.PkgError Pkg.Apps.update("DoesNotExist")
+
+        # updating a `path = "."` entry as written by Pkg 1.12.6 must not
+        # wipe the app manifest (#4805)
+        app_manifest_file = joinpath(first(DEPOT_PATH), "environments", "apps", "AppManifest.toml")
+        manifest = app_manifest()
+        runic_uuid = only(uuid for (uuid, e) in manifest.deps if e.name == "Runic")
+        old_entry = manifest.deps[runic_uuid]
+        manifest.deps[runic_uuid] = Pkg.Types.PackageEntry(;
+            name = "Runic", uuid = runic_uuid, version = v"1.5.1", apps = old_entry.apps, path = "."
+        )
+        Pkg.Types.write_manifest(manifest, app_manifest_file)
+        @test app_manifest().deps[runic_uuid].path == "."
+        Pkg.Apps.update()
+        @test haskey(app_manifest().deps, runic_uuid)
+        entry = app_manifest().deps[runic_uuid]
+        @test entry.path === nothing
+        @test entry.tree_hash !== nothing
+        @test entry.version > v"1.5.1"
+        @test haskey(entry.apps, "runic")
     end
 end
 

@@ -14,6 +14,7 @@ include("utils.jl")
 using .Utils
 include("resolve_utils.jl")
 using .ResolveUtils
+import .ResolveUtils: graph_from_data, reqs_from_data, pkguuid
 
 # Check that VersionWeight keeps the same ordering as VersionNumber
 
@@ -700,6 +701,48 @@ end
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
 
+end
+
+@testset "local optimality pass" begin
+    VERBOSE && @info("SCHEME LOCAL OPTIMALITY")
+    ## The local-optimality pass (`enforce_optimality!`) must not give up on a
+    ## package when only its next version conflicts with an already bumped
+    ## dependency while a later version would be fine.
+    ## ref Pkg.jl issue #4783
+    deps_data = Any[
+        ["J", v"1", "M", "*"],
+        ["J", v"1", "O", "1"],
+        ["J", v"2", "M", "1"],
+        ["J", v"2", "O", "*"],
+        ["J", v"3", "M", "*"],
+        ["J", v"3", "O", "*"],
+        ["M", v"1"],
+        ["M", v"2"],
+        ["O", v"1"],
+        ["O", v"2"],
+    ]
+    reqs_data = Any[
+        ["J", "*"],
+    ]
+    graph = graph_from_data(deps_data)
+    add_reqs!(graph, reqs_from_data(reqs_data, graph))
+    simplify_graph!(graph)
+    idx(p) = graph.data.pdict[pkguuid(p)]
+    vidx(p, vn) = graph.data.vdict[idx(p)][vn]
+    # a feasible but suboptimal configuration, as the maxsum solver may produce:
+    # bumping J to v2 is blocked by M (already at its maximum), but J v3 is fine
+    sol = copy(graph.spp)
+    sol[idx("J")] = vidx("J", v"1")
+    sol[idx("M")] = vidx("M", v"2")
+    sol[idx("O")] = vidx("O", v"1")
+    @test Resolve.verify_solution(sol, graph)
+    Resolve.enforce_optimality!(sol, graph)
+    @test sol[idx("J")] == vidx("J", v"3")
+    @test sol[idx("M")] == vidx("M", v"2")
+    @test sol[idx("O")] == vidx("O", v"2")
+
+    want_data = Dict("J" => v"3", "M" => v"2", "O" => v"2")
+    @test resolve_tst(deps_data, reqs_data, want_data)
 end
 
 @testset "realistic" begin

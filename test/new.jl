@@ -2793,7 +2793,7 @@ end
         @test isempty(opts)
         api, opts = first(Pkg.pkg"gc --all")
         @test api == Pkg.gc
-        @test opts[:collect_delay] == Hour(0)
+        # N.B.: `--all` is now a no-op, but is retained for now for compatibility.
     end
 end
 
@@ -3489,6 +3489,49 @@ for v in (nothing, "true")
                     Pkg.add("JSON"; use_only_tarballs_for_downloads = true)
                     @test "JSON" in [pkg.name for (uuid, pkg) in Pkg.dependencies()]
                     Pkg.rm("JSON")
+                end
+            end
+            # https://github.com/JuliaLang/Pkg.jl/issues/4779
+            # A tag `rev` is first fetched with a `refs/heads/<rev>` refspec. When that ref does not
+            # exist on the remote, CLI git fails the fetch (LibGit2 treats it as a no-op), which used
+            # to abort the add before the broader fallback fetch could find the tag.
+            isolate() do
+                mktempdir() do tmp
+                    @testset "tag rev missing from clone cache" begin
+                        pkg_path = joinpath(tmp, "TagRevPkg")
+                        pkg_uuid = UUID("0ab8ec4e-4c3a-4d5b-9a5c-2c6f2a0d1e11")
+                        mkpath(joinpath(pkg_path, "src"))
+                        write(
+                            joinpath(pkg_path, "Project.toml"), """
+                            name = "TagRevPkg"
+                            uuid = "$(pkg_uuid)"
+                            version = "0.1.0"
+                            """
+                        )
+                        write(joinpath(pkg_path, "src", "TagRevPkg.jl"), "module TagRevPkg\nend\n")
+                        git_init_and_commit(pkg_path)
+                        # Populate the clone cache while the tag does not exist yet
+                        Pkg.add(url = pkg_path)
+                        @test haskey(Pkg.dependencies(), pkg_uuid)
+                        # Tag a new upstream commit, so the cached clone has to fetch the tag
+                        write(joinpath(pkg_path, "src", "TagRevPkg.jl"), "module TagRevPkg\nconst TAGGED = true\nend\n")
+                        tagged_commit = LibGit2.with(LibGit2.GitRepo(pkg_path)) do repo
+                            LibGit2.add!(repo, "*")
+                            commit = LibGit2.commit(repo, "tagged commit"; author = TEST_SIG, committer = TEST_SIG)
+                            LibGit2.tag_create(repo, "v1.0.0", commit; sig = TEST_SIG)
+                            commit
+                        end
+                        tagged_tree = LibGit2.with(LibGit2.GitRepo(pkg_path)) do repo
+                            string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(repo, tagged_commit))))
+                        end
+                        Pkg.add(url = pkg_path, rev = "v1.0.0")
+                        info = Pkg.dependencies()[pkg_uuid]
+                        @test info.git_revision == "v1.0.0"
+                        @test string(info.tree_hash) == tagged_tree
+                        # A rev that exists nowhere must still be reported as such
+                        @test_throws PkgError Pkg.add(url = pkg_path, rev = "does-not-exist")
+                        Pkg.rm("TagRevPkg")
+                    end
                 end
             end
         end

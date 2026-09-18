@@ -250,6 +250,107 @@ temp_pkg_dir() do project_path
         end
     end
 
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4157
+    # Editing the `rev` of a `[sources]` entry directly in the project file must invalidate
+    # the manifest, and `resolve` must check out the new rev instead of reusing the tree hash.
+    @testset "changing the rev of a [sources] entry re-resolves the package (#4157)" begin
+        mktempdir() do tmp
+            cd(tmp) do
+                local_pkg_uuid = UUID("00000000-0000-0000-0000-000000000002")
+                mkdir("LocalPkg")
+                mkdir(joinpath("LocalPkg", "src"))
+                write(joinpath("LocalPkg", "src", "LocalPkg.jl"), "module LocalPkg end")
+                project(version) = write(
+                    joinpath("LocalPkg", "Project.toml"), """
+                    name = "LocalPkg"
+                    uuid = "$local_pkg_uuid"
+                    version = "$version"
+                    """
+                )
+                project("0.1.0")
+                rev1 = string(git_init_and_commit("LocalPkg"))
+                project("0.2.0")
+                rev2 = string(git_init_and_commit("LocalPkg"; msg = "bump version"))
+                @test rev1 != rev2
+                local_pkg_url = make_file_url(abspath("LocalPkg"))
+
+                env(rev) = write(
+                    "Project.toml", """
+                    [deps]
+                    LocalPkg = "$local_pkg_uuid"
+
+                    [sources]
+                    LocalPkg = { url = "$local_pkg_url", rev = "$rev" }
+                    """
+                )
+                env(rev1)
+                with_current_env() do
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    entry = manifest[local_pkg_uuid]
+                    tree_hash1 = entry.tree_hash
+                    project_hash1 = manifest.other["project_hash"]
+                    @test entry.version == v"0.1.0"
+                    @test entry.repo.rev == rev1
+                    @test tree_hash1 !== nothing
+
+                    # Resolving again without touching the project is a no-op
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    @test manifest[local_pkg_uuid].tree_hash == tree_hash1
+                    @test manifest.other["project_hash"] == project_hash1
+
+                    env(rev2)
+                    @test Pkg.Operations.is_manifest_current(Pkg.Types.EnvCache()) === false
+                    Pkg.resolve()
+                    manifest = Pkg.Types.read_manifest("Manifest.toml")
+                    entry = manifest[local_pkg_uuid]
+                    @test entry.version == v"0.2.0"
+                    @test entry.repo.rev == rev2
+                    @test entry.tree_hash != tree_hash1
+                    @test manifest.other["project_hash"] != project_hash1
+                    @test Pkg.Operations.is_manifest_current(Pkg.Types.EnvCache()) === true
+                    @test Pkg.dependencies()[local_pkg_uuid].version == v"0.2.0"
+                end
+            end
+        end
+    end
+
+    @testset "project hash covers [sources] filled in from the manifest" begin
+        mktempdir() do tmp
+            cd(tmp) do
+                local_pkg_uuid = UUID("00000000-0000-0000-0000-000000000003")
+                mkpath(joinpath("LocalPkg", "src"))
+                write(
+                    joinpath("LocalPkg", "Project.toml"), """
+                    name = "LocalPkg"
+                    uuid = "$local_pkg_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath("LocalPkg", "src", "LocalPkg.jl"), "module LocalPkg end")
+                git_init_and_commit("LocalPkg")
+                local_pkg_url = make_file_url(abspath("LocalPkg"))
+                is_current() = Pkg.Operations.is_manifest_current(Pkg.Types.EnvCache())
+
+                with_current_env() do
+                    Pkg.develop(path = "LocalPkg")
+                    @test Pkg.project().sources["LocalPkg"] == Dict("path" => "LocalPkg")
+                    @test is_current() === true
+                    Pkg.resolve()
+                    @test is_current() === true
+
+                    Pkg.rm("LocalPkg")
+                    Pkg.add(url = local_pkg_url)
+                    @test Pkg.project().sources["LocalPkg"]["url"] == local_pkg_url
+                    @test is_current() === true
+                    Pkg.resolve()
+                    @test is_current() === true
+                end
+            end
+        end
+    end
+
     # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4750
     # A `[sources]` entry in a dependency's project file must not take over a package that
     # the environment being resolved already tracks itself (here: from a registry).
@@ -307,6 +408,78 @@ temp_pkg_dir() do project_path
                 @test manifest[example_uuid].version < v"999"
                 @test !haskey(Pkg.project().sources, "Example")
                 @test manifest[main_uuid].repo.source !== nothing
+            end
+        end
+    end
+
+    # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4650
+    # The deved package's own manifest (here the workspace root manifest) is stale and
+    # records a `[sources]` path dependency as registry-tracked. The tree hash must not be
+    # carried over, or the entry ends up with both a path and a tree hash.
+    @testset "dev package whose stale manifest tracks a [sources] path dep by tree hash (#4650)" begin
+        isolate() do
+            mktempdir() do tmp
+                example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+                main_uuid = UUID("00000000-0000-0000-0000-000000004650")
+                main = joinpath(tmp, "MainPkg")
+                mkpath(joinpath(main, "src"))
+                mkpath(joinpath(tmp, "Example", "src"))
+                write(
+                    joinpath(tmp, "Project.toml"), """
+                    [workspace]
+                    projects = ["MainPkg", "Example"]
+                    """
+                )
+                # Install the registered `Example` so the stale manifest below refers to a
+                # tree hash that exists in the depot, as it does when a manifest goes stale.
+                Pkg.activate(joinpath(tmp, "scratch"))
+                Pkg.add("Example")
+                example_entry = Pkg.Types.read_manifest(joinpath(tmp, "scratch", "Manifest.toml"))[example_uuid]
+                write(
+                    joinpath(tmp, "Manifest.toml"), """
+                    manifest_format = "2.0"
+
+                    [[deps.Example]]
+                    git-tree-sha1 = "$(example_entry.tree_hash)"
+                    uuid = "$example_uuid"
+                    version = "$(example_entry.version)"
+
+                    [[deps.MainPkg]]
+                    deps = ["Example"]
+                    path = "MainPkg"
+                    uuid = "$main_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(
+                    joinpath(main, "Project.toml"), """
+                    name = "MainPkg"
+                    uuid = "$main_uuid"
+                    version = "0.1.0"
+
+                    [deps]
+                    Example = "$example_uuid"
+
+                    [sources]
+                    Example = {path = "../Example"}
+                    """
+                )
+                write(joinpath(main, "src", "MainPkg.jl"), "module MainPkg\nusing Example\nend")
+                write(
+                    joinpath(tmp, "Example", "Project.toml"), """
+                    name = "Example"
+                    uuid = "$example_uuid"
+                    version = "999.0.0-dev"
+                    """
+                )
+                write(joinpath(tmp, "Example", "src", "Example.jl"), "module Example end")
+
+                Pkg.activate(joinpath(tmp, "env"))
+                Pkg.develop(path = main)
+                manifest = Pkg.Types.read_manifest(joinpath(tmp, "env", "Manifest.toml"))
+                @test manifest[example_uuid].path == joinpath("..", "Example")
+                @test manifest[example_uuid].tree_hash === nothing
+                @test manifest[example_uuid].version == v"999.0.0-dev"
             end
         end
     end
