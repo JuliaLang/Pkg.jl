@@ -1509,9 +1509,11 @@ end
 
 @testset "JuliaLang/julia #55850" begin
     isolate(loaded_depot = true) do
-        # `promptf` is covered in-process; without `--code-coverage=none` the
-        # subprocess would have to compile Pkg from scratch when run with coverage
-        prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --code-coverage=none -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+        cmd = addenv(
+            `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`,
+            "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+        )
+        prompt = readchomp(cmd)
         @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
     end
 end
