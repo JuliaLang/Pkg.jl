@@ -335,7 +335,9 @@ A pinned package will never be updated. A package can be pinned using `pin`, for
   [7876af07] ~ Example v0.5.3 ⇒ v0.5.3 ⚲
 ```
 
-Note the pin symbol `⚲` showing that the package is pinned. Removing the pin is done using `free`
+Note the pin symbol `⚲` showing that the package is pinned. Trying to `add` a pinned package at a
+different version (or from a different repository or path) is an error; unpin it first with `free`.
+Removing the pin is done using `free`
 
 ```julia-repl
 (@v1.10) pkg> free Example

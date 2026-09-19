@@ -459,46 +459,51 @@ end
 # since we need access to the Project file to read the information
 # about extensions
 function fixups_from_projectfile!(ctx::Context)
-    env = ctx.env
-    for pkg in values(env.manifest)
-        if ctx.julia_version !== VERSION && is_stdlib(pkg.uuid, ctx.julia_version)
-            # Special handling for non-current julia_version resolving given the source for historical stdlibs
-            # isn't available at this stage as Pkg thinks it should not be needed, so rely on STDLIBS_BY_VERSION
-            stdlibs = Types.get_last_stdlibs(ctx.julia_version)
-            p = stdlibs[pkg.uuid]
-            pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
-            # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
-            # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
-            for (name, uuid) in pkg.weakdeps
-                if !(uuid in p.deps)
-                    delete!(pkg.deps, name)
-                end
-            end
-        else
-            # normal mode based on project files.
-            # isfile_casesenstive within locate_project_file used to error on Windows if given a
-            # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
-            sourcepath = source_path(env.manifest_file, pkg)
-            if sourcepath === nothing
-                pkgerror("could not find source path for package $(pkg.name) based on manifest $(env.manifest_file)")
-            end
-            project_file = Base.locate_project_file(abspath(sourcepath))
-            if project_file isa String && isfile(project_file)
-                p = Types.read_project(project_file)
-                pkg.weakdeps = p.weakdeps
-                pkg.exts = p.exts
-                pkg.entryfile = p.entryfile
-                pkg.julia_syntax_version = get_project_syntax_version(p)
+    for pkg in values(ctx.env.manifest)
+        fixup_from_projectfile!(ctx, pkg)
+    end
+    return prune_manifest(ctx.env)
+end
 
-                for (name, _) in p.weakdeps
-                    if !haskey(p.deps, name)
-                        delete!(pkg.deps, name)
-                    end
-                end
+# Fill in what only the package's own project file knows (extensions, weak deps, entry file).
+# A package whose source is not on disk yet is left as is. Returns whether the entry changed.
+function fixup_from_projectfile!(ctx::Context, pkg::PackageEntry)
+    env = ctx.env
+    if ctx.julia_version !== VERSION && is_stdlib(pkg.uuid, ctx.julia_version)
+        # Special handling for non-current julia_version resolving given the source for historical stdlibs
+        # isn't available at this stage as Pkg thinks it should not be needed, so rely on STDLIBS_BY_VERSION
+        stdlibs = Types.get_last_stdlibs(ctx.julia_version)
+        stdlib = stdlibs[pkg.uuid]
+        pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in stdlib.weakdeps)
+        # pkg.exts = stdlib.exts # TODO: STDLIBS_BY_VERSION doesn't record this
+        # pkg.entryfile = stdlib.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
+        for (name, uuid) in pkg.weakdeps
+            if !(uuid in stdlib.deps)
+                delete!(pkg.deps, name)
             end
         end
+        return true
     end
-    return prune_manifest(env)
+    # normal mode based on project files.
+    # isfile_casesenstive within locate_project_file used to error on Windows if given a
+    # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
+    sourcepath = source_path(env.manifest_file, pkg)
+    if sourcepath === nothing
+        pkgerror("could not find source path for package $(pkg.name) based on manifest $(env.manifest_file)")
+    end
+    project_file = Base.locate_project_file(abspath(sourcepath))
+    (project_file isa String && isfile(project_file)) || return false
+    p = Types.read_project(project_file)
+    julia_syntax_version = get_project_syntax_version(p)
+    weakdeps_in_deps = [name for (name, _) in p.weakdeps if !haskey(p.deps, name) && haskey(pkg.deps, name)]
+    changed = pkg.weakdeps != p.weakdeps || pkg.exts != p.exts || pkg.entryfile != p.entryfile ||
+        pkg.julia_syntax_version != julia_syntax_version || !isempty(weakdeps_in_deps)
+    pkg.weakdeps = p.weakdeps
+    pkg.exts = p.exts
+    pkg.entryfile = p.entryfile
+    pkg.julia_syntax_version = julia_syntax_version
+    foreach(name -> delete!(pkg.deps, name), weakdeps_in_deps)
+    return changed
 end
 
 ####################
@@ -1965,7 +1970,9 @@ function artifact_suffix(artifact_counts)
     return ""
 end
 
-function download_source(ctx::Context, pkgs; readonly::Bool = true)
+# `on_installed(pkg)` is called from this task once the source of `pkg` is on disk, whether
+# this or another process put it there.
+function download_source(ctx::Context, pkgs; readonly::Bool = true, on_installed::Function = Returns(nothing))
     pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
     for pkg in pkgs
@@ -1990,6 +1997,12 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
     end
 
     length(pkgs_to_install) == 0 && return Set{UUID}()
+
+    # Download leaves of the dependency graph first: their precompilation can start before
+    # anything else has arrived (see `install_pipeline!`).
+    let uuids = Set{UUID}(entry.pkg.uuid for entry in pkgs_to_install), depth = Dict{UUID, Int}()
+        sort!(pkgs_to_install; by = entry -> (install_depth!(depth, ctx.env, uuids, entry.pkg.uuid), entry.pkg.name))
+    end
 
     ########################################
     # Install from archives asynchronously #
@@ -2069,11 +2082,12 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
                     pkgerror("Error when installing package $(pkg.name):\n", sprint(Base.showerror, exc, bt_or_pathurls))
                 end
                 if exc_or_success_or_nothing === nothing
+                    on_installed(pkg)
                     continue # represents when another process did the install
                 end
                 success = exc_or_success_or_nothing::Bool
                 (urls, path) = bt_or_pathurls::Tuple{Set{String}, String}
-                success || push!(missed_packages, (; pkg, urls, path))
+                success ? on_installed(pkg) : push!(missed_packages, (; pkg, urls, path))
                 bar.current = i
                 str = sprint(; context = ctx.io) do io
                     if success
@@ -2114,9 +2128,237 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
             artifact_str = artifact_suffix(count_artifacts(path))
             printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr, artifact_str))
         end
+        on_installed(pkg)
     end
 
     return Set{UUID}(entry.pkg.uuid for entry in pkgs_to_install)
+end
+
+# Longest chain of dependencies within `uuids` below `uuid`; leaves are 0.
+function install_depth!(depth::Dict{UUID, Int}, env::EnvCache, uuids::Set{UUID}, uuid::UUID)
+    d = get(depth, uuid, nothing)
+    d === nothing || return d
+    depth[uuid] = 0 # guards against cycles
+    entry = manifest_info(env.manifest, uuid)
+    d = 0
+    if entry !== nothing
+        for dep in values(entry.deps)
+            dep in uuids || continue
+            d = max(d, 1 + install_depth!(depth, env, uuids, dep))
+        end
+    end
+    return depth[uuid] = d
+end
+
+####################
+# Parallel install #
+####################
+
+parallel_install_enabled() =
+    isdefined(Base.Precompilation, :SourceGate) && Base.get_bool_env("JULIA_PKG_PARALLEL_INSTALL", true)
+
+# Install the eagerly downloadable artifacts of one package. Selected artifacts need the
+# whole environment, so packages with a selector are left to `download_artifacts`.
+function install_package_artifacts!(
+        ctx::Context, pkg::Union{PackageSpec, PackageEntry}, pkg_root::String;
+        platform::AbstractPlatform, server_registry_info, sema::Base.Semaphore
+    )
+    has_artifact_selector(pkg_root) && return
+    info = (; root = pkg_root, uuid = pkg.uuid, has_selector = false)
+    collected = collect_package_artifacts(info, Set{String}(); platform, include_lazy = false)
+    isempty(collected) && return
+    pkg_server_eligible = Registry.is_pkg_in_pkgserver_registry(pkg.uuid, server_registry_info, ctx.registries)
+    for (artifacts_toml, artifacts, _) in collected, name in keys(artifacts)
+        download = ensure_artifact_installed(
+            name, artifacts[name], artifacts_toml;
+            pkg_server_eligible, verbose = false, quiet_download = true, io = ctx.io,
+            progress = (total, current; status = "") -> nothing
+        )
+        download isa Function || continue
+        Base.acquire(sema) do
+            download()
+        end
+        printpkgstyle(ctx.io, :Installed, "artifact $name")
+    end
+    return
+end
+
+# Install the sources and artifacts of `pkgs` while the environment precompiles: the
+# precompilation of each package starts as soon as it is installed (see `source_ready` in
+# `Base.Precompilation.precompilepkgs`), and sources are downloaded leaves first so that
+# the precompile workers get work as early as possible. A package with a build script or
+# an artifact selector, and everything depending on it, is precompiled after
+# `build_versions` as before. See JuliaLang/Pkg.jl#4502.
+#
+# With `update_manifest`, the manifest is being created by this operation: it is written
+# before the installs so that precompilation can begin, and what a package's own project
+# file adds to its entry (`fixup_from_projectfile!`) is written out as the package lands.
+# `precompile_pkgs` restricts the precompilation to those packages and their dependencies.
+function install_pipeline!(
+        ctx::Context, pkgs, new_git;
+        platform::AbstractPlatform = HostPlatform(), julia_version = VERSION, verbose::Bool = false,
+        allow_build::Bool = true, allow_autoprecomp::Bool = true, workspace::Bool = false,
+        precompile_pkgs::Vector{PackageSpec} = PackageSpec[], update_manifest::Bool = false
+    )
+    precompile = allow_autoprecomp && Pkg.should_autoprecompile()
+    if !(precompile && parallel_install_enabled())
+        new_apply = download_source(ctx, pkgs)
+        update_manifest && fixups_from_projectfile!(ctx)
+        download_artifacts(ctx, pkgs; platform, julia_version, verbose)
+        if update_manifest
+            write_env(ctx.env)
+            show_update(ctx.env, ctx.registries; io = ctx.io)
+        end
+        allow_build && build_versions(ctx, union(new_apply, new_git); verbose)
+        return precompile ? Pkg._auto_precompile(ctx, precompile_pkgs; already_instantiated = true, workspace) : nothing
+    end
+
+    if update_manifest
+        # the installed packages can be fixed up right away; the rest as they land
+        foreach(pkg -> fixup_from_projectfile!(ctx, pkg), values(ctx.env.manifest))
+        write_env(ctx.env; update_undo = false) # the undo snapshot is taken once the manifest is final
+        show_update(ctx.env, ctx.registries; io = ctx.io)
+    end
+    manifest_dirty = Ref(false)
+    # Rewrite the manifest through an atomic rename: the precompile session and its
+    # workers read it while this runs and must never see a half-written file.
+    # Call with `state_lock` held.
+    function write_manifest_if_dirty!()
+        manifest_dirty[] || return
+        manifest_dirty[] = false
+        file = ctx.env.manifest_file
+        islink(file) && (file = realpath(file))
+        tmp = file * ".tmp"
+        write(tmp, sprint(Types.write_manifest, ctx.env.manifest))
+        mv(tmp, file; force = true)
+        return
+    end
+
+    # the packages whose source is about to be downloaded
+    pending = Dict{UUID, eltype(pkgs)}()
+    for pkg in pkgs
+        tracking_registered_version(pkg, ctx.julia_version) || continue
+        path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
+        (path === nothing || ispath(path)) && continue
+        pending[pkg.uuid] = pkg
+    end
+    SourceGate = Base.Precompilation.SourceGate
+    gates = Dict{Base.PkgId, SourceGate}(Base.PkgId(pkg.uuid, pkg.name) => SourceGate() for pkg in values(pending))
+    # the pending packages each pending package depends on, itself included
+    # (`_get_deps!` leaves out stdlibs, and an upgradable one may well be pending)
+    needed = Dict{UUID, Set{UUID}}(
+        uuid => push!(intersect!(_get_deps!(Set{UUID}(), ctx.env, [uuid]), keys(pending)), uuid) for uuid in keys(pending)
+    )
+
+    state_lock = ReentrantLock()
+    installed = Set{UUID}() # source and eager artifacts on disk
+    deferred = Set{UUID}()  # has a build script or an artifact selector
+    opened = Set{UUID}()
+    # A gate opens once everything the package needs is installed; with a build script or
+    # a selector among them the package is left for the precompilation after the build.
+    # Call with `state_lock` held.
+    function open_gates!()
+        for (uuid, need) in needed
+            uuid in opened && continue
+            gate = gates[Base.PkgId(uuid, pending[uuid].name)]
+            if !isdisjoint(need, deferred)
+                Base.Precompilation.open_gate!(gate, false)
+            elseif need ⊆ installed
+                # the session re-reads the manifest when a gate opens, so it must be current
+                write_manifest_if_dirty!()
+                Base.Precompilation.open_gate!(gate, true)
+            else
+                continue
+            end
+            push!(opened, uuid)
+        end
+        return
+    end
+
+    server_registry_info = Registry.pkg_server_registry_info()
+    sema = Base.Semaphore(ctx.num_concurrent_downloads)
+    artifact_tasks = Task[]
+    reported = Set{UUID}()
+    # The source of `pkg` is on disk: install its artifacts, then let its precompilation start.
+    function on_installed(pkg)
+        (haskey(pending, pkg.uuid) && !(pkg.uuid in reported)) || return
+        push!(reported, pkg.uuid)
+        path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
+        if update_manifest
+            @lock state_lock begin
+                entry = manifest_info(ctx.env.manifest, pkg.uuid)
+                entry === nothing || (manifest_dirty[] |= fixup_from_projectfile!(ctx, entry))
+            end
+        end
+        task = Threads.@spawn begin
+            install_package_artifacts!(ctx, pkg, path; platform, server_registry_info, sema)
+            @lock state_lock begin
+                push!(installed, pkg.uuid)
+                (ispath(buildfile(path)) || has_artifact_selector(path)) && push!(deferred, pkg.uuid)
+                open_gates!()
+            end
+        end
+        push!(artifact_tasks, task)
+        return
+    end
+
+    precompile_task = Threads.@spawn Pkg._auto_precompile(
+        ctx, precompile_pkgs; already_instantiated = true, workspace, source_ready = gates, fancyprint = false
+    )
+    local new_apply
+    try
+        new_apply = download_source(ctx, pkgs; on_installed)
+        # a package another process installed in the meantime never reaches `on_installed`
+        foreach(on_installed, values(pending))
+        foreach(wait, artifact_tasks)
+    catch err
+        # the session cannot finish with closed gates: interrupt it and release them
+        Base.Precompilation.stop_background_precompile(graceful = true)
+        @lock state_lock foreach(gate -> Base.Precompilation.open_gate!(gate, false), values(gates))
+        try
+            wait(precompile_task)
+        catch
+        end
+        err isa TaskFailedException ? throw(err.task.result) : rethrow()
+    end
+    # selected artifacts, plus recording the artifact usage of the environment
+    download_artifacts(ctx, pkgs; platform, julia_version, verbose)
+    if update_manifest
+        fixups_from_projectfile!(ctx)
+        @lock state_lock begin
+            manifest_dirty[] = true
+            write_manifest_if_dirty!()
+        end
+        Pkg.API.add_snapshot_to_undo(ctx.env)
+    end
+    try
+        wait(precompile_task)
+    catch err
+        err isa TaskFailedException ? throw(err.task.result) : rethrow()
+    end
+    # build scripts swap the active project, so they wait for the session to finish
+    allow_build && build_versions(ctx, union(new_apply, new_git); verbose)
+    isempty(deferred) && return
+    return Pkg._auto_precompile(ctx, precompile_pkgs; already_instantiated = true, workspace)
+end
+
+# Put the project and manifest files back as they were when `env` was loaded, for an
+# operation that wrote them before it could finish.
+function restore_env!(env::EnvCache)
+    for (file, original, current) in (
+            (env.project_file, env.original_project, env.project),
+            (env.manifest_file, env.original_manifest, env.manifest),
+        )
+        original == current && continue
+        if original isa Project
+            Types.write_project(original, file)
+        elseif isempty(original.deps) && isfile(file)
+            Base.rm(file) # `write_env` never created it, `original` is the empty default
+        else
+            Types.write_manifest(original, file)
+        end
+    end
+    return
 end
 
 ################################
@@ -2504,9 +2746,31 @@ end
 update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
 function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
-        if pkg.version == VersionSpec()
-            println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
+        # A pinned package is never changed by `add`. Requesting a version, path or repo
+        # that conflicts with the pinned entry is an error rather than a silent no-op.
+        if pkg.version isa VersionNumber || (pkg.version isa VersionSpec && pkg.version != VersionSpec())
+            compatible = entry.version isa VersionNumber && (
+                pkg.version isa VersionNumber ? entry.version == pkg.version : entry.version in pkg.version
+            )
+            if !compatible
+                pkgerror(
+                    "package $(err_rep(pkg)) is pinned at `v$(entry.version)`; ",
+                    "cannot add version `$(pkg.version)`. Run `free $(pkg.name)` first to unpin it."
+                )
+            end
+        elseif pkg.path !== nothing && pkg.path != entry.path
+            pkgerror(
+                "package $(err_rep(pkg)) is pinned; ",
+                "cannot add it from path `$(pkg.path)`. Run `free $(pkg.name)` first to unpin it."
+            )
+        elseif pkg.repo.source !== nothing && (pkg.repo.source != entry.repo.source || (pkg.repo.rev !== nothing && pkg.repo.rev != entry.repo.rev))
+            pkgerror(
+                "package $(err_rep(pkg)) is pinned; ",
+                "cannot add it from repository `$(pkg.repo.source)`$(pkg.repo.rev === nothing ? "" : "#$(pkg.repo.rev)"). ",
+                "Run `free $(pkg.name)` first to unpin it."
+            )
         end
+        println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
         return PackageSpec(;
             uuid = pkg.uuid, name = pkg.name, pinned = true,
             version = entry.version, tree_hash = entry.tree_hash,
@@ -2812,6 +3076,23 @@ function add(
         )
         maybe_print_preferred_loaded_note(ctx.io, direct_names, indirect_count)
         update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, ctx.registries)
+        if allow_autoprecomp && Pkg.should_autoprecompile() && parallel_install_enabled()
+            # if env is a package add compat entries
+            add_compat_entries!(ctx, pkgs)
+            record_project_hash(ctx.env) # compat entries changed the hash after it was last recorded in update_manifest!
+            # The environment is written before the installs so that precompilation can
+            # start as packages land, so put it back should they fail.
+            try
+                install_pipeline!(
+                    ctx, collect(values(ctx.env.manifest)), new_git;
+                    platform, julia_version = ctx.julia_version, precompile_pkgs = pkgs, update_manifest = true
+                )
+            catch
+                restore_env!(ctx.env)
+                rethrow()
+            end
+            return
+        end
         new_apply = download_source(ctx)
         fixups_from_projectfile!(ctx)
 

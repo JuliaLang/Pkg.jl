@@ -371,7 +371,7 @@ end
         Pkg.add("Test")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
     end
-    # Add by version should not override pinned version.
+    # Add by a conflicting version should error rather than silently keep the pinned version (#4654).
     isolate(loaded_depot = true) do
         Pkg.add(name = "Example", version = "0.3.0")
         Pkg.pin("Example")
@@ -380,8 +380,21 @@ end
             @test ex.is_tracking_registry
             @test ex.is_pinned
         end
-        Pkg.add(name = "Example", version = "0.5.0")
+        @test_throws PkgError Pkg.add(name = "Example", version = "0.5.0")
+        @test_throws PkgError Pkg.add(name = "Example", version = v"0.5.0")
+        @test_throws PkgError Pkg.add(name = "Example", version = "0.5")
+        @test_throws PkgError Pkg.add(name = "Example", rev = "master")
         # We check that the package state is left unchanged.
+        Pkg.dependencies(exuuid) do ex
+            @test ex.version == v"0.3.0"
+            @test ex.is_tracking_registry
+            @test ex.is_pinned
+        end
+        # A version spec that includes the pinned version, or no version at all, keeps the pin.
+        Pkg.add(name = "Example", version = "0.3.0")
+        Pkg.add(name = "Example", version = "0.3")
+        Pkg.add(name = "Example", version = v"0.3.0")
+        Pkg.add("Example")
         Pkg.dependencies(exuuid) do ex
             @test ex.version == v"0.3.0"
             @test ex.is_tracking_registry
@@ -422,7 +435,7 @@ end
             end
         end
     end
-    # Add by URL should not override pin.
+    # Add by URL should error rather than silently keep the pin.
     isolate(loaded_depot = true) do
         Pkg.add(name = "Example", version = "0.3.0")
         Pkg.pin(name = "Example")
@@ -431,7 +444,7 @@ end
             @test ex.is_tracking_registry
             @test ex.version == v"0.3.0"
         end
-        Pkg.add(url = "https://github.com/JuliaLang/Example.jl")
+        @test_throws PkgError Pkg.add(url = "https://github.com/JuliaLang/Example.jl")
         Pkg.dependencies(exuuid) do ex
             @test ex.is_pinned
             @test ex.is_tracking_registry
