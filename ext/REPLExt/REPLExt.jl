@@ -354,6 +354,16 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     end
 end
 
+function prompt_to_disambiguate_name(name, repo_infos)
+    # prompt for which UUID was intended:
+    menu = TerminalMenus.RadioMenu(String["Registry: $(value[1]) - Repo: $(value[2]) - UUID: $(value[3])" for value in repo_infos])
+    choice = TerminalMenus.request("There are multiple registered `$name` packages, choose one:", menu)
+    return if choice == -1
+        nothing
+    else
+        repo_infos[choice]
+    end
+end
 
 function __init__()
     # Clear any cached prompt baked in during precompilation.
@@ -374,6 +384,7 @@ function __init__()
             end
         end
     end
+    Pkg.Types.name_disambiguation_hook[] = prompt_to_disambiguate_name
     return if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
         push!(REPL.install_packages_hooks, try_prompt_pkg_add)
     end
