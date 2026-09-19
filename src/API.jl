@@ -665,7 +665,9 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
             end
 
             for (filename, infos) in parse_toml(usage_filepath)
-                f.(Ref(filename), infos)
+                for info in infos::Vector{Any}
+                    f(filename, info::Dict{String, Any})
+                end
             end
             return
         end

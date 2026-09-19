@@ -2,6 +2,7 @@ using Base: UUID, SHA1
 using TOML
 using Dates
 using Tar
+import Mmap
 using ..Versions: VersionSpec, VersionRange
 
 # The content of a registry is assumed to be constant during the
@@ -77,17 +78,18 @@ mutable struct PkgEntry
     const name::String
     const uuid::UUID
 
+    # Index of this package's record in the on-disk registry cache (0 if none)
+    const cache_idx::Int
+
     # Version.toml / (Compat.toml / Deps.toml):
     info::PkgInfo # lazily initialized
 
-    PkgEntry(path, registry_path, name, uuid) = new(path, registry_path, name, uuid #= undef =#)
+    PkgEntry(path, registry_path, name, uuid, cache_idx::Int = 0) = new(path, registry_path, name, uuid, cache_idx #= undef =#)
 end
 
 # Helper to load deps data from Deps.toml or WeakDeps.toml
 # Returns Dict{VersionRange, Set{UUID}} - just lists which deps exist
-function load_deps_data(in_memory_registry, registry_path, pkg_path, filename, name_to_uuid)
-    deps_data_toml = custom_isfile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) ?
-        parsefile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) : Dict{String, Any}()
+function load_deps_data(deps_data_toml::Dict{String, Any}, name_to_uuid)
     deps = Dict{VersionRange, Set{UUID}}()
     for (v, data) in deps_data_toml
         data = data::Dict{String, Any}
@@ -104,9 +106,7 @@ function load_deps_data(in_memory_registry, registry_path, pkg_path, filename, n
 end
 
 # Helper to load compat data from Compat.toml or WeakCompat.toml
-function load_compat_data(in_memory_registry, registry_path, pkg_path, filename, name_to_uuid)
-    compat_data_toml = custom_isfile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) ?
-        parsefile(in_memory_registry, registry_path, joinpath(pkg_path, filename)) : Dict{String, Any}()
+function load_compat_data(compat_data_toml::Dict{String, Any}, name_to_uuid)
     compat = Dict{VersionRange, Dict{UUID, VersionSpec}}()
     for (v, data) in compat_data_toml
         data = data::Dict{String, Any}
@@ -370,6 +370,202 @@ function uncompress_registry(compressed_tar::AbstractString)
     return data
 end
 
+
+###
+### On-disk cache of a compressed (tarball) registry
+###
+# Reading the registry tarball means decompressing it and walking ~75k tar
+# entries on every Julia session that touches the registry. Instead, the
+# uncompressed contents are cached once in a single file with a per-package
+# index, which is memory mapped (read into memory on Windows) so that a session
+# only pays for the packages it touches.
+#
+# Layout (all integers little-endian UInt32 unless noted):
+#   0   magic "JLREGC\0\0" (8 bytes)
+#   8   format version
+#   12  npkgs
+#   16  git-tree-sha1 of the registry (20 bytes)
+#   36  4 × (offset, length) of the registry name, uuid, repo, description
+#   68  npkgs records of RECORD_SIZE bytes:
+#         uuid (16 bytes), (offset, length) of name, path and each of PKG_FILES
+#   ..  blob of string data referenced by the offsets above (offset from file start)
+# A length of typemax(UInt32) marks a missing string/file.
+#
+# Cache files are named by the registry's tree hash and never overwritten.
+
+const CACHE_MAGIC = b"JLREGC\0\0"
+const CACHE_VERSION = UInt32(1)
+const CACHE_MISSING = typemax(UInt32)
+const PKG_FILES = ("Package.toml", "Versions.toml", "Deps.toml", "WeakDeps.toml", "Compat.toml", "WeakCompat.toml")
+const CACHE_HEADER_SIZE = 36 + 4 * 8
+const RECORD_SIZE = 16 + 8 * (2 + length(PKG_FILES))
+
+struct RegistryCache
+    data::Vector{UInt8} # file contents (memory mapped, except on Windows)
+    npkgs::Int
+end
+
+registry_cache_enabled() = Base.get_bool_env("JULIA_PKG_REGISTRY_CACHE", true)
+registry_cache_dir(compressed_tar::AbstractString) = joinpath(dirname(compressed_tar), ".cache")
+function registry_cache_path(compressed_tar::AbstractString, tree_hash::SHA1)
+    name = first(split(basename(compressed_tar), '.'))
+    return joinpath(registry_cache_dir(compressed_tar), "$(name)-$(tree_hash).v$(CACHE_VERSION).bin")
+end
+
+@inline function _cache_u32(c::RegistryCache, off::Int)
+    data = c.data
+    @boundscheck checkbounds(data, off + 4)
+    return GC.@preserve data unsafe_load(Ptr{UInt32}(pointer(data, off + 1)))
+end
+function _cache_string(c::RegistryCache, off::Int)
+    soff, slen = _cache_u32(c, off), _cache_u32(c, off + 4)
+    slen == CACHE_MISSING && return nothing
+    data = c.data
+    checkbounds(data, Int(soff) + Int(slen))
+    return GC.@preserve data unsafe_string(pointer(data, Int(soff) + 1), Int(slen))
+end
+cache_header_string(c::RegistryCache, i::Int) = _cache_string(c, 36 + 8 * (i - 1))
+record_offset(idx::Int) = CACHE_HEADER_SIZE + RECORD_SIZE * (idx - 1)
+function cache_pkg_uuid(c::RegistryCache, idx::Int)
+    off = record_offset(idx)
+    data = c.data
+    checkbounds(data, off + 16)
+    return UUID(GC.@preserve data unsafe_load(Ptr{UInt128}(pointer(data, off + 1))))
+end
+cache_pkg_name(c::RegistryCache, idx::Int) = _cache_string(c, record_offset(idx) + 16)::String
+cache_pkg_path(c::RegistryCache, idx::Int) = _cache_string(c, record_offset(idx) + 24)::String
+# `fileno` indexes into `PKG_FILES`
+cache_pkg_file(c::RegistryCache, idx::Int, fileno::Int) = _cache_string(c, record_offset(idx) + 32 + 8 * (fileno - 1))
+
+function load_registry_cache(path::AbstractString, tree_hash::SHA1)
+    isfile(path) || return nothing
+    # Validate the header before reading in the whole file
+    header = try
+        open(io -> read(io, CACHE_HEADER_SIZE), path)
+    catch err
+        @debug "Failed to read registry cache" path exception = (err, catch_backtrace())
+        return nothing
+    end
+    length(header) == CACHE_HEADER_SIZE || return nothing
+    c = RegistryCache(header, 0)
+    view(header, 1:8) == CACHE_MAGIC || return nothing
+    _cache_u32(c, 8) == CACHE_VERSION || return nothing
+    npkgs = Int(_cache_u32(c, 12))
+    all(i -> header[16 + i] == tree_hash.bytes[i], 1:20) || return nothing
+    filesize(path) >= CACHE_HEADER_SIZE + RECORD_SIZE * npkgs || return nothing
+    data = try
+        if Sys.iswindows()
+            # A mapped file can neither be removed nor replaced on Windows, which would
+            # break `registry rm`, registry updates and removing the registries directory.
+            read(path)
+        else
+            open(io -> Mmap.mmap(io, Vector{UInt8}, filesize(io); grow = false, shared = false), path)
+        end
+    catch err
+        @debug "Failed to read registry cache" path exception = (err, catch_backtrace())
+        return nothing
+    end
+    return RegistryCache(data, npkgs)
+end
+
+function write_registry_cache(io::IO, files::Dict{String, String}, tree_hash::SHA1)
+    d = Base.TOML.parse(Base.TOML.Parser{Dates}(files["Registry.toml"]; filepath = "Registry.toml"))
+    pkgs = d["packages"]::Dict{String, Any}
+    npkgs = length(pkgs)
+    blob = IOBuffer()
+    blob_start = CACHE_HEADER_SIZE + RECORD_SIZE * npkgs
+    # returns the (offset, length) pair to be written for `str`
+    function put!(str::Union{String, Nothing})
+        str === nothing && return (UInt32(0), CACHE_MISSING)
+        off = blob_start + position(blob)
+        write(blob, str)
+        return (UInt32(off), UInt32(sizeof(str)))
+    end
+    header = IOBuffer()
+    write(header, CACHE_MAGIC, CACHE_VERSION, UInt32(npkgs), Ref(tree_hash.bytes))
+    for key in ("name", "uuid", "repo", "description")
+        off, len = put!(get(d, key, nothing)::Union{String, Nothing})
+        write(header, off, len)
+    end
+    @assert position(header) == CACHE_HEADER_SIZE
+    for (uuid, info) in pkgs
+        info::Dict{String, Any}
+        name = info["name"]::String
+        path = info["path"]::String
+        write(header, UUID(uuid::String).value)
+        for str in (name, path)
+            off, len = put!(str)
+            write(header, off, len)
+        end
+        for file in PKG_FILES
+            off, len = put!(get(files, path * "/" * file, nothing))
+            write(header, off, len)
+        end
+    end
+    @assert position(header) == blob_start
+    write(io, take!(header))
+    write(io, take!(blob))
+    return
+end
+
+function build_registry_cache(compressed_tar::AbstractString, tree_hash::SHA1, cache_path::AbstractString)
+    files = uncompress_registry(compressed_tar)
+    cache_dir = dirname(cache_path)
+    mkpath(cache_dir)
+    tmp = tempname(cache_dir)
+    try
+        open(io -> write_registry_cache(io, files, tree_hash), tmp, "w")
+        mv(tmp, cache_path; force = true)
+    finally
+        Base.rm(tmp; force = true)
+    end
+    # Remove caches of previous versions of this registry
+    prefix = first(split(basename(compressed_tar), '.')) * "-"
+    for f in readdir(cache_dir; join = true)
+        (startswith(basename(f), prefix) && f != cache_path) || continue
+        try
+            Base.rm(f; force = true)
+        catch err
+            @debug "Failed to remove stale registry cache" f exception = (err, catch_backtrace())
+        end
+    end
+    return
+end
+
+# Remove all cache files for the registry stored in `compressed_tar`
+function remove_registry_cache(compressed_tar::AbstractString)
+    cache_dir = registry_cache_dir(compressed_tar)
+    isdir(cache_dir) || return
+    prefix = first(split(basename(compressed_tar), '.')) * "-"
+    try
+        for f in readdir(cache_dir; join = true)
+            startswith(basename(f), prefix) && Base.rm(f; force = true)
+        end
+        isempty(readdir(cache_dir)) && Base.rm(cache_dir)
+    catch err
+        @debug "Failed to remove registry cache" cache_dir exception = (err, catch_backtrace())
+    end
+    return
+end
+
+# Returns a `RegistryCache` for the tarball, building it if necessary, or
+# `nothing` if the cache cannot be created (e.g. read-only depot).
+function load_or_build_registry_cache(compressed_tar::AbstractString, tree_hash::SHA1)
+    registry_cache_enabled() || return nothing
+    cache_path = registry_cache_path(compressed_tar, tree_hash)
+    cache = load_registry_cache(cache_path, tree_hash)
+    cache === nothing || return cache
+    try
+        build_registry_cache(compressed_tar, tree_hash, cache_path)
+    catch err
+        # Another process may have built the cache in the meantime; that one is as good as ours
+        cache = load_registry_cache(cache_path, tree_hash)
+        cache === nothing && @debug "Failed to build registry cache" cache_path exception = (err, catch_backtrace())
+        return cache
+    end
+    return load_registry_cache(cache_path, tree_hash)
+end
+
 mutable struct RegistryInstance
     path::String
     tree_info::Union{Base.SHA1, Nothing}
@@ -383,6 +579,7 @@ mutable struct RegistryInstance
     description::Union{String, Nothing}
     pkgs::Dict{UUID, PkgEntry}
     in_memory_registry::Union{Nothing, Dict{String, String}}
+    cache::Union{Nothing, RegistryCache}
     # various caches
     name_to_uuids::Dict{String, Vector{UUID}}
 
@@ -398,11 +595,27 @@ mutable struct RegistryInstance
             pkgs::Dict{UUID, PkgEntry}, in_memory_registry::Union{Nothing, Dict{String, String}},
             name_to_uuids::Dict{String, Vector{UUID}}
         )
-        return new(path, tree_info, compressed_file, ReentrantLock(), name, uuid, repo, description, pkgs, in_memory_registry, name_to_uuids)
+        return new(path, tree_info, compressed_file, ReentrantLock(), name, uuid, repo, description, pkgs, in_memory_registry, nothing, name_to_uuids)
     end
 end
 
 const REGISTRY_CACHE = Dict{String, Tuple{Base.SHA1, Bool, RegistryInstance}}()
+
+# Parse the `fileno`th file of `PKG_FILES` for `pkg`, or return `nothing` if it does not exist
+function parse_pkg_file(registry::RegistryInstance, pkg::PkgEntry, fileno::Int)
+    filename = PKG_FILES[fileno]
+    cache = registry.cache
+    if cache !== nothing
+        content = cache_pkg_file(cache, pkg.cache_idx, fileno)
+        content === nothing && return nothing
+        parser = Base.TOML.Parser{Dates}(content; filepath = joinpath(pkg.path, filename))
+        return Base.TOML.parse(parser)
+    end
+    in_memory_registry = registry.in_memory_registry
+    file = joinpath(pkg.path, filename)
+    custom_isfile(in_memory_registry, pkg.registry_path, file) || return nothing
+    return parsefile(in_memory_registry, pkg.registry_path, file)
+end
 
 function init_package_info!(registry::RegistryInstance, pkg::PkgEntry)
     # Thread-safe lazy loading with double-check pattern
@@ -414,7 +627,7 @@ function init_package_info!(registry::RegistryInstance, pkg::PkgEntry)
         path = pkg.registry_path
         in_memory_registry = registry.in_memory_registry
 
-        d_p = parsefile(in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Package.toml"))
+        d_p = something(parse_pkg_file(registry, pkg, 1), Dict{String, Any}())
         name = d_p["name"]::String
         name != pkg.name && error("inconsistent name in Registry.toml ($(name)) and Package.toml ($(pkg.name)) for pkg at $(path)")
         repo = get(d_p, "repo", nothing)::Union{Nothing, String}
@@ -426,8 +639,7 @@ function init_package_info!(registry::RegistryInstance, pkg::PkgEntry)
         deprecated = metadata !== nothing ? get(metadata, "deprecated", nothing)::Union{Nothing, Dict{String, Any}} : nothing
 
         # Versions.toml
-        d_v = custom_isfile(in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) ?
-            parsefile(in_memory_registry, pkg.registry_path, joinpath(pkg.path, "Versions.toml")) : Dict{String, Any}()
+        d_v = something(parse_pkg_file(registry, pkg, 2), Dict{String, Any}())
         version_info = Dict{VersionNumber, VersionInfo}(
             VersionNumber(k) =>
                 VersionInfo(SHA1(v["git-tree-sha1"]::String), get(v, "yanked", false)::Bool) for (k, v) in d_v
@@ -435,19 +647,19 @@ function init_package_info!(registry::RegistryInstance, pkg::PkgEntry)
 
         # Deps.toml (load first to build name -> UUID mapping)
         name_to_uuid = Dict{String, UUID}()
-        deps = load_deps_data(in_memory_registry, pkg.registry_path, pkg.path, "Deps.toml", name_to_uuid)
+        deps = load_deps_data(something(parse_pkg_file(registry, pkg, 3), Dict{String, Any}()), name_to_uuid)
         # All packages depend on julia
         deps[VersionRange()] = Set([JULIA_UUID])
         name_to_uuid["julia"] = JULIA_UUID
 
         # WeakDeps.toml (load to extend name -> UUID mapping)
-        weak_deps = load_deps_data(in_memory_registry, pkg.registry_path, pkg.path, "WeakDeps.toml", name_to_uuid)
+        weak_deps = load_deps_data(something(parse_pkg_file(registry, pkg, 4), Dict{String, Any}()), name_to_uuid)
 
         # Compat.toml (convert names to UUIDs using the mapping)
-        compat = load_compat_data(in_memory_registry, pkg.registry_path, pkg.path, "Compat.toml", name_to_uuid)
+        compat = load_compat_data(something(parse_pkg_file(registry, pkg, 5), Dict{String, Any}()), name_to_uuid)
 
         # WeakCompat.toml (convert names to UUIDs using the mapping)
-        weak_compat = load_compat_data(in_memory_registry, pkg.registry_path, pkg.path, "WeakCompat.toml", name_to_uuid)
+        weak_compat = load_compat_data(something(parse_pkg_file(registry, pkg, 6), Dict{String, Any}()), name_to_uuid)
 
         #=
         # These validations are a bit too expensive
@@ -473,7 +685,7 @@ function init_package_info!(registry::RegistryInstance, pkg::PkgEntry)
 
         # Free memory: delete the package's files from in_memory_registry since we've fully parsed them
         if in_memory_registry !== nothing
-            for filename in ("Package.toml", "Versions.toml", "Deps.toml", "WeakDeps.toml", "Compat.toml", "WeakCompat.toml")
+            for filename in PKG_FILES
                 delete!(in_memory_registry, to_tar_path_format(joinpath(pkg.path, filename)))
             end
         end
@@ -489,28 +701,51 @@ registry_info(registry::RegistryInstance, pkg::PkgEntry) = init_package_info!(re
         # Double-check pattern: if another thread loaded while we were waiting for the lock
         isdefined(r, :pkgs) && return r
 
-        if getfield(r, :compressed_file) !== nothing
-            r.in_memory_registry = uncompress_registry(joinpath(dirname(getfield(r, :path)), getfield(r, :compressed_file)))
+        compressed_file = getfield(r, :compressed_file)
+        tree_info = getfield(r, :tree_info)
+        r.cache = nothing
+        r.in_memory_registry = nothing
+        if compressed_file !== nothing
+            compressed_tar = joinpath(dirname(getfield(r, :path)), compressed_file)
+            if tree_info !== nothing
+                r.cache = load_or_build_registry_cache(compressed_tar, tree_info)
+            end
+            if r.cache === nothing
+                r.in_memory_registry = uncompress_registry(compressed_tar)
+            end
+        end
+
+        cache = r.cache
+        if cache !== nothing
+            r.name = cache_header_string(cache, 1)::String
+            r.uuid = UUID(cache_header_string(cache, 2)::String)
+            r.repo = cache_header_string(cache, 3)
+            r.description = cache_header_string(cache, 4)
+            pkgs = Dict{UUID, PkgEntry}()
+            sizehint!(pkgs, cache.npkgs)
+            for idx in 1:cache.npkgs
+                uuid = cache_pkg_uuid(cache, idx)
+                pkgs[uuid] = PkgEntry(cache_pkg_path(cache, idx), getfield(r, :path), cache_pkg_name(cache, idx), uuid, idx)
+            end
+            r.pkgs = pkgs
         else
-            r.in_memory_registry = nothing
-        end
+            d = parsefile(r.in_memory_registry, getfield(r, :path), "Registry.toml")
+            r.name = d["name"]::String
+            r.uuid = UUID(d["uuid"]::String)
+            r.repo = get(d, "repo", nothing)::Union{String, Nothing}
+            r.description = get(d, "description", nothing)::Union{String, Nothing}
 
-        d = parsefile(r.in_memory_registry, getfield(r, :path), "Registry.toml")
-        r.name = d["name"]::String
-        r.uuid = UUID(d["uuid"]::String)
-        r.repo = get(d, "repo", nothing)::Union{String, Nothing}
-        r.description = get(d, "description", nothing)::Union{String, Nothing}
-
-        pkgs = Dict{UUID, PkgEntry}()
-        for (uuid, info) in d["packages"]::Dict{String, Any}
-            uuid = UUID(uuid::String)
-            info::Dict{String, Any}
-            name = info["name"]::String
-            pkgpath = info["path"]::String
-            pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid)
-            pkgs[uuid] = pkg
+            pkgs = Dict{UUID, PkgEntry}()
+            for (uuid, info) in d["packages"]::Dict{String, Any}
+                uuid = UUID(uuid::String)
+                info::Dict{String, Any}
+                name = info["name"]::String
+                pkgpath = info["path"]::String
+                pkg = PkgEntry(pkgpath, getfield(r, :path), name, uuid)
+                pkgs[uuid] = pkg
+            end
+            r.pkgs = pkgs
         end
-        r.pkgs = pkgs
 
         r.name_to_uuids = Dict{String, Vector{UUID}}()
 
