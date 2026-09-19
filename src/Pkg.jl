@@ -241,9 +241,9 @@ See also [`PackageSpec`](@ref), [`Pkg.develop`](@ref).
 const add = API.add
 
 """
-    Pkg.precompile(; strict::Bool=false, timing::Bool=false, workspace::Bool=false)
-    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false, workspace::Bool=false)
-    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false, workspace::Bool=false)
+    Pkg.precompile(; strict::Bool=false, timing::Bool=false, workspace::Bool=false, skip_dependents::Bool=true, force::Bool=false)
+    Pkg.precompile(pkg; strict::Bool=false, timing::Bool=false, workspace::Bool=false, skip_dependents::Bool=true, force::Bool=false)
+    Pkg.precompile(pkgs; strict::Bool=false, timing::Bool=false, workspace::Bool=false, skip_dependents::Bool=true, force::Bool=false)
     Pkg.precompile(f, args...; kwargs...)
 
 Precompile all or specific dependencies of the project in parallel.
@@ -252,6 +252,14 @@ Set `timing=true` to show the duration of the precompilation of each dependency.
 
 Set `workspace=true` to precompile every project in the workspace rather than only the
 active one.
+
+When a package fails to precompile, the packages that depend on it are skipped rather than
+attempted, since loading the failed dependency would fail again. Set `skip_dependents=false`
+(`pkg> precompile --noskip`) to attempt them anyway, for example when a package only loads
+that dependency on some platforms.
+
+Set `force=true` (`pkg> precompile --force`) to recompile packages even if their cache files are
+already up to date. Standard libraries are never recompiled by this.
 
 To delay autoprecompilation of multiple Pkg actions until the end use.
 This may be most efficient while manipulating the environment in various ways.
@@ -294,6 +302,9 @@ During interactive precompilation the following keyboard controls are available:
 
 !!! compat "Julia 1.14"
     Keyboard controls during precompilation require at least Julia 1.14.
+
+!!! compat "Julia 1.14"
+    `skip_dependents` and `force` require at least Julia 1.14.
 
 # Examples
 ```julia
