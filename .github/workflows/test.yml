@@ -71,7 +71,7 @@ jobs:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
       - uses: julia-actions/cache@v3
-      - name: Use three test workers on macOS
+      - name: Lower worker RSS on macOS
         # The macOS runners have little free memory, so the test runner
         # would use a single worker. Three workers fit if each is restarted
         # once its RSS grows past 1.2 GiB.
