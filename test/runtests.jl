@@ -188,7 +188,7 @@ module PkgTestsInner
         end
 
         try
-            runtests(Pkg, args; testsuite, init_code, init_worker_code, memory_per_worker)
+            runtests(Pkg, args; testsuite, init_code, init_worker_code, memory_per_worker = 2^30)
         finally
             islogging && close(default_io)
             cd(original_wd)
