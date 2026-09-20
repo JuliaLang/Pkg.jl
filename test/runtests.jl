@@ -127,6 +127,7 @@ module PkgTestsInner
 
         using ParallelTestRunner
 
+        push!(ARGS, "--verbose")
         args = ParallelTestRunner.parse_args(ARGS)
 
         testsuite = Dict{String, Expr}()
@@ -187,7 +188,7 @@ module PkgTestsInner
         end
 
         try
-            runtests(Pkg, args; testsuite, init_code, init_worker_code)
+            runtests(Pkg, args; testsuite, init_code, init_worker_code, memory_per_worker)
         finally
             islogging && close(default_io)
             cd(original_wd)
