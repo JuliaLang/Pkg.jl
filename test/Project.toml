@@ -21,4 +21,4 @@ UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 [compat]
 Aqua = "0.8.10"
 HistoricalStdlibVersions = "2"
-ParallelTestRunner = "2.8"
+ParallelTestRunner = "2.9"
