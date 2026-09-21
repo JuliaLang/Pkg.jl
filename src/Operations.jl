@@ -829,6 +829,76 @@ function workspace_project_files(env::EnvCache)
     return sort!(files; by = first)
 end
 
+# The line each of a TOML file's entries is written on, by section and key:
+# `lines["compat"]["DataFrames"]`. TOML.parse drops line numbers, and an editor
+# opens `path:line`, so the file's text is scanned for its entries -- once per
+# file, whatever the number of entries asked about afterwards. A file that
+# cannot be read has no entries, and is named by its path alone.
+function toml_entry_lines(path::AbstractString)
+    entries = Dict{String, Dict{String, Int}}()
+    text = try
+        readlines(path)
+    catch
+        return entries
+    end
+    section = ""
+    for (i, line) in enumerate(text)
+        header = match(r"^\s*\[\s*([^\[\]]*?)\s*\]", line)
+        if header !== nothing
+            section = header[1]
+            continue
+        end
+        entry = match(r"^\s*(\"[^\"]*\"|'[^']*'|[^\s=.\[\]#]+)\s*=", line)
+        entry === nothing && continue
+        key = entry[1]
+        if startswith(key, '"') || startswith(key, '\'')
+            key = key[nextind(key, 1):prevind(key, lastindex(key))]
+        end
+        keys_in_section = get!(Dict{String, Int}, entries, section)
+        haskey(keys_in_section, key) || (keys_in_section[key] = i)
+    end
+    return entries
+end
+
+# Where an entry is declared, said the way the resolver prints it: the project
+# file's path, and the line the entry is on when `lines` has one, so that
+# `path:line` is something an editor opens at the line to change. The first of
+# `sections` that has an entry for `name` wins; the bare path is the answer
+# when none of them does, a generated or unusually written file being no
+# reason to say nothing.
+function entry_source(file::AbstractString, lines::Dict{String, Dict{String, Int}}, sections, name::AbstractString)
+    for section in sections
+        keys_in_section = get(lines, section, nothing)
+        keys_in_section === nothing && continue
+        line = get(keys_in_section, name, nothing)
+        line === nothing || return "$file:$line"
+    end
+    return String(file)
+end
+
+# Where the workspace declares each package, by package name: the compat
+# entries its project files hold, keyed by the place each is declared, and the
+# places that list the package as a dependency. Each project file is read
+# once. Empty outside a workspace, where there is one project file and the
+# reader is already in it.
+function workspace_sources(env::EnvCache)
+    compat = Dict{String, Dict{String, VersionSpec}}()
+    deps = Dict{String, Vector{String}}()
+    isempty(env.workspace) && return compat, deps
+    root = workspace_root(env)
+    for (file, project) in workspace_project_files(env)
+        lines = toml_entry_lines(joinpath(root, file))
+        for (name, entry) in project.compat
+            source = entry_source(file, lines, ("compat",), name)
+            get!(Dict{String, VersionSpec}, compat, name)[source] = entry.val
+        end
+        for name in keys(project.deps)
+            push!(get!(Vector{String}, deps, name), entry_source(file, lines, ("deps", "weakdeps", "extras"), name))
+        end
+    end
+    return compat, deps
+end
+
 # The error for a requirement that no version satisfies together with the
 # compat of the project(s): in a workspace, say which files declare compat
 # for the package, since the intersection alone does not tell whose entry to change.
@@ -914,6 +984,13 @@ function resolve_versions!(
     @assert length(Set(pkg.uuid::UUID for pkg in pkgs)) == length(pkgs)
 
     # check compat
+    # where the workspace declares each package: the compat entries that were
+    # intersected into the requirement spec, and the files that list it as a
+    # dependency, each naming the line of the entry, so that a failed resolve
+    # can say which line of which file to edit
+    workspace_compat, workspace_deps = workspace_sources(env)
+    compat_sources = Dict{UUID, Dict{String, VersionSpec}}()
+    req_sources = Dict{UUID, Vector{String}}()
     for pkg in pkgs
         compat = get_compat_workspace(env, pkg.name)
         v = intersect(pkg.version, compat)
@@ -924,6 +1001,10 @@ function resolve_versions!(
         if !(pkg.version isa VersionNumber)
             pkg.version = v
         end
+        entries = get(workspace_compat, pkg.name, nothing)
+        entries === nothing || (compat_sources[pkg.uuid] = entries)
+        files = get(workspace_deps, pkg.name, nothing)
+        files === nothing || (req_sources[pkg.uuid] = files)
     end
 
     for pkg in pkgs
@@ -946,7 +1027,7 @@ function resolve_versions!(
         vers = SATResolve.resolve_versions(
             deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
             pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, julia_version, preferred_versions;
-            pinned, diagnose_unsat
+            pinned, compat_sources, req_sources, diagnose_unsat
         )
     else
         graph = Resolve.Graph(

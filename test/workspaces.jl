@@ -214,6 +214,35 @@ end
                     e
                 end
             end
+            # compat entries in different members conflict: the diagnosis
+            # attributes each one to the line of the file it is written on, and
+            # the fixes say which entry to relax
+            err = workspace(
+                [
+                    "Sub1" => """
+                        [deps]
+                        DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+
+                        [compat]
+                        DataFrames = "1.7"
+                        """,
+                    "Sub2" => """
+                        [deps]
+                        PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+
+                        [compat]
+                        PrettyTables = "1"
+                        """,
+                ]
+            )
+            @test err isa ResolverError
+            @test occursin("Conflict 1: DataFrames (Sub1/Project.toml:2)", err.msg)
+            @test occursin("your compat (Sub1/Project.toml:5) restricts DataFrames", err.msg)
+            @test occursin("your compat (Sub2/Project.toml:5) restricts PrettyTables", err.msg)
+            @test occursin("relax your compat on PrettyTables (Sub2/Project.toml:5)", err.msg)
+            @test occursin("relax your compat on DataFrames (Sub1/Project.toml:5)", err.msg)
+            @test occursin("drop dependency DataFrames (Sub1/Project.toml:2)", err.msg)
+            @test !occursin("your compat restricts", err.msg)
             # entries on the same package that admit nothing in common are
             # caught before resolving, and listed per file
             err = workspace(
