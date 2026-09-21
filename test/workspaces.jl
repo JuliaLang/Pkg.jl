@@ -5,6 +5,7 @@ using Test
 using TOML
 using UUIDs
 using ..Utils
+using ..Pkg.Resolve: ResolverError
 
 temp_pkg_dir() do project_path
     cd(project_path) do;
@@ -189,6 +190,54 @@ end
                     end
                 end
             end
+        end
+    end
+end
+
+@testset "resolver errors name the workspace project file" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do dir
+            function workspace(members)
+                root = joinpath(dir, "ws")
+                rm(root; force = true, recursive = true)
+                mkpath(root)
+                write(joinpath(root, "Project.toml"), "[workspace]\nprojects = [\"Sub1\", \"Sub2\"]\n")
+                for (name, toml) in members
+                    mkpath(joinpath(root, name))
+                    write(joinpath(root, name, "Project.toml"), toml)
+                end
+                Pkg.activate(root)
+                return try
+                    Pkg.resolve()
+                    nothing
+                catch e
+                    e
+                end
+            end
+            # entries on the same package that admit nothing in common are
+            # caught before resolving, and listed per file
+            err = workspace(
+                [
+                    "Sub1" => """
+                        [deps]
+                        JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+
+                        [compat]
+                        JSON = "0.21"
+                        """,
+                    "Sub2" => """
+                        [deps]
+                        JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+
+                        [compat]
+                        JSON = "1"
+                        """,
+                ]
+            )
+            @test err isa ResolverError
+            @test occursin("workspace compatibility", err.msg)
+            @test occursin("* Sub1/Project.toml: JSON = \"0.21\"", err.msg)
+            @test occursin("* Sub2/Project.toml: JSON = \"1\"", err.msg)
         end
     end
 end
