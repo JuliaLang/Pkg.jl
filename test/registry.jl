@@ -582,6 +582,51 @@ end
     end
 end
 
+@testset "update of a shallow git registry" begin
+    # Registries are cloned with depth 1 and updated with depth-1 fetches. In
+    # a shallow clone the new tip is then disconnected from the local HEAD, so
+    # it cannot be fast-forwarded to, and rebasing the old tip onto it fails.
+    # Local transports do not support shallow fetches, so the shape of such a
+    # clone is recreated here by hand through the `.git/shallow` graft file.
+    temp_pkg_dir() do depot
+        regdir = mktempdir()
+        setup_test_registries(regdir)
+        upstream = joinpath(regdir, "RegistryFoo1")
+        Registry.add(url = upstream; io = devnull)
+        installed = joinpath(depots1(), "registries", "RegistryFoo")
+        @test isdir(joinpath(installed, ".git"))
+        old_head, branch = LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            LibGit2.head_oid(repo), LibGit2.headname(repo)
+        end
+
+        # A new commit upstream
+        write(joinpath(upstream, "README.md"), "updated\n")
+        new_head = LibGit2.with(LibGit2.GitRepo(upstream)) do repo
+            LibGit2.add!(repo, "README.md")
+            LibGit2.commit(repo, "update"; author = Utils.TEST_SIG, committer = Utils.TEST_SIG)
+        end
+
+        # Fetch it as a depth-1 fetch would: the new tip is present but grafted
+        # to have no parent, and so is the old HEAD.
+        LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            LibGit2.fetch(repo; refspecs = ["+refs/heads/$branch:refs/remotes/origin/$branch"])
+        end
+        write(joinpath(installed, ".git", "shallow"), string(old_head) * "\n" * string(new_head) * "\n")
+        LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            @test LibGit2.isshallow(repo)
+            @test !(@test_logs (:warn, "Cannot perform fast-forward merge") LibGit2.merge!(repo; branch = "refs/remotes/origin/$branch", fastforward = true))
+        end
+
+        @test_logs Registry.update(; io = devnull, update_cooldown = Second(0))
+        LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            @test LibGit2.head_oid(repo) == new_head
+            @test !LibGit2.isdirty(repo)
+            @test LibGit2.isattached(repo)
+        end
+        @test read(joinpath(installed, "README.md"), String) == "updated\n"
+    end
+end
+
 @testset "Offline registry operations" begin
     mktempdir() do dir
         setup_test_registries(dir)
