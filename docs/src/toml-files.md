@@ -361,9 +361,11 @@ the versioned format, and Pkg will subsequently maintain it through its operatio
 
 ### `Manifest.toml` entries
 
-There are three top-level entries in the manifest which could look like this:
+There are a few top-level entries in the manifest which could look like this:
 
 ```toml
+environment_id = "d3f9a0c4-6b1e-4f7a-9c2d-8e5b1a7f3c60"
+environment_name = "MyApp"
 julia_version = "1.8.2"
 manifest_format = "2.0"
 project_hash = "4d9d5b552a1236d3c1171abf88d59da3aaac328a"
@@ -373,11 +375,25 @@ This shows the Julia version the manifest was created on, the "format" of the ma
 and a hash of the project file, so that it is possible to see when the manifest is stale
 compared to the project file.
 
+The `environment_id` identifies the environment: it is the `uuid` of the project file
+when there is one, and otherwise a UUID generated the first time the manifest is written
+and kept from then on. Julia mixes it into the names of precompile cache files, so
+environments at the same path (say, projects mounted at `/work` in different containers
+sharing a depot) do not overwrite each other's caches. The `environment_name` is the
+`name` of the project file and is left out when the project has none. Both are updated
+whenever Pkg writes the manifest, so they follow changes to the project file.
+
+!!! compat
+    `environment_id` and `environment_name` are written by Pkg in Julia 1.14+, and their
+    presence bumps the manifest format to `"2.2"`.
+
 #### Manifest format versions
 
 The `manifest_format` field indicates the structure version of the manifest file:
 - `"2.0"`: The standard format for Julia 1.7+
-- `"2.1"`: The current format (requires Julia 1.13+). This format introduced registry tracking in the `[registries]` section.
+- `"2.1"`: Requires Julia 1.13+. This format introduced registry tracking in the `[registries]` section.
+- `"2.2"`: The current format (requires Julia 1.14+). This format introduced the `environment_id` and
+  `environment_name` entries.
 
 ### The `[registries]` section
 
