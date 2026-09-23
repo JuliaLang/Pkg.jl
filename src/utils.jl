@@ -163,6 +163,14 @@ function isfile_nothrow(path::String)
     end
 end
 
+function ispath_nothrow(path::AbstractString)
+    return try
+        ispath(path)
+    catch e
+        false
+    end
+end
+
 
 """
     atomic_toml_write(path::String, data; private::Bool = false, kws...)
