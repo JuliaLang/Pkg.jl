@@ -1336,6 +1336,14 @@ function instantiate(
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
         return instantiate(Context(); manifest = manifest, update_registry = update_registry, verbose = verbose, platform = platform, allow_build = allow_build, allow_autoprecomp = allow_autoprecomp, workspace = workspace, julia_version_strict = julia_version_strict, update_on_mismatch = update_on_mismatch, kwargs...)
     end
+
+    # Check for empty environment early
+    if isempty(ctx.env.project.deps) && isempty(ctx.env.manifest)
+        env_path = isfile(ctx.env.project_file) ? dirname(ctx.env.project_file) : dirname(ctx.env.manifest_file)
+        printpkgstyle(ctx.io, :Instantiate, "called on an empty environment: $(pathrepr(env_path))", color = Base.warn_color())
+        return
+    end
+
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
