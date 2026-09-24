@@ -13,7 +13,7 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
     list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url,
-    http_server, stalling_http_server
+    http_server, stalling_http_server, host_deps_depot
 
 # The cache directory is shared between the test-runner main process and its
 # worker processes: the first process to include this file creates the
@@ -40,6 +40,12 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 const COMPILED_SUBDIR = joinpath("compiled", "v$(VERSION.major).$(VERSION.minor)")
 const THIS_PKG_COMPILE_CACHE = joinpath(Base.DEPOT_PATH[1], COMPILED_SUBDIR)
 
+# The depot that hosts the dev Pkg's non-stdlib deps (Resolver and its deps).
+# Subprocesses that load the dev Pkg with an isolated JULIA_DEPOT_PATH need it
+# appended so code loading can find them.
+host_deps_depot() =
+    abspath(joinpath(dirname(Base.pathof(Pkg.SATResolve.Resolver)), "..", "..", "..", ".."))
+
 function copy_this_pkg_cache(new_depot)
     for p in ("Pkg", "REPLExt")
         source = joinpath(THIS_PKG_COMPILE_CACHE, p)
@@ -53,7 +59,9 @@ function copy_this_pkg_cache(new_depot)
     # a stdlib tracked from a repo or path in the manifest while developing it, are
     # compiled next to Pkg and the Pkg cache is only valid together with them. A
     # source checkout in the depot goes along, since the cache records it relative
-    # to the depot and the subprocesses would otherwise fall back to the stdlib.
+    # to the depot and the subprocesses would otherwise fall back to the stdlib,
+    # and so do the artifacts of such a checkout (libpicosat for Resolver): a JLL
+    # errors in its `__init__` when its artifact is in no visible depot.
     packages_dir = joinpath(dirname(dirname(THIS_PKG_COMPILE_CACHE)), "packages")
     for (id, origin) in Base.pkgorigins
         cachefile = origin.cachepath
@@ -74,6 +82,16 @@ function copy_this_pkg_cache(new_depot)
             isdir(dest_dir) && continue
             mkpath(dirname(dest_dir))
             cp(source_dir, dest_dir)
+            artifacts_toml = joinpath(source_dir, "Artifacts.toml")
+            isfile(artifacts_toml) || continue
+            for (_, meta) in Pkg.Artifacts.select_downloadable_artifacts(artifacts_toml)
+                hash = Base.SHA1(meta["git-tree-sha1"])
+                Pkg.Artifacts.artifact_exists(hash) || continue
+                artifact_dest = joinpath(new_depot, "artifacts", bytes2hex(hash.bytes))
+                isdir(artifact_dest) && continue
+                mkpath(dirname(artifact_dest))
+                cp(Pkg.Artifacts.artifact_path(hash), artifact_dest)
+            end
         end
     end
     return
