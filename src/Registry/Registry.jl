@@ -417,10 +417,13 @@ end
 function rm(regs::Vector{RegistrySpec}; io::IO = stderr_f())
     for registry in find_installed_registries(io, regs; depots = first(Base.DEPOT_PATH))
         printpkgstyle(io, :Removing, "registry `$(registry.name)` from $(Base.contractuser(registry.path))")
+        delete!(REGISTRY_CACHE, registry.path) # drop any mapping of the registry cache
         if isfile(registry.path)
             d = TOML.parsefile(registry.path)
             if haskey(d, "path")
-                Base.rm(joinpath(dirname(registry.path), d["path"]); force = true)
+                compressed_tar = joinpath(dirname(registry.path), d["path"])
+                Base.rm(compressed_tar; force = true)
+                remove_registry_cache(compressed_tar)
             end
         end
         Base.rm(registry.path; force = true, recursive = true)
@@ -523,7 +526,8 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
         # only allow one julia process to update registries in this depot at a time
         FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
             errors = Tuple{String, String}[]
-            registry_urls = pkg_server_registry_urls()
+            # Only ask the pkg server for registry urls if some registry is actually going to be updated
+            registry_urls = nothing
             for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs; depots = [depot]); seen = Set{UUID}())
                 prev_update = get(registry_update_log, string(reg.uuid), nothing)::Union{Nothing, DateTime}
                 if prev_update !== nothing
@@ -544,6 +548,9 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
                         if reg.tree_info !== nothing
                             printpkgstyle(io, :Updating, "registry at " * regpath)
                             old_hash = reg.tree_info
+                            if registry_urls === nothing
+                                registry_urls = pkg_server_registry_urls()
+                            end
                             url = get(registry_urls, reg.uuid, nothing)
                             if url !== nothing
                                 check_registry_state(reg)
@@ -782,7 +789,7 @@ end
 # disk with a git/bare registry, in which case a new Julia may use the
 # former and a sufficiently old Julia the latter.
 function get_registry_type(reg)
-    isnothing(reg.in_memory_registry) || return :packed
+    isnothing(reg.compressed_file) || return :packed
     isnothing(reg.tree_info) || return :unpacked
     isdir(joinpath(reg.path, ".git")) && return :git
     isfile(joinpath(reg.path, "Registry.toml")) && return :bare
