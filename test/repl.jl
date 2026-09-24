@@ -209,6 +209,18 @@ end
             @test length(args) == 1
             @test args[1].url == "ssh://git@server.com/path/repo.git"
             @test args[1].rev == "branch-name"
+
+            api, args, opts = first(Pkg.pkg"add myorg@vs-ssh.example.com:v3/org/proj/Repo.jl#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "myorg@vs-ssh.example.com:v3/org/proj/Repo.jl"
+            @test args[1].rev == "main"
+
+            api, args, opts = first(Pkg.pkg"add file:///tmp/repo#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "file:///tmp/repo"
+            @test args[1].rev == "main"
         end
 
         # Test SSH URLs with IP addresses (issue #1822)
