@@ -3438,6 +3438,10 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     end
     # collect relevant info from source
     source_env = EnvCache(projectfile_path(source_path))
+    # `[sources]` paths are relative to the package's own project file; make them absolute
+    # before they move into the sandbox project, which `sandbox` resolves against the active
+    # project instead (e.g. the workspace root when testing a workspace member)
+    abspath!(source_env, source_env.project)
     # collect regular dependencies
     test_project.deps = source_env.project.deps
     test_project.sources = source_env.project.sources
