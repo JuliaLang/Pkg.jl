@@ -34,48 +34,21 @@ function is_valid_uuid(str::String)
     end
 end
 
+# An all-numeric host in `user@host:path` is a version, not an address, unless it has the three dots
+# of an IPv4 address: `Package@1.2.3:subdir` versus `user@10.20.30.40:Pkg.jl`.
+function looks_like_version_spec(str::String)
+    at_pos = findfirst('@', str)
+    at_pos === nothing && return false
+    colon_pos = findnext(':', str, nextind(str, at_pos))
+    colon_pos === nothing && return false
+    host_part = str[nextind(str, at_pos):prevind(str, colon_pos)]
+    all(c -> isdigit(c) || c == '.', host_part) || return false
+    return count(==('.'), host_part) < 3
+end
+
 # Simple URL detection
 function looks_like_url(str::String)
-    if startswith(str, "http://") || startswith(str, "https://") ||
-            startswith(str, "git@") || startswith(str, "ssh://") ||
-            contains(str, ".git")
-        return true
-    end
-
-    # Check for user@host:path pattern (SSH URL with user)
-    # This handles cases like: user@10.20.30.40:PackageName.jl
-    # The host part should not contain / or @ characters, and should come before the :
-    at_pos = findfirst('@', str)
-    if at_pos !== nothing
-        colon_pos = findnext(':', str, nextind(str, at_pos))
-        if colon_pos !== nothing
-            host_part = str[nextind(str, at_pos):(prevind(str, colon_pos))]
-            # Host should not contain / (which would suggest this is package@version:subdir syntax)
-            # and should look like a hostname or IP address (no spaces, etc.)
-            # Additionally, exclude things that look like version numbers (e.g., "1.0", "1.0.0")
-            # by checking if the host contains only digits and dots (which would be a version or IP)
-            # If it's all digits and dots, it must have at least 3 dots to be an IP (X.X.X.X)
-            if !contains(host_part, '/') && !contains(host_part, ' ') && !isempty(host_part)
-                # Check if this looks like a version number (e.g., "1.0", "1.0.0")
-                # vs an IP address (e.g., "10.20.30.40") or hostname (e.g., "server.com")
-                if all(c -> isdigit(c) || c == '.', host_part)
-                    # All digits and dots - could be version or IP
-                    # Count dots: version has 1-2 dots, IP has 3 dots
-                    dot_count = count(==('.'), host_part)
-                    if dot_count >= 3
-                        # Likely an IP address (X.X.X.X)
-                        return true
-                    end
-                    # else: likely a version number, not a URL
-                else
-                    # Contains letters or other chars - likely a hostname
-                    return true
-                end
-            end
-        end
-    end
-
-    return false
+    return isurl(str) && !looks_like_version_spec(str)
 end
 
 # Simple path detection
@@ -85,11 +58,7 @@ end
 
 # Check if a string looks like a complete URL
 function looks_like_complete_url(str::String)
-    return (
-        startswith(str, "http://") || startswith(str, "https://") ||
-            startswith(str, "git@") || startswith(str, "ssh://")
-    ) &&
-        (contains(str, '.') || contains(str, '/'))
+    return looks_like_url(str) && (contains(str, '.') || contains(str, '/'))
 end
 
 is_windows_drive_colon(str::String) = occursin(r"^[a-zA-Z]:", str)
