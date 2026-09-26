@@ -342,6 +342,9 @@ Base.hash(x::ManifestRegistryEntry, h::UInt) =
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing, VersionNumber} = nothing # only set to VERSION when resolving
     project_hash::Union{Nothing, SHA1} = nothing
+    # identity of the environment, kept in step with the project uuid and name (see `update_environment_info!`)
+    environment_id::Union{Nothing, UUID} = nothing
+    environment_name::Union{Nothing, String} = nothing
     manifest_format::VersionNumber = v"2.0.0"
     deps::Dict{UUID, PackageEntry} = Dict{UUID, PackageEntry}()
     registries::Dict{String, ManifestRegistryEntry} = Dict{String, ManifestRegistryEntry}()
@@ -1496,6 +1499,32 @@ function update_project_sources!(env::EnvCache)
     return env.project
 end
 
+# The project whose directory holds the manifest: the root project of a workspace,
+# otherwise the active project.
+function manifest_project(env::EnvCache)
+    root_project_file = find_root_base_project(env.project_file)
+    root_project_file == env.project_file && return env.project
+    return get(env.workspace, root_project_file) do
+        isfile(root_project_file) ? read_project(root_project_file) : env.project
+    end
+end
+
+# Keep the manifest's `environment_id` and `environment_name` in step with the project:
+# the id copies the project uuid if there is one, otherwise it is generated once and then
+# kept, so environments that share a project path still have distinct identities (Base
+# mixes the id into precompile cache file names). The name mirrors the project name.
+function update_environment_info!(env::EnvCache)
+    project = manifest_project(env)
+    manifest = env.manifest
+    if project.uuid !== nothing
+        manifest.environment_id = project.uuid
+    elseif manifest.environment_id === nothing
+        manifest.environment_id = uuid4()
+    end
+    manifest.environment_name = project.name
+    return manifest
+end
+
 function write_env(
         env::EnvCache; update_undo = true,
         skip_writing_project::Bool = false,
@@ -1510,6 +1539,11 @@ function write_env(
 
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env, skip_readonly_check)
+    end
+    # an existing manifest picks up the environment info on any write; one is never
+    # created just for it
+    if !env.project.readonly && (env.manifest != env.original_manifest || isfile(env.manifest_file))
+        update_environment_info!(env)
     end
     if env.manifest != env.original_manifest
         write_manifest(env)

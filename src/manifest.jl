@@ -178,7 +178,7 @@ end
 manifest_path_str(f_or_io::IO) = "streamed manifest"
 manifest_path_str(path::String) = path
 
-function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any}, registries::Dict{String, ManifestRegistryEntry}, f_or_io)
+function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, environment_id::Union{Nothing, UUID}, environment_name::Union{Nothing, String}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any}, registries::Dict{String, ManifestRegistryEntry}, f_or_io)
     manifest_path = manifest_path_str(f_or_io)
     # expand vector format deps
     for (name, infos) in stage1, info in infos
@@ -214,12 +214,14 @@ function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project
             end
         end
     end
-    return Manifest(; julia_version, project_hash, manifest_format, deps, registries, other)
+    return Manifest(; julia_version, project_hash, environment_id, environment_name, manifest_format, deps, registries, other)
 end
 
 function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
     julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]::String) : nothing
     project_hash = haskey(raw, "project_hash") ? SHA1(raw["project_hash"]::String) : nothing
+    environment_id = haskey(raw, "environment_id") ? UUID(raw["environment_id"]::String) : nothing
+    environment_name = haskey(raw, "environment_name") ? raw["environment_name"]::String : nothing
 
     manifest_format = VersionNumber(raw["manifest_format"]::String)
     if !in(manifest_format.major, 1:2)
@@ -290,12 +292,12 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
 
     other = Dict{String, Any}()
     for (k, v) in raw
-        if k in ("julia_version", "deps", "manifest_format", "registries")
+        if k in ("julia_version", "deps", "manifest_format", "registries", "environment_id", "environment_name")
             continue
         end
         other[k] = v
     end
-    return validate_manifest(julia_version, project_hash, manifest_format, stage1, other, registries, f_or_io)
+    return validate_manifest(julia_version, project_hash, environment_id, environment_name, manifest_format, stage1, other, registries, f_or_io)
 end
 
 function read_manifest(f_or_io::Union{String, IO})
@@ -344,6 +346,9 @@ function destructure(manifest::Manifest)::Dict
     if !isempty(manifest.registries) && manifest.manifest_format < v"2.1.0"
         manifest.manifest_format = v"2.1.0"
     end
+    if (manifest.environment_id !== nothing || manifest.environment_name !== nothing) && manifest.manifest_format < v"2.2.0"
+        manifest.manifest_format = v"2.2.0"
+    end
 
     unique_name = Dict{String, Bool}()
     for (uuid, entry) in manifest
@@ -360,6 +365,12 @@ function destructure(manifest::Manifest)::Dict
         end
         if !isnothing(manifest.project_hash)
             raw["project_hash"] = manifest.project_hash
+        end
+        if !isnothing(manifest.environment_id)
+            raw["environment_id"] = manifest.environment_id
+        end
+        if !isnothing(manifest.environment_name)
+            raw["environment_name"] = manifest.environment_name
         end
         raw["manifest_format"] = string(manifest.manifest_format.major, ".", manifest.manifest_format.minor)
         raw["deps"] = Dict{String, Vector{Dict{String, Any}}}()
@@ -463,28 +474,37 @@ function write_manifest(env::EnvCache)
         pkgerror("Cannot write to readonly manifest file at $(env.manifest_file)")
     end
     mkpath(dirname(env.manifest_file))
-    return write_manifest(env.manifest, env.manifest_file)
+    id = env.manifest.environment_id
+    generated_id = id !== nothing && id != manifest_project(env).uuid
+    return write_manifest(env.manifest, env.manifest_file; generated_id)
 end
-function write_manifest(manifest::Manifest, manifest_file::AbstractString)
+function write_manifest(manifest::Manifest, manifest_file::AbstractString; generated_id::Bool = false)
     if manifest.manifest_format.major == 1
         @warn """The active manifest file at `$(manifest_file)` has an old format.
-        Any package operation (add, remove, update, etc.) will automatically upgrade it to format v2.1.""" maxlog = 1 _id = Symbol(manifest_file)
+        Any package operation (add, remove, update, etc.) will automatically upgrade it to format v2.2.""" maxlog = 1 _id = Symbol(manifest_file)
     end
-    return write_manifest(destructure(manifest), manifest_file)
+    return write_manifest(destructure(manifest), manifest_file; generated_id)
 end
 function write_manifest(io::IO, manifest::Manifest)
     return write_manifest(io, destructure(manifest))
 end
-function write_manifest(io::IO, raw_manifest::Dict)
+function write_manifest(io::IO, raw_manifest::Dict; generated_id::Bool = false)
     print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
-    TOML.print(io, raw_manifest, sorted = true) do x
-        (typeof(x) in [String, Nothing, UUID, SHA1, VersionNumber]) && return string(x)
-        error("unhandled type `$(typeof(x))`")
+    str = sprint() do toml_io
+        TOML.print(toml_io, raw_manifest, sorted = true) do x
+            (typeof(x) in [String, Nothing, UUID, SHA1, VersionNumber]) && return string(x)
+            error("unhandled type `$(typeof(x))`")
+        end
     end
+    # tell readers the id is not the project uuid, since nothing else in the file says where it came from
+    if generated_id
+        str = replace(str, r"^environment_id = .*$"m => s"\0  # generated"; count = 1)
+    end
+    print(io, str)
     return nothing
 end
-function write_manifest(raw_manifest::Dict, manifest_file::AbstractString)
-    str = sprint(write_manifest, raw_manifest)
+function write_manifest(raw_manifest::Dict, manifest_file::AbstractString; generated_id::Bool = false)
+    str = sprint(io -> write_manifest(io, raw_manifest; generated_id))
     mkpath(dirname(manifest_file))
     return write(manifest_file, str)
 end
