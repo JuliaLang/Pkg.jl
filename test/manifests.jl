@@ -34,7 +34,7 @@ end
 ##
 
 @testset "Manifest.toml formats" begin
-    @testset "Default manifest format is v2.1" begin
+    @testset "Default manifest format is v2.2" begin
         isolate(loaded_depot = true) do
             io = IOBuffer()
             Pkg.activate(; io = io, temp = true)
@@ -43,7 +43,7 @@ end
             Pkg.add("Profile")
             env_manifest = Pkg.Types.Context().env.manifest_file
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.2.0"
         end
     end
 
@@ -66,7 +66,7 @@ end
             env_manifest = Pkg.Types.Context().env.manifest_file
             @test samefile(env_manifest, manifest)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.2.0"
 
             # check that having a Project with deps, and an empty manifest file doesn't error
             rm(manifest)
@@ -85,14 +85,14 @@ end
             # Can read v1.0 format
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest))
 
-            # Operations upgrade to v2.1
+            # Operations upgrade to v2.2
             Pkg.add("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.2.0"
 
             Pkg.rm("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.2.0"
         end
     end
 
@@ -104,14 +104,14 @@ end
             @test occursin(r"Activating.*project at.*`.*v2.0`", output)
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
 
-            # Operations upgrade to v2.1
+            # Operations upgrade to v2.2
             Pkg.add("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.2.0"
 
             Pkg.rm("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.1.0"
+            @test Pkg.Types.Context().env.manifest.manifest_format == v"2.2.0"
 
             m = Pkg.Types.read_manifest(env_manifest)
             @test m.other["some_other_field"] == "other"
@@ -179,11 +179,37 @@ end
 
             Pkg.add("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
-            # Manifest format should remain 2.1
-            @test Pkg.Types.read_manifest(env_manifest).manifest_format >= v"2.1.0"
+            # Operations upgrade to 2.2 (environment_id is recorded)
+            @test Pkg.Types.read_manifest(env_manifest).manifest_format == v"2.2.0"
 
             Pkg.rm("Profile")
             @test Base.is_v1_format_manifest(Base.parsed_toml(env_manifest)) == false
+        end
+    end
+
+    @testset "v2.2: activate, change, maintain manifest format with environment info" begin
+        reference_manifest_isolated_test("v2.2") do env_dir, env_manifest
+            m = Pkg.Types.read_manifest(env_manifest)
+            @test m.manifest_format == v"2.2.0"
+            @test m.environment_id == UUID("1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b")
+            @test m.environment_name == "Reference"
+            @test m.other["some_other_field"] == "other"
+            @test !haskey(m.other, "environment_id")
+
+            # Write and read back to verify round-trip
+            mktemp() do path, io
+                Pkg.Types.write_manifest(io, m)
+                close(io)
+                @test Pkg.Types.read_manifest(path) == m
+            end
+
+            # The project has no uuid or name: the recorded id is kept, the name dropped
+            Pkg.activate(env_dir)
+            Pkg.add("Profile")
+            m = Pkg.Types.read_manifest(env_manifest)
+            @test m.manifest_format == v"2.2.0"
+            @test m.environment_id == UUID("1f2e3d4c-5b6a-4798-8a9b-0c1d2e3f4a5b")
+            @test m.environment_name === nothing
         end
     end
 
@@ -265,6 +291,98 @@ end
                 @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
                 Pkg.status(io = iob)
                 @test !occursin(sync_msg_str, String(take!(iob)))
+            end
+        end
+        @testset "environment_id and environment_name follow the project" begin
+            isolate(loaded_depot = true) do
+                manifest() = Pkg.Types.Context().env.manifest
+                raw_manifest() = TOML.parsefile(Pkg.Types.Context().env.manifest_file)
+
+                # no project uuid: an id is generated once and then kept
+                Pkg.activate(; temp = true)
+                Pkg.add("Example")
+                id = manifest().environment_id
+                @test id isa UUID
+                @test manifest().environment_name === nothing
+                raw = raw_manifest()
+                @test raw["environment_id"] == string(id)
+                @test !haskey(raw, "environment_name")
+                @test manifest().manifest_format == v"2.2.0"
+                @test raw["manifest_format"] == "2.2"
+                manifest_text() = read(Pkg.Types.Context().env.manifest_file, String)
+                @test occursin("environment_id = \"$id\"  # generated\n", manifest_text())
+                Pkg.compat("Example", "0.4")
+                @test manifest().environment_id == id
+                Pkg.update()
+                @test manifest().environment_id == id
+                Pkg.rm("Example")
+                @test manifest().environment_id == id
+
+                # the project gains a uuid and a name: the manifest follows on the next write
+                project_file = Pkg.Types.Context().env.project_file
+                project_uuid = UUID("6d9c8a4e-0f3b-4d5a-9e2c-1b7f8a3c5d61")
+                write(
+                    project_file, """
+                    name = "MyEnv"
+                    uuid = "$project_uuid"
+                    """ * read(project_file, String)
+                )
+                @test manifest().environment_id == id
+                Pkg.add("Example")
+                @test manifest().environment_id == project_uuid
+                @test manifest().environment_name == "MyEnv"
+                @test raw_manifest()["environment_name"] == "MyEnv"
+                @test occursin("environment_id = \"$project_uuid\"\n", manifest_text())
+
+                # the name is dropped again when the project loses it
+                write(project_file, replace(read(project_file, String), "name = \"MyEnv\"\n" => ""))
+                Pkg.rm("Example")
+                @test manifest().environment_id == project_uuid
+                @test manifest().environment_name === nothing
+                @test !haskey(raw_manifest(), "environment_name")
+
+                # a manifest from before the entry existed picks it up on the next write
+                write(
+                    Pkg.Types.Context().env.manifest_file,
+                    replace(read(Pkg.Types.Context().env.manifest_file, String), r"environment_id = .*\n" => "")
+                )
+                @test manifest().environment_id === nothing
+                Pkg.add("Example")
+                @test manifest().environment_id == project_uuid
+
+                # the entries round-trip through read and write
+                m = Pkg.Types.read_manifest(Pkg.Types.Context().env.manifest_file)
+                io = IOBuffer()
+                Pkg.Types.write_manifest(io, m)
+                seekstart(io)
+                @test Pkg.Types.read_manifest(io) == m
+            end
+        end
+        @testset "environment_id in a workspace comes from the root project" begin
+            isolate(loaded_depot = true) do
+                mktempdir() do dir
+                    root_uuid = UUID("7e1f2a3b-4c5d-4e6f-8a9b-0c1d2e3f4a5b")
+                    write(
+                        joinpath(dir, "Project.toml"), """
+                        name = "Root"
+                        uuid = "$root_uuid"
+                        [workspace]
+                        projects = ["sub"]
+                        """
+                    )
+                    mkpath(joinpath(dir, "sub"))
+                    write(
+                        joinpath(dir, "sub", "Project.toml"), """
+                        name = "Sub"
+                        uuid = "8f2a3b4c-5d6e-4f70-9a8b-1c2d3e4f5a6b"
+                        """
+                    )
+                    Pkg.activate(joinpath(dir, "sub"))
+                    Pkg.add("Example")
+                    m = Pkg.Types.read_manifest(joinpath(dir, "Manifest.toml"))
+                    @test m.environment_id == root_uuid
+                    @test m.environment_name == "Root"
+                end
             end
         end
     end
@@ -588,8 +706,8 @@ end
                 git_entry = ctx.env.manifest[git_pkg_uuid]
                 @test isempty(git_entry.registries)
 
-                # Manifest format is always 2.1 now
-                @test ctx.env.manifest.manifest_format == v"2.1.0"
+                # Manifest format is always 2.2 now
+                @test ctx.env.manifest.manifest_format == v"2.2.0"
                 # Registries section should be empty since no registry packages
                 @test isempty(ctx.env.manifest.registries)
             end

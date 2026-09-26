@@ -414,7 +414,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     prune_manifest(env)
 
     env.manifest.registries = registry_entries
-    env.manifest.manifest_format = v"2.1.0"
+    env.manifest.manifest_format = v"2.2.0"
     return record_project_hash(env)
 end
 
@@ -1698,6 +1698,10 @@ end
 function selector_environment(env::EnvCache)
     manifest = deepcopy(env.manifest)
     abspath!(env, manifest)
+    # Selectors don't depend on the environment's identity, and the id may be first written
+    # after installation, so leave it out to keep the cached selection valid.
+    manifest.environment_id = nothing
+    manifest.environment_name = nothing
     projects = map(enumerate(Base.get_projects_workspace_to_root(env.project_file))) do (i, file)
         project = deepcopy(i == 1 ? env.project : env.workspace[file])
         project.manifest = nothing
