@@ -458,9 +458,11 @@ end
 # This has to be done after the packages have been downloaded
 # since we need access to the Project file to read the information
 # about extensions
-function fixups_from_projectfile!(ctx::Context)
+# TODO: the registry could record this so that no download is needed (https://github.com/JuliaLang/Pkg.jl/issues/4833)
+function fixups_from_projectfile!(ctx::Context; tmpdir::Union{Nothing, String} = nothing, skip::Set{UUID} = Set{UUID}())
     env = ctx.env
     for pkg in values(env.manifest)
+        pkg.uuid in skip && continue
         if ctx.julia_version !== VERSION && is_stdlib(pkg.uuid, ctx.julia_version)
             # Special handling for non-current julia_version resolving given the source for historical stdlibs
             # isn't available at this stage as Pkg thinks it should not be needed, so rely on STDLIBS_BY_VERSION
@@ -479,6 +481,9 @@ function fixups_from_projectfile!(ctx::Context)
             # isfile_casesenstive within locate_project_file used to error on Windows if given a
             # relative path so abspath it to be extra safe https://github.com/JuliaLang/julia/pull/55220
             sourcepath = source_path(env.manifest_file, pkg)
+            if tmpdir !== nothing && sourcepath !== nothing && !ispath(sourcepath)
+                sourcepath = joinpath(tmpdir, "packages", string(pkg.uuid))
+            end
             if sourcepath === nothing
                 pkgerror("could not find source path for package $(pkg.name) based on manifest $(env.manifest_file)")
             end
@@ -499,6 +504,61 @@ function fixups_from_projectfile!(ctx::Context)
         end
     end
     return prune_manifest(env)
+end
+
+# The lower bound of a package version's julia compat in the registry, which is where its syntax
+# version comes from when the package does not set one.
+function registry_julia_compat_lower(registries::Vector{Registry.RegistryInstance}, uuid::UUID, version::VersionNumber)
+    for reg in registries
+        reg_pkg = get(reg, uuid, nothing)
+        reg_pkg === nothing && continue
+        info = Registry.registry_info(reg, reg_pkg)
+        haskey(info.version_info, version) || continue
+        spec = Registry.query_compat_for_version(info, version, JULIA_UUID)
+        (spec === nothing || spec == VersionSpec()) && return nothing
+        lower = first(spec.ranges).lower
+        return VersionNumber(lower.t[1], lower.t[2], lower.t[3])
+    end
+    return nothing
+end
+
+# An unchanged entry can keep what the previous manifest recorded from the package's project file.
+# Only a Pkg that records the syntax version records all of it. The syntax version can also default
+# to the Julia version that wrote the manifest, so it is only kept if it is the julia compat bound
+# it would otherwise come from, or if it is the version it would default to now.
+function reuse_project_info!(ctx::Context)
+    reused = Set{UUID}()
+    for (uuid, entry) in ctx.env.manifest
+        tracking_registered_version(entry, ctx.julia_version) || continue
+        entry.version isa VersionNumber || continue
+        old_entry = manifest_info(ctx.env.original_manifest, uuid)
+        old_entry === nothing && continue
+        syntax_version = old_entry.julia_syntax_version
+        (old_entry.tree_hash == entry.tree_hash && syntax_version !== nothing) || continue
+        syntax_version == dropbuild(VERSION) ||
+            syntax_version == registry_julia_compat_lower(ctx.registries, uuid, entry.version) || continue
+        entry.weakdeps = copy(old_entry.weakdeps)
+        entry.exts = copy(old_entry.exts)
+        entry.entryfile = old_entry.entryfile
+        entry.julia_syntax_version = old_entry.julia_syntax_version
+        for name in keys(entry.weakdeps)
+            haskey(old_entry.deps, name) || delete!(entry.deps, name)
+        end
+        push!(reused, uuid)
+    end
+    return reused
+end
+
+# Sources that are not installed are only needed for their project files, so they are
+# downloaded to a temporary directory and not kept.
+# TODO: read this from the registry instead, once it records it (https://github.com/JuliaLang/Pkg.jl/issues/4833)
+function lazy_fixups_from_projectfile!(ctx::Context)
+    reused = reuse_project_info!(ctx)
+    return mktempdir() do tmpdir
+        pkgs = [entry for entry in values(ctx.env.manifest) if !(entry.uuid in reused)]
+        download_source(ctx, pkgs; readonly = false, tmpdir)
+        fixups_from_projectfile!(ctx; tmpdir, skip = reused)
+    end
 end
 
 ####################
@@ -1760,7 +1820,7 @@ has_artifact_selector(pkg_root::String) = isfile(joinpath(pkg_root, ".pkg", "sel
 # Collect the source roots whose artifacts need to be considered: every package in `pkgs`
 # (given as `uuid => pkg` pairs) with a source directory, plus the project itself even if
 # it is not a package.
-function artifact_package_info(env::EnvCache, pkgs; julia_version = VERSION)
+function artifact_package_info(env::EnvCache, pkgs; julia_version = VERSION, include_project::Bool = true)
     pkg_info = ArtifactPackageInfo[]
     for (uuid, pkg) in pkgs
         pkg_root = source_path(env.manifest_file, pkg, julia_version)
@@ -1768,7 +1828,7 @@ function artifact_package_info(env::EnvCache, pkgs; julia_version = VERSION)
         push!(pkg_info, (; root = pkg_root, uuid, has_selector = has_artifact_selector(pkg_root)))
     end
     project_root = dirname(env.project_file)
-    if !any(info -> info.root == project_root, pkg_info)
+    if include_project && !any(info -> info.root == project_root, pkg_info)
         push!(
             pkg_info, (;
                 root = project_root,
@@ -1836,13 +1896,14 @@ function download_artifacts(
         julia_version = VERSION,
         verbose::Bool = false,
         io::IO = stderr_f(),
-        include_lazy::Bool = false
+        include_lazy::Bool = false,
+        include_project::Bool = true
     )
     env = ctx.env
     io = ctx.io
     pkg_uuids = Set(pkg.uuid for pkg in pkgs)
     manifest_pkgs = [uuid => manifest_info(env.manifest, uuid) for uuid in keys(env.manifest) if uuid in pkg_uuids]
-    pkg_info = artifact_package_info(env, manifest_pkgs; julia_version)
+    pkg_info = artifact_package_info(env, manifest_pkgs; julia_version, include_project)
     used_artifact_tomls = Set{String}()
 
     # A selector dependency must be able to initialize before its consumer's hook runs.
@@ -1948,7 +2009,8 @@ function find_urls(registries::Vector{Registry.RegistryInstance}, uuid::UUID)
 end
 
 
-download_source(ctx::Context; readonly::Bool = true) = download_source(ctx, collect(values(ctx.env.manifest)); readonly)
+download_source(ctx::Context; readonly::Bool = true, tmpdir::Union{Nothing, String} = nothing) =
+    download_source(ctx, collect(values(ctx.env.manifest)); readonly, tmpdir)
 
 function count_artifacts(pkg_root::String; platform::AbstractPlatform = HostPlatform())
     for f in artifact_names
@@ -1969,13 +2031,19 @@ function artifact_suffix(artifact_counts)
     return ""
 end
 
-function download_source(ctx::Context, pkgs; readonly::Bool = true)
+# With `tmpdir`, sources that are not installed are downloaded into it instead of the depot.
+function download_source(ctx::Context, pkgs; readonly::Bool = true, tmpdir::Union{Nothing, String} = nothing)
     pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
     pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
     for pkg in pkgs
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
         path === nothing && continue
+        if tmpdir !== nothing
+            ispath(path) && continue
+            push!(pkgs_to_install, (; pkg, urls = find_urls(ctx.registries, pkg.uuid), path = joinpath(tmpdir, "packages", string(pkg.uuid))))
+            continue
+        end
         if ispath(path) && iswritable(path)
             pidfile = path * ".pid"
         else
@@ -1994,6 +2062,7 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
     end
 
     length(pkgs_to_install) == 0 && return Set{UUID}()
+    done_verb = tmpdir === nothing ? :Installed : :Downloaded
 
     ########################################
     # Install from archives asynchronously #
@@ -2089,7 +2158,7 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
                             "[$short_treehash]"
                         end
                         artifact_str = artifact_suffix(count_artifacts(path))
-                        printpkgstyle(io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr, artifact_str))
+                        printpkgstyle(io, done_verb, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr, artifact_str))
                         fancyprint && show_progress(io, bar)
                     end
                 end
@@ -2116,7 +2185,7 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
                 "[$short_treehash]"
             end
             artifact_str = artifact_suffix(count_artifacts(path))
-            printpkgstyle(ctx.io, :Installed, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr, artifact_str))
+            printpkgstyle(ctx.io, done_verb, string(rpad(pkg.name * " ", max_name + 2, "─"), " ", vstr, artifact_str))
         end
     end
 
@@ -2296,6 +2365,39 @@ pkg_scratchpath() = joinpath(depots1(), "scratchspaces", PkgUUID)
 
 builddir(source_path::String) = joinpath(source_path, "deps")
 buildfile(source_path::String) = joinpath(builddir(source_path), "build.jl")
+
+function manifest_deps_closure(env::EnvCache, uuids)
+    entries = PackageEntry[]
+    for uuid in keys(dependency_order_uuids(env, collect(UUID, uuids)))
+        entry = manifest_info(env.manifest, uuid)
+        entry === nothing || push!(entries, entry)
+    end
+    return entries
+end
+
+# Repos are checked out into the depot even in lazy mode, so those packages and their dependencies
+# are installed fully instead of being left without artifacts or builds.
+function install_lazy_checkouts(ctx::Context, new_git::Set{UUID}; platform::AbstractPlatform = HostPlatform())
+    uuids = filter(uuid -> haskey(ctx.env.manifest, uuid), new_git)
+    # repos can also be checked out while resolving, e.g. for the `[sources]` of another repo
+    for (uuid, entry) in ctx.env.manifest
+        (entry.repo.source === nothing || entry.tree_hash === nothing) && continue
+        old_entry = manifest_info(ctx.env.original_manifest, uuid)
+        (old_entry === nothing || old_entry.tree_hash != entry.tree_hash) && push!(uuids, uuid)
+    end
+    isempty(uuids) && return
+    closure = manifest_deps_closure(ctx.env, uuids)
+    new_apply = download_source(ctx, closure)
+    # the project's own artifacts may need packages outside of this closure
+    download_artifacts(ctx, closure; platform, julia_version = ctx.julia_version, include_project = false)
+    return build_versions(ctx, union(new_apply, uuids))
+end
+
+function print_lazy_note(io::IO)
+    cmd = Pkg.in_repl_mode() ? "pkg> instantiate" : "Pkg.instantiate()"
+    return printpkgstyle(io, :Info, "Run `$cmd` to finish installing.", color = Base.info_color())
+end
+
 function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_reresolve::Bool = true)
     # collect builds for UUIDs with `deps/build.jl` files
     builds = Tuple{UUID, String, String, VersionNumber}[]
@@ -2746,7 +2848,7 @@ end
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}, new_git = Set{UUID}();
         allow_autoprecomp::Bool = true, preserve::PreserveLevel = default_preserve(), platform::AbstractPlatform = HostPlatform(),
-        target::Symbol = :deps, prefer_loaded_versions::Bool = false
+        target::Symbol = :deps, prefer_loaded_versions::Bool = false, lazy::Bool = false
     )
     assert_can_add(ctx, pkgs)
     # load manifest data
@@ -2786,12 +2888,23 @@ function add(
             foreach(pkg -> proj_entry.deps[pkg.name] = pkg.uuid, pkgs)
         end
 
+        # the packages may be in the manifest without being installed, e.g. after a lazy add
+        new_apply = Set{UUID}()
+        if !lazy
+            closure = manifest_deps_closure(ctx.env, (pkg.uuid for pkg in pkgs))
+            if any(entry -> (path = source_path(ctx.env.manifest_file, entry); path !== nothing && !ispath(path)), closure)
+                new_apply = download_source(ctx, closure)
+                download_artifacts(ctx, closure; platform, julia_version = ctx.julia_version, include_project = false)
+            end
+        end
+
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
 
         record_project_hash(ctx.env)
         write_env(ctx.env)
         show_update(ctx.env, ctx.registries; io = ctx.io)
+        build_versions(ctx, new_apply)
 
         return
     end
@@ -2816,12 +2929,16 @@ function add(
         )
         maybe_print_preferred_loaded_note(ctx.io, direct_names, indirect_count)
         update_manifest!(ctx.env, man_pkgs, deps_map, ctx.julia_version, ctx.registries)
-        new_apply = download_source(ctx)
-        fixups_from_projectfile!(ctx)
-
-        # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
-        # and ensure they are all downloaded and unpacked as well:
-        download_artifacts(ctx, platform = platform, julia_version = ctx.julia_version)
+        if lazy
+            new_apply = Set{UUID}()
+            lazy_fixups_from_projectfile!(ctx)
+        else
+            new_apply = download_source(ctx)
+            fixups_from_projectfile!(ctx)
+            # After downloading resolutionary packages, search for (Julia)Artifacts.toml files
+            # and ensure they are all downloaded and unpacked as well:
+            download_artifacts(ctx, platform = platform, julia_version = ctx.julia_version)
+        end
 
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
@@ -2829,6 +2946,11 @@ function add(
 
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
+        if lazy
+            install_lazy_checkouts(ctx, new_git; platform)
+            print_lazy_note(ctx.io)
+            return
+        end
         build_versions(ctx, union(new_apply, new_git))
         allow_autoprecomp && Pkg._auto_precompile(ctx, pkgs)
     else
@@ -3003,7 +3125,8 @@ end
 
 function up(
         ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
-        skip_writing_project::Bool = false, preserve::Union{Nothing, PreserveLevel} = nothing
+        skip_writing_project::Bool = false, preserve::Union{Nothing, PreserveLevel} = nothing,
+        lazy::Bool = false
     )
 
     requested_pkgs = pkgs
@@ -3030,9 +3153,14 @@ function up(
         deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
     end
     update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
-    new_apply = download_source(ctx)
-    fixups_from_projectfile!(ctx)
-    download_artifacts(ctx, julia_version = ctx.julia_version)
+    if lazy
+        new_apply = Set{UUID}()
+        lazy_fixups_from_projectfile!(ctx)
+    else
+        new_apply = download_source(ctx)
+        fixups_from_projectfile!(ctx)
+        download_artifacts(ctx, julia_version = ctx.julia_version)
+    end
     write_env(ctx.env; skip_writing_project) # write env before building
     show_update(ctx.env, ctx.registries; io = ctx.io, hidden_upgrades_info = true)
 
@@ -3062,6 +3190,11 @@ function up(
         end
     end
 
+    if lazy
+        install_lazy_checkouts(ctx, new_git)
+        print_lazy_note(ctx.io)
+        return
+    end
     return build_versions(ctx, union(new_apply, new_git))
 end
 
