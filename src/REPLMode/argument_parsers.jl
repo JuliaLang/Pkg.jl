@@ -48,7 +48,7 @@ end
 
 # Simple URL detection
 function looks_like_url(str::String)
-    return isurl(str) && !looks_like_version_spec(str)
+    return isurl(str) && (contains(str, "://") || !looks_like_version_spec(str))
 end
 
 # Simple path detection

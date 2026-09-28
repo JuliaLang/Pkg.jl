@@ -210,6 +210,12 @@ end
             @test args[1].url == "ssh://git@server.com/path/repo.git"
             @test args[1].rev == "branch-name"
 
+            api, args, opts = first(Pkg.pkg"add ssh://git@1.2.3:2222/path/repo.git#branch-name")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@1.2.3:2222/path/repo.git"
+            @test args[1].rev == "branch-name"
+
             api, args, opts = first(Pkg.pkg"add myorg@vs-ssh.example.com:v3/org/proj/Repo.jl#main")
             @test api == Pkg.add
             @test length(args) == 1
