@@ -52,9 +52,9 @@ function isshallow(repo::LibGit2.GitRepo)
     if supports_shallow_clone() && isdefined(LibGit2, :isshallow)
         return LibGit2.isshallow(repo)
     else
-        # Fallback: check for .git/shallow file
-        repo_path = LibGit2.path(repo)
-        shallow_file = joinpath(repo_path, "shallow")
+        # Fallback: check for the shallow file in the repository's git dir.
+        # LibGit2.path(repo) is the worktree path for non-bare repositories.
+        shallow_file = joinpath(LibGit2.gitdir(repo), "shallow")
         return isfile(shallow_file)
     end
 end
