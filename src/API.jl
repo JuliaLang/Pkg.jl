@@ -170,8 +170,9 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
             pkgs = deepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
-            $(f in (:up, :pin, :free, :build)) && Pkg._auto_precompile(ctx)
-            $(f in (:up, :pin, :free, :rm)) && Pkg._auto_gc(ctx)
+            lazy = get(kwargs, :lazy, false)
+            $(f in (:up, :pin, :free, :build)) && !lazy && Pkg._auto_precompile(ctx)
+            $(f in (:up, :pin, :free, :rm)) && !lazy && Pkg._auto_gc(ctx)
             return ret
         end
         $f(ctx::Context; kwargs...) = $f(ctx, PackageSpec[]; kwargs...)
@@ -404,7 +405,7 @@ end
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel = Operations.default_preserve(),
         platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true,
-        prefer_loaded_versions::Bool = Pkg.in_repl_mode(),
+        prefer_loaded_versions::Bool = Pkg.in_repl_mode(), lazy::Bool = false,
         from::Union{Nothing, AbstractString, AbstractVector{<:AbstractString}} = nothing, kwargs...
     )
     from === nothing && require_not_empty(pkgs, :add)
@@ -465,7 +466,7 @@ function add(
         update_source_if_set(ctx.env, pkg)
     end
 
-    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target, prefer_loaded_versions)
+    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target, prefer_loaded_versions, lazy)
     return
 end
 
@@ -544,6 +545,7 @@ function up(
         update_registry::Bool = true,
         skip_writing_project::Bool = false,
         workspace::Bool = false,
+        lazy::Bool = false,
         kwargs...
     )
     Context!(ctx; kwargs...)
@@ -570,7 +572,7 @@ function up(
     for pkg in pkgs
         update_source_if_set(ctx.env, pkg)
     end
-    Operations.up(ctx, pkgs, level; skip_writing_project, preserve)
+    Operations.up(ctx, pkgs, level; skip_writing_project, preserve, lazy)
     return
 end
 
