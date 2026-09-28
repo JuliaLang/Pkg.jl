@@ -4,7 +4,7 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..can_fancyprint, ..printpkgstyle, ..stdout_f
+import ..can_fancyprint, ..printpkgstyle, ..stdout_f, ..ispath_nothrow
 using SHA
 import Base: SHA1
 import LibGit2
@@ -34,7 +34,7 @@ end
 # Shallow clones are only supported for network protocols (HTTP, HTTPS, Git, SSH)
 function is_local_repo(url::AbstractString)
     # Check if it's a local filesystem path
-    ispath(url) && return true
+    ispath_nothrow(url) && return true
     # Check if it uses file:// protocol
     startswith(url, "file://") && return true
     return false
