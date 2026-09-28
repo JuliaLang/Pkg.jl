@@ -399,4 +399,24 @@ end
     end
 end
 
+# `Pkg.test` of a workspace member whose test dependencies come from `[extras]`/`[targets]`
+# must resolve the member's relative `[sources]` against the member's own directory, not
+# against the active project (here the workspace root).
+@testset "Pkg.test of a workspace member with relative [sources] from the workspace root" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceTestMemberSources")
+            cd(path) do
+                with_current_env() do
+                    Pkg.activate(".")
+                    Pkg.instantiate()
+                    Pkg.test("B")
+                    # The member's own project file keeps its relative source path
+                    @test TOML.parsefile(joinpath("B", "Project.toml"))["sources"]["A"]["path"] == "../A"
+                end
+            end
+        end
+    end
+end
+
 end # module
