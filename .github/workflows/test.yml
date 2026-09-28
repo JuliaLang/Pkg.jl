@@ -71,6 +71,11 @@ jobs:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
       - uses: julia-actions/cache@v3
+        with:
+          # Without a package server the General registry is a git clone.
+          # A restored clone is only as fresh as the cache that saved it, so
+          # clone it anew in every run instead.
+          cache-registries: ${{ matrix.pkg-server != '' }}
       - name: Use three test workers on macOS
         # The macOS runners have little free memory, so the test runner
         # would use a single worker. Three workers fit if each is restarted
