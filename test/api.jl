@@ -347,6 +347,37 @@ import .FakeTerminals.FakeTerminal
     end
 end
 
+@testset "add precompiles the dependents of packages it changes" begin
+    isolate() do
+        cd_tempdir() do tmp
+            Pkg.activate(".")
+            Pkg.add(name = "Example", version = "0.5.3")
+            mkpath(joinpath("UsesExample", "src"))
+            write(
+                joinpath("UsesExample", "Project.toml"), """
+                name = "UsesExample"
+                uuid = "5d3e2b35-6a3c-4c1e-9d1f-0b6a4e7c2f11"
+                version = "0.1.0"
+
+                [deps]
+                Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+                """
+            )
+            write(joinpath("UsesExample", "src", "UsesExample.jl"), "module UsesExample\nimport Example\nend\n")
+            Pkg.develop(path = "UsesExample")
+            Pkg.precompile()
+            iob = IOBuffer()
+            withenv("JULIA_PKG_PRECOMPILE_AUTO" => 1) do
+                Pkg.add(name = "Example", version = "0.5.1"; io = iob)
+            end
+            @test occursin("UsesExample", String(take!(iob)))
+            @test Base.isprecompiled(Base.identify_package("UsesExample"))
+            Pkg.precompile(io = iob)
+            @test !occursin("Precompiling", String(take!(iob)))
+        end
+    end
+end
+
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin
     @test_throws Pkg.Types.PkgError("`Example.jl` is not a valid package name. Perhaps you meant `Example`") Pkg.API.check_package_name("Example.jl")
 end
