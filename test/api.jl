@@ -330,7 +330,7 @@ import .FakeTerminals.FakeTerminal
 
             Pkg.add("Random")
             #@test_throws ErrorException Pkg.precompile("DoesNotExist")
-            Pkg.precompile() # should be a no-op
+            @test Pkg.precompile() === nothing # should be a no-op
         end
     end
 end

@@ -643,6 +643,24 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
                                     push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
                                     @goto done_git
                                 end
+                                if GitTools.isshallow(repo)
+                                    # A depth-1 fetch into a shallow clone leaves the new tip
+                                    # disconnected from the local HEAD, so it can be neither
+                                    # fast-forwarded to nor rebased onto. The registry is clean
+                                    # and has no local commits, so just move the branch there.
+                                    try
+                                        remote_id = LibGit2.revparseid(repo, "refs/remotes/origin/$branch")
+                                        if remote_id != LibGit2.head_oid(repo)
+                                            LibGit2.reset!(repo, remote_id, LibGit2.Consts.RESET_HARD)
+                                        end
+                                    catch e
+                                        e isa LibGit2.GitError || rethrow()
+                                        push!(errors, (reg.path, "registry failed to reset to origin/$branch"))
+                                        @goto done_git
+                                    end
+                                    registry_update_log[string(reg.uuid)] = now()
+                                    @goto done_git
+                                end
                                 attempts = 0
                                 @label merge
                                 ff_succeeded = try

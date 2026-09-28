@@ -1244,7 +1244,10 @@ function precompile(
             ctx.io
         end
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
+        # since JuliaLang/julia#59765 the driver returns the cache files it found or
+        # made, for code loading; that is not part of `Pkg.precompile`'s API
+        Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
+        return nothing
     end
 end
 
