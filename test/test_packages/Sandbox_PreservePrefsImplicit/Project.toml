@@ -1,0 +1,18 @@
+authors = ["Carsten Bauer <crstnbr@gmail.com>"]
+name = "Sandbox_PreservePrefsImplicit"
+uuid = "ecddbb86-518e-4a4d-b30b-c11ee99fa784"
+version = "0.1.0"
+
+[deps]
+Foo = "128bfcea-dc33-4310-8fcf-6a5a6a7c0677"
+
+[extras]
+FooDep = "22d90790-ba35-49ef-9cc5-1d4fefcbe869"
+Foo = "128bfcea-dc33-4310-8fcf-6a5a6a7c0677"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[preferences]
+FooDep.weather = "sunny"
+
+[targets]
+test = ["Test", "Foo"]
