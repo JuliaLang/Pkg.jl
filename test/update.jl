@@ -551,16 +551,23 @@ end
             # the manifest is consistent with the project, so `resolve` is a no-op
             Pkg.resolve()
             @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            # editing the compat entry invalidates the manifest
+            project["compat"]["Example"] = "0.5.0 - 0.5.4"
+            open(io -> TOML.print(io, project), project_file, "w")
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.4"
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
             # the extras package is not installed when nothing depends on it
             Pkg.rm("DependsOnExample")
             @test !haskey(Pkg.dependencies(), exuuid)
             # lifting the compat entry lets the package update again
             Pkg.add(path = path)
-            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            @test Pkg.dependencies()[exuuid].version == v"0.5.4"
             delete!(project["compat"], "Example")
             open(io -> TOML.print(io, project), project_file, "w")
             Pkg.update()
-            @test Pkg.dependencies()[exuuid].version > v"0.5.3"
+            @test Pkg.dependencies()[exuuid].version > v"0.5.4"
         end
     end
 end
