@@ -1268,6 +1268,12 @@ end
             @test args[1].url == "myorg@vs-ssh.example.com:v3/org/proj/Repo.jl"
             @test args[1].rev == "main"
 
+            api, args, opts = first(Pkg.pkg"add git@server:repo#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@server:repo"
+            @test args[1].rev == "main"
+
             api, args, opts = first(Pkg.pkg"add file:///tmp/repo#main")
             @test api == Pkg.add
             @test length(args) == 1
