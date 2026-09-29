@@ -136,11 +136,13 @@ function build_pkg_data(
                     q == uuid && continue
                     # like the legacy resolver, ignore registry compat on a
                     # non-upgradable stdlib when it excludes the stdlib version
-                    # shipped with this julia (see the Resolve.Graph constructor)
+                    # shipped with this julia (see the Resolve.Graph constructor);
+                    # the dependency edge itself is kept so the stdlib still
+                    # ends up in the manifest deps (#4801)
                     if Types.is_stdlib(q) && !(q in Types.UPGRADABLE_STDLIBS_UUIDS)
                         stdlib_ver = Types.stdlib_version(q, julia_version)
                         if stdlib_ver !== nothing && !isempty(spec) && !(stdlib_ver in spec)
-                            continue
+                            spec = VersionSpec()
                         end
                     end
                     if q == JULIA_UUID
