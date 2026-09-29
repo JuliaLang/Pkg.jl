@@ -13,6 +13,10 @@ Example = "0.5"
 
 After a compatibility entry is put into the project file, `up` can be used to apply it.
 
+A compatibility entry can also be given for a package listed under `[extras]`. Such an entry constrains
+the package when it is in the environment, for example as an indirect dependency, without making it a
+direct dependency of the project.
+
 The format of the version specifier is described in detail below.
 
 !!! info
