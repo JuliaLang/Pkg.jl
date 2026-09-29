@@ -49,19 +49,17 @@ function _run_precompilation_script_setup()
         Pkg.generate("TestPkg")
         uuid = TOML.parsefile(joinpath("TestPkg", "Project.toml"))["uuid"]
         mv("TestPkg", "TestPkg.jl")
-        tree_hash = cd("TestPkg.jl") do
+        cd("TestPkg.jl") do
             sig = LibGit2.Signature("TEST", "TEST@TEST.COM", round(time()), 0)
             repo = LibGit2.init(".")
             LibGit2.add!(repo, "")
-            commit =
-                LibGit2.commit(repo, "initial commit"; author = sig, committer = sig)
-            th =
-                LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(repo, commit)) |>
-                LibGit2.GitHash |>
-                string
+            LibGit2.commit(repo, "initial commit"; author = sig, committer = sig)
             close(repo)
-            th
         end
+        # Hash the tarball the fake server sends, not the git commit. On Windows the two
+        # hashes can differ, and the download then fails its hash check.
+        Tar.create(p -> basename(p) != ".git", "TestPkg.jl", "TestPkg.tar")
+        tree_hash = Tar.tree_hash("TestPkg.tar")
         # Prevent cloning the General registry by adding a fake one
         mkpath("registries/Registry/T/TestPkg")
         write(
@@ -119,7 +117,6 @@ function _run_precompilation_script_setup()
         write(joinpath(server_dir, "registries"), "/registry/$registry_uuid/$registry_hash\n")
         # zstd is what the real server sends to current clients, so exercise that decompression path
         mkpath(joinpath(server_dir, "package", uuid))
-        Tar.create(p -> basename(p) != ".git", "TestPkg.jl", "TestPkg.tar")
         cmd = `$(Pkg.PlatformEngines.exezstd()) -q -f "TestPkg.tar" -o $(joinpath(server_dir, "package", uuid, tree_hash))`
         run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
         # Install the registry under a stale hash so that the first registry update
