@@ -613,4 +613,46 @@ end
     @test Pkg.API._depot_package_slug(join(["", "tmp", "Foo", "src", "Foo.jl"], sep)) === nothing
 end
 
+@testset "resolver backends" begin
+    isolate(loaded_depot = true) do
+        # the legacy maxsum resolver stays selectable
+        withenv("JULIA_PKG_RESOLVER" => "maxsum") do
+            Pkg.add(TEST_PKG.name)
+            @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
+            Pkg.rm(TEST_PKG.name)
+        end
+        # unknown backends error
+        withenv("JULIA_PKG_RESOLVER" => "bogus") do
+            @test_throws PkgError Pkg.add(TEST_PKG.name)
+        end
+        # requirements matching no available version are reported directly
+        err = try
+            Pkg.add(PackageSpec(name = TEST_PKG.name, version = "99"))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ResolverError
+        @test occursin("no available version matches the requirement `99`", err.msg)
+        @test occursin("available versions are:", err.msg)
+        # conflicting requirements get a diagnosis with verified fixes
+        err = try
+            Pkg.add(
+                [
+                    PackageSpec(name = "DataFrames", version = "1.7"),
+                    PackageSpec(name = "PrettyTables", version = "1"),
+                ]
+            )
+            nothing
+        catch e
+            e
+        end
+        @test err isa ResolverError
+        @test occursin("Unsatisfiable requirements detected — 1 conflict", err.msg)
+        @test occursin("your compat restricts DataFrames", err.msg)
+        @test occursin("relax your compat on PrettyTables", err.msg)
+        @test occursin("→ allows: DataFrames", err.msg)
+    end
+end
+
 end # module APITests

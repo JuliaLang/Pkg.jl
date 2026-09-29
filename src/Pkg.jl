@@ -112,6 +112,7 @@ include("Versions.jl")
 include("Registry/Registry.jl")
 include("Types.jl")
 include("Resolve/Resolve.jl")
+include("SATResolve.jl")
 include("BinaryPlatformsCompat.jl")
 include("Artifacts.jl")
 const Artifacts = PkgArtifacts
