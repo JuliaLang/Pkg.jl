@@ -1,0 +1,55 @@
+name: Missing Pkg Tags
+# Run this workflow manually to list stable Julia releases whose bundled Pkg
+# version has no matching tag in this repository. The job summary gives the
+# `git tag` commands to create them.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  list-missing-tags:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: List missing tags
+        run: |
+          set -euo pipefail
+          git tag --list | sort -u > pkg_tags.txt
+          git ls-remote --tags --refs https://github.com/JuliaLang/julia.git |
+            sed 's|.*refs/tags/||' | grep -E '^v[1-9][0-9]*\.[0-9]+\.[0-9]+$' | sort -V > julia_tags.txt
+
+          : > commands.txt
+          while read -r tag; do
+            grep -qxF "$tag" pkg_tags.txt && continue
+            # Julia releases before Pkg moved out of tree have no Pkg.version file.
+            version_file=$(curl -fsSL "https://raw.githubusercontent.com/JuliaLang/julia/$tag/stdlib/Pkg.version") || continue
+            sha=$(sed -nE 's/^PKG_SHA1[[:space:]]*=[[:space:]]*([0-9a-f]{40}).*/\1/p' <<< "$version_file")
+            if [ -z "$sha" ]; then
+              echo "::warning::No PKG_SHA1 found in stdlib/Pkg.version for Julia $tag"
+            elif ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+              echo "::warning::Julia $tag bundles Pkg commit $sha, which is not in this repository"
+            else
+              echo "git tag $tag $sha" >> commands.txt
+            fi
+          done < julia_tags.txt
+
+          cat commands.txt
+          {
+            echo "## Missing Pkg.jl tags"
+            echo
+            if [ -s commands.txt ]; then
+              echo "Run these in a clone of ${{ github.repository }}, then push the tags:"
+              echo
+              echo '```sh'
+              cat commands.txt
+              echo "git push origin $(cut -d' ' -f3 commands.txt | paste -sd' ' -)"
+              echo '```'
+            else
+              echo "Every stable Julia release has a matching Pkg.jl tag."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
