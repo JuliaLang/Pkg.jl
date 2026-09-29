@@ -304,6 +304,9 @@ function read_manifest(f_or_io::Union{String, IO})
     raw = try
         if f_or_io isa IO
             TOML.parse(read(f_or_io, String))
+        elseif is_script(f_or_io)
+            # the manifest block of the script (empty if there is none)
+            parse_toml(f_or_io; manifest = true)
         else
             isfile(f_or_io) ? parse_toml(f_or_io) : return Manifest()
         end
@@ -488,8 +491,8 @@ end
 function write_manifest(io::IO, manifest::Manifest)
     return write_manifest(io, destructure(manifest))
 end
-function write_manifest(io::IO, raw_manifest::Dict; generated_id::Bool = false)
-    print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
+function write_manifest(io::IO, raw_manifest::Dict; generated_id::Bool = false, header::Bool = true)
+    header && print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
     str = sprint() do toml_io
         TOML.print(toml_io, raw_manifest, sorted = true) do x
             (typeof(x) in [String, Nothing, UUID, SHA1, VersionNumber]) && return string(x)
@@ -504,6 +507,10 @@ function write_manifest(io::IO, raw_manifest::Dict; generated_id::Bool = false)
     return nothing
 end
 function write_manifest(raw_manifest::Dict, manifest_file::AbstractString; generated_id::Bool = false)
+    if is_script(manifest_file)
+        str = sprint(io -> write_manifest(io, raw_manifest; generated_id, header = false))
+        return write_script_block(String(manifest_file), "manifest", str)
+    end
     str = sprint(io -> write_manifest(io, raw_manifest; generated_id))
     mkpath(dirname(manifest_file))
     return write(manifest_file, str)

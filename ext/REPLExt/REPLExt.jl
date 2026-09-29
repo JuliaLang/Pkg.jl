@@ -68,7 +68,8 @@ function projname(project_file::String)
         nothing
     end
     if project === nothing || project.name === nothing
-        name = basename(dirname(project_file))
+        # a script with inline project metadata is named after its file
+        name = Types.is_script(project_file) ? basename(project_file) : basename(dirname(project_file))
     else
         name = project.name::String
     end

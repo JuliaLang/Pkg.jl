@@ -253,6 +253,8 @@ function read_project(f_or_io::Union{String, IO})
     raw = try
         if f_or_io isa IO
             TOML.parse(read(f_or_io, String); comments)
+        elseif is_script(f_or_io)
+            TOML.parse(something(Base.read_script_metadata(f_or_io).project, ""); comments)
         elseif isfile(f_or_io)
             # The comment-capturing path bypasses the shared parser cache;
             # project files are small so the extra parse is cheap
@@ -361,6 +363,9 @@ function write_project(io::IO, project::Dict; comments::Union{TOML.Comments, Not
 end
 function write_project(project::Dict, project_file::AbstractString; comments::Union{TOML.Comments, Nothing} = nothing)
     str = sprint(io -> write_project(io, project; comments))
+    if is_script(project_file)
+        return write_script_block(String(project_file), "project", str)
+    end
     mkpath(dirname(project_file))
     return write(project_file, str)
 end

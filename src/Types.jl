@@ -30,7 +30,8 @@ export UUID, SHA1, VersionRange, VersionSpec,
     UpgradeLevel, UPLEVEL_FIXED, UPLEVEL_PATCH, UPLEVEL_MINOR, UPLEVEL_MAJOR,
     PreserveLevel, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_TIERED,
     PRESERVE_TIERED_INSTALLED, PRESERVE_NONE,
-    projectfile_path, manifestfile_path
+    projectfile_path, manifestfile_path,
+    is_script, manifest_exists, write_script_block
 
 # Load in data about historical stdlibs
 include("HistoricalStdlibs.jl")
@@ -55,9 +56,98 @@ end
 # See loading.jl
 const TOML_CACHE = Base.TOMLCache(Base.TOML.Parser{Dates}())
 const TOML_LOCK = ReentrantLock()
-# Some functions mutate the returning Dict so return a copy of the cached value here
-parse_toml(toml_file::AbstractString) =
-    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK))::Dict{String, Any}
+# Some functions mutate the returning Dict so return a copy of the cached value here.
+# `manifest=true` selects the manifest block when `toml_file` is a script with inline project metadata.
+parse_toml(toml_file::AbstractString; manifest::Bool = false) =
+    Base.invokelatest(deepcopy_toml, Base.parsed_toml(toml_file, TOML_CACHE, TOML_LOCK; manifest))::Dict{String, Any}
+
+########################################
+# Scripts with inline project metadata #
+########################################
+
+# A file used as an environment: it carries its project (and optionally manifest) in
+# `# /// project` and `# /// manifest` comment blocks, see the "Scripts with inline project
+# metadata" section of the code loading manual. Such a file is used in place of a
+# `Project.toml`, and in place of the `Manifest.toml` too unless the project block has a
+# `manifest = "..."` entry. A file without any block yet has an empty project; the block is
+# written on the first change.
+is_script(project_file::AbstractString) = Base.is_script_env(project_file)
+
+# Whether the manifest exists: the file for a regular environment, the `# /// manifest`
+# block for a script that keeps its manifest inline.
+function manifest_exists(project_file::String, manifest_file::String)
+    isfile(manifest_file) && manifest_file != project_file && return true
+    # (still) inline in the script; see `EnvCache` for a manifest that is being moved out
+    return is_script(project_file) && Base.read_script_metadata(project_file).manifest !== nothing
+end
+
+# The lines of a `# /// name` block holding `toml`
+function render_script_block(name::String, toml::AbstractString)
+    block = ["# /// $name"]
+    toml = chomp(toml)
+    if !isempty(toml)
+        for line in split(toml, '\n')
+            line = chopsuffix(line, "\r")
+            push!(block, isempty(line) ? "#" : "# " * line)
+        end
+    end
+    push!(block, "# ///")
+    return block
+end
+
+# Replace or insert the `# /// name` block of the script at `path` so that it holds `toml`,
+# or remove the block when `toml === nothing`. Nothing else in the file is touched.
+# A new project block goes after the leading comments of the file (e.g. a shebang). The
+# manifest block goes last: one that code has been added after is moved to the end.
+function write_script_block(path::String, name::String, toml::Union{Nothing, AbstractString})
+    content = read(path, String)
+    meta = Base.parse_script_metadata(content; path)
+    newline = occursin("\r\n", content) ? "\r\n" : "\n"
+    lines = String[chopsuffix(line, "\r") for line in split(content, '\n')]
+    if !isempty(lines) && isempty(lines[end]) # trailing newline
+        pop!(lines)
+    end
+    range = name == "project" ? meta.project_lines : meta.manifest_lines
+    # a manifest block that is no longer the last thing in the file is moved to the end
+    move = name == "manifest" && range !== nothing && toml !== nothing &&
+        any(!Base._script_trivia_line(line) for line in lines[(last(range) + 1):end])
+    if toml === nothing || move
+        range === nothing && return
+        deleteat!(lines, range)
+        # do not leave a double blank line, or a blank line at either end of the file
+        k = first(range) # the line that now follows the removed block
+        if 1 < k <= length(lines) && isempty(lines[k - 1]) && isempty(lines[k])
+            deleteat!(lines, k)
+        elseif k > length(lines) && !isempty(lines) && isempty(lines[end])
+            pop!(lines)
+        elseif k == 1 && !isempty(lines) && isempty(lines[1])
+            popfirst!(lines)
+        end
+        out = lines
+        range = nothing
+    end
+    if toml !== nothing
+        block = render_script_block(name, toml)
+        if range !== nothing
+            out = vcat(lines[1:(first(range) - 1)], block, lines[(last(range) + 1):end])
+        elseif name == "project"
+            # right after the leading comments, before any blank lines that follow them
+            at = meta.header_end
+            while at > 0 && isempty(lines[at])
+                at -= 1
+            end
+            rest = lines[(at + 1):end]
+            (isempty(rest) || isempty(rest[1])) || pushfirst!(rest, "")
+            out = vcat(lines[1:at], block, rest)
+        else
+            (isempty(lines) || isempty(lines[end])) || push!(lines, "")
+            out = append!(lines, block)
+        end
+    end
+    # written in place (not via a temporary file) to keep the mode of the file, e.g. its executable bit
+    write(path, isempty(out) ? "" : join(out, newline) * newline)
+    return
+end
 
 #################
 # Pkg Error #
@@ -215,16 +305,18 @@ function find_project_file(env::Union{Nothing, String} = nothing)
         if isdir(env)
             isempty(readdir(env)) || pkgerror("environment is a package directory: $env")
             project_file = joinpath(env, Base.project_names[end])
+        elseif is_script(env)
+            project_file = abspath(env)
         else
             project_file = endswith(env, ".toml") ? abspath(env) :
                 abspath(env, Base.project_names[end])
         end
     end
-    if isfile(project_file) && !contains(basename(project_file), "Project")
+    if isfile(project_file) && !contains(basename(project_file), "Project") && !is_script(project_file)
         pkgerror(
             """
             The active project has been set to a file that isn't a Project file: $project_file
-            The project path must be to a Project file or directory.
+            The project path must be to a Project file, a directory, or a script with a `# /// project` block.
             """
         )
     end
@@ -446,9 +538,11 @@ function EnvCache(env::Union{Nothing, String} = nothing)
     end
 
     manifest_file = project.manifest
+    script = is_script(project_file)
     root_base_proj_file = find_root_base_project(project_file)
     workspace = Dict{String, Project}()
-    if isfile(root_base_proj_file)
+    # a script is never part of a workspace
+    if !script && isfile(root_base_proj_file)
         if root_base_proj_file !== project_file
             manifest_file = manifestfile_path(dirname(root_base_proj_file))
         end
@@ -457,11 +551,29 @@ function EnvCache(env::Union{Nothing, String} = nothing)
     end
 
     dir = abspath(project_dir)
-    manifest_file = manifest_file !== nothing ?
-        (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
-        manifestfile_path(dir)::String
+    if manifest_file !== nothing
+        manifest_file = isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)
+    elseif script
+        # the manifest block of the script
+        manifest_file = project_file
+    else
+        manifest_file = manifestfile_path(dir)::String
+    end
     write_env_usage(manifest_file, "manifest_usage.toml")
-    manifest = read_manifest(manifest_file)
+    if script && manifest_file != project_file && !isfile(manifest_file)
+        # the manifest was just moved to a separate file by a `manifest = "..."` entry:
+        # start from the inline block, `write_env` writes it out and removes the block
+        manifest = read_manifest(project_file)
+        # relative paths are relative to the manifest, which is no longer the script
+        for (_, entry) in manifest
+            path = entry.path
+            if path !== nothing && !isabspath(path)
+                entry.path = relpath(normpath(joinpath(dir, path)), dirname(manifest_file))
+            end
+        end
+    else
+        manifest = read_manifest(manifest_file)
+    end
 
     env′ = EnvCache(
         env,
@@ -1542,14 +1654,24 @@ function write_env(
     end
     # an existing manifest picks up the environment info on any write; one is never
     # created just for it
-    if !env.project.readonly && (env.manifest != env.original_manifest || isfile(env.manifest_file))
+    if !env.project.readonly && (env.manifest != env.original_manifest || manifest_exists(env))
         update_environment_info!(env)
     end
-    if env.manifest != env.original_manifest
+    # a script whose manifest moved to a separate file (see `EnvCache`) gets that file
+    # written from the inline block, which is then removed
+    script_external_manifest = is_script(env.project_file) && env.manifest_file != env.project_file
+    moving_manifest = script_external_manifest && !isfile(env.manifest_file) &&
+        Base.read_script_metadata(env.project_file).manifest !== nothing
+    if env.manifest != env.original_manifest || moving_manifest
         write_manifest(env)
+    end
+    if script_external_manifest
+        write_script_block(env.project_file, "manifest", nothing)
     end
     return update_undo && Pkg.API.add_snapshot_to_undo(env)
 end
+
+manifest_exists(env::EnvCache) = manifest_exists(env.project_file, env.manifest_file)
 
 
 end # module
