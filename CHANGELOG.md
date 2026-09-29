@@ -27,7 +27,7 @@ Pkg v1.14 Release Notes
 - New `[compat_overrides]` section in the project file. An entry replaces every compatibility constraint on
   a package, including those of the packages that depend on it, with the given one, e.g. to try a new version
   of a package that a dependency has not been updated to allow yet. Only the overrides of the active project
-  (and its workspace) apply. ([#XXXX])
+  (and its workspace) apply. ([#4841])
 - A `[compat]` entry for a package listed under `[extras]` is now honored by `Pkg.update` and `Pkg.instantiate`:
   it constrains the package when it is in the environment as an indirect dependency, without making it a direct
   dependency. Previously only `Pkg.resolve` took such entries into account, by erroring. ([#4840])
@@ -258,5 +258,6 @@ Pkg v1.7 Release Notes
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4840]: https://github.com/JuliaLang/Pkg.jl/pull/4840
+[#4841]: https://github.com/JuliaLang/Pkg.jl/pull/4841
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
