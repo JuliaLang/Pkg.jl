@@ -746,7 +746,7 @@ function workspace_resolve_hash(env::EnvCache)
     end
     if !isempty(overrides)
         println(iob)
-        println(iob, "[compat_overrides]")
+        println(iob, "[compat-overrides]")
         for (name, compat) in sort!(collect(overrides); by = first)
             println(iob, name, "=", compat)
         end

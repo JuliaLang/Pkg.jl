@@ -206,7 +206,7 @@ function validate(project::Project; file = nothing)
         name in listed ||
             pkgerror("Compat `$name` not listed in `deps`, `weakdeps` or `extras` section" * location_string)
     end
-    # compat_overrides
+    # compat-overrides
     for name in keys(project.compat_overrides)
         name in listed ||
             pkgerror("Compat override `$name` not listed in `deps`, `weakdeps` or `extras` section" * location_string)
@@ -237,7 +237,7 @@ function Project(raw::Dict; file = nothing)
     project.sources = read_project_sources(get(raw, "sources", nothing), project)
     project.extras = read_project_deps(get(raw, "extras", nothing), "extras")
     project.compat = read_project_compat(get(raw, "compat", nothing), project; file)
-    project.compat_overrides = read_project_compat(get(raw, "compat_overrides", nothing), project; file)
+    project.compat_overrides = read_project_compat(get(raw, "compat-overrides", nothing), project; file)
     project.targets = read_project_targets(get(raw, "targets", nothing), project)
     project.workspace = read_project_workspace(get(raw, "workspace", nothing), project)
     project.apps = read_project_apps(get(raw, "apps", nothing), project)
@@ -323,7 +323,7 @@ function destructure(project::Project)::Dict
     entry!("sources", normalized_sources)
     entry!("extras", project.extras)
     entry!("compat", Dict(name => x.str for (name, x) in project.compat))
-    entry!("compat_overrides", Dict(name => x.str for (name, x) in project.compat_overrides))
+    entry!("compat-overrides", Dict(name => x.str for (name, x) in project.compat_overrides))
     entry!("targets", project.targets)
     entry!(
         "syntax", project.julia_syntax_version === nothing ? nothing :
@@ -340,7 +340,7 @@ function destructure(project::Project)::Dict
     return raw
 end
 
-const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "readonly", "workspace", "deps", "weakdeps", "sources", "extensions", "compat", "compat_overrides"]
+const _project_key_order = ["name", "uuid", "keywords", "license", "desc", "version", "readonly", "workspace", "deps", "weakdeps", "sources", "extensions", "compat", "compat-overrides"]
 project_key_order(key::String) =
     something(findfirst(x -> x == key, _project_key_order), length(_project_key_order) + 1)
 

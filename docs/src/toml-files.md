@@ -269,9 +269,9 @@ constraints in detail. It is also possible to list constraints on `julia` itself
 julia = "1.1"
 ```
 
-### [The `[compat_overrides]` section](@id compat-overrides)
+### [The `[compat-overrides]` section](@id compat-overrides)
 
-A `[compat_overrides]` entry replaces every constraint on a package, including the `[compat]` entries of
+A `[compat-overrides]` entry replaces every constraint on a package, including the `[compat]` entries of
 all the packages in the environment that depend on it and the project's own, with the given one.
 It is useful to try out a new version of a package that a dependency has not been updated to allow yet.
 Like `[compat]`, it can be given for packages listed under `[deps]`, `[weakdeps]`, and `[extras]`,
@@ -282,7 +282,7 @@ the projects in its workspace) apply; those of a dependency are ignored.
 [extras]
 Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 
-[compat_overrides]
+[compat-overrides]
 Example = "2"
 ```
 

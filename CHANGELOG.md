@@ -24,7 +24,7 @@ Pkg v1.14 Release Notes
   and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
 - Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
   nor add a `[sources]` entry for a package that is itself a project of the workspace. ([#4237])
-- New `[compat_overrides]` section in the project file. An entry replaces every compatibility constraint on
+- New `[compat-overrides]` section in the project file. An entry replaces every compatibility constraint on
   a package, including those of the packages that depend on it, with the given one, e.g. to try a new version
   of a package that a dependency has not been updated to allow yet. Only the overrides of the active project
   (and its workspace) apply. ([#4841])

@@ -607,7 +607,7 @@ function collect_project(
     if !isnothing(julia_compat) && !isnothing(julia_version) && !(julia_version in julia_compat)
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
     end
-    # A `[compat_overrides]` entry replaces every other constraint on the package, including the
+    # A `[compat-overrides]` entry replaces every other constraint on the package, including the
     # project's own `[compat]`. Only the projects loaded into the environment apply theirs.
     function constraint(name, uuid)
         override = loaded === nothing ? nothing : get_compat_override(project, name)
@@ -622,7 +622,7 @@ function collect_project(
         push!(deps, PackageSpec(name, uuid, constraint(name, uuid)))
         push!(weakdeps, uuid)
     end
-    # `[compat]` (or `[compat_overrides]`) for an `[extras]` package of a loaded project constrains
+    # `[compat]` (or `[compat-overrides]`) for an `[extras]` package of a loaded project constrains
     # it if it is in the environment (e.g. as an indirect dependency) without adding it: a weak requirement.
     if loaded !== nothing
         for (name, uuid) in project.extras
@@ -810,7 +810,7 @@ end
 # i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
 dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
-# The `[compat_overrides]` of the workspace for `name`, or `nothing` if there is none
+# The `[compat-overrides]` of the workspace for `name`, or `nothing` if there is none
 function get_compat_override_workspace(env, name)
     override = nothing
     for project in Iterators.flatten(((env.project,), values(env.workspace)))
@@ -1294,7 +1294,7 @@ function deps_graph(
         fixed = fixed_filtered
     end
 
-    # `[compat_overrides]` replace the compat that every package has on the overridden packages.
+    # `[compat-overrides]` replace the compat that every package has on the overridden packages.
     # The registry data is shared, so the entries are rebuilt rather than mutated.
     if !isempty(compat_overrides)
         override(requires) = Resolve.Requires(uuid => get(compat_overrides, uuid, spec) for (uuid, spec) in requires)

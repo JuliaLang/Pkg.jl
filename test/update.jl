@@ -572,7 +572,7 @@ end
     end
 end
 
-@testset "compat_overrides" begin
+@testset "compat-overrides" begin
     write_project(file, project) = open(io -> TOML.print(io, project), file, "w")
     # an override replaces the compat of a fixed (developed) dependency and the project's own
     isolate(loaded_depot = true) do
@@ -587,7 +587,7 @@ end
             project = TOML.parsefile(project_file)
             project["extras"] = Dict("Example" => string(exuuid))
             project["compat"] = Dict("Example" => "0.3")
-            project["compat_overrides"] = Dict("Example" => "0.5.0 - 0.5.3")
+            project["compat-overrides"] = Dict("Example" => "0.5.0 - 0.5.3")
             write_project(project_file, project)
             Pkg.update()
             @test Pkg.dependencies()[exuuid].version == v"0.5.3"
@@ -596,7 +596,7 @@ end
             Pkg.instantiate()
             @test Pkg.dependencies()[exuuid].version == v"0.5.3"
             # editing the override invalidates the manifest
-            project["compat_overrides"]["Example"] = "0.5.0 - 0.5.4"
+            project["compat-overrides"]["Example"] = "0.5.0 - 0.5.4"
             write_project(project_file, project)
             @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
             Pkg.update()
@@ -605,11 +605,11 @@ end
             # the override survives a round trip through Pkg and is pruned with its package
             Pkg.add("Example")
             project = TOML.parsefile(project_file)
-            @test project["compat_overrides"] == Dict("Example" => "0.5.0 - 0.5.4")
+            @test project["compat-overrides"] == Dict("Example" => "0.5.0 - 0.5.4")
             delete!(project["extras"], "Example")
             write_project(project_file, project)
             Pkg.rm("Example")
-            @test !haskey(TOML.parsefile(project_file), "compat_overrides")
+            @test !haskey(TOML.parsefile(project_file), "compat-overrides")
             # without the override the compat entries apply again
             Pkg.update()
             @test Pkg.dependencies()[exuuid].version == v"0.3.0"
@@ -625,7 +625,7 @@ end
             project_file = Base.active_project()
             project = TOML.parsefile(project_file)
             project["extras"] = Dict("Example" => string(exuuid))
-            project["compat_overrides"] = Dict("Example" => "0.3")
+            project["compat-overrides"] = Dict("Example" => "0.3")
             write_project(project_file, project)
             Pkg.update()
             @test v"0.3.0" <= Pkg.dependencies()[exuuid].version < v"0.4.0"
@@ -634,7 +634,7 @@ end
     # the package must be listed, like for `compat`
     mktempdir() do tempdir
         project_file = joinpath(tempdir, "Project.toml")
-        write_project(project_file, Dict("compat_overrides" => Dict("Example" => "0.3")))
+        write_project(project_file, Dict("compat-overrides" => Dict("Example" => "0.3")))
         @test_throws PkgError("Compat override `Example` not listed in `deps`, `weakdeps` or `extras` section at $(repr(project_file)).") Pkg.Types.read_project(project_file)
     end
 end
