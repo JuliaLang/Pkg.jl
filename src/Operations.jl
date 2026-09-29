@@ -2297,6 +2297,33 @@ function add_compat_entries!(ctx::Context, pkgs::Vector{PackageSpec})
     return
 end
 
+# Packages that were already in the manifest and now have another version or source,
+# plus everything that depends on them. Their caches no longer match, so an `add` that
+# changes them precompiles them too instead of leaving that to the next load.
+function changed_packages_and_dependents(env::EnvCache)
+    affected = Set{UUID}()
+    for (uuid, old) in env.original_manifest
+        new = get(env.manifest, uuid, nothing)
+        new === nothing && continue
+        if new.version != old.version || new.tree_hash != old.tree_hash || new.path != old.path
+            push!(affected, uuid)
+        end
+    end
+    isempty(affected) && return PackageSpec[]
+    grew = true
+    while grew
+        grew = false
+        for (uuid, entry) in env.manifest
+            uuid in affected && continue
+            if any(in(affected), values(entry.deps))
+                push!(affected, uuid)
+                grew = true
+            end
+        end
+    end
+    return PackageSpec[PackageSpec(; name = env.manifest[uuid].name, uuid) for uuid in affected]
+end
+
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}, new_git = Set{UUID}();
         allow_autoprecomp::Bool = true, preserve::PreserveLevel = default_preserve(), platform::AbstractPlatform = HostPlatform(),
@@ -2370,7 +2397,11 @@ function add(
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
         build_versions(ctx, union(new_apply, new_git))
-        allow_autoprecomp && Pkg._auto_precompile(ctx, pkgs)
+        if allow_autoprecomp
+            added = Set(pkg.uuid for pkg in pkgs)
+            affected = filter(pkg -> !(pkg.uuid in added), changed_packages_and_dependents(ctx.env))
+            Pkg._auto_precompile(ctx, vcat(pkgs, affected))
+        end
     else
         record_project_hash(ctx.env)
         write_env(ctx.env)
