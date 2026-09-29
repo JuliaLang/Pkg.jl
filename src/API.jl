@@ -1824,59 +1824,95 @@ set_current_compat(; kwargs...) = set_current_compat(Context(); kwargs...)
 # why #
 #######
 
-function why_find_paths!(final_paths, incoming, project_deps, current, path)
-    push!(path, current)
-    current in project_deps && push!(final_paths, path) # record once we've traversed to a project dep
-    haskey(incoming, current) || return # but only return if we've reached a leaf that nothing depends on
-    for p in incoming[current]
-        if p in path
-            # detected dependency cycle and none of the dependencies in the cycle
-            # are in the project could happen when manually modifying
-            # the project and running this function function before a
-            # resolve
-            continue
-        end
-        why_find_paths!(final_paths, incoming, project_deps, p, copy(path))
+# Print `uuid` and, recursively, its neighbors in `adjacency` as a tree. A subtree
+# is only printed the first time its node is seen; later occurrences are marked
+# with `(*)`. Only children satisfying `keep` are shown.
+function why_print_tree!(
+        io::IO, seen::Set{UUID}, uuid::UUID, prefix::String, child_prefix::String;
+        manifest, adjacency, keep, project_deps
+    )
+    pkg = manifest[uuid]
+    children = sort!(
+        filter(keep, get(adjacency, uuid, UUID[])),
+        by = u -> (is_stdlib(u), endswith(manifest[u].name, "_jll"), manifest[u].name)
+    )
+    print(io, prefix)
+    if uuid in project_deps
+        printstyled(io, pkg.name; bold = true, color = :light_green)
+    else
+        print(io, pkg.name)
+    end
+    repeated = uuid in seen && !isempty(children)
+    repeated && printstyled(io, " (*)"; color = :light_black)
+    println(io)
+    push!(seen, uuid)
+    repeated && return
+    for (i, child) in enumerate(children)
+        last = i == length(children)
+        why_print_tree!(
+            io, seen, child, child_prefix * (last ? "└── " : "├── "), child_prefix * (last ? "    " : "│   ");
+            manifest, adjacency, keep, project_deps
+        )
     end
     return
 end
 
-function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = false, kwargs...)
+# All nodes reachable from `roots` by following `adjacency`, restricted to `within`
+function why_closure(roots, adjacency, within)
+    closure = Set{UUID}()
+    queue = collect(roots)
+    while !isempty(queue)
+        uuid = pop!(queue)
+        (uuid in closure || !(uuid in within)) && continue
+        push!(closure, uuid)
+        append!(queue, get(adjacency, uuid, UUID[]))
+    end
+    return closure
+end
+
+function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = false, forward::Bool = false, kwargs...)
     require_not_empty(pkgs, :why)
 
     manifest_resolve!(ctx.env.manifest, pkgs)
     project_deps_resolve!(ctx.env, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
-    # Store all packages that has a dependency on us (all dependees)
-    incoming = Dict{UUID, Set{UUID}}()
-    for (uuid, dep_pkgs) in ctx.env.manifest
-        for (dep, dep_uuid) in dep_pkgs.deps
-            haskey(incoming, dep_uuid) || (incoming[dep_uuid] = Set{UUID}())
-            push!(incoming[dep_uuid], uuid)
+    manifest = ctx.env.manifest
+    outgoing = Dict{UUID, Vector{UUID}}() # the dependencies of each package
+    incoming = Dict{UUID, Vector{UUID}}() # the packages that depend on each package
+    for (uuid, entry) in manifest
+        outgoing[uuid] = collect(values(entry.deps))
+        for dep_uuid in values(entry.deps)
+            push!(get!(Vector{UUID}, incoming, dep_uuid), uuid)
         end
     end
 
     project_deps = Set(values(ctx.env.project.deps))
-
     if workspace
         for (_, project) in ctx.env.workspace
             union!(project_deps, values(project.deps))
         end
     end
 
+    # Everything the project (transitively) depends on
+    reachable = why_closure(project_deps, outgoing, keys(manifest))
+
     first = true
     for pkg in pkgs
         !first && println(io)
         first = false
-        final_paths = Set{Vector{UUID}}()
-        why_find_paths!(final_paths, incoming, project_deps, pkg.uuid, UUID[])
-        foreach(reverse!, final_paths)
-        final_paths_names = map(x -> [ctx.env.manifest[uuid].name for uuid in x], collect(final_paths))
-        sort!(final_paths_names, by = x -> (x, length(x)))
-        delimiter = sprint((io, args) -> printstyled(io, args...; color = :light_green), "→", context = io)
-        for path in final_paths_names
-            println(io, "  ", join(path, " $delimiter "))
+        pkg.uuid in reachable || continue # not depended on by the project
+        seen = Set{UUID}()
+        if forward
+            # Top-down: start at the direct dependencies and only follow edges that lead to the package
+            ancestors = why_closure([pkg.uuid], incoming, reachable)
+            roots = sort!(filter(in(ancestors), collect(project_deps)); by = u -> manifest[u].name)
+            for root in roots
+                why_print_tree!(io, seen, root, "  ", "  "; manifest, adjacency = outgoing, keep = in(ancestors), project_deps)
+            end
+        else
+            # Bottom-up: start at the package and show what depends on it
+            why_print_tree!(io, seen, pkg.uuid, "  ", "  "; manifest, adjacency = incoming, keep = in(reachable), project_deps)
         end
     end
     return

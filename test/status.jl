@@ -19,14 +19,91 @@ json_uuid = UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6")
 
         Pkg.why("StaticArraysCore"; io)
         str = String(take!(io))
-        @test str == "  StaticArrays → StaticArraysCore\n"
+        @test str ==
+            """  StaticArraysCore
+              └── StaticArrays
+            """
 
         Pkg.why("LinearAlgebra"; io)
         str = String(take!(io))
         @test str ==
-            """  StaticArrays → LinearAlgebra
-              StaticArrays → Statistics → LinearAlgebra
+            """  LinearAlgebra
+              ├── StaticArrays
+              └── Statistics
+                  └── StaticArrays
             """
+
+    end
+
+    # A → C, C → D, C → E, E → D: C's dependents are shown once and then marked with (*).
+    # F is in the manifest but not depended on by the project.
+    isolate() do
+        mktempdir() do dir
+            uuids = Dict(n => string(uuid4()) for n in ("A", "C", "D", "E", "F"))
+            write(
+                joinpath(dir, "Project.toml"), """
+                [deps]
+                A = "$(uuids["A"])"
+                """
+            )
+            write(
+                joinpath(dir, "Manifest.toml"), """
+                manifest_format = "2.0"
+
+                [[deps.A]]
+                deps = ["C"]
+                uuid = "$(uuids["A"])"
+                version = "0.1.0"
+
+                [[deps.C]]
+                deps = ["D", "E"]
+                uuid = "$(uuids["C"])"
+                version = "0.1.0"
+
+                [[deps.D]]
+                uuid = "$(uuids["D"])"
+                version = "0.1.0"
+
+                [[deps.E]]
+                deps = ["D"]
+                uuid = "$(uuids["E"])"
+                version = "0.1.0"
+
+                [[deps.F]]
+                deps = ["D"]
+                uuid = "$(uuids["F"])"
+                version = "0.1.0"
+                """
+            )
+            Pkg.activate(dir)
+            io = IOBuffer()
+            Pkg.why("D"; io)
+            @test String(take!(io)) ==
+                """  D
+                  ├── C
+                  │   └── A
+                  └── E
+                      └── C (*)
+                """
+            Pkg.why("D"; io, forward = true)
+            @test String(take!(io)) ==
+                """  A
+                  └── C
+                      ├── D
+                      └── E
+                          └── D
+                """
+            Pkg.why("F"; io)
+            @test String(take!(io)) == ""
+            Pkg.why(["A", "E"]; io)
+            @test String(take!(io)) ==
+                """  A
+
+                  E
+                  └── C
+                      └── A
+                """
+        end
     end
 end
 
