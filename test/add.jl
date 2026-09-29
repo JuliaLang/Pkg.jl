@@ -936,7 +936,7 @@ end
         """
         cmd = addenv(
             `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
-            "JULIA_DEPOT_PATH" => join([DEPOT_PATH; Utils.host_deps_depot()], Sys.iswindows() ? ";" : ":")
+            "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":")
         )
         @test Utils.show_output_if_command_errors(cmd)
     end

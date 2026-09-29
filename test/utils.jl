@@ -13,7 +13,7 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
     list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url,
-    http_server, stalling_http_server, host_deps_depot
+    http_server, stalling_http_server, DEPS_DEPOT
 
 # The cache directory is shared between the test-runner main process and its
 # worker processes: the first process to include this file creates the
@@ -40,11 +40,16 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 const COMPILED_SUBDIR = joinpath("compiled", "v$(VERSION.major).$(VERSION.minor)")
 const THIS_PKG_COMPILE_CACHE = joinpath(Base.DEPOT_PATH[1], COMPILED_SUBDIR)
 
-# The depot that hosts the dev Pkg's non-stdlib deps (Resolver and its deps).
-# Subprocesses that load the dev Pkg with an isolated JULIA_DEPOT_PATH need it
-# appended so code loading can find them.
-host_deps_depot() =
-    abspath(joinpath(dirname(Base.pathof(Pkg.SATResolve.Resolver)), "..", "..", "..", ".."))
+# A depot holding the dependencies of this Pkg that are not loaded from the
+# bundled depots (Resolver and its dependencies), as the test process has them
+# loaded: their compile caches, sources and artifacts. Every isolated depot path
+# ends with it (see `isolate` and `temp_pkg_dir`): a precompile worker is told
+# to load the modules its parent has loaded at the parent's build ids, so a test
+# that precompiles anything depending on Preferences or JLLWrappers in a fresh
+# depot needs the caches those build ids come from, and subprocesses that load
+# this Pkg need its dependencies. Populated once per test run by
+# `populate_deps_depot!`.
+const DEPS_DEPOT = joinpath(CACHE_DIRECTORY, "deps_depot")
 
 function copy_this_pkg_cache(new_depot)
     for p in ("Pkg", "REPLExt")
@@ -55,14 +60,20 @@ function copy_this_pkg_cache(new_depot)
         mkpath(dirname(dest))
         cp(source, dest; force = true)
     end
-    # Dependencies of this Pkg that were not loaded from the bundled depots, such as
-    # a stdlib tracked from a repo or path in the manifest while developing it, are
-    # compiled next to Pkg and the Pkg cache is only valid together with them. A
-    # source checkout in the depot goes along, since the cache records it relative
-    # to the depot and the subprocesses would otherwise fall back to the stdlib,
-    # and so do the artifacts of such a checkout (libpicosat for Resolver): a JLL
-    # errors in its `__init__` when its artifact is in no visible depot.
-    packages_dir = joinpath(dirname(dirname(THIS_PKG_COMPILE_CACHE)), "packages")
+    return
+end
+
+# Copy the compile caches of the dependencies of this Pkg that were not loaded
+# from the bundled depots into `new_depot`, such as a stdlib tracked from a repo
+# or path in the manifest while developing it, or Resolver and its dependencies:
+# they are compiled next to Pkg and the Pkg cache is only valid together with
+# them. A source checkout in the depot goes along, since the cache records it
+# relative to the depot and the subprocesses would otherwise fall back to the
+# stdlib, and so do the artifacts of such a checkout (libpicosat for Resolver):
+# a JLL errors in its `__init__` when its artifact is in no visible depot.
+function copy_loaded_deps(new_depot)
+    host_depot = dirname(dirname(THIS_PKG_COMPILE_CACHE))
+    packages_dir = joinpath(host_depot, "packages")
     for (id, origin) in Base.pkgorigins
         cachefile = origin.cachepath
         cachefile === nothing && continue
@@ -85,12 +96,13 @@ function copy_this_pkg_cache(new_depot)
             artifacts_toml = joinpath(source_dir, "Artifacts.toml")
             isfile(artifacts_toml) || continue
             for (_, meta) in Pkg.Artifacts.select_downloadable_artifacts(artifacts_toml)
-                hash = Base.SHA1(meta["git-tree-sha1"])
-                Pkg.Artifacts.artifact_exists(hash) || continue
-                artifact_dest = joinpath(new_depot, "artifacts", bytes2hex(hash.bytes))
+                # (looked up in the host depot: `DEPOT_PATH` may already be the test's)
+                artifact_source = joinpath(host_depot, "artifacts", meta["git-tree-sha1"])
+                isdir(artifact_source) || continue
+                artifact_dest = joinpath(new_depot, "artifacts", meta["git-tree-sha1"])
                 isdir(artifact_dest) && continue
                 mkpath(dirname(artifact_dest))
-                cp(Pkg.Artifacts.artifact_path(hash), artifact_dest)
+                cp(artifact_source, artifact_dest)
             end
         end
     end
@@ -247,6 +259,33 @@ function populate_loaded_depot!()
     return
 end
 
+# Populate `DEPS_DEPOT` (see there). Called once by the test runner before any
+# tests run; the workers of a parallel run share the result through
+# `CACHE_DIRECTORY`.
+function populate_deps_depot!()
+    isdir(DEPS_DEPOT) && return # already populated
+    tmp = DEPS_DEPOT * "-" * string(getpid())
+    copy_loaded_deps(tmp)
+    # Make the files read-only so tests can't accidentally modify them.
+    for (root, _, files) in walkdir(tmp)
+        for file in files
+            filepath = joinpath(root, file)
+            fmode = filemode(filepath)
+            try
+                chmod(filepath, fmode & (typemax(fmode) ⊻ 0o222))
+            catch
+            end
+        end
+    end
+    try
+        mv(tmp, DEPS_DEPOT)
+    catch
+        isdir(DEPS_DEPOT) || rethrow() # populated concurrently
+        rm(tmp; force = true, recursive = true)
+    end
+    return
+end
+
 # The helpers taking a `do` block are called with hundreds of distinct closures
 # across the test suite; `@nospecialize` keeps them from being compiled once per
 # closure type (each specialization took 0.2-0.5 s).
@@ -285,6 +324,8 @@ function isolate(@nospecialize(fn::Function); loaded_depot = false, linked_reg =
             push!(DEPOT_PATH, target_depot)
             Base.append_bundled_depot_path!(DEPOT_PATH)
             loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
+            populate_deps_depot!()
+            push!(DEPOT_PATH, DEPS_DEPOT)
             # (with the loaded depot the registry is reachable through that)
             registry_is_compressed() && linked_reg && !loaded_depot && link_shared_registry!(target_depot)
             depot_mtimes = Dict(d => mtime(d) for d in DEPOT_PATH if isdir(d))
@@ -401,6 +442,8 @@ function temp_pkg_dir(@nospecialize(fn::Function); rm = true, linked_reg = true)
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
                 Base.append_bundled_depot_path!(DEPOT_PATH)
+                populate_deps_depot!()
+                push!(DEPOT_PATH, DEPS_DEPOT)
                 registry_is_compressed() && linked_reg && link_shared_registry!(depot_dir)
                 fn(env_dir)
             finally
