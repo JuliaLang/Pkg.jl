@@ -21,16 +21,16 @@ json_uuid = UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6")
         str = String(take!(io))
         @test str ==
             """  StaticArraysCore
-              └── StaticArrays
+              └─← StaticArrays
             """
 
         Pkg.why("LinearAlgebra"; io)
         str = String(take!(io))
         @test str ==
             """  LinearAlgebra
-              ├── StaticArrays
-              └── Statistics
-                  └── StaticArrays
+              ├─← StaticArrays
+              └─← Statistics
+                  └─← StaticArrays
             """
 
     end
@@ -81,18 +81,18 @@ json_uuid = UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6")
             Pkg.why("D"; io)
             @test String(take!(io)) ==
                 """  D
-                  ├── C
-                  │   └── A
-                  └── E
-                      └── C (*)
+                  ├─← C
+                  │   └─← A
+                  └─← E
+                      └─← C (*)
                 """
             Pkg.why("D"; io, forward = true)
             @test String(take!(io)) ==
                 """  A
-                  └── C
-                      ├── D
-                      └── E
-                          └── D
+                  └─→ C
+                      ├─→ D
+                      └─→ E
+                          └─→ D
                 """
             Pkg.why("F"; io)
             @test String(take!(io)) == ""
@@ -101,8 +101,8 @@ json_uuid = UUID("682c06a0-de6a-54ab-a142-c8b1cf79cde6")
                 """  A
 
                   E
-                  └── C
-                      └── A
+                  └─← C
+                      └─← A
                 """
         end
     end

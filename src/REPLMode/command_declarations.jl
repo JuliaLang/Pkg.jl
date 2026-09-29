@@ -261,7 +261,8 @@ compound_declarations = [
                 package at the root and the packages that depend on it below, down to the
                 direct dependencies of the project (highlighted). With `--forward` the tree is
                 printed top-down instead, starting at the direct dependencies and only following
-                the paths that lead to the package. Subtrees that have already been shown
+                the paths that lead to the package. The arrows on the tree branches point from
+                a package to the package it depends on. Subtrees that have already been shown
                 elsewhere in the tree are marked with `(*)` and not repeated.
                 The `workspace` option can be used to show the path from any dependency of a project in
                 the workspace.

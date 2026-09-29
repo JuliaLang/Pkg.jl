@@ -369,8 +369,9 @@ The output is a tree with the package at the root and the packages that depend
 on it as children, down to the direct dependencies of the project, which are
 highlighted. If `forward` is true the tree is instead printed top-down: the
 direct dependencies are the roots and only the paths leading to the package are
-shown. In both cases a package whose subtree has already been shown elsewhere is
-marked with `(*)` instead of repeating it.
+shown. The arrows on the tree branches point from a package to the package it
+depends on. In both cases a package whose subtree has already been shown
+elsewhere is marked with `(*)` instead of repeating it.
 If `workspace` is true, this will consider all projects in the workspace and not just the active one.
 
 !!! compat "Julia 1.9"

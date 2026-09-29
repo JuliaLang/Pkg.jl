@@ -1814,10 +1814,12 @@ set_current_compat(; kwargs...) = set_current_compat(Context(); kwargs...)
 
 # Print `uuid` and, recursively, its neighbors in `adjacency` as a tree. A subtree
 # is only printed the first time its node is seen; later occurrences are marked
-# with `(*)`. Only children satisfying `keep` are shown.
+# with `(*)`. Only children satisfying `keep` are shown. The connector to each
+# child ends in `arrow`, which points in the direction of the dependency: `→`
+# when the parent depends on the child and `←` when the child depends on the parent.
 function why_print_tree!(
         io::IO, seen::Set{UUID}, uuid::UUID, prefix::String, child_prefix::String;
-        manifest, adjacency, keep, project_deps
+        manifest, adjacency, keep, project_deps, arrow::String
     )
     pkg = manifest[uuid]
     children = sort!(
@@ -1838,8 +1840,8 @@ function why_print_tree!(
     for (i, child) in enumerate(children)
         last = i == length(children)
         why_print_tree!(
-            io, seen, child, child_prefix * (last ? "└── " : "├── "), child_prefix * (last ? "    " : "│   ");
-            manifest, adjacency, keep, project_deps
+            io, seen, child, child_prefix * (last ? "└─" : "├─") * arrow * " ", child_prefix * (last ? "    " : "│   ");
+            manifest, adjacency, keep, project_deps, arrow
         )
     end
     return
@@ -1896,11 +1898,11 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = 
             ancestors = why_closure([pkg.uuid], incoming, reachable)
             roots = sort!(filter(in(ancestors), collect(project_deps)); by = u -> manifest[u].name)
             for root in roots
-                why_print_tree!(io, seen, root, "  ", "  "; manifest, adjacency = outgoing, keep = in(ancestors), project_deps)
+                why_print_tree!(io, seen, root, "  ", "  "; manifest, adjacency = outgoing, keep = in(ancestors), project_deps, arrow = "→")
             end
         else
             # Bottom-up: start at the package and show what depends on it
-            why_print_tree!(io, seen, pkg.uuid, "  ", "  "; manifest, adjacency = incoming, keep = in(reachable), project_deps)
+            why_print_tree!(io, seen, pkg.uuid, "  ", "  "; manifest, adjacency = incoming, keep = in(reachable), project_deps, arrow = "←")
         end
     end
     return
