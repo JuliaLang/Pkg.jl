@@ -276,6 +276,7 @@ Base.@kwdef mutable struct Project
     targets::Dict{String, Vector{String}} = Dict{String, Vector{String}}()
     apps::Dict{String, AppInfo} = Dict{String, AppInfo}()
     compat::Dict{String, Compat} = Dict{String, Compat}()
+    compat_overrides::Dict{String, Compat} = Dict{String, Compat}()
     sources::Dict{String, Dict{String, String}} = Dict{String, Dict{String, String}}()
     workspace::Dict{String, Any} = Dict{String, Any}()
     readonly::Bool = false
@@ -734,6 +735,19 @@ function workspace_resolve_hash(env::EnvCache)
     if !isempty(extras_compats)
         println(iob)
         for (name, compat) in sort!(collect(extras_compats); by = first)
+            println(iob, name, "=", compat)
+        end
+    end
+    overrides = Dict{String, VersionSpec}()
+    for project in Iterators.flatten(((env.project,), values(env.workspace)))
+        for (name, compat) in project.compat_overrides
+            overrides[name] = intersect(get(overrides, name, VersionSpec()), compat.val)
+        end
+    end
+    if !isempty(overrides)
+        println(iob)
+        println(iob, "[compat_overrides]")
+        for (name, compat) in sort!(collect(overrides); by = first)
             println(iob, name, "=", compat)
         end
     end

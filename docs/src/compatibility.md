@@ -17,6 +17,9 @@ A compatibility entry can also be given for a package listed under `[extras]`. S
 the package when it is in the environment, for example as an indirect dependency, without making it a
 direct dependency of the project.
 
+To ignore the compatibility constraints that other packages put on a package, for example to try a new
+version of it that a dependency does not allow yet, use the [`[compat_overrides]`](@ref compat-overrides) section instead.
+
 The format of the version specifier is described in detail below.
 
 !!! info
