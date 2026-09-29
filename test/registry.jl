@@ -623,7 +623,8 @@ end
             @test !LibGit2.isdirty(repo)
             @test LibGit2.isattached(repo)
         end
-        @test read(joinpath(installed, "README.md"), String) == "updated\n"
+        # The checkout follows `core.autocrlf`, which is on by default with Git for Windows
+        @test replace(read(joinpath(installed, "README.md"), String), "\r\n" => "\n") == "updated\n"
     end
 end
 
