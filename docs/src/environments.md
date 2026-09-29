@@ -138,6 +138,63 @@ between several incompatible packages.
   [7876af07] + Example v0.5.3
 ```
 
+## Scripts with inline project metadata
+
+A single Julia file can be its own environment by carrying the project, and by default also the
+manifest, as TOML inside comment blocks. This makes a script self-contained: one file holds the
+code and everything needed to reproduce the packages it uses, and `julia script.jl` runs it in
+exactly that environment (see the [code loading manual](https://docs.julialang.org/en/v1/manual/code-loading/#inline-project-scripts)
+for the loading rules).
+
+Activating a Julia file turns it into such a script: package operations work as usual and update
+the blocks inside the file, adding the `# /// project` block at the top the first time if the file
+has none:
+
+```julia-repl
+(@v1.13) pkg> activate script.jl
+  Activating new script at `~/script.jl`
+
+(script.jl) pkg> add Example
+   Resolving package versions...
+    Updating `~/script.jl`
+  [7876af07] + Example v0.5.3
+    Updating `~/script.jl`
+  [7876af07] + Example v0.5.3
+```
+
+The file now looks like this, with the project block after the leading comments of the file and the
+manifest block at the end:
+
+```julia
+# /// project
+# [deps]
+# Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+# ///
+
+using Example
+println(Example.hello("world"))
+
+# /// manifest
+# julia_version = "1.13.0"
+# manifest_format = "2.0"
+# project_hash = "..."
+#
+# [[deps.Example]]
+# git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb612"
+# uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+# version = "0.5.3"
+# ///
+```
+
+Every line inside a block is a comment, so the script stays a valid Julia file. Comments you add
+inside the project block are preserved by Pkg. Code added after the manifest block is fine: Pkg
+moves the block back to the end of the file the next time it writes the manifest. The blocks may also be written by hand; a file whose
+leading comments contain a `# /// project` block is a script with inline project metadata.
+
+To keep the manifest in a separate file instead, add a `manifest` entry to the project block, e.g.
+`manifest = "script.Manifest.toml"` (relative to the directory of the script). The next package
+operation moves an existing inline manifest to that file and removes the block.
+
 ## Shared environments
 
 A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v1.10` environment is
