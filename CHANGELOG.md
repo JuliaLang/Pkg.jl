@@ -27,6 +27,11 @@ Pkg v1.14 Release Notes
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
+- `Pkg.why` now prints a tree instead of listing every path through the dependency graph, which could
+  run to thousands of lines for widely used packages. The package is the root, the packages that depend
+  on it are nested below down to the project's direct dependencies (highlighted), and a subtree already
+  shown elsewhere is marked with `(*)`. The new `forward` keyword (`--forward`/`-f` in the REPL) prints
+  the paths top-down from the direct dependencies instead. ([#4839])
 
 Pkg v1.13 Release Notes
 =======================
@@ -252,3 +257,4 @@ Pkg v1.7 Release Notes
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
+[#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
