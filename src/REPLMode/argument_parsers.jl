@@ -56,11 +56,6 @@ function looks_like_path(str::String)
     return contains(str, '/') || contains(str, '\\') || str == "." || str == ".." || is_windows_drive_colon(str)
 end
 
-# Check if a string looks like a complete URL
-function looks_like_complete_url(str::String)
-    return looks_like_url(str) && (contains(str, '.') || contains(str, '/'))
-end
-
 is_windows_drive_colon(str::String) = occursin(r"^[a-zA-Z]:", str)
 
 # Check if a colon at given position is part of a Windows drive letter
@@ -202,7 +197,7 @@ function extract_url_revision(input::String)
     before_hash = input[1:prevind(input, hash_pos)]
     after_hash = input[nextind(input, hash_pos):end]
 
-    if looks_like_complete_url(before_hash)
+    if looks_like_url(before_hash)
         return before_hash, after_hash
     end
 
