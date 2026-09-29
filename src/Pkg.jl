@@ -361,12 +361,16 @@ See also [`PackageSpec`](@ref), [`PackageMode`](@ref).
 const rm = API.rm
 
 """
-    Pkg.why(pkg::Union{String, Vector{String}}; workspace::Bool=false)
-    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}}; workspace::Bool=false)
+    Pkg.why(pkg::Union{String, Vector{String}}; workspace::Bool=false, forward::Bool=false)
+    Pkg.why(pkg::Union{PackageSpec, Vector{PackageSpec}}; workspace::Bool=false, forward::Bool=false)
 
 Show the reason why this package is in the manifest.
-The output is all the different ways to reach the package
-through the dependency graph starting from the dependencies.
+The output is a tree with the package at the root and the packages that depend
+on it as children, down to the direct dependencies of the project, which are
+highlighted. If `forward` is true the tree is instead printed top-down: the
+direct dependencies are the roots and only the paths leading to the package are
+shown. In both cases a package whose subtree has already been shown elsewhere is
+marked with `(*)` instead of repeating it.
 If `workspace` is true, this will consider all projects in the workspace and not just the active one.
 
 !!! compat "Julia 1.9"
