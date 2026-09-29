@@ -616,11 +616,8 @@ function collect_project(
         push!(deps, PackageSpec(name, uuid, vspec))
         push!(weakdeps, uuid)
     end
-    # A `[compat]` entry for an `[extras]` package of the active project (or a workspace
-    # member) constrains that package if it is in the environment, e.g. as an indirect
-    # dependency, but does not add it. A weak requirement has exactly these semantics.
-    # The `[extras]` of a dependency are not consulted, so they are only honored for the
-    # projects that are loaded into the environment.
+    # `[compat]` for an `[extras]` package of a loaded project constrains it if it is in
+    # the environment (e.g. as an indirect dependency) without adding it: a weak requirement.
     if loaded !== nothing
         for (name, uuid) in project.extras
             (haskey(project.deps, name) || haskey(project.weakdeps, name)) && continue
