@@ -2129,7 +2129,8 @@ end
 
 function prune_manifest(env::EnvCache)
     # if project uses another manifest, only prune project entry in manifest
-    if isempty(env.workspace) && dirname(env.project_file) != dirname(env.manifest_file)
+    # (a script owns its manifest wherever the `manifest = "..."` entry puts it)
+    if isempty(env.workspace) && dirname(env.project_file) != dirname(env.manifest_file) && !is_script(env.project_file)
         proj_entry = env.manifest[env.project.uuid]
         proj_entry.deps = env.project.deps
     else
@@ -2211,7 +2212,7 @@ function any_package_not_installed(manifest::Manifest)
 end
 
 function build(ctx::Context, uuids::Set{UUID}, verbose::Bool; allow_reresolve::Bool = true)
-    if any_package_not_installed(ctx.env.manifest) || !isfile(ctx.env.manifest_file)
+    if any_package_not_installed(ctx.env.manifest) || !manifest_exists(ctx.env)
         Pkg.instantiate(ctx, allow_build = false, allow_autoprecomp = false)
     end
     all_uuids = get_deps(ctx.env, uuids)
@@ -4248,6 +4249,18 @@ function git_head_env(env, project_dir)
             git_path = LibGit2.path(repo)
             project_path = relpath(env.project_file, git_path)
             manifest_path = relpath(env.manifest_file, git_path)
+            if is_script(env.project_file)
+                # the blocks of the committed script
+                content = read(GitTools.git_file_stream(repo, "HEAD:$project_path", fakeit = true), String)
+                meta = Base.parse_script_metadata(content; path = project_path)
+                new_env.project = read_project(IOBuffer(something(meta.project, "")))
+                if env.manifest_file == env.project_file
+                    new_env.manifest = read_manifest(IOBuffer(something(meta.manifest, "")))
+                else
+                    new_env.manifest = read_manifest(GitTools.git_file_stream(repo, "HEAD:$manifest_path", fakeit = true))
+                end
+                return new_env
+            end
             new_env.project = read_project(GitTools.git_file_stream(repo, "HEAD:$project_path", fakeit = true))
             new_env.manifest = read_manifest(GitTools.git_file_stream(repo, "HEAD:$manifest_path", fakeit = true))
             return new_env

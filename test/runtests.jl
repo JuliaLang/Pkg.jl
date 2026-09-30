@@ -71,6 +71,7 @@ module PkgTestsInner
         "manifests.jl",
         "project_manifest.jl",
         "project_comments.jl",
+        "scripts.jl",
         "sources.jl",
         "workspaces.jl",
         "apps.jl",
