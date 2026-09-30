@@ -136,7 +136,10 @@ module PkgTestsInner
                 @with Pkg.DEFAULT_IO => Main.PKG_TEST_IO begin
                     Logging.with_logger(Logging.ConsoleLogger(Main.PKG_TEST_IO)) do
                         ts = @testset $f begin
+                            loaded_before = Set(keys(Base.loaded_modules))
                             include($path)
+                            # a package loaded here would stay loaded for later test files
+                            @test Main.Utils.packages_loaded_since(loaded_before) == String[]
                         end
                         Main.print_testset_times(Main.PKG_TEST_IO, ts)
                     end
@@ -205,7 +208,9 @@ module PkgTestsInner
                         @testset "$f" verbose = verbose for f in test_files
                             @info "==== Testing `test/$f`"
                             flush(default_io)
+                            loaded_before = Set(keys(Base.loaded_modules))
                             include(f)
+                            @test Utils.packages_loaded_since(loaded_before) == String[]
                         end
                     finally
                         islogging && close(default_io)
