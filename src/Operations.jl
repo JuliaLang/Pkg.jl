@@ -16,7 +16,7 @@ using Base.BinaryPlatforms
 import ...Pkg
 import ...Pkg: pkg_server, Registry, pathrepr, can_fancyprint, printpkgstyle, stderr_f, OFFLINE_MODE
 import ...Pkg: UPDATED_REGISTRY_THIS_SESSION, RESPECT_SYSIMAGE_VERSIONS, should_autoprecompile
-import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path
+import ...Pkg: usable_io, discover_repo, create_cachedir_tag, manifest_rel_path, is_interrupt, shield_cancellation
 
 #########
 # Utils #
@@ -1634,9 +1634,10 @@ function install_collected_artifacts!(
                     show_progress(io, main_bar; carriagereturn = false)
                     println(io)
                 catch e
-                    e isa InterruptException || rethrow()
+                    is_interrupt(e) || rethrow()
                 finally
-                    print(io, ansi_enablecursor)
+                    # if the scope was cancelled the write itself would be, leaving the cursor hidden
+                    shield_cancellation(print, io, ansi_enablecursor)
                 end
             end
             Base.errormonitor(t_print)
@@ -1654,7 +1655,7 @@ function install_collected_artifacts!(
                     Threads.@spawn try
                         f()
                     catch e
-                        e isa InterruptException && (interrupted[] = true)
+                        is_interrupt(e) && (interrupted[] = true)
                         put!(errors, e)
                     finally
                         Base.release(sema)
@@ -1671,7 +1672,7 @@ function install_collected_artifacts!(
             is_done[] = true
             if fancyprint
                 try
-                    wait(t_print)
+                    shield_cancellation(wait, t_print)
                 catch
                     # already reported by the `errormonitor` above
                 end
