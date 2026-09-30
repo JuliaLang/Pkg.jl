@@ -1423,7 +1423,7 @@ end
                         add JSON
                         build
                     """
-                    @eval using BigProject
+                    run_in_subprocess("using BigProject")
                     pkg"build BigProject"
                     @test_throws PkgError pkg"add BigProject"
                     json_uuid = Pkg.project().dependencies["JSON"]

@@ -17,8 +17,8 @@ for v in (nothing, "true")
                 @testset "via name" begin
                     Pkg.add(TEST_PKG.name; use_git_for_all_downloads = true)
                     @test haskey(Pkg.dependencies(), TEST_PKG.uuid)
-                    @eval import $(Symbol(TEST_PKG.name))
-                    @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+                    source = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
+                    @test_throws SystemError open(source, "w") do io end  # check read-only
                     Pkg.rm(TEST_PKG.name)
                 end
                 if (Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false) == false) && !Sys.iswindows()

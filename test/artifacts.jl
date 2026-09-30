@@ -850,12 +850,7 @@ end
             Pkg.test("ArtifactInstallation")
 
             # Also manually do it
-            Core.eval(
-                Module(:__anon__), quote
-                    using ArtifactInstallation
-                    do_test()
-                end
-            )
+            run_in_subprocess("using ArtifactInstallation; do_test()")
         end
     end
 
@@ -1187,13 +1182,7 @@ end
                 )
             )
 
-            (arty_path, barty_path) = Core.eval(
-                Module(:__anon__), quote
-                    # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
-                    using ArtifactOverrideLoading
-                    arty_path, barty_path
-                end
-            )
+            arty_path, barty_path = split(run_in_subprocess("using ArtifactOverrideLoading; println(arty_path); print(barty_path)"), '\n')
 
             @test arty_path == artifact_path(bar_hash)
             @test barty_path == barty_override_path
@@ -1218,11 +1207,6 @@ end
         # Force Pkg to reload what it knows about artifact overrides
         Pkg.Artifacts.load_overrides(; force = true)
 
-        # Force Julia to re-load ArtifactOverrideLoading from scratch
-        pkgid = Base.PkgId(aol_uuid, "ArtifactOverrideLoading")
-        Base.unreference_module(pkgid)
-        touch(joinpath(depot_container, "ArtifactOverrideLoading", "src", "ArtifactOverrideLoading.jl"))
-
         # Verify that the hash-based overrides (and clears) worked
         @test artifact_path(foo_hash) == barty_override_path
         @test endswith(artifact_path(baz_hash), bytes2hex(baz_hash.bytes))
@@ -1230,13 +1214,7 @@ end
         # Verify that the name-based override worked; extract paths from module that
         # loads overridden package artifacts.
         Pkg.activate(depot_container) do
-            # TODO: This causes a loading.jl warning, probably Pkg is clashing because of a different UUID??
-            (arty_path, barty_path) = Core.eval(
-                Module(:__anon__), quote
-                    using ArtifactOverrideLoading
-                    arty_path, barty_path
-                end
-            )
+            arty_path, barty_path = split(run_in_subprocess("using ArtifactOverrideLoading; println(arty_path); print(barty_path)"), '\n')
 
             @test arty_path == barty_override_path
             @test barty_path == barty_override_path

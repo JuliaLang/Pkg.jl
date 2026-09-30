@@ -143,13 +143,7 @@ temp_pkg_dir() do project_path
                 @test sibling_info.source !== nothing
                 @test endswith(sibling_info.source, "SiblingPkg")
 
-                result = include_string(
-                    Module(), """
-                    using ParentPkg
-                    ParentPkg.parent_value()
-                    """
-                )
-                @test result == 47
+                @test run_in_subprocess("using ParentPkg; print(ParentPkg.parent_value())") == "47"
             end
         end
     end

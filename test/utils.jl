@@ -13,7 +13,7 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
     list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url,
-    http_server, stalling_http_server
+    http_server, stalling_http_server, run_in_subprocess
 
 # The cache directory is shared between the test-runner main process and its
 # worker processes: the first process to include this file creates the
@@ -657,6 +657,24 @@ function make_file_url(path)
         path = "/" * path
     end
     return "file://$(path)"
+end
+
+# Test files share worker processes, so a package loaded by one test file stays loaded for
+# the next. Tests load packages in a fresh julia instead, with the current depots, load path
+# and active project, and get back what `code` prints.
+function run_in_subprocess(code::AbstractString)
+    pathsep = Sys.iswindows() ? ";" : ":"
+    cmd = addenv(
+        `$(Base.julia_cmd()) --startup-file=no --color=no -e $code`,
+        "JULIA_DEPOT_PATH" => join(DEPOT_PATH, pathsep),
+        "JULIA_LOAD_PATH" => join(LOAD_PATH, pathsep),
+        "JULIA_PROJECT" => Base.active_project(),
+    )
+    out, err = IOBuffer(), IOBuffer()
+    proc = run(pipeline(ignorestatus(cmd); stdout = out, stderr = err))
+    output = String(take!(out))
+    success(proc) || error("subprocess failed:\n", output, String(take!(err)))
+    return output
 end
 
 end
