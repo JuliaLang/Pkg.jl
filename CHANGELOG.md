@@ -27,6 +27,17 @@ Pkg v1.14 Release Notes
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
+- The `[sources]` of a package added by URL or path now also replace packages that are only in the manifest
+  because other packages depend on them, e.g. `add Foo#main` in an environment that already has a registered
+  version of a subpackage of `Foo` now tracks that subpackage from `Foo`'s `[sources]` too. Direct dependencies
+  and pinned packages keep their source, and different `[sources]` for the same package are an error. ([#4750])
+- A relative `path` in the `[sources]` of a package added by URL is now tracked from the same repository and commit
+  as that package, instead of by a path into the package's installation in the depot. This makes such dependencies
+  work for packages in a subdirectory of a repository, and keeps the manifest valid when it is moved to another depot.
+- When a package that is part of a `[workspace]` is added by URL or developed, the other packages of that workspace
+  that it depends on now come from the same commit or checkout, as if they were listed in its `[sources]`. This way,
+  `add BigProject#main` also tracks the subpackages of `BigProject` from its repository without them needing
+  `[sources]` entries for each other.
 
 Pkg v1.13 Release Notes
 =======================
@@ -252,3 +263,4 @@ Pkg v1.7 Release Notes
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
+[#4750]: https://github.com/JuliaLang/Pkg.jl/issues/4750

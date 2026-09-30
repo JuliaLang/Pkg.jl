@@ -668,12 +668,37 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     return developed
 end
 
-function collect_fixed!(
-        env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version;
-        # A `[sources]` entry in a dependency's project file must not take over such a
-        # package for which the environment already has a source for, see #4750.
-        env_uuids::Set{UUID} = Set{UUID}()
-    )
+# The packages whose source the environment decides itself: its projects, their direct
+# dependencies and pinned packages. The `[sources]` of a dependency don't apply to them.
+function env_source_uuids(env::EnvCache, pkgs::Vector{PackageSpec})
+    uuids = Set{UUID}()
+    for project in Iterators.flatten(((env.project,), values(env.workspace)))
+        project.uuid === nothing || push!(uuids, project.uuid)
+        union!(uuids, values(project.deps))
+    end
+    for pkg in pkgs
+        pkg.pinned && push!(uuids, pkg.uuid)
+    end
+    return uuids
+end
+
+# Whether `pkg` is tracked from the source that `dep` got from a `[sources]` entry. Either may
+# not have been tracked yet, and leave out the rev and tree hash that tracking fills in.
+function tracks_source(env::EnvCache, pkg::PackageSpec, dep::PackageSpec)
+    if is_tracking_path(dep)
+        is_tracking_path(pkg) || return false
+        return Pkg.safe_realpath(source_path(env.manifest_file, pkg)) ==
+            Pkg.safe_realpath(source_path(env.manifest_file, dep))
+    end
+    is_tracking_repo(pkg) && !is_tracking_path(pkg) || return false
+    unset_or_equal(a, b) = a === nothing || b === nothing || a == b
+    return pkg.repo.source == dep.repo.source && pkg.repo.subdir == dep.repo.subdir &&
+        unset_or_equal(pkg.repo.rev, dep.repo.rev) && unset_or_equal(pkg.tree_hash, dep.tree_hash)
+end
+
+# Collect the fixed packages in `pkgs` and the dependencies that `[sources]` entries of those
+# add. Returns the latter, some of which may replace a package in `pkgs`.
+function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version)
     deps_map = Dict{UUID, Vector{PackageSpec}}()
     weak_map = Dict{UUID, Set{UUID}}()
 
@@ -700,17 +725,38 @@ function collect_fixed!(
         names[uuid] = project.name === nothing ? "project" : project.name
     end
 
-    pkg_queue = collect(pkgs)
+    # The fixed packages that the environment tracks itself are collected first, together
+    # with the dependencies that `[sources]` of those add. Such a dependency takes over any
+    # other package that is only kept from the manifest, e.g. a registered version that is
+    # now a subpackage of a package added by URL. The remaining fixed packages are deferred
+    # until then, and the `[sources]` of those only add packages that have no source yet.
+    env_uuids = env_source_uuids(env, pkgs)
     pkg_by_uuid = Dict{UUID, PackageSpec}()
     for pkg in pkgs
         pkg.uuid === nothing && continue
         pkg_by_uuid[pkg.uuid] = pkg
     end
+    kept = copy(pkg_by_uuid)
+    pkg_queue = PackageSpec[pkg for pkg in pkgs if !is_tracking_registry(pkg) && pkg.uuid in env_uuids]
+    deferred = PackageSpec[pkg for pkg in pkgs if !is_tracking_registry(pkg) && !(pkg.uuid in env_uuids)]
     new_fixed_pkgs = PackageSpec[]
-    seen = Set{UUID}(keys(pkg_by_uuid))
-    union!(seen, env_uuids)
-    while !isempty(pkg_queue)
-        pkg = popfirst!(pkg_queue)
+    seen = copy(env_uuids)
+    # the package whose `[sources]` a dependency got its source from
+    sourced_from = Dict{UUID, PackageSpec}()
+    while !isempty(pkg_queue) || !isempty(deferred)
+        takeover = !isempty(pkg_queue)
+        pkg = if takeover
+            popfirst!(pkg_queue)
+        else
+            deferred_pkg = popfirst!(deferred)
+            deferred_pkg.uuid in seen && continue
+            push!(seen, deferred_pkg.uuid)
+            if get(kept, deferred_pkg.uuid, nothing) !== deferred_pkg
+                push!(new_fixed_pkgs, deferred_pkg)
+                pkg_by_uuid[deferred_pkg.uuid] = deferred_pkg
+            end
+            deferred_pkg
+        end
         pkg.uuid === nothing && continue
         # add repo package if necessary
         source = source_path(env.manifest_file, pkg)
@@ -743,33 +789,72 @@ function collect_fixed!(
             end
             pkgerror(error_msg)
         end
-        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded = get(loaded_projects, pkg.uuid, nothing))
+        loaded = get(loaded_projects, pkg.uuid, nothing)
+        if loaded === nothing
+            project_file = projectfile_path(path; strict = true)
+            project_file === nothing || (loaded = (project_file, read_project(project_file)))
+        end
+        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded)
+        # dependencies whose source is only kept from the manifest
+        from_manifest = Set{UUID}()
+        if is_tracking_path(pkg)
+            path_workspace_sources!(env, path, deps, weakdeps)
+        elseif loaded !== nothing && is_tracking_repo(pkg)
+            from_manifest = repo_sources!(env, pkg, loaded[2], deps, weakdeps)
+        end
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
         for dep in deps
             names[dep.uuid] = dep.name
             dep_uuid = dep.uuid
-            if !is_tracking_registry(dep) && dep_uuid !== nothing && !(dep_uuid in seen)
-                # Only recursively collect path sources if the path actually exists
-                # Repo sources (with URL/rev) are always collected
-                if is_tracking_path(dep)
-                    dep_source = source_path(env.manifest_file, dep)
-                    if dep_source !== nothing && isdir(dep_source)
-                        push!(pkg_queue, dep)
-                        push!(new_fixed_pkgs, dep)
-                        pkg_by_uuid[dep_uuid] = dep
-                        push!(seen, dep_uuid)
-                    end
-                else
-                    # Repo source - always add to queue
-                    push!(pkg_queue, dep)
-                    push!(new_fixed_pkgs, dep)
-                    pkg_by_uuid[dep_uuid] = dep
-                    push!(seen, dep_uuid)
-                end
-            elseif dep_uuid !== nothing && !haskey(pkg_by_uuid, dep_uuid)
-                pkg_by_uuid[dep_uuid] = dep
+            dep_uuid === nothing && continue
+            dep_takeover = takeover && !(dep_uuid in from_manifest)
+            # Only recursively collect path sources if the path actually exists
+            # Repo sources (with URL/rev) are always collected
+            has_source = if is_tracking_path(dep)
+                dep_source = source_path(env.manifest_file, dep)
+                dep_source !== nothing && isdir(dep_source)
+            else
+                is_tracking_repo(dep)
             end
+            if !has_source
+                haskey(pkg_by_uuid, dep_uuid) || (pkg_by_uuid[dep_uuid] = dep)
+                continue
+            end
+            if dep_uuid in seen
+                other = get(sourced_from, dep_uuid, nothing)
+                if dep_takeover && other !== nothing
+                    sourced = pkg_by_uuid[dep_uuid]
+                    if !tracks_source(env, sourced, dep)
+                        pkgerror(
+                            "packages $(err_rep(other)) and $(err_rep(pkg)) have different `[sources]` for ",
+                            "$(err_rep(dep)); add it to the environment to choose its source"
+                        )
+                    end
+                    # keep what this source asks for as well, to compare later ones against it
+                    sourced.repo.rev === nothing && (sourced.repo.rev = dep.repo.rev)
+                    sourced.tree_hash === nothing && (sourced.tree_hash = dep.tree_hash)
+                end
+                continue
+            end
+            kept_pkg = get(kept, dep_uuid, nothing)
+            if !dep_takeover
+                # collected later, unless a package that the environment tracks gives it
+                # another source first
+                kept_pkg === nothing && push!(deferred, dep)
+                continue
+            end
+            if kept_pkg !== nothing && tracks_source(env, kept_pkg, dep)
+                # keep the package as it is, e.g. at the tree hash that the manifest records
+                # for the rev that the `[sources]` entry asks for
+                dep = kept_pkg
+            else
+                push!(new_fixed_pkgs, dep)
+            end
+            push!(pkg_queue, dep)
+            pkg_by_uuid[dep_uuid] = dep
+            push!(seen, dep_uuid)
+            sourced_from[dep_uuid] = pkg
         end
     end
 
@@ -788,6 +873,198 @@ function collect_fixed!(
         fixed[uuid] = Resolve.Fixed(fixpkgversion, q, get(weak_map, uuid, Set{UUID}()))
     end
     return fixed, new_fixed_pkgs
+end
+
+# Join a relative path onto a directory of a repository, where `""` is the root. Returns
+# `nothing` when the result is outside of the repository.
+function join_repo_path(dir::AbstractString, path::AbstractString)
+    joined = rstrip(replace(normpath(joinpath(dir, path)), '\\' => '/'), '/')
+    joined == "." && return ""
+    (joined == ".." || startswith(joined, "../") || isabspath(joined)) && return nothing
+    return String(joined)
+end
+
+function git_subtree(tree::LibGit2.GitTree, subdir::String)
+    isempty(subdir) && return tree
+    obj = try
+        tree[subdir]
+    catch err
+        err isa KeyError || rethrow()
+        return nothing
+    end
+    return obj isa LibGit2.GitTree ? obj : nothing
+end
+
+# The bare clone of the repository that `pkg` is tracked from
+function repo_clone_path(env::EnvCache, pkg::PackageSpec)
+    source = pkg.repo.source::String
+    if !Pkg.isurl(source)
+        # the canonical path of a local repository, which may be relative to the manifest
+        source = Pkg.safe_realpath(isabspath(source) ? source : normpath(joinpath(dirname(env.manifest_file), source)))
+    end
+    return Types.add_repo_cache_path(source)
+end
+
+# Call `f` with the tree of the commit that the rev of `pkg`, tracked from a repository,
+# resolved to during this operation, if `pkg` is at that commit. Returns `nothing` without
+# calling `f` if there is no such commit, e.g. because `pkg` is kept at the tree hash that
+# the manifest records.
+function with_resolved_tree(f, env::EnvCache, pkg::PackageSpec)
+    (pkg.repo.source === nothing || pkg.repo.rev === nothing || pkg.tree_hash === nothing) && return nothing
+    clone = repo_clone_path(env, pkg)
+    commit = get(env.resolved_revs, (clone, pkg.repo.rev), nothing)
+    commit === nothing && return nothing
+    return LibGit2.with(LibGit2.GitRepo(clone)) do repo
+        tree = LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(repo, commit))
+        subtree = git_subtree(tree, something(pkg.repo.subdir, ""))
+        subtree === nothing && return nothing
+        SHA1(string(LibGit2.GitHash(subtree))) == pkg.tree_hash || return nothing
+        return f(tree)
+    end
+end
+
+function git_read_project(tree::LibGit2.GitTree, dir::String)
+    for name in Base.project_names
+        obj = try
+            tree[isempty(dir) ? name : "$dir/$name"]
+        catch err
+            err isa KeyError || rethrow()
+            continue
+        end
+        obj isa LibGit2.GitBlob || continue
+        return read_project(IOBuffer(LibGit2.content(obj)))
+    end
+    return nothing
+end
+
+# The directory of the project whose workspace includes the project at `dir`, looked up in
+# `tree` the same way that `Base.base_project` does on the file system
+function git_base_project(tree::LibGit2.GitTree, dir::String)
+    parent = dir
+    while !isempty(parent)
+        parent = dirname(parent)
+        project = git_read_project(tree, parent)
+        project === nothing && continue
+        for path in get(project.workspace, "projects", String[])
+            join_repo_path(parent, path) == dir && return parent
+        end
+    end
+    return nothing
+end
+
+# The packages of the workspace in `tree` that includes the project at `dir`, by UUID and
+# directory, like `Types.collect_workspace` does on the file system
+function git_workspace_packages(tree::LibGit2.GitTree, dir::String)
+    while true
+        base = git_base_project(tree, dir)
+        base === nothing && break
+        dir = base
+    end
+    packages = Dict{UUID, String}()
+    seen = Set{String}()
+    queue = [dir]
+    while !isempty(queue)
+        dir = pop!(queue)
+        dir in seen && continue
+        push!(seen, dir)
+        project = git_read_project(tree, dir)
+        project === nothing && continue
+        project.uuid === nothing || (packages[project.uuid] = dir)
+        for path in get(project.workspace, "projects", String[])
+            subdir = join_repo_path(dir, path)
+            subdir === nothing || push!(queue, subdir)
+        end
+    end
+    return packages
+end
+
+# The packages of the workspace that includes the project at `dir` on the file system, by UUID
+# and directory, unless that is the workspace of the active environment
+function workspace_packages(env::EnvCache, dir::String)
+    project_file = projectfile_path(dir; strict = true)
+    project_file === nothing && return Dict{UUID, String}()
+    root = Types.find_root_base_project(project_file)
+    root == Types.find_root_base_project(env.project_file) && return Dict{UUID, String}()
+    packages = Dict{UUID, String}()
+    for (file, project) in Types.collect_workspace(root)
+        project.uuid === nothing || (packages[project.uuid] = dirname(file))
+    end
+    return packages
+end
+
+# Whether `dep`, a dependency of a package, can get its source from the workspace of that package
+has_no_source(dep::PackageSpec, weakdeps::Set{UUID}) =
+    dep.path === nothing && !is_tracking_repo(dep) && !(dep.uuid in weakdeps)
+
+# The dependencies of `pkg`, tracked from a repository, that are in another directory of the same
+# repository: those with a relative `path` in its `[sources]`, and the other packages of the
+# workspace of `pkg` that it depends on without a `[sources]` entry. Track them from the
+# repository as well, at the same commit, instead of from a registry or by a path into the
+# installation of `pkg`, which doesn't contain the rest of the repository when `pkg` is in a
+# subdirectory of it, and doesn't move with the manifest.
+#
+# This needs the commit of `pkg`, which is known when `pkg` was resolved from its rev during
+# this operation. Otherwise such a dependency is kept as the manifest records it, and returned
+# so that it does not take over the source of another package.
+function repo_sources!(env::EnvCache, pkg::PackageSpec, project::Project, deps::Vector{PackageSpec}, weakdeps::Set{UUID})
+    subdirs = Dict{UUID, String}()
+    for dep in deps
+        dep.path === nothing && continue
+        path = project.sources[dep.name]["path"]::String
+        isabspath(path) && continue
+        subdir = join_repo_path(something(pkg.repo.subdir, ""), path)
+        subdir === nothing || (subdirs[dep.uuid] = subdir)
+    end
+    from_manifest = Set{UUID}()
+    resolved = with_resolved_tree(env, pkg) do tree
+        workspace = git_workspace_packages(tree, something(pkg.repo.subdir, ""))
+        for dep in deps
+            subdir = get(subdirs, dep.uuid, nothing)
+            if subdir === nothing
+                has_no_source(dep, weakdeps) || continue
+                subdir = get(workspace, dep.uuid, nothing)
+                subdir === nothing && continue
+            end
+            subtree = git_subtree(tree, subdir)
+            subtree === nothing && continue
+            dep.path = nothing
+            dep.repo = GitRepo(pkg.repo.source, pkg.repo.rev, isempty(subdir) ? nothing : subdir)
+            dep.tree_hash = SHA1(string(LibGit2.GitHash(subtree)))
+        end
+        return true
+    end
+    resolved === nothing || return from_manifest
+    for dep in deps
+        subdir = get(subdirs, dep.uuid, nothing)
+        # never a path into the installation of `pkg`, as that is what the manifest would record
+        subdir === nothing || (dep.path = nothing)
+        entry = manifest_info(env.manifest, dep.uuid)
+        entry === nothing && continue
+        entry.repo.source == pkg.repo.source || continue
+        if subdir !== nothing
+            something(entry.repo.subdir, "") == subdir || continue
+        else
+            # a package of the workspace of `pkg` has its rev
+            has_no_source(dep, weakdeps) && entry.repo.rev == pkg.repo.rev || continue
+        end
+        dep.repo = GitRepo(entry.repo.source, entry.repo.rev, entry.repo.subdir)
+        dep.tree_hash = entry.tree_hash
+        push!(from_manifest, dep.uuid)
+    end
+    return from_manifest
+end
+
+# The other packages of the workspace of `pkg`, tracked by the path `path`, that it depends on
+# without a `[sources]` entry come from the same checkout of the workspace
+function path_workspace_sources!(env::EnvCache, path::String, deps::Vector{PackageSpec}, weakdeps::Set{UUID})
+    workspace = workspace_packages(env, path)
+    for dep in deps
+        has_no_source(dep, weakdeps) || continue
+        dir = get(workspace, dep.uuid, nothing)
+        dir === nothing && continue
+        dep.path = Types.relative_project_path(env.manifest_file, dir)
+    end
+    return
 end
 
 # drops build detail in version but keeps the main prerelease context
@@ -851,17 +1128,16 @@ function resolve_versions!(
         end
     end
     # this also sets pkg.version for fixed packages
-    pkgs_fixed = filter(!is_tracking_registry, pkgs)
-    env_uuids = Set{UUID}()
-    for pkg in pkgs
-        pkg.uuid === nothing && continue
-        push!(env_uuids, pkg.uuid)
-    end
-    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version; env_uuids)
+    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs, names, julia_version)
+    pkg_index = Dict{UUID, Int}(pkg.uuid => i for (i, pkg) in pairs(pkgs))
     for new_pkg in new_fixed_pkgs
-        new_pkg.uuid in pkg_uuids && continue
-        push!(pkgs, new_pkg)
-        push!(pkg_uuids, new_pkg.uuid)
+        idx = get(pkg_index, new_pkg.uuid, nothing)
+        if idx === nothing
+            push!(pkgs, new_pkg)
+        else
+            # a package kept from the manifest that a `[sources]` entry took over
+            pkgs[idx] = new_pkg
+        end
     end
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
@@ -3179,11 +3455,18 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
     end
 
     return if any(pkg -> pkg.version == VersionSpec(), pkgs)
+        # the packages that go back to a registry, rather than only being unpinned
+        freed = Set{UUID}(pkg.uuid for pkg in pkgs if pkg.version == VersionSpec())
         pkgs = load_direct_deps(ctx.env, pkgs)
         check_registered(ctx.registries, pkgs)
 
         # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
+        for pkg in pkgs
+            if pkg.uuid in freed && !is_tracking_registry(pkg)
+                pkgerror("$(err_rep(pkg)) can not be freed since the `[sources]` of another package in the environment track it")
+            end
+        end
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
         new = download_source(ctx)
@@ -3473,6 +3756,16 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     end
     # collect relevant info from source
     source_env = EnvCache(projectfile_path(source_path))
+    entry = manifest_info(env.manifest, pkg.uuid)
+    if entry !== nothing && entry.path === nothing && entry.repo.source !== nothing
+        # A relative path refers to another directory of the repository that `pkg` is tracked
+        # from, not of its installation, and the manifest records where such a dependency
+        # of `pkg` comes from (see `repo_sources!`)
+        filter!(source_env.project.sources) do (name, source)
+            path = get(source, "path", nothing)
+            return path === nothing || isabspath(path) || !haskey(source_env.project.deps, name)
+        end
+    end
     # `[sources]` paths are relative to the package's own project file; make them absolute
     # before they move into the sandbox project, which `sandbox` resolves against the active
     # project instead (e.g. the workspace root when testing a workspace member)
