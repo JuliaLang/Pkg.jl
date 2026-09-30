@@ -1116,7 +1116,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
             tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
-            if pkg.repo.subdir !== nothing
+            # A tree hash is already that of the subdirectory
+            if pkg.repo.subdir !== nothing && pkg.tree_hash === nothing
                 try
                     tree_hash_object = tree_hash_object[pkg.repo.subdir]
                 catch e
