@@ -424,6 +424,10 @@ mutable struct EnvCache
     # What these where at creation of the EnvCache
     original_project::Project
     original_manifest::Manifest
+    # The commit that each rev of a repository resolved to during this operation, keyed by the
+    # clone of the repository and the rev, so that every package tracked from that rev comes
+    # from the same commit
+    resolved_revs::Dict{Tuple{String, String}, String}
 end
 
 function EnvCache(env::Union{Nothing, String} = nothing)
@@ -473,6 +477,7 @@ function EnvCache(env::Union{Nothing, String} = nothing)
         manifest,
         deepcopy(project),
         deepcopy(manifest),
+        Dict{Tuple{String, String}, String}(),
     )
 
     return env′
@@ -656,6 +661,8 @@ function Context!(ctx::Context; kwargs...)
     for (k, v) in kwargs
         setfield!(ctx, k, v)
     end
+    # a new operation resolves the revs of repositories anew
+    empty!(ctx.env.resolved_revs)
 
     # Highlight for logging purposes if julia_version is set to a different version than current VERSION
     if haskey(kwargs, :julia_version) && ctx.julia_version !== nothing && ctx.julia_version != VERSION
@@ -1065,7 +1072,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkg.repo.rev = LibGit2.isattached(repo) ? LibGit2.branch(repo) : string(LibGit2.GitHash(LibGit2.head(repo)))
             end
             rev_or_hash = pkg.tree_hash === nothing ? pkg.repo.rev : pkg.tree_hash
-            obj_branch = get_object_or_branch(repo, rev_or_hash)
+            rev_key = (add_repo_cache_path(repo_source), pkg.repo.rev)
+            resolved_commit = pkg.tree_hash === nothing ? get(ctx.env.resolved_revs, rev_key, nothing) : nothing
+            obj_branch = if resolved_commit === nothing
+                get_object_or_branch(repo, rev_or_hash)
+            else
+                # another package already resolved this rev during this operation
+                LibGit2.GitObject(repo, resolved_commit), false
+            end
             fetched = false
             if obj_branch === nothing
                 fetched = true
@@ -1112,6 +1126,10 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
                 GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 gitobject, isbranch = get_object_or_branch(repo, rev_or_hash)
+            end
+
+            if pkg.tree_hash === nothing
+                ctx.env.resolved_revs[rev_key] = string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitCommit, gitobject)))
             end
 
             # Now we have the gitobject for our ref, time to find the tree hash for it

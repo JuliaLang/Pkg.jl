@@ -789,13 +789,25 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             end
             pkgerror(error_msg)
         end
-        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded = get(loaded_projects, pkg.uuid, nothing))
+        loaded = get(loaded_projects, pkg.uuid, nothing)
+        if loaded === nothing
+            project_file = projectfile_path(path; strict = true)
+            project_file === nothing || (loaded = (project_file, read_project(project_file)))
+        end
+        deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded)
+        # dependencies whose source is only kept from the manifest
+        from_manifest = if loaded !== nothing && is_tracking_repo(pkg) && !is_tracking_path(pkg)
+            repo_path_sources!(env, pkg, loaded[2], deps)
+        else
+            Set{UUID}()
+        end
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
         for dep in deps
             names[dep.uuid] = dep.name
             dep_uuid = dep.uuid
             dep_uuid === nothing && continue
+            dep_takeover = takeover && !(dep_uuid in from_manifest)
             # Only recursively collect path sources if the path actually exists
             # Repo sources (with URL/rev) are always collected
             has_source = if is_tracking_path(dep)
@@ -810,7 +822,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
             end
             if dep_uuid in seen
                 other = get(sourced_from, dep_uuid, nothing)
-                if takeover && other !== nothing
+                if dep_takeover && other !== nothing
                     sourced = pkg_by_uuid[dep_uuid]
                     if !tracks_source(env, sourced, dep)
                         pkgerror(
@@ -825,7 +837,7 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
                 continue
             end
             kept_pkg = get(kept, dep_uuid, nothing)
-            if !takeover
+            if !dep_takeover
                 # collected later, unless a package that the environment tracks gives it
                 # another source first
                 kept_pkg === nothing && push!(deferred, dep)
@@ -860,6 +872,101 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         fixed[uuid] = Resolve.Fixed(fixpkgversion, q, get(weak_map, uuid, Set{UUID}()))
     end
     return fixed, new_fixed_pkgs
+end
+
+# Join a relative path onto a directory of a repository, where `""` is the root. Returns
+# `nothing` when the result is outside of the repository.
+function join_repo_path(dir::AbstractString, path::AbstractString)
+    joined = rstrip(replace(normpath(joinpath(dir, path)), '\\' => '/'), '/')
+    joined == "." && return ""
+    (joined == ".." || startswith(joined, "../") || isabspath(joined)) && return nothing
+    return String(joined)
+end
+
+function git_subtree(tree::LibGit2.GitTree, subdir::String)
+    isempty(subdir) && return tree
+    obj = try
+        tree[subdir]
+    catch err
+        err isa KeyError || rethrow()
+        return nothing
+    end
+    return obj isa LibGit2.GitTree ? obj : nothing
+end
+
+# The bare clone of the repository that `pkg` is tracked from
+function repo_clone_path(env::EnvCache, pkg::PackageSpec)
+    source = pkg.repo.source::String
+    if !Pkg.isurl(source)
+        # the canonical path of a local repository, which may be relative to the manifest
+        source = Pkg.safe_realpath(isabspath(source) ? source : normpath(joinpath(dirname(env.manifest_file), source)))
+    end
+    return Types.add_repo_cache_path(source)
+end
+
+# Call `f` with the tree of the commit that the rev of `pkg`, tracked from a repository,
+# resolved to during this operation, if `pkg` is at that commit. Returns `nothing` without
+# calling `f` if there is no such commit, e.g. because `pkg` is kept at the tree hash that
+# the manifest records.
+function with_resolved_tree(f, env::EnvCache, pkg::PackageSpec)
+    (pkg.repo.source === nothing || pkg.repo.rev === nothing || pkg.tree_hash === nothing) && return nothing
+    clone = repo_clone_path(env, pkg)
+    commit = get(env.resolved_revs, (clone, pkg.repo.rev), nothing)
+    commit === nothing && return nothing
+    return LibGit2.with(LibGit2.GitRepo(clone)) do repo
+        tree = LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(repo, commit))
+        subtree = git_subtree(tree, something(pkg.repo.subdir, ""))
+        subtree === nothing && return nothing
+        SHA1(string(LibGit2.GitHash(subtree))) == pkg.tree_hash || return nothing
+        return f(tree)
+    end
+end
+
+# A relative `path` in the `[sources]` of a package tracked from a repository refers to another
+# directory of that repository, at the same commit. Track such a dependency from the repository
+# as well, instead of by a path into the installation of `pkg`, which doesn't contain the rest
+# of the repository when `pkg` is in a subdirectory of it, and doesn't move with the manifest.
+#
+# This needs the commit of `pkg`, which is known when `pkg` was resolved from its rev during
+# this operation. Otherwise the dependency is kept as the manifest records it, and returned so
+# that it does not take over the source of another package.
+function repo_path_sources!(env::EnvCache, pkg::PackageSpec, project::Project, deps::Vector{PackageSpec})
+    subdirs = Dict{UUID, String}()
+    for dep in deps
+        dep.path === nothing && continue
+        path = project.sources[dep.name]["path"]::String
+        isabspath(path) && continue
+        subdir = join_repo_path(something(pkg.repo.subdir, ""), path)
+        subdir === nothing || (subdirs[dep.uuid] = subdir)
+    end
+    from_manifest = Set{UUID}()
+    isempty(subdirs) && return from_manifest
+    resolved = with_resolved_tree(env, pkg) do tree
+        for dep in deps
+            subdir = get(subdirs, dep.uuid, nothing)
+            subdir === nothing && continue
+            subtree = git_subtree(tree, subdir)
+            subtree === nothing && continue
+            dep.path = nothing
+            dep.repo = GitRepo(pkg.repo.source, pkg.repo.rev, isempty(subdir) ? nothing : subdir)
+            dep.tree_hash = SHA1(string(LibGit2.GitHash(subtree)))
+        end
+        return true
+    end
+    resolved === nothing || return from_manifest
+    for dep in deps
+        subdir = get(subdirs, dep.uuid, nothing)
+        subdir === nothing && continue
+        # never a path into the installation of `pkg`, as that is what the manifest would record
+        dep.path = nothing
+        entry = manifest_info(env.manifest, dep.uuid)
+        entry === nothing && continue
+        entry.repo.source == pkg.repo.source && something(entry.repo.subdir, "") == subdir || continue
+        dep.repo = GitRepo(entry.repo.source, entry.repo.rev, entry.repo.subdir)
+        dep.tree_hash = entry.tree_hash
+        push!(from_manifest, dep.uuid)
+    end
+    return from_manifest
 end
 
 # drops build detail in version but keeps the main prerelease context
@@ -3551,6 +3658,16 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     end
     # collect relevant info from source
     source_env = EnvCache(projectfile_path(source_path))
+    entry = manifest_info(env.manifest, pkg.uuid)
+    if entry !== nothing && entry.path === nothing && entry.repo.source !== nothing
+        # A relative path refers to another directory of the repository that `pkg` is tracked
+        # from, not of its installation, and the manifest records where such a dependency
+        # of `pkg` comes from (see `repo_path_sources!`)
+        filter!(source_env.project.sources) do (name, source)
+            path = get(source, "path", nothing)
+            return path === nothing || isabspath(path) || !haskey(source_env.project.deps, name)
+        end
+    end
     # `[sources]` paths are relative to the package's own project file; make them absolute
     # before they move into the sandbox project, which `sandbox` resolves against the active
     # project instead (e.g. the workspace root when testing a workspace member)

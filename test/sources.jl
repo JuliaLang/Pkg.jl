@@ -139,10 +139,16 @@ temp_pkg_dir() do project_path
                 @test dep_info_by_name["ParentPkg"].git_source == parent_url
                 @test dep_info_by_name["ChildPkg"].git_source == child_url
                 @test dep_info_by_name["GrandchildPkg"].git_source == grandchild_url
+                # A relative path in the `[sources]` of a package tracked from a repository
+                # refers to the same repository, not to the installation of the package
                 sibling_info = dep_info_by_name["SiblingPkg"]
-                @test sibling_info.is_tracking_path
-                @test sibling_info.source !== nothing
-                @test endswith(sibling_info.source, "SiblingPkg")
+                @test !sibling_info.is_tracking_path
+                @test sibling_info.git_source == child_url
+                manifest = Pkg.Types.EnvCache().manifest
+                sibling_uuid = UUID("44444444-4444-4444-4444-444444444444")
+                child_uuid = UUID("22222222-2222-2222-2222-222222222222")
+                @test manifest[sibling_uuid].repo.subdir == "SiblingPkg"
+                @test manifest[sibling_uuid].repo.rev == manifest[child_uuid].repo.rev
 
                 result = include_string(
                     Module(), """
@@ -151,6 +157,119 @@ temp_pkg_dir() do project_path
                     """
                 )
                 @test result == 47
+            end
+        end
+    end
+
+    @testset "relative [sources] of a package tracked from a repository" begin
+        isolate() do
+            mktempdir() do tmp
+                a_uuid = UUID("00000000-0000-0000-0000-00000000b001")
+                b_uuid = UUID("00000000-0000-0000-0000-00000000b002")
+                repo = joinpath(tmp, "Mono")
+                for (name, uuid, extra) in (
+                        (
+                            "A", a_uuid, """
+                            [deps]
+                            B = "$b_uuid"
+
+                            [sources]
+                            B = {path = "../B"}
+
+                            [extras]
+                            Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+                            [targets]
+                            test = ["Test"]
+                            """,
+                        ),
+                        ("B", b_uuid, ""),
+                    )
+                    mkpath(joinpath(repo, "lib", name, "src"))
+                    write(joinpath(repo, "lib", name, "Project.toml"), "name = \"$name\"\nuuid = \"$uuid\"\nversion = \"0.1.0\"\n\n$extra")
+                    write(joinpath(repo, "lib", name, "src", "$name.jl"), "module $name end")
+                end
+                mkpath(joinpath(repo, "lib", "A", "test"))
+                write(joinpath(repo, "lib", "A", "test", "runtests.jl"), "using A, B, Test\n@test true\n")
+                git_init_and_commit(repo)
+                subtree_hash(subdir) = LibGit2.with(LibGit2.GitRepo(repo)) do r
+                    tree = LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(r, "HEAD"))
+                    Base.SHA1(string(LibGit2.GitHash(tree[subdir])))
+                end
+
+                # `B` is outside of the installation of `A`, and is tracked from the same
+                # repository and commit
+                env = joinpath(tmp, "env")
+                Pkg.activate(env)
+                Pkg.add(url = make_file_url(repo), subdir = "lib/A")
+                manifest = Pkg.Types.read_manifest(joinpath(env, "Manifest.toml"))
+                @test manifest[b_uuid].path === nothing
+                @test manifest[b_uuid].repo.source == manifest[a_uuid].repo.source
+                @test manifest[b_uuid].repo.rev == manifest[a_uuid].repo.rev
+                @test manifest[b_uuid].repo.subdir == "lib/B"
+                @test manifest[b_uuid].tree_hash == subtree_hash("lib/B")
+                @test Base.locate_package(Base.PkgId(b_uuid, "B")) !== nothing
+                @test !haskey(Pkg.project().sources, "B")
+                # also in the sandbox of `Pkg.test`
+                Pkg.test("A")
+                # where a test-only dependency still comes from the installation
+                root = joinpath(tmp, "Root")
+                t_uuid = UUID("00000000-0000-0000-0000-00000000b004")
+                mkpath(joinpath(root, "src"))
+                mkpath(joinpath(root, "test"))
+                mkpath(joinpath(root, "lib", "T", "src"))
+                write(
+                    joinpath(root, "Project.toml"), """
+                    name = "Root"
+                    uuid = "00000000-0000-0000-0000-00000000b005"
+                    version = "0.1.0"
+
+                    [extras]
+                    T = "$t_uuid"
+                    Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+                    [sources]
+                    T = {path = "lib/T"}
+
+                    [targets]
+                    test = ["T", "Test"]
+                    """
+                )
+                write(joinpath(root, "src", "Root.jl"), "module Root end")
+                write(joinpath(root, "test", "runtests.jl"), "using Root, T, Test\n@test true\n")
+                write(joinpath(root, "lib", "T", "Project.toml"), "name = \"T\"\nuuid = \"$t_uuid\"\nversion = \"0.1.0\"\n")
+                write(joinpath(root, "lib", "T", "src", "T.jl"), "module T end")
+                git_init_and_commit(root)
+                Pkg.add(url = make_file_url(root))
+                Pkg.test("Root")
+
+                # Another operation keeps `B` at the recorded tree, also when the clone of the
+                # repository has the new commit
+                write(joinpath(repo, "lib", "B", "src", "B.jl"), "module B # changed\nend")
+                git_init_and_commit(repo)
+                Pkg.activate(joinpath(tmp, "other"))
+                Pkg.add(url = make_file_url(repo), subdir = "lib/B")
+                Pkg.activate(env)
+                c = joinpath(tmp, "C")
+                mkpath(joinpath(c, "src"))
+                write(joinpath(c, "Project.toml"), "name = \"C\"\nuuid = \"00000000-0000-0000-0000-00000000b003\"\nversion = \"0.1.0\"\n")
+                write(joinpath(c, "src", "C.jl"), "module C end")
+                Pkg.develop(path = c)
+                @test Pkg.Types.read_manifest(joinpath(env, "Manifest.toml"))[b_uuid].tree_hash == manifest[b_uuid].tree_hash
+
+                # and updating `A` moves `B` along to the new commit
+                Pkg.update()
+                manifest = Pkg.Types.read_manifest(joinpath(env, "Manifest.toml"))
+                @test manifest[b_uuid].tree_hash == subtree_hash("lib/B")
+                @test manifest[a_uuid].tree_hash == subtree_hash("lib/A")
+
+                # Another operation with the same context resolves the rev again
+                ctx = Pkg.Types.Context()
+                Pkg.update(ctx)
+                write(joinpath(repo, "lib", "B", "src", "B.jl"), "module B # changed again\nend")
+                git_init_and_commit(repo)
+                Pkg.update(ctx)
+                @test Pkg.Types.read_manifest(joinpath(env, "Manifest.toml"))[b_uuid].tree_hash == subtree_hash("lib/B")
             end
         end
     end
@@ -431,6 +550,13 @@ temp_pkg_dir() do project_path
                 Pkg.add(url = make_file_url(main))
                 @test Pkg.dependencies()[example_uuid].version == v"999.0.0-dev"
                 @test !haskey(Pkg.project().sources, "Example")
+                # MainPkg is kept at its tree hash from now on, which doesn't tell the commit
+                # that `Example` would come from, so freeing `Example` sticks
+                Pkg.free("Example")
+                @test Pkg.dependencies()[example_uuid].version < v"999"
+                Pkg.resolve()
+                @test Pkg.dependencies()[example_uuid].version < v"999"
+                @test !Pkg.dependencies()[example_uuid].is_tracking_path
                 # and can't be freed while the `[sources]` of a developed MainPkg track it
                 Pkg.activate(joinpath(tmp, "free"))
                 Pkg.develop(path = user)

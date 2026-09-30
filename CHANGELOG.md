@@ -31,6 +31,9 @@ Pkg v1.14 Release Notes
   because other packages depend on them, e.g. `add Foo#main` in an environment that already has a registered
   version of a subpackage of `Foo` now tracks that subpackage from `Foo`'s `[sources]` too. Direct dependencies
   and pinned packages keep their source, and different `[sources]` for the same package are an error. ([#4750])
+- A relative `path` in the `[sources]` of a package added by URL is now tracked from the same repository and commit
+  as that package, instead of by a path into the package's installation in the depot. This makes such dependencies
+  work for packages in a subdirectory of a repository, and keeps the manifest valid when it is moved to another depot.
 
 Pkg v1.13 Release Notes
 =======================

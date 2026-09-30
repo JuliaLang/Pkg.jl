@@ -192,6 +192,9 @@ Sources are read and applied in the following situations:
 
 This recursive behavior is particularly useful for managing chains of unregistered or private packages.
 
+A relative `path` in the `[sources]` of a package that was added by URL refers to another directory of the
+same repository, so that dependency is tracked from that repository too, at the same commit.
+
 A source collected this way also replaces a package that is only in the manifest because another
 package depends on it, e.g. a registered version of that dependency. It does not change the source of a
 direct dependency of the active environment (or of a project in its workspace), nor of a pinned package.
