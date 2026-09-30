@@ -162,8 +162,8 @@ const PreserveLevel = Types.PreserveLevel
 
 # Define new variables so tab comleting Pkg. works.
 """
-    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
-    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
+    Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode(), lazy::Bool=false)
+    Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode(), lazy::Bool=false)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -186,6 +186,20 @@ resolved independently of what's currently loaded, for more reproducible behavio
 
 !!! compat "Julia 1.13"
     The `prefer_loaded_versions` kwarg requires at least Julia 1.13.
+
+## Lazy
+
+With `lazy=true`, dependencies are resolved and the project and manifest are updated, but nothing new is
+installed: the result is the same as copying in the project and manifest from elsewhere. Resolution and
+manifest contents are unchanged. The manifest records information (such as extensions) from each package's
+project file. For a package version already in the manifest this is kept, otherwise the package's source
+is downloaded to a temporary directory to read it and is not kept. Packages from a git repository are the
+exception: they are checked out into the depot, so they and their dependencies are installed fully.
+Run [`Pkg.instantiate`](@ref) to finish installing.
+The same keyword is accepted by [`Pkg.update`](@ref) and [`Pkg.resolve`](@ref).
+
+!!! compat "Julia 1.14"
+    The `lazy` kwarg requires at least Julia 1.14.
 
 ## Resolution Tiers
 `Pkg` resolves the set of packages in your environment using a tiered algorithm.
@@ -226,6 +240,7 @@ Pkg.add("Example") # Add a package from registry
 Pkg.add("Example", target=:weakdeps) # Add a package as a weak dependency
 Pkg.add("Example", target=:extras) # Add a package to the `[extras]` list
 Pkg.add("Example"; prefer_loaded_versions=true) # Prefer the version of Example already loaded in this session, if any
+Pkg.add("Example"; lazy=true) # Update the project and manifest without installing anything
 Pkg.add("Example"; preserve=Pkg.PRESERVE_ALL) # Add the `Example` package and strictly preserve existing dependencies
 Pkg.add(name="Example", version="0.3") # Specify version; latest release in the 0.3 series
 Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
@@ -375,7 +390,7 @@ If `workspace` is true, this will consider all projects in the workspace and not
 const why = API.why
 
 """
-    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false)
+    Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false, lazy::Bool = false)
     Pkg.update(pkg::Union{String, Vector{String}})
     Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
 
@@ -389,7 +404,13 @@ If packages are given as positional arguments, the `preserve` argument can be us
 
 If `workspace` is `true`, packages from all projects in the workspace will be included when no packages are specified.
 
-After any package updates the project will be precompiled. See more at [Environment Precompilation](@ref).
+With `lazy=true`, the project and manifest are updated but nothing new is installed, and automatic
+[`Pkg.gc`](@ref) is skipped. Run [`Pkg.instantiate`](@ref) to finish installing. See [`Pkg.add`](@ref).
+
+!!! compat "Julia 1.14"
+    The `lazy` kwarg requires at least Julia 1.14.
+
+Unless `lazy` is set, the project will be precompiled after any package updates. See more at [Environment Precompilation](@ref).
 
 See also [`PackageSpec`](@ref), [`PackageMode`](@ref), [`UpgradeLevel`](@ref).
 """
@@ -675,10 +696,16 @@ See more and how to disable auto-precompilation at [Environment Precompilation](
 const instantiate = API.instantiate
 
 """
-    Pkg.resolve(; io::IO=stderr)
+    Pkg.resolve(; io::IO=stderr, lazy::Bool=false)
 
 Update the current manifest with potential changes to the dependency graph
 from packages that are tracking a path.
+
+With `lazy=true`, the manifest is updated but nothing new is installed. Run [`Pkg.instantiate`](@ref)
+to finish installing. See [`Pkg.add`](@ref).
+
+!!! compat "Julia 1.14"
+    The `lazy` kwarg requires at least Julia 1.14.
 """
 const resolve = API.resolve
 

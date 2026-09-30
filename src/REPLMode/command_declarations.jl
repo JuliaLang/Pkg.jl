@@ -117,11 +117,12 @@ compound_declarations = [
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
                 PSA[:name => "weak", :short_name => "w", :api => :target => :weakdeps],
                 PSA[:name => "extra", :short_name => "e", :api => :target => :extras],
+                PSA[:name => "lazy", :api => :lazy => true],
             ],
             :completions => :complete_add_dev,
             :description => "add packages to project",
             :help => md"""
-                    add [--preserve=<opt>] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...
+                    add [--preserve=<opt>] [-w|--weak] [-e|--extra] [--lazy] pkg[=uuid] [@version] [#rev] ...
 
                 Add package `pkg` to the current project file. If `pkg` could refer to
                 multiple different packages, specifying `uuid` allows you to disambiguate.
@@ -157,6 +158,10 @@ compound_declarations = [
                 true.
 
                 After the installation of new packages the project will be precompiled. For more information see `pkg> ?precompile`.
+
+                With `--lazy`, the project and manifest are updated but nothing new is installed (see `?Pkg.add` for
+                the exceptions). The manifest is the same as without `--lazy`. Package sources may still be downloaded
+                to read their project files, but are not kept. Run `pkg> instantiate` to finish installing.
 
                 With the `installed` strategy the newly added packages will likely already be precompiled, but if not this may be
                 because either the combination of package versions resolved in this environment has not been resolved and
@@ -317,12 +322,17 @@ compound_declarations = [
         PSA[
             :name => "resolve",
             :api => API.resolve,
+            :option_spec => [
+                PSA[:name => "lazy", :api => :lazy => true],
+            ],
             :description => "resolves to update the manifest from changes in dependencies of developed packages",
             :help => md"""
-                    resolve
+                    resolve [--lazy]
 
                 Resolve the project i.e. run package resolution and update the Manifest. This is useful in case the dependencies of developed
                 packages have changed causing the current Manifest to be out of sync.
+                With `--lazy`, the project and manifest are updated but nothing new is installed
+                (see `pkg> ?add`). Run `pkg> instantiate` to finish installing.
                 """,
         ],
         PSA[
@@ -377,6 +387,7 @@ compound_declarations = [
                 PSA[:name => "fixed", :api => :level => UPLEVEL_FIXED],
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
                 PSA[:name => "workspace", :api => :workspace => true],
+                PSA[:name => "lazy", :api => :lazy => true],
             ],
             :completions => :complete_installed_packages,
             :description => "update packages in manifest",
@@ -386,6 +397,7 @@ compound_declarations = [
 
                     opts: --major | --minor | --patch | --fixed
                           --preserve=<all/direct/none>
+                          --lazy
 
                 Update `pkg` within the constraints of the indicated version
                 specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
@@ -397,8 +409,11 @@ compound_declarations = [
                 packages will not be upgraded at all.
                 The `--workspace` option includes packages from all projects in the workspace
                 when no packages are specified.
+                With `--lazy`, the project and manifest are updated but nothing new is installed, and
+                automatic `gc` is skipped (see `pkg> ?add`). Run `pkg> instantiate` to finish installing.
 
-                After any package updates the project will be precompiled. For more information see `pkg> ?precompile`.
+                Unless `--lazy` is given, the project will be precompiled after any package updates. For more information
+                see `pkg> ?precompile`.
                 """,
         ],
         PSA[
