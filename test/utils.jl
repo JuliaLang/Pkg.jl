@@ -639,6 +639,8 @@ function stalling_http_server()
             while !eof(sock)
                 readavailable(sock)
             end
+        catch
+            # a client that hangs up with data still unread resets the connection
         finally
             close(sock)
             wait(trickle)
