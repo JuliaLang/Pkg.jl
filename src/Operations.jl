@@ -668,12 +668,37 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     return developed
 end
 
-function collect_fixed!(
-        env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version;
-        # A `[sources]` entry in a dependency's project file must not take over such a
-        # package for which the environment already has a source for, see #4750.
-        env_uuids::Set{UUID} = Set{UUID}()
-    )
+# The packages whose source the environment decides itself: its projects, their direct
+# dependencies and pinned packages. The `[sources]` of a dependency don't apply to them.
+function env_source_uuids(env::EnvCache, pkgs::Vector{PackageSpec})
+    uuids = Set{UUID}()
+    for project in Iterators.flatten(((env.project,), values(env.workspace)))
+        project.uuid === nothing || push!(uuids, project.uuid)
+        union!(uuids, values(project.deps))
+    end
+    for pkg in pkgs
+        pkg.pinned && push!(uuids, pkg.uuid)
+    end
+    return uuids
+end
+
+# Whether `pkg` is tracked from the source that `dep` got from a `[sources]` entry. Either may
+# not have been tracked yet, and leave out the rev and tree hash that tracking fills in.
+function tracks_source(env::EnvCache, pkg::PackageSpec, dep::PackageSpec)
+    if is_tracking_path(dep)
+        is_tracking_path(pkg) || return false
+        return Pkg.safe_realpath(source_path(env.manifest_file, pkg)) ==
+            Pkg.safe_realpath(source_path(env.manifest_file, dep))
+    end
+    is_tracking_repo(pkg) && !is_tracking_path(pkg) || return false
+    unset_or_equal(a, b) = a === nothing || b === nothing || a == b
+    return pkg.repo.source == dep.repo.source && pkg.repo.subdir == dep.repo.subdir &&
+        unset_or_equal(pkg.repo.rev, dep.repo.rev) && unset_or_equal(pkg.tree_hash, dep.tree_hash)
+end
+
+# Collect the fixed packages in `pkgs` and the dependencies that `[sources]` entries of those
+# add. Returns the latter, some of which may replace a package in `pkgs`.
+function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version)
     deps_map = Dict{UUID, Vector{PackageSpec}}()
     weak_map = Dict{UUID, Set{UUID}}()
 
@@ -700,17 +725,38 @@ function collect_fixed!(
         names[uuid] = project.name === nothing ? "project" : project.name
     end
 
-    pkg_queue = collect(pkgs)
+    # The fixed packages that the environment tracks itself are collected first, together
+    # with the dependencies that `[sources]` of those add. Such a dependency takes over any
+    # other package that is only kept from the manifest, e.g. a registered version that is
+    # now a subpackage of a package added by URL. The remaining fixed packages are deferred
+    # until then, and the `[sources]` of those only add packages that have no source yet.
+    env_uuids = env_source_uuids(env, pkgs)
     pkg_by_uuid = Dict{UUID, PackageSpec}()
     for pkg in pkgs
         pkg.uuid === nothing && continue
         pkg_by_uuid[pkg.uuid] = pkg
     end
+    kept = copy(pkg_by_uuid)
+    pkg_queue = PackageSpec[pkg for pkg in pkgs if !is_tracking_registry(pkg) && pkg.uuid in env_uuids]
+    deferred = PackageSpec[pkg for pkg in pkgs if !is_tracking_registry(pkg) && !(pkg.uuid in env_uuids)]
     new_fixed_pkgs = PackageSpec[]
-    seen = Set{UUID}(keys(pkg_by_uuid))
-    union!(seen, env_uuids)
-    while !isempty(pkg_queue)
-        pkg = popfirst!(pkg_queue)
+    seen = copy(env_uuids)
+    # the package whose `[sources]` a dependency got its source from
+    sourced_from = Dict{UUID, PackageSpec}()
+    while !isempty(pkg_queue) || !isempty(deferred)
+        takeover = !isempty(pkg_queue)
+        pkg = if takeover
+            popfirst!(pkg_queue)
+        else
+            deferred_pkg = popfirst!(deferred)
+            deferred_pkg.uuid in seen && continue
+            push!(seen, deferred_pkg.uuid)
+            if get(kept, deferred_pkg.uuid, nothing) !== deferred_pkg
+                push!(new_fixed_pkgs, deferred_pkg)
+                pkg_by_uuid[deferred_pkg.uuid] = deferred_pkg
+            end
+            deferred_pkg
+        end
         pkg.uuid === nothing && continue
         # add repo package if necessary
         source = source_path(env.manifest_file, pkg)
@@ -749,27 +795,53 @@ function collect_fixed!(
         for dep in deps
             names[dep.uuid] = dep.name
             dep_uuid = dep.uuid
-            if !is_tracking_registry(dep) && dep_uuid !== nothing && !(dep_uuid in seen)
-                # Only recursively collect path sources if the path actually exists
-                # Repo sources (with URL/rev) are always collected
-                if is_tracking_path(dep)
-                    dep_source = source_path(env.manifest_file, dep)
-                    if dep_source !== nothing && isdir(dep_source)
-                        push!(pkg_queue, dep)
-                        push!(new_fixed_pkgs, dep)
-                        pkg_by_uuid[dep_uuid] = dep
-                        push!(seen, dep_uuid)
-                    end
-                else
-                    # Repo source - always add to queue
-                    push!(pkg_queue, dep)
-                    push!(new_fixed_pkgs, dep)
-                    pkg_by_uuid[dep_uuid] = dep
-                    push!(seen, dep_uuid)
-                end
-            elseif dep_uuid !== nothing && !haskey(pkg_by_uuid, dep_uuid)
-                pkg_by_uuid[dep_uuid] = dep
+            dep_uuid === nothing && continue
+            # Only recursively collect path sources if the path actually exists
+            # Repo sources (with URL/rev) are always collected
+            has_source = if is_tracking_path(dep)
+                dep_source = source_path(env.manifest_file, dep)
+                dep_source !== nothing && isdir(dep_source)
+            else
+                is_tracking_repo(dep)
             end
+            if !has_source
+                haskey(pkg_by_uuid, dep_uuid) || (pkg_by_uuid[dep_uuid] = dep)
+                continue
+            end
+            if dep_uuid in seen
+                other = get(sourced_from, dep_uuid, nothing)
+                if takeover && other !== nothing
+                    sourced = pkg_by_uuid[dep_uuid]
+                    if !tracks_source(env, sourced, dep)
+                        pkgerror(
+                            "packages $(err_rep(other)) and $(err_rep(pkg)) have different `[sources]` for ",
+                            "$(err_rep(dep)); add it to the environment to choose its source"
+                        )
+                    end
+                    # keep what this source asks for as well, to compare later ones against it
+                    sourced.repo.rev === nothing && (sourced.repo.rev = dep.repo.rev)
+                    sourced.tree_hash === nothing && (sourced.tree_hash = dep.tree_hash)
+                end
+                continue
+            end
+            kept_pkg = get(kept, dep_uuid, nothing)
+            if !takeover
+                # collected later, unless a package that the environment tracks gives it
+                # another source first
+                kept_pkg === nothing && push!(deferred, dep)
+                continue
+            end
+            if kept_pkg !== nothing && tracks_source(env, kept_pkg, dep)
+                # keep the package as it is, e.g. at the tree hash that the manifest records
+                # for the rev that the `[sources]` entry asks for
+                dep = kept_pkg
+            else
+                push!(new_fixed_pkgs, dep)
+            end
+            push!(pkg_queue, dep)
+            pkg_by_uuid[dep_uuid] = dep
+            push!(seen, dep_uuid)
+            sourced_from[dep_uuid] = pkg
         end
     end
 
@@ -851,17 +923,16 @@ function resolve_versions!(
         end
     end
     # this also sets pkg.version for fixed packages
-    pkgs_fixed = filter(!is_tracking_registry, pkgs)
-    env_uuids = Set{UUID}()
-    for pkg in pkgs
-        pkg.uuid === nothing && continue
-        push!(env_uuids, pkg.uuid)
-    end
-    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version; env_uuids)
+    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs, names, julia_version)
+    pkg_index = Dict{UUID, Int}(pkg.uuid => i for (i, pkg) in pairs(pkgs))
     for new_pkg in new_fixed_pkgs
-        new_pkg.uuid in pkg_uuids && continue
-        push!(pkgs, new_pkg)
-        push!(pkg_uuids, new_pkg.uuid)
+        idx = get(pkg_index, new_pkg.uuid, nothing)
+        if idx === nothing
+            push!(pkgs, new_pkg)
+        else
+            # a package kept from the manifest that a `[sources]` entry took over
+            pkgs[idx] = new_pkg
+        end
     end
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
@@ -3179,11 +3250,18 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; err_if_free = true)
     end
 
     return if any(pkg -> pkg.version == VersionSpec(), pkgs)
+        # the packages that go back to a registry, rather than only being unpinned
+        freed = Set{UUID}(pkg.uuid for pkg in pkgs if pkg.version == VersionSpec())
         pkgs = load_direct_deps(ctx.env, pkgs)
         check_registered(ctx.registries, pkgs)
 
         # TODO: change free to not take a version and just have it pin on the current version. Then there is no need to resolve after a pin
         pkgs, deps_map = _resolve(ctx.io, ctx.env, ctx.registries, pkgs, PRESERVE_TIERED, ctx.julia_version)
+        for pkg in pkgs
+            if pkg.uuid in freed && !is_tracking_registry(pkg)
+                pkgerror("$(err_rep(pkg)) can not be freed since the `[sources]` of another package in the environment track it")
+            end
+        end
 
         update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
         new = download_source(ctx)

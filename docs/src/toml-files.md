@@ -192,6 +192,12 @@ Sources are read and applied in the following situations:
 
 This recursive behavior is particularly useful for managing chains of unregistered or private packages.
 
+A source collected this way also replaces a package that is only in the manifest because another
+package depends on it, e.g. a registered version of that dependency. It does not change the source of a
+direct dependency of the active environment (or of a project in its workspace), nor of a pinned package.
+When two packages give different sources for the same dependency, Pkg errors; adding the dependency to
+the environment decides its source.
+
 !!! note "Scope of sources"
     Sources are only used when the environment containing them is the active environment being resolved. If a package is used as a dependency in another project, its `[sources]` section is **not** consulted (except when that package itself was added by URL or path, in which case recursive collection applies as described above).
 

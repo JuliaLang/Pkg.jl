@@ -4,6 +4,7 @@ import ..Pkg # ensure we are using the correct Pkg
 using Test, Pkg
 using ..Utils
 using UUIDs
+import LibGit2
 
 temp_pkg_dir() do project_path
     @testset "test Project.toml [sources]" begin
@@ -348,42 +349,47 @@ temp_pkg_dir() do project_path
 
     # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4750
     # A `[sources]` entry in a dependency's project file must not take over a package that
-    # the environment being resolved already tracks itself (here: from a registry).
-    @testset "dependency [sources] don't hijack a registered direct dep (#4750)" begin
+    # the environment being resolved tracks itself (here: from a registry), but does take
+    # over one that is only kept from the manifest.
+    @testset "dependency [sources] and packages already in the environment (#4750)" begin
         isolate() do
             mktempdir() do tmp
                 example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
                 main_uuid = UUID("00000000-0000-0000-0000-000000004750")
-                main = joinpath(tmp, "MainPkg")
 
                 # MainPkg ships a copy of the registered package `Example` in a subdirectory
                 # and points at it with `[sources]`, like KernelAbstractions does for
                 # KernelInterface.
-                mkpath(joinpath(main, "src"))
-                mkpath(joinpath(main, "lib", "Example", "src"))
-                write(
-                    joinpath(main, "Project.toml"), """
-                    name = "MainPkg"
-                    uuid = "$main_uuid"
-                    version = "0.1.0"
+                function make_main(name, uuid)
+                    dir = joinpath(tmp, name)
+                    mkpath(joinpath(dir, "src"))
+                    mkpath(joinpath(dir, "lib", "Example", "src"))
+                    write(
+                        joinpath(dir, "Project.toml"), """
+                        name = "$name"
+                        uuid = "$uuid"
+                        version = "0.1.0"
 
-                    [deps]
-                    Example = "$example_uuid"
+                        [deps]
+                        Example = "$example_uuid"
 
-                    [sources]
-                    Example = {path = "lib/Example"}
-                    """
-                )
-                write(joinpath(main, "src", "MainPkg.jl"), "module MainPkg\nusing Example\nend")
-                write(
-                    joinpath(main, "lib", "Example", "Project.toml"), """
-                    name = "Example"
-                    uuid = "$example_uuid"
-                    version = "999.0.0-dev"
-                    """
-                )
-                write(joinpath(main, "lib", "Example", "src", "Example.jl"), "module Example end")
-                git_init_and_commit(main)
+                        [sources]
+                        Example = {path = "lib/Example"}
+                        """
+                    )
+                    write(joinpath(dir, "src", "$name.jl"), "module $name\nusing Example\nend")
+                    write(
+                        joinpath(dir, "lib", "Example", "Project.toml"), """
+                        name = "Example"
+                        uuid = "$example_uuid"
+                        version = "999.0.0-dev"
+                        """
+                    )
+                    write(joinpath(dir, "lib", "Example", "src", "Example.jl"), "module Example # $name\nend")
+                    git_init_and_commit(dir)
+                    return dir
+                end
+                main = make_main("MainPkg", main_uuid)
 
                 Pkg.activate(joinpath(tmp, "env"))
                 # Adding the registered `Example` alongside `MainPkg` used to error with
@@ -403,6 +409,77 @@ temp_pkg_dir() do project_path
                 @test manifest[example_uuid].version < v"999"
                 @test !haskey(Pkg.project().sources, "Example")
                 @test manifest[main_uuid].repo.source !== nothing
+
+                # A registered `Example` that is only in the manifest because another
+                # package depends on it is taken over
+                user = joinpath(tmp, "UserPkg")
+                mkpath(joinpath(user, "src"))
+                write(
+                    joinpath(user, "Project.toml"), """
+                    name = "UserPkg"
+                    uuid = "00000000-0000-0000-0000-000000004751"
+                    version = "0.1.0"
+
+                    [deps]
+                    Example = "$example_uuid"
+                    """
+                )
+                write(joinpath(user, "src", "UserPkg.jl"), "module UserPkg\nusing Example\nend")
+                Pkg.activate(joinpath(tmp, "indirect"))
+                Pkg.develop(path = user)
+                @test Pkg.dependencies()[example_uuid].version < v"999"
+                Pkg.add(url = make_file_url(main))
+                @test Pkg.dependencies()[example_uuid].version == v"999.0.0-dev"
+                @test !haskey(Pkg.project().sources, "Example")
+                # and can't be freed while the `[sources]` of a developed MainPkg track it
+                Pkg.activate(joinpath(tmp, "free"))
+                Pkg.develop(path = user)
+                Pkg.develop(path = main)
+                @test Pkg.dependencies()[example_uuid].version == v"999.0.0-dev"
+                err = @test_throws Pkg.Types.PkgError Pkg.free("Example")
+                @test occursin("can not be freed", err.value.msg)
+
+                # Two packages with different `[sources]` for the same package
+                other = make_main("OtherPkg", UUID("00000000-0000-0000-0000-000000004752"))
+                Pkg.activate(joinpath(tmp, "conflict"))
+                err = @test_throws Pkg.Types.PkgError Pkg.add([PackageSpec(url = make_file_url(main)), PackageSpec(url = make_file_url(other))])
+                @test occursin("different `[sources]`", err.value.msg)
+
+                # but a source that leaves out the rev is the same as one with the default branch
+                dep = joinpath(tmp, "DepPkg")
+                dep_uuid = UUID("00000000-0000-0000-0000-000000004753")
+                mkpath(joinpath(dep, "src"))
+                write(joinpath(dep, "Project.toml"), "name = \"DepPkg\"\nuuid = \"$dep_uuid\"\nversion = \"0.1.0\"\n")
+                write(joinpath(dep, "src", "DepPkg.jl"), "module DepPkg end")
+                git_init_and_commit(dep)
+                branch = LibGit2.with(LibGit2.branch, LibGit2.GitRepo(dep))
+                users = map(enumerate(("", ", rev = \"$branch\"", ", rev = \"feature\""))) do (i, rev)
+                    user = joinpath(tmp, "DepUser$i")
+                    mkpath(joinpath(user, "src"))
+                    write(
+                        joinpath(user, "Project.toml"), """
+                        name = "DepUser$i"
+                        uuid = "00000000-0000-0000-0000-00000000476$i"
+                        version = "0.1.0"
+
+                        [deps]
+                        DepPkg = "$dep_uuid"
+
+                        [sources]
+                        DepPkg = {url = "$(make_file_url(dep))"$rev}
+                        """
+                    )
+                    write(joinpath(user, "src", "DepUser$i.jl"), "module DepUser$i end")
+                    git_init_and_commit(user)
+                    PackageSpec(url = make_file_url(user))
+                end
+                Pkg.activate(joinpath(tmp, "same"))
+                Pkg.add(users[1:2])
+                @test Pkg.dependencies()[dep_uuid].git_revision == branch
+                # and that is still different from another rev
+                Pkg.activate(joinpath(tmp, "three"))
+                err = @test_throws Pkg.Types.PkgError Pkg.add(users)
+                @test occursin("different `[sources]`", err.value.msg)
             end
         end
     end

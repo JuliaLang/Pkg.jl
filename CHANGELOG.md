@@ -27,6 +27,10 @@ Pkg v1.14 Release Notes
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
+- The `[sources]` of a package added by URL or path now also replace packages that are only in the manifest
+  because other packages depend on them, e.g. `add Foo#main` in an environment that already has a registered
+  version of a subpackage of `Foo` now tracks that subpackage from `Foo`'s `[sources]` too. Direct dependencies
+  and pinned packages keep their source, and different `[sources]` for the same package are an error. ([#4750])
 
 Pkg v1.13 Release Notes
 =======================
@@ -252,3 +256,4 @@ Pkg v1.7 Release Notes
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
+[#4750]: https://github.com/JuliaLang/Pkg.jl/issues/4750
