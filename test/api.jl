@@ -371,7 +371,8 @@ end
                 Pkg.add(name = "Example", version = "0.5.1"; io = iob)
             end
             @test occursin("UsesExample", String(take!(iob)))
-            @test Base.isprecompiled(Base.identify_package("UsesExample"))
+            # an earlier test file in this worker may have loaded another version of Example
+            @test Base.isprecompiled(Base.identify_package("UsesExample"); ignore_loaded = true)
             Pkg.precompile(io = iob)
             @test !occursin("Precompiling", String(take!(iob)))
         end
