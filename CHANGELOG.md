@@ -24,6 +24,9 @@ Pkg v1.14 Release Notes
   and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
 - Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
   nor add a `[sources]` entry for a package that is itself a project of the workspace. ([#4237])
+- A `[compat]` entry for a package listed under `[extras]` is now honored by `Pkg.update` and `Pkg.instantiate`:
+  it constrains the package when it is in the environment as an indirect dependency, without making it a direct
+  dependency. Previously only `Pkg.resolve` took such entries into account, by erroring. ([#4840])
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
@@ -250,5 +253,6 @@ Pkg v1.7 Release Notes
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
+[#4840]: https://github.com/JuliaLang/Pkg.jl/pull/4840
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237

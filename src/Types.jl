@@ -720,6 +720,23 @@ function workspace_resolve_hash(env::EnvCache)
     for (name, compat) in sort!(collect(compats); by = first)
         println(iob, name, "=", compat)
     end
+    # `[compat]` for `[extras]` packages also constrains a resolve (see `collect_project`).
+    # Only appended when present so that the hash of environments without any stays the same.
+    extras_compats = Dict{String, VersionSpec}()
+    for project in Iterators.flatten(((env.project,), values(env.workspace)))
+        for name in keys(project.extras)
+            haskey(alldeps, name) && continue
+            haskey(project.compat, name) || continue
+            compat = Pkg.Operations.get_compat(project, name)
+            extras_compats[name] = intersect(get(extras_compats, name, VersionSpec()), compat)
+        end
+    end
+    if !isempty(extras_compats)
+        println(iob)
+        for (name, compat) in sort!(collect(extras_compats); by = first)
+            println(iob, name, "=", compat)
+        end
+    end
     # A changed `[sources]` entry (e.g. a new `rev`) must invalidate the manifest, see #4157.
     # The section is only appended when there are sources so that the hash of environments
     # without any stays the same as before it was included.

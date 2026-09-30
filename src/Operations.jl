@@ -616,6 +616,17 @@ function collect_project(
         push!(deps, PackageSpec(name, uuid, vspec))
         push!(weakdeps, uuid)
     end
+    # `[compat]` for an `[extras]` package of a loaded project constrains it if it is in
+    # the environment (e.g. as an indirect dependency) without adding it: a weak requirement.
+    if loaded !== nothing
+        for (name, uuid) in project.extras
+            (haskey(project.deps, name) || haskey(project.weakdeps, name)) && continue
+            haskey(project.compat, name) || continue
+            vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
+            push!(deps, PackageSpec(name, uuid, vspec))
+            push!(weakdeps, uuid)
+        end
+    end
     if pkg !== nothing
         if project.version !== nothing
             pkg.version = project.version
