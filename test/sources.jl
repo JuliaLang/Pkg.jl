@@ -274,6 +274,113 @@ temp_pkg_dir() do project_path
         end
     end
 
+    # When a package of a workspace is added by URL or developed, the other packages of the
+    # workspace that it depends on come from the same commit or checkout, as if they were
+    # listed in its `[sources]`
+    @testset "packages of the workspace of a package added by URL or developed" begin
+        isolate() do
+            mktempdir() do tmp
+                example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+                mono_uuid = UUID("00000000-0000-0000-0000-00000000c001")
+                sub_uuid = UUID("00000000-0000-0000-0000-00000000c002")
+                # `Mono` and `Sub` use the workspace copy of `Example`, which has a version
+                # that is not registered, without `[sources]`
+                repo = joinpath(tmp, "Mono")
+                mkpath(joinpath(repo, "src"))
+                write(
+                    joinpath(repo, "Project.toml"), """
+                    name = "Mono"
+                    uuid = "$mono_uuid"
+                    version = "0.1.0"
+
+                    [workspace]
+                    projects = ["lib/Example", "lib/Sub", "test"]
+
+                    [deps]
+                    Sub = "$sub_uuid"
+                    """
+                )
+                write(joinpath(repo, "src", "Mono.jl"), "module Mono\nusing Sub\nend")
+                for (name, uuid, deps) in (
+                        ("Example", example_uuid, ""),
+                        ("Sub", sub_uuid, "[deps]\nExample = \"$example_uuid\"\n"),
+                    )
+                    mkpath(joinpath(repo, "lib", name, "src"))
+                    write(joinpath(repo, "lib", name, "Project.toml"), "name = \"$name\"\nuuid = \"$uuid\"\nversion = \"999.0.0\"\n\n$deps")
+                    write(joinpath(repo, "lib", name, "src", "$name.jl"), "module $name end")
+                end
+                mkpath(joinpath(repo, "test"))
+                write(joinpath(repo, "test", "Project.toml"), "[deps]\nMono = \"$mono_uuid\"\n")
+                git_init_and_commit(repo)
+                subtree_hash(subdir) = LibGit2.with(LibGit2.GitRepo(repo)) do r
+                    tree = LibGit2.peel(LibGit2.GitTree, LibGit2.GitObject(r, "HEAD"))
+                    Base.SHA1(string(LibGit2.GitHash(tree[subdir])))
+                end
+                function check_from_repo(env, subdirs)
+                    manifest = Pkg.Types.read_manifest(joinpath(env, "Manifest.toml"))
+                    for (uuid, subdir) in subdirs
+                        entry = manifest[uuid]
+                        @test entry.version == v"999.0.0"
+                        @test entry.path === nothing
+                        @test entry.repo.source == make_file_url(repo)
+                        @test entry.repo.subdir == subdir
+                        @test entry.tree_hash == subtree_hash(subdir)
+                    end
+                    return manifest
+                end
+                # `UserPkg` has the registered `Example` as a dependency
+                user = joinpath(tmp, "UserPkg")
+                mkpath(joinpath(user, "src"))
+                write(
+                    joinpath(user, "Project.toml"), """
+                    name = "UserPkg"
+                    uuid = "00000000-0000-0000-0000-00000000c003"
+                    version = "0.1.0"
+
+                    [deps]
+                    Example = "$example_uuid"
+                    """
+                )
+                write(joinpath(user, "src", "UserPkg.jl"), "module UserPkg\nusing Example\nend")
+
+                Pkg.activate(joinpath(tmp, "url"))
+                Pkg.develop(path = user)
+                @test Pkg.dependencies()[example_uuid].version < v"999"
+                Pkg.add(url = make_file_url(repo))
+                check_from_repo(joinpath(tmp, "url"), (sub_uuid => "lib/Sub", example_uuid => "lib/Example"))
+                @test !haskey(Pkg.project().sources, "Sub")
+
+                # Updating `Mono` moves the other packages along
+                write(joinpath(repo, "lib", "Example", "src", "Example.jl"), "module Example # changed\nend")
+                git_init_and_commit(repo)
+                Pkg.update()
+                check_from_repo(joinpath(tmp, "url"), (sub_uuid => "lib/Sub", example_uuid => "lib/Example"))
+
+                # A package in a subdirectory of the repository
+                Pkg.activate(joinpath(tmp, "subdir"))
+                Pkg.add(url = make_file_url(repo), subdir = "lib/Sub")
+                manifest = check_from_repo(joinpath(tmp, "subdir"), (example_uuid => "lib/Example",))
+                @test !haskey(manifest, mono_uuid)
+
+                # A direct dependency of the environment keeps its source
+                Pkg.activate(joinpath(tmp, "direct"))
+                Pkg.add("Example")
+                Pkg.add(url = make_file_url(repo))
+                @test Pkg.dependencies()[example_uuid].version < v"999"
+                @test Pkg.dependencies()[sub_uuid].version == v"999.0.0"
+
+                # Developing a package develops the packages of its workspace that it uses
+                Pkg.activate(joinpath(tmp, "dev"))
+                Pkg.develop(path = user)
+                Pkg.develop(path = joinpath(repo, "lib", "Sub"))
+                manifest = Pkg.Types.read_manifest(joinpath(tmp, "dev", "Manifest.toml"))
+                @test manifest[example_uuid].path !== nothing
+                @test samefile(joinpath(tmp, "dev", manifest[example_uuid].path), joinpath(repo, "lib", "Example"))
+                @test !haskey(manifest, mono_uuid)
+            end
+        end
+    end
+
     # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4337
     # Switching between path and repo sources should not cause assertion error
     @testset "[sources] url for a stdlib, resolved from scratch" begin

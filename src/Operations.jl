@@ -796,10 +796,11 @@ function collect_fixed!(env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UU
         end
         deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded)
         # dependencies whose source is only kept from the manifest
-        from_manifest = if loaded !== nothing && is_tracking_repo(pkg) && !is_tracking_path(pkg)
-            repo_path_sources!(env, pkg, loaded[2], deps)
-        else
-            Set{UUID}()
+        from_manifest = Set{UUID}()
+        if is_tracking_path(pkg)
+            path_workspace_sources!(env, path, deps, weakdeps)
+        elseif loaded !== nothing && is_tracking_repo(pkg)
+            from_manifest = repo_sources!(env, pkg, loaded[2], deps, weakdeps)
         end
         deps_map[pkg.uuid] = deps
         weak_map[pkg.uuid] = weakdeps
@@ -922,15 +923,90 @@ function with_resolved_tree(f, env::EnvCache, pkg::PackageSpec)
     end
 end
 
-# A relative `path` in the `[sources]` of a package tracked from a repository refers to another
-# directory of that repository, at the same commit. Track such a dependency from the repository
-# as well, instead of by a path into the installation of `pkg`, which doesn't contain the rest
-# of the repository when `pkg` is in a subdirectory of it, and doesn't move with the manifest.
+function git_read_project(tree::LibGit2.GitTree, dir::String)
+    for name in Base.project_names
+        obj = try
+            tree[isempty(dir) ? name : "$dir/$name"]
+        catch err
+            err isa KeyError || rethrow()
+            continue
+        end
+        obj isa LibGit2.GitBlob || continue
+        return read_project(IOBuffer(LibGit2.content(obj)))
+    end
+    return nothing
+end
+
+# The directory of the project whose workspace includes the project at `dir`, looked up in
+# `tree` the same way that `Base.base_project` does on the file system
+function git_base_project(tree::LibGit2.GitTree, dir::String)
+    parent = dir
+    while !isempty(parent)
+        parent = dirname(parent)
+        project = git_read_project(tree, parent)
+        project === nothing && continue
+        for path in get(project.workspace, "projects", String[])
+            join_repo_path(parent, path) == dir && return parent
+        end
+    end
+    return nothing
+end
+
+# The packages of the workspace in `tree` that includes the project at `dir`, by UUID and
+# directory, like `Types.collect_workspace` does on the file system
+function git_workspace_packages(tree::LibGit2.GitTree, dir::String)
+    while true
+        base = git_base_project(tree, dir)
+        base === nothing && break
+        dir = base
+    end
+    packages = Dict{UUID, String}()
+    seen = Set{String}()
+    queue = [dir]
+    while !isempty(queue)
+        dir = pop!(queue)
+        dir in seen && continue
+        push!(seen, dir)
+        project = git_read_project(tree, dir)
+        project === nothing && continue
+        project.uuid === nothing || (packages[project.uuid] = dir)
+        for path in get(project.workspace, "projects", String[])
+            subdir = join_repo_path(dir, path)
+            subdir === nothing || push!(queue, subdir)
+        end
+    end
+    return packages
+end
+
+# The packages of the workspace that includes the project at `dir` on the file system, by UUID
+# and directory, unless that is the workspace of the active environment
+function workspace_packages(env::EnvCache, dir::String)
+    project_file = projectfile_path(dir; strict = true)
+    project_file === nothing && return Dict{UUID, String}()
+    root = Types.find_root_base_project(project_file)
+    root == Types.find_root_base_project(env.project_file) && return Dict{UUID, String}()
+    packages = Dict{UUID, String}()
+    for (file, project) in Types.collect_workspace(root)
+        project.uuid === nothing || (packages[project.uuid] = dirname(file))
+    end
+    return packages
+end
+
+# Whether `dep`, a dependency of a package, can get its source from the workspace of that package
+has_no_source(dep::PackageSpec, weakdeps::Set{UUID}) =
+    dep.path === nothing && !is_tracking_repo(dep) && !(dep.uuid in weakdeps)
+
+# The dependencies of `pkg`, tracked from a repository, that are in another directory of the same
+# repository: those with a relative `path` in its `[sources]`, and the other packages of the
+# workspace of `pkg` that it depends on without a `[sources]` entry. Track them from the
+# repository as well, at the same commit, instead of from a registry or by a path into the
+# installation of `pkg`, which doesn't contain the rest of the repository when `pkg` is in a
+# subdirectory of it, and doesn't move with the manifest.
 #
 # This needs the commit of `pkg`, which is known when `pkg` was resolved from its rev during
-# this operation. Otherwise the dependency is kept as the manifest records it, and returned so
-# that it does not take over the source of another package.
-function repo_path_sources!(env::EnvCache, pkg::PackageSpec, project::Project, deps::Vector{PackageSpec})
+# this operation. Otherwise such a dependency is kept as the manifest records it, and returned
+# so that it does not take over the source of another package.
+function repo_sources!(env::EnvCache, pkg::PackageSpec, project::Project, deps::Vector{PackageSpec}, weakdeps::Set{UUID})
     subdirs = Dict{UUID, String}()
     for dep in deps
         dep.path === nothing && continue
@@ -940,11 +1016,15 @@ function repo_path_sources!(env::EnvCache, pkg::PackageSpec, project::Project, d
         subdir === nothing || (subdirs[dep.uuid] = subdir)
     end
     from_manifest = Set{UUID}()
-    isempty(subdirs) && return from_manifest
     resolved = with_resolved_tree(env, pkg) do tree
+        workspace = git_workspace_packages(tree, something(pkg.repo.subdir, ""))
         for dep in deps
             subdir = get(subdirs, dep.uuid, nothing)
-            subdir === nothing && continue
+            if subdir === nothing
+                has_no_source(dep, weakdeps) || continue
+                subdir = get(workspace, dep.uuid, nothing)
+                subdir === nothing && continue
+            end
             subtree = git_subtree(tree, subdir)
             subtree === nothing && continue
             dep.path = nothing
@@ -956,17 +1036,35 @@ function repo_path_sources!(env::EnvCache, pkg::PackageSpec, project::Project, d
     resolved === nothing || return from_manifest
     for dep in deps
         subdir = get(subdirs, dep.uuid, nothing)
-        subdir === nothing && continue
         # never a path into the installation of `pkg`, as that is what the manifest would record
-        dep.path = nothing
+        subdir === nothing || (dep.path = nothing)
         entry = manifest_info(env.manifest, dep.uuid)
         entry === nothing && continue
-        entry.repo.source == pkg.repo.source && something(entry.repo.subdir, "") == subdir || continue
+        entry.repo.source == pkg.repo.source || continue
+        if subdir !== nothing
+            something(entry.repo.subdir, "") == subdir || continue
+        else
+            # a package of the workspace of `pkg` has its rev
+            has_no_source(dep, weakdeps) && entry.repo.rev == pkg.repo.rev || continue
+        end
         dep.repo = GitRepo(entry.repo.source, entry.repo.rev, entry.repo.subdir)
         dep.tree_hash = entry.tree_hash
         push!(from_manifest, dep.uuid)
     end
     return from_manifest
+end
+
+# The other packages of the workspace of `pkg`, tracked by the path `path`, that it depends on
+# without a `[sources]` entry come from the same checkout of the workspace
+function path_workspace_sources!(env::EnvCache, path::String, deps::Vector{PackageSpec}, weakdeps::Set{UUID})
+    workspace = workspace_packages(env, path)
+    for dep in deps
+        has_no_source(dep, weakdeps) || continue
+        dir = get(workspace, dep.uuid, nothing)
+        dir === nothing && continue
+        dep.path = Types.relative_project_path(env.manifest_file, dir)
+    end
+    return
 end
 
 # drops build detail in version but keeps the main prerelease context
@@ -3662,7 +3760,7 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     if entry !== nothing && entry.path === nothing && entry.repo.source !== nothing
         # A relative path refers to another directory of the repository that `pkg` is tracked
         # from, not of its installation, and the manifest records where such a dependency
-        # of `pkg` comes from (see `repo_path_sources!`)
+        # of `pkg` comes from (see `repo_sources!`)
         filter!(source_env.project.sources) do (name, source)
             path = get(source, "path", nothing)
             return path === nothing || isabspath(path) || !haskey(source_env.project.deps, name)

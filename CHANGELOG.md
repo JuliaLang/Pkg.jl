@@ -34,6 +34,10 @@ Pkg v1.14 Release Notes
 - A relative `path` in the `[sources]` of a package added by URL is now tracked from the same repository and commit
   as that package, instead of by a path into the package's installation in the depot. This makes such dependencies
   work for packages in a subdirectory of a repository, and keeps the manifest valid when it is moved to another depot.
+- When a package that is part of a `[workspace]` is added by URL or developed, the other packages of that workspace
+  that it depends on now come from the same commit or checkout, as if they were listed in its `[sources]`. This way,
+  `add BigProject#main` also tracks the subpackages of `BigProject` from its repository without them needing
+  `[sources]` entries for each other.
 
 Pkg v1.13 Release Notes
 =======================

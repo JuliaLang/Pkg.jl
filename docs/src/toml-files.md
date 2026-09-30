@@ -301,6 +301,16 @@ This structure is particularly beneficial for developers using a monorepo approa
 Workspaces can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
 
+When a package that is part of a workspace is added to another environment by URL (e.g.
+`pkg> add https://github.com/author/BigProject#main`, possibly with a `subdir`) or developed, the other
+packages of its workspace that it depends on come from the same commit or checkout as well, as if they were
+listed in its `[sources]`. Packages of the workspace that it does not depend on are not installed. The packages
+of a repository therefore don't need `[sources]` entries pointing at each other to be installed together; such
+entries are only needed for older versions of Julia.
+
+!!! compat
+    Taking packages from the workspace of a package added by URL or developed requires Julia 1.14+.
+
 ### The `[extras]` section (legacy)
 
 !!! warning
