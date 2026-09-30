@@ -407,7 +407,7 @@ end
 
 @testset "status showing incompatible loaded deps" begin
     isolate(loaded_depot = true) do
-        cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
+        cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no --project=$(pkgdir(Pkg)) -e "
             using Pkg
             Pkg.activate(temp=true)
             Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.4\"))
