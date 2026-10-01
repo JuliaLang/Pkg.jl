@@ -65,6 +65,32 @@ function setup_packages_repository(dir)
     return package_tree_hash, dep_tree_hash
 end
 
+const DEP = (name = "Dep", uuid = UUID("d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"))
+
+# Commit a change to `Dep` and return its new tree hash.
+function update_dep(dir)
+    open(io -> println(io, "# update"), joinpath(dir, "dependencies", "Dep", "src", "Dep.jl"), "a")
+    git = gitcmd(dir)
+    run(pipeline(`$git commit -qam 'Update Dep.'`, stdout = stdout_f(), stderr = stderr_f()))
+    return readchomp(`$git rev-parse HEAD:dependencies/Dep`)
+end
+
+# Replace the history of `dir` so that none of its earlier trees are reachable.
+function rewrite_history(dir)
+    open(io -> println(io, "# rewritten"), joinpath(dir, "dependencies", "Dep", "src", "Dep.jl"), "a")
+    git = gitcmd(dir)
+    for cmd in (
+            `$git checkout -q --orphan rewritten`, `$git add -A`, `$git commit -qm 'Rewrite history.'`,
+            `$git branch -q -D master`, `$git branch -m master`,
+            `$git reflog expire --expire=now --all`, `$git gc -q --prune=now`,
+        )
+        run(pipeline(cmd, stdout = stdout_f(), stderr = stderr_f()))
+    end
+    return nothing
+end
+
+dep_spec(url; kwargs...) = Pkg.PackageSpec(; url, subdir = "dependencies/Dep", kwargs...)
+
 
 # Create a registry with the two packages `Package` and `Dep`.
 function setup_registry(dir, packages_dir_url, package_tree_hash, dep_tree_hash)
@@ -175,7 +201,7 @@ end
             tree_hashes = setup_packages_repository(packages_dir)
             setup_registry(registry_dir, packages_dir_url, tree_hashes...)
             pkgstr("registry add $(registry_dir)")
-            dep = (name = "Dep", uuid = UUID("d43cb7ef-9818-40d3-bb27-28fb4aa46cc5"))
+            dep = DEP
 
             # Ordinary add from registry.
             pkg"add Package"
@@ -384,6 +410,80 @@ end
             @test isinstalled("Dep")
             pkg"rm Dep"
         end #cd
+    end
+end
+
+@testset "resolve with a subdir package missing from the depot (#4851)" begin
+    temp_pkg_dir() do project
+        cd(@__DIR__) do
+            packages_dir = mktempdir()
+            packages_dir_url = make_file_url(packages_dir)
+            _, dep_tree_hash = setup_packages_repository(packages_dir)
+
+            Pkg.add(dep_spec(packages_dir_url))
+            @test isinstalled("Dep")
+            @test Pkg.dependencies()[DEP.uuid].tree_hash == dep_tree_hash
+
+            rm(joinpath(DEPOT_PATH[1], "packages", "Dep"); recursive = true)
+            @test !isinstalled("Dep")
+            Pkg.resolve()
+            @test isinstalled("Dep")
+
+            update_dep(packages_dir)
+            rm(joinpath(DEPOT_PATH[1], "packages", "Dep"); recursive = true)
+            rm(Pkg.Types.add_repo_cache_path(packages_dir_url); recursive = true)
+            @test !isinstalled("Dep")
+
+            Pkg.resolve()
+            @test isinstalled("Dep")
+            @test Pkg.dependencies()[DEP.uuid].tree_hash == dep_tree_hash
+        end
+    end
+end
+
+@testset "pin, and an unreachable tree, of a subdir package missing from the depot" begin
+    temp_pkg_dir() do project
+        cd(@__DIR__) do
+            packages_dir = mktempdir()
+            packages_dir_url = make_file_url(packages_dir)
+            setup_packages_repository(packages_dir)
+            Pkg.add(dep_spec(packages_dir_url))
+
+            rm(joinpath(DEPOT_PATH[1], "packages", "Dep"); recursive = true)
+            Pkg.pin("Dep")
+            @test isinstalled("Dep")
+            Pkg.free("Dep")
+
+            rewrite_history(packages_dir)
+            rm(joinpath(DEPOT_PATH[1], "packages", "Dep"); recursive = true)
+            rm(Pkg.Types.add_repo_cache_path(packages_dir_url); recursive = true)
+            @test_throws "Did not find tree" Pkg.resolve()
+        end
+    end
+end
+
+@testset "rev lookups of a subdir package: tree rev, update, pinned re-add" begin
+    temp_pkg_dir() do project
+        cd(@__DIR__) do
+            packages_dir = mktempdir()
+            packages_dir_url = make_file_url(packages_dir)
+            _, dep_tree_hash = setup_packages_repository(packages_dir)
+
+            root_tree_hash = readchomp(`$(gitcmd(packages_dir)) rev-parse 'HEAD^{tree}'`)
+            Pkg.add(dep_spec(packages_dir_url; rev = root_tree_hash))
+            @test Pkg.dependencies()[DEP.uuid].tree_hash == dep_tree_hash
+            pkg"rm Dep"
+
+            Pkg.add(dep_spec(packages_dir_url))
+            new_tree_hash = update_dep(packages_dir)
+            Pkg.update()
+            @test Pkg.dependencies()[DEP.uuid].tree_hash == new_tree_hash
+
+            Pkg.pin("Dep")
+            update_dep(packages_dir)
+            Pkg.add(dep_spec(packages_dir_url))
+            @test Pkg.dependencies()[DEP.uuid].tree_hash == new_tree_hash
+        end
     end
 end
 
