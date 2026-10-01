@@ -458,6 +458,9 @@ end
             rm(joinpath(DEPOT_PATH[1], "packages", "Dep"); recursive = true)
             rm(Pkg.Types.add_repo_cache_path(packages_dir_url); recursive = true)
             @test_throws "Did not find tree" Pkg.resolve()
+            # Updating the package resolves it again from its tracked rev, as the error suggests.
+            Pkg.update("Dep")
+            @test isinstalled("Dep")
         end
     end
 end
