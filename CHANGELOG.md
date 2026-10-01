@@ -41,6 +41,8 @@ Pkg v1.14 Release Notes
   on it are nested below down to the project's direct dependencies (highlighted), and a subtree already
   shown elsewhere is marked with `(*)`. The new `forward` keyword (`--forward`/`-f` in the REPL) prints
   the paths top-down from the direct dependencies instead. ([#4839])
+- `Pkg.resolve` and `Pkg.pin` no longer fail with "Did not find subdirectory" for a package tracked from a git repo
+  `subdir` whose manifest entry is not installed in the depot yet, e.g. on a fresh machine with a committed manifest. ([#4851])
 
 Pkg v1.13 Release Notes
 =======================
@@ -270,3 +272,4 @@ Pkg v1.7 Release Notes
 [#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
 [#4849]: https://github.com/JuliaLang/Pkg.jl/issues/4849
 [#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
+[#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851

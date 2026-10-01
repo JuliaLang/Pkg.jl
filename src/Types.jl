@@ -1116,7 +1116,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     obj_branch = get_object_or_branch(repo, rev_or_hash)
                 end
                 if obj_branch === nothing
-                    pkgerror("Did not find rev $(rev_or_hash) in repository")
+                    if pkg.tree_hash === nothing
+                        pkgerror("Did not find rev $(rev_or_hash) in repository")
+                    else
+                        pkgerror("Did not find tree $(rev_or_hash) of $(err_rep(pkg)) in repository `$(repo_source_typed)`")
+                    end
                 end
             end
             gitobject, isbranch = obj_branch
@@ -1133,7 +1137,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
             tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
-            if pkg.repo.subdir !== nothing
+            if pkg.repo.subdir !== nothing && !(pkg.tree_hash !== nothing && gitobject isa LibGit2.GitTree)
                 try
                     tree_hash_object = tree_hash_object[pkg.repo.subdir]
                 catch e
