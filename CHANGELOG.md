@@ -27,6 +27,9 @@ Pkg v1.14 Release Notes
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
+- `Pkg.resolve` no longer fails with "Did not find subdirectory" when a package tracked from a repository
+  subdirectory is recorded in the manifest but not installed, such as on a fresh machine with a committed
+  manifest. ([#4853])
 
 Pkg v1.13 Release Notes
 =======================
@@ -250,5 +253,6 @@ Pkg v1.7 Release Notes
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
+[#4853]: https://github.com/JuliaLang/Pkg.jl/pull/4853
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
