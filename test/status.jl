@@ -252,6 +252,101 @@ end
     end
 end
 
+@testset "status --outdated: compat only taken from registries containing the version (#4849)" begin
+    isolate(loaded_depot = true) do
+        dep_uuid = "6b8c0ba6-8e4e-4a0b-9e5a-2f0d9c1a7e11"
+        function write_dep_registry(name, uuid, versions, compat)
+            reg = joinpath(DEPOT_PATH[1], "registries", name)
+            pkg_path = joinpath(reg, "D", "DepOnExample")
+            mkpath(pkg_path)
+            write(
+                joinpath(reg, "Registry.toml"), """
+                name = "$name"
+                uuid = "$uuid"
+                repo = "whydoineedthis?"
+
+                [packages]
+                $dep_uuid = { name = "DepOnExample", path = "D/DepOnExample" }
+                """
+            )
+            write(
+                joinpath(pkg_path, "Package.toml"), """
+                name = "DepOnExample"
+                uuid = "$dep_uuid"
+                repo = "https://example.com/DepOnExample.jl.git"
+                """
+            )
+            write(
+                joinpath(pkg_path, "Versions.toml"),
+                join(("[\"$v\"]\ngit-tree-sha1 = \"46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc\"\n" for v in versions), "\n")
+            )
+            write(
+                joinpath(pkg_path, "Deps.toml"), """
+                ["1"]
+                Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+                """
+            )
+            compat === nothing || write(
+                joinpath(pkg_path, "Compat.toml"), """
+                ["1"]
+                Example = "$compat"
+                """
+            )
+            return reg
+        end
+        # RegA has DepOnExample 1.0.0 and 1.1.0 with no compat on Example.
+        # RegB only has 1.0.0 but its Compat.toml range "1" also covers 1.1.0,
+        # which RegB does not contain.
+        write_dep_registry("RegA", "d3e3f5c0-3c5e-4f1a-9a3e-1c2b3d4e5f60", ["1.0.0", "1.1.0"], nothing)
+        regb = write_dep_registry("RegB", "f0e1d2c3-b4a5-4697-8879-6a5b4c3d2e1f", ["1.0.0"], "0.5.3")
+
+        mktempdir() do tmp
+            write(
+                joinpath(tmp, "Project.toml"), """
+                [deps]
+                DepOnExample = "$dep_uuid"
+                Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+                """
+            )
+            write(
+                joinpath(tmp, "Manifest.toml"), """
+                julia_version = "$VERSION"
+                manifest_format = "2.0"
+
+                [[deps.DepOnExample]]
+                deps = ["Example"]
+                git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+                uuid = "$dep_uuid"
+                version = "1.1.0"
+
+                [[deps.Example]]
+                git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+                uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+                version = "0.5.3"
+                """
+            )
+            Pkg.activate(tmp)
+            Pkg.Registry.add(Pkg.RegistrySpec[], io = devnull) # load reg before io capturing
+            example_status_line() = let io = IOBuffer()
+                Pkg.status(; outdated = true, io = io)
+                lines = split(String(take!(io)), '\n')
+                only(filter(contains("[7876af07] Example"), lines))
+            end
+            # DepOnExample 1.1.0 is not in RegB, so RegB's compat must not hold Example back
+            line = example_status_line()
+            @test occursin(r"Example\s*v0.5.3\s*\(<v[\d.]+\)", line)
+            @test !occursin("DepOnExample", line)
+
+            # Once RegB also contains 1.1.0 its compat does apply
+            open(joinpath(regb, "D", "DepOnExample", "Versions.toml"), append = true) do io
+                write(io, "\n[\"1.1.0\"]\ngit-tree-sha1 = \"46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc\"\n")
+            end
+            line = example_status_line()
+            @test occursin(r"Example\s*v0.5.3\s*\(<v[\d.]+\): DepOnExample", line)
+        end
+    end
+end
+
 @testset "Pkg.compat" begin
     # State changes
     isolate(loaded_depot = true) do;
