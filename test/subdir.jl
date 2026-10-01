@@ -465,6 +465,27 @@ end
     end
 end
 
+@testset "unreachable tree of a subdir package added at a commit" begin
+    temp_pkg_dir() do project
+        cd(@__DIR__) do
+            packages_dir = mktempdir()
+            packages_dir_url = make_file_url(packages_dir)
+            setup_packages_repository(packages_dir)
+            commit = readchomp(`$(gitcmd(packages_dir)) rev-parse HEAD`)
+            Pkg.add(dep_spec(packages_dir_url; rev = commit))
+
+            rewrite_history(packages_dir)
+            rm(joinpath(DEPOT_PATH[1], "packages", "Dep"); recursive = true)
+            rm(Pkg.Types.add_repo_cache_path(packages_dir_url); recursive = true)
+            @test_throws "add the package again at a rev that still exists" Pkg.resolve()
+            @test_throws "Did not find rev" Pkg.update("Dep")
+
+            Pkg.add(dep_spec(packages_dir_url; rev = "master"))
+            @test isinstalled("Dep")
+        end
+    end
+end
+
 @testset "rev lookups of a subdir package: tree rev, update, pinned re-add" begin
     temp_pkg_dir() do project
         cd(@__DIR__) do
