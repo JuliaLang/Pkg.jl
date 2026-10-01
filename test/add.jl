@@ -846,6 +846,60 @@ end
     end
 end
 
+@testset "multiple registries: deps only taken from registries containing the version (#4849)" begin
+    isolate(loaded_depot = true) do
+        # A second registry that only knows Example 0.5.3 and declares a dependency on
+        # Test for all its versions. That Deps.toml range also covers 0.5.5, which this
+        # registry does not have, so it must not leak into the manifest for 0.5.5.
+        dp = DEPOT_PATH[1]
+        newreg = joinpath(dp, "registries", "NewReg")
+        mkpath(newreg)
+        write(
+            joinpath(newreg, "Registry.toml"), """
+            name = "NewReg"
+            uuid = "23338594-aafe-5451-b93e-139f81909106"
+            repo = "whydoineedthis?"
+
+            [packages]
+            7876af07-990d-54b4-ab0e-23690620f79a = { name = "Example", path = "E/Example" }
+            """
+        )
+        example_path = joinpath(newreg, "E", "Example")
+        mkpath(example_path)
+        write(
+            joinpath(example_path, "Package.toml"), """
+            name = "Example"
+            uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+            repo = "https://github.com/JuliaLang/Example.jl.git"
+            """
+        )
+        write(
+            joinpath(example_path, "Versions.toml"), """
+            ["0.5.3"]
+            git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+            """
+        )
+        write(
+            joinpath(example_path, "Deps.toml"), """
+            ["0"]
+            Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+            """
+        )
+
+        # Test is in the manifest, so a leaked dependency edge would be recorded
+        Pkg.add(["Example", "Test"])
+        example = Pkg.dependencies()[exuuid]
+        @test example.version > v"0.5.3"
+        @test isempty(example.dependencies)
+
+        # For the version NewReg does contain, its deps do apply
+        Pkg.add(Pkg.PackageSpec(name = "Example", version = "0.5.3"))
+        example = Pkg.dependencies()[exuuid]
+        @test example.version == v"0.5.3"
+        @test haskey(example.dependencies, "Test")
+    end
+end
+
 @testset "Offline mode" begin
     isolate(loaded_depot = false) do
         # cache this version
