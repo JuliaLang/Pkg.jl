@@ -1106,7 +1106,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                             "Did not find tree $(rev_or_hash) of $(err_rep(pkg)) in repository `$(repo_source_typed)`. ",
                             "The manifest records a tree that is no longer reachable from the repository, ",
                             "for example because its history was rewritten. ",
-                            "Update the package to resolve it again from `$(pkg.repo.rev)`."
+                            looks_like_commit_hash(pkg.repo.rev) ?
+                                "It was added at commit `$(pkg.repo.rev)`, which is not reachable either; add the package again at a rev that still exists." :
+                                "Update the package to resolve it again from `$(pkg.repo.rev)`."
                         )
                     end
                 end
