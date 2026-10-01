@@ -1117,9 +1117,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 end
                 if obj_branch === nothing
                     if pkg.tree_hash === nothing
-                        pkgerror("Did not find rev $(rev_or_hash) in repository")
+                        pkgerror("Did not find rev $(rev_or_hash) in repository `$(repo_source_typed)`")
                     else
-                        pkgerror("Did not find tree $(rev_or_hash) of $(err_rep(pkg)) in repository `$(repo_source_typed)`")
+                        pkgerror(
+                            "Did not find tree $(rev_or_hash) of $(err_rep(pkg)) in repository `$(repo_source_typed)`. ",
+                            "The manifest records a tree that is no longer reachable from the repository, ",
+                            "for example because its history was rewritten. ",
+                            "Update the package to resolve it again from `$(pkg.repo.rev)`."
+                        )
                     end
                 end
             end
@@ -1137,12 +1142,16 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
             tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
-            if pkg.repo.subdir !== nothing && !(pkg.tree_hash !== nothing && gitobject isa LibGit2.GitTree)
+            # When the lookup was by `pkg.tree_hash` the object is already the tree of the
+            # package itself: for a subdir package the manifest records the hash of the
+            # subdirectory, not of the repository root. Only descend into the subdir when
+            # the lookup was by rev, where the object is the commit's root tree.
+            if pkg.repo.subdir !== nothing && pkg.tree_hash === nothing
                 try
                     tree_hash_object = tree_hash_object[pkg.repo.subdir]
                 catch e
                     e isa KeyError || rethrow()
-                    pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
+                    pkgerror("Did not find subdirectory `$(pkg.repo.subdir)` in repository `$(repo_source_typed)` at rev `$(pkg.repo.rev)`")
                 end
             end
             @assert pkg.path === nothing
