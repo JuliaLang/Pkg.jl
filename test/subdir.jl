@@ -319,6 +319,19 @@ end
             @test isinstalled("Dep")
             pkg"rm Dep"
 
+            # Resolve with a manifest that records a subdir package which is not installed,
+            # like on a fresh machine with a committed manifest (#4851). The manifest's
+            # tree hash is that of the subdirectory, so the lookup in the clone must not
+            # descend into the subdir a second time.
+            Pkg.add(Pkg.PackageSpec(url = packages_dir_url, subdir = "dependencies/Dep"))
+            @test isinstalled("Dep")
+            rm(joinpath(DEPOT_PATH[1], "packages", "Dep"); recursive = true)
+            rm(joinpath(DEPOT_PATH[1], "clones"); recursive = true)
+            @test !isinstalled("Dep")
+            Pkg.resolve()
+            @test isinstalled("Dep")
+            pkg"rm Dep"
+
             # Add from url, REPL subdir syntax.
             pkgstr("add $(packages_dir_url):julia")
             @test isinstalled("Package")
