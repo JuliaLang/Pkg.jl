@@ -112,6 +112,8 @@ include("Versions.jl")
 include("Registry/Registry.jl")
 include("Types.jl")
 include("Resolve/Resolve.jl")
+# Resolver.jl, vendored by vendor/update_resolver.sh
+include("../vendor/Resolver/src/Resolver.jl")
 include("SATResolve.jl")
 include("BinaryPlatformsCompat.jl")
 include("Artifacts.jl")

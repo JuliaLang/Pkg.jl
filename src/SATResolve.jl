@@ -5,8 +5,8 @@
 # resolver; the legacy maxsum resolver is selected with JULIA_PKG_RESOLVER=maxsum.
 module SATResolve
 
-import Resolver
-import Resolver.Diagnostics
+import ..Resolver
+import ..Resolver.Diagnostics
 using UUIDs
 import ..Registry, ..Types
 using ..Versions: VersionSpec, VersionRange

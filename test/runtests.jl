@@ -22,7 +22,9 @@ module PkgTestsInner
         error("The wrong Pkg is being tested")
     end
 
-    @test isempty(Test.detect_closure_boxes(Pkg))
+    # (not checked in vendored code, which is kept as upstream has it)
+    in_vendored(mod) = mod === Pkg.Resolver || (mod !== Pkg && in_vendored(parentmodule(mod)))
+    @test isempty(filter(((m, _),) -> !in_vendored(m.module), Test.detect_closure_boxes(Pkg)))
 
     const original_depot_had_registries = isdir(joinpath(Base.DEPOT_PATH[1], "registries"))
 
@@ -113,7 +115,7 @@ module PkgTestsInner
                 end
                 t_proxy = @elapsed PkgServerProxy.start!(upstream = Pkg.pkg_server(), cache_dir = proxy_cache)
                 t_registry = @elapsed Utils.check_init_reg()
-                t_depot = @elapsed (Utils.populate_deps_depot!(); Utils.populate_loaded_depot!())
+                t_depot = @elapsed Utils.populate_loaded_depot!()
                 return (; t_proxy, t_registry, t_depot)
             end
         end

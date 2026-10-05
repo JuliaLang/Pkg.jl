@@ -114,7 +114,7 @@ jobs:
       - uses: julia-actions/cache@v3
       - name: Generate docs
         run: |
-          julia --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
+          julia --project --color=yes -e 'using Pkg; Pkg.activate("docs"); Pkg.instantiate();'
           julia --project=docs --color=yes docs/make.jl pdf
         env:
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}

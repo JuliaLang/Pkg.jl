@@ -46,7 +46,7 @@ end
             """
             cmd = addenv(
                 `$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --color=no -e $script`,
-                "JULIA_DEPOT_PATH" => join([tmp, LOADED_DEPOT, DEPS_DEPOT, ""], pathsep)
+                "JULIA_DEPOT_PATH" => join([tmp, LOADED_DEPOT, ""], pathsep)
             )
             did_install_package = Threads.Atomic{Int}(0)
             did_install_artifact = Threads.Atomic{Int}(0)
