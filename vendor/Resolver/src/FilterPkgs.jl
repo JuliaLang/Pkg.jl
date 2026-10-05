@@ -1343,8 +1343,8 @@ function drop_unmarked!(
                 @inbounds for w = 1:nw
                     dst[db + w] = src[sb + w]
                 end
-                r = m′ & 63
-                r != 0 && @inbounds (dst[db + nw] &= (UInt64(1) << r) - 1)
+                t = m′ & 63
+                t != 0 && @inbounds (dst[db + nw] &= (UInt64(1) << t) - 1)
             else
                 # gather the kept classes' bits
                 acc = UInt64(0)

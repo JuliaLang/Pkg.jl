@@ -18,6 +18,8 @@ Base.getindex(::EmptyDict, key) = throw(KeyError(key))
 struct Constraint{P}
     forbids :: Any                     # (p, v) -> Bool
     named   :: Union{Nothing, Set{P}}  # the packages it names, or every package
+    # no default outer constructor: `P` is unbound when `named` is `nothing`
+    Constraint{P}(forbids, named) where {P} = new{P}(forbids, named)
 end
 
 """
@@ -59,19 +61,21 @@ a deletion from a private one: that is what lets a single T1 artifact (see
 [`pkg_info`](@ref Resolver.pkg_info)) serve queries that admit different things,
 and what lets diagnostics eventually name the kind that ruled a version out.
 """
-struct Problem{P, C<:AbstractDict{Symbol}, S<:AbstractDict{P,Vector{String}}}
+struct Problem{P}
     reqs :: Vector{P}
-    # the constraints, by kind. Typed as a parameter so that an unconstrained
-    # problem can share one immutable empty dictionary rather than make one
-    constraints :: C
-    # where each requirement is required from, for the ones the query said.
-    # A parameter for the same reason: a query that said nothing, which is
-    # every convenience `resolve`, shares the empty map rather than making one
-    sources :: S
+    # the constraints, by kind. An unconstrained problem shares one immutable
+    # empty dictionary rather than make one. A small union and not a type
+    # parameter, so that everything taking a problem is compiled once per `P`
+    constraints :: Union{EmptyDict{Symbol,Constraint{P}}, Dict{Symbol,Constraint{P}}}
+    # where each requirement is required from, for the ones the query said; a
+    # query that said nothing, which is every convenience `resolve`, shares the
+    # empty map rather than making one
+    sources :: Union{EmptyDict{P,Vector{String}}, Dict{P,Vector{String}}}
 end
 
-Problem(reqs::Vector{P}, constraints::AbstractDict{Symbol}) where {P} =
-    Problem(reqs, constraints, EmptyDict{P,Vector{String}}())
+Problem(reqs::Vector{P}, constraints::AbstractDict{Symbol},
+        sources::AbstractDict{P} = EmptyDict{P,Vector{String}}()) where {P} =
+    Problem{P}(reqs, constraints, sources)
 
 # A kind can carry the place it was declared after an `@`: `compat@a/Project.toml`
 # is that file's compat. A kind is a symbol wherever it goes — a report is plain

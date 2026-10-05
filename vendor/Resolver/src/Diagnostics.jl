@@ -645,8 +645,9 @@ end
 function trim_route(sat::SAT{P,V}, base::Vector{Clause{P}}, c::Clause{P},
                     through::Vector{P}) where {P,V}
     named = Set{P}(packages(c))
-    ok(v) = entails(sat, Clause{P}[b for b in base
-        if all(q -> q in named || q in v, packages(b))], c)
+    allowed(v) = Clause{P}[b for b in base
+        if all(q -> q in named || q in v, packages(b))]
+    ok(v) = entails(sat, allowed(v), c)
     v = Set{P}(q for q in through if q ∉ named)
     isempty(v) && return P[]
     if ok(v)
@@ -656,15 +657,14 @@ function trim_route(sat::SAT{P,V}, base::Vector{Clause{P}}, c::Clause{P},
         end
     end
     isempty(v) && return P[]
-    usable = Clause{P}[b for b in base
-                       if all(q -> q in named || q in v, packages(b))]
+    usable = allowed(v)
     seen = copy(named); out = P[]
     front = sort!(collect(named))
     while !isempty(front)
         step = P[]
         for b in usable
             ps = packages(b)
-            any(q -> q in front, ps) || continue
+            any(in(front), ps) || continue
             for q in ps
                 q in v && q ∉ seen && q ∉ step && push!(step, q)
             end
@@ -721,41 +721,50 @@ const ELIM_SET = 5
 function minimal_emptying(bits::Vector{BitVector}, budget::Ref{Int})
     n = length(bits)
     sols = Vector{Vector{Int}}()
-    chosen = Int[]
+    isempty(bits) && return sols
     suffix = [trues(length(bits[1])) for _ = 1:n+1]
     for i = n:-1:1
         suffix[i] = suffix[i+1] .& bits[i]
     end
-    function is_minimal()
-        for j in eachindex(chosen)
-            cur = trues(length(bits[1]))
-            for k in eachindex(chosen)
-                k == j || (cur .&= bits[chosen[k]])
-            end
-            any(cur) || return false
+    ok = emptying_rec!(sols, Int[], bits, suffix, budget, 1, trues(length(bits[1])))
+    return ok ? sols : nothing
+end
+
+# no member of `chosen` can be left out with the intersection still empty
+function is_minimal(bits::Vector{BitVector}, chosen::Vector{Int})
+    for j in eachindex(chosen)
+        cur = trues(length(bits[1]))
+        for k in eachindex(chosen)
+            k == j || (cur .&= bits[chosen[k]])
         end
-        return true
+        any(cur) || return false
     end
-    function rec(start::Int, cur::BitVector)
-        any(cur .& suffix[start]) && return true
-        length(chosen) ≥ ELIM_SET && return true
-        for i = start:n
-            budget[] -= 1
-            budget[] ≤ 0 && return false
-            nxt = cur .& bits[i]
-            nxt == cur && continue
-            push!(chosen, i)
-            if !any(nxt)
-                is_minimal() && push!(sols, copy(chosen))
-            elseif i < n
-                rec(i + 1, nxt) || (pop!(chosen); return false)
-            end
-            pop!(chosen)
+    return true
+end
+
+# the walk of `minimal_emptying` from `start`, with `cur` the intersection of
+# `chosen`; false once the budget runs out
+function emptying_rec!(sols::Vector{Vector{Int}}, chosen::Vector{Int},
+                       bits::Vector{BitVector}, suffix::Vector{BitVector},
+                       budget::Ref{Int}, start::Int, cur::BitVector)
+    n = length(bits)
+    any(cur .& suffix[start]) && return true
+    length(chosen) ≥ ELIM_SET && return true
+    for i = start:n
+        budget[] -= 1
+        budget[] ≤ 0 && return false
+        nxt = cur .& bits[i]
+        nxt == cur && continue
+        push!(chosen, i)
+        if !any(nxt)
+            is_minimal(bits, chosen) && push!(sols, copy(chosen))
+        elseif i < n
+            emptying_rec!(sols, chosen, bits, suffix, budget, i + 1, nxt) ||
+                (pop!(chosen); return false)
         end
-        return true
+        pop!(chosen)
     end
-    isempty(bits) && return sols
-    return rec(1, trues(length(bits[1]))) ? sols : nothing
+    return true
 end
 
 # drop what another item already says: an item saying at least as much on no
@@ -1085,7 +1094,7 @@ function min_repairs(sat::SAT, lits::Vector{Int})
         found, more = with_temp_clauses(sat) do
             add_at_most!(sat, lits, k)
             out = Vector{Vector{Int}}()
-            more = false
+            local more = false
             while sat_solve(sat)
                 viol = Int[i for i = 1:n if PicoSAT.deref(sat.pico, lits[i]) < 0]
                 push!(out, viol)
@@ -1306,18 +1315,21 @@ function factoring_partition(F::Vector{Vector{Int}}, U::Vector{Int})
     end
     total = prod(B -> length(proj(F, B)), blocks; init = 1)
     gen = Set{Vector{Int}}()
-    function build(bi::Int, acc::Vector{Int})
-        if bi > length(blocks)
-            push!(gen, sort!(copy(acc)))
-            return
-        end
-        for tr in proj(F, blocks[bi])
-            build(bi + 1, vcat(acc, tr))
-        end
-    end
-    build(1, Int[])
+    product_traces!(gen, F, blocks, 1, Int[])
     (length(blocks) > 1 && gen == Set(F) && length(F) == total) ?
         sort!(blocks; by = first) : nothing
+end
+
+# every combination of one trace per block from `bi` on, each joined to `acc`
+function product_traces!(gen::Set{Vector{Int}}, F::Vector{Vector{Int}},
+                         blocks::Vector{Vector{Int}}, bi::Int, acc::Vector{Int})
+    if bi > length(blocks)
+        push!(gen, sort!(copy(acc)))
+        return
+    end
+    for tr in proj(F, blocks[bi])
+        product_traces!(gen, F, blocks, bi + 1, vcat(acc, tr))
+    end
 end
 
 # The decomposition tree of family `fmin` (all members size `k`) over facts
@@ -1639,28 +1651,26 @@ end
 function reason_walk(sat::SAT, pool::Vector{Int}, lits::Vector{Int})
     found = Vector{Vector{Int}}()
     seen = Set{Vector{Int}}()
-    budget = Ref(REASON_NODES)
-    complete = Ref(true)
+    budget = REASON_NODES
     index = Dict{Int,Int}(l => i for (i, l) in enumerate(lits))
-    function walk(p::Vector{Int})
-        if length(found) ≥ REASON_CAP || budget[] ≤ 0
-            complete[] = false
-            return
-        end
-        budget[] -= 1
+    # depth first, children pushed in reverse so they are visited in order
+    stack = [pool]
+    while !isempty(stack)
+        (length(found) ≥ REASON_CAP || budget ≤ 0) && return found, false
+        budget -= 1
+        p = pop!(stack)
         m = sat_mus(sat, Int[lits[i] for i in p])
-        isempty(m) && return
+        isempty(m) && continue
         r = sort!(Int[index[l] for l in m])
         if !(r in seen)
             push!(seen, r)
             push!(found, r)
         end
-        for x in r
-            walk(Int[y for y in p if y != x])
+        for x in Iterators.reverse(r)
+            push!(stack, Int[y for y in p if y != x])
         end
     end
-    walk(pool)
-    return found, complete[]
+    return found, true
 end
 
 ## explanation
@@ -1880,23 +1890,26 @@ function coarsen_core(sat::SAT{P,V}, core::Vector{Clause{P}},
     context(except) = Clause{P}[c for k in order if k != except
                                 for c in current[k]]
     for ps in order
-        function join_family(cs::Vector{Clause{P}}, rest::Vector{Clause{P}})
-            length(cs) ≤ 1 && return cs
-            for u in clause_joins(cs)
-                clauses_satisfiable(sat,
-                    Clause{P}[held; context(ps); rest; u]) && continue
-                return Clause{P}[u]
-            end
-            h = length(cs) ÷ 2
-            a, b = cs[1:h], cs[h+1:end]
-            ja = join_family(a, Clause{P}[rest; b])
-            jb = join_family(b, Clause{P}[rest; ja])
-            return Clause{P}[ja; jb]
-        end
         fam = sort!(current[ps]; by = c -> [m.bits for (_, m) in c.lits])
-        current[ps] = join_family(fam, Clause{P}[])
+        current[ps] = join_family(sat, Clause{P}[held; context(ps)], fam, Clause{P}[])
     end
     return Clause{P}[c for k in order for c in current[k]]
+end
+
+# one family of `coarsen_core` joined as far as it can be, with `fixed` the
+# statements outside the family and `rest` those of it set aside
+function join_family(sat::SAT{P}, fixed::Vector{Clause{P}},
+                     cs::Vector{Clause{P}}, rest::Vector{Clause{P}}) where {P}
+    length(cs) ≤ 1 && return cs
+    for u in clause_joins(cs)
+        clauses_satisfiable(sat, Clause{P}[fixed; rest; u]) && continue
+        return Clause{P}[u]
+    end
+    h = length(cs) ÷ 2
+    a, b = cs[1:h], cs[h+1:end]
+    ja = join_family(sat, fixed, a, Clause{P}[rest; b])
+    jb = join_family(sat, fixed, b, Clause{P}[rest; ja])
+    return Clause{P}[ja; jb]
 end
 
 # The registry's share of one reason: a minimal set of its statements that the
@@ -2189,26 +2202,26 @@ function lift_actions(prob::Problem{P}, sat::SAT{P,V}, univ::Universe{P,V},
     # smaller first, then the lift admitting the best excluded version, then
     # the kinds themselves: what a version is admitted by is the lift covering
     # everything that excludes it
-    function key(S::Vector{Symbol})
-        j = findfirst(j -> !isempty(excl[j]) && excl[j] ⊆ S, eachindex(vs))
-        return (length(S), something(j, length(vs) + 1), S)
-    end
-    best = nothing
-    function search(i::Int, S::Vector{Symbol})
-        best !== nothing && length(S) > best[1] && return
-        if i > length(choices)
-            k = key(S)
-            (best === nothing || k < best) && (best = k)
-            return
-        end
-        any(E -> E ⊆ S, choices[i]) && return search(i + 1, S)
-        for E in choices[i]
-            search(i + 1, sort!(union(S, E)))
-        end
-    end
-    search(1, Symbol[])
+    best = lift_search(choices, excl, 1, Symbol[], nothing)
     lift = best === nothing ? Symbol[] : best[3]
     return Action{P}[Action(k, p) for k in lift]
+end
+
+# the best key of a lift extending `S` by a choice for each class from `i` on,
+# or `best` where none beats it
+function lift_search(choices::Vector{Vector{Vector{Symbol}}},
+                     excl::Vector{Vector{Symbol}}, i::Int, S::Vector{Symbol}, best)
+    best !== nothing && length(S) > best[1] && return best
+    if i > length(choices)
+        j = findfirst(e -> !isempty(e) && e ⊆ S, excl)
+        k = (length(S), something(j, length(excl) + 1), S)
+        return best === nothing || k < best ? k : best
+    end
+    any(E -> E ⊆ S, choices[i]) && return lift_search(choices, excl, i + 1, S, best)
+    for E in choices[i]
+        best = lift_search(choices, excl, i + 1, sort!(union(S, E)), best)
+    end
+    return best
 end
 
 fix_actions(prob::Problem{P}, sat::SAT{P,V}, univ::Universe{P,V},
@@ -2520,11 +2533,10 @@ function upstream_probe(deps::DepsProvider{P,D}, base, prob::Problem{P},
     # the release's own data is a `PkgData` of its own type — same versions,
     # same dependencies, a compat map rebuilt — so the provider answers in
     # whatever both it and the rest of the registry are
-    prov = DepsProvider{P,typejoin(D, typeof(over)),typeof(release)}(
-        deps.packages, release)
+    prov = DepsProvider{P,typejoin(D, typeof(over))}(deps.packages, release)
     drop_reqs, drop_constraints = withdrawal(settle)
-    sol = resolve(prov, relax(prob, drop_reqs, drop_constraints);
-                  by, order, diagnose = false, upstream = false)
+    sol = Resolver.resolve_undiagnosed(prov, relax(prob, drop_reqs, drop_constraints);
+                                       by, order)
     sol === nothing && return nothing
     get(sol, p, nothing) == v || return nothing
     w = get(sol, q, nothing)
@@ -3645,7 +3657,7 @@ end
 
 # the package data for one package, from whichever shape of it the checker was
 # handed — the same two `resolve` itself takes
-pkg_data_of(data::DepsProvider{P}, p::P) where {P} = data.provider(p)
+pkg_data_of(data::DepsProvider{P,D}, p::P) where {P,D} = data.provider(p)::D
 pkg_data_of(data::AbstractDict{P,<:PkgData{P}}, p::P) where {P} = data[p]
 
 # (V7), of one conflict's upstream fixes

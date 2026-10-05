@@ -421,8 +421,8 @@ function clause_phrase(c::Clause{P}, vers, names = letters;
             return "$(names(p)) must be installed at $r"
         end
     end
-    s = subject === nothing ? default_subject(c, vers) : subject
-    c[s] === nothing && (s = default_subject(c, vers))
+    s = subject === nothing || c[subject] === nothing ?
+        default_subject(c, vers) : subject
     ants = String[antecedent_phrase(q, c[q], vers, names) for q in ps if q != s]
     m = c[s]
     plural = length(ants) > 1

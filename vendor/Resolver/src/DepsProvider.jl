@@ -36,15 +36,19 @@ function PkgData(
     PkgData{P,V,S,Vers,Deps,Comp}(versions, depends, compat)
 end
 
-struct DepsProvider{P, D<:PkgData, R} # function or callable
+struct DepsProvider{P, D<:PkgData}
     packages :: Vector{P}
-    provider :: R
+    # a function or callable, called once per package and asserted to give a
+    # `D`. Not a type parameter, so that what takes a provider is compiled once
+    # per data type and not again for every provider, such as each release an
+    # upstream probe tries
+    provider :: Any
 end
 
 function DepsProvider(
-    provider :: R,
+    provider,
     packages :: SetOrVec{P},
-) where {P,R}
+) where {P}
     # check arguments
     hasmethod(provider, Tuple{P}) ||
         throw(ArgumentError("provider need provider(::P) method"))
@@ -54,7 +58,7 @@ function DepsProvider(
     # construct provider
     packages = sort!(P[p for p in packages])
     D = typeof(provider(first(packages)))
-    DepsProvider{P,D,R}(packages, provider)
+    DepsProvider{P,D}(packages, provider)
 end
 
 pkg_data(deps::DepsProvider{P,D}, pkg::P) where {P,D<:PkgData} =

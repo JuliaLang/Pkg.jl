@@ -360,6 +360,17 @@ function resolve(
     return with_upstream(data, prob, ans, upstream; by, order)
 end
 
+# `resolve(deps, prob; diagnose = false, upstream = false)`, which is what an
+# upstream probe asks. Not `resolve` itself: inference would meet that again
+# inside its own probes, and the cycle widens the argument types it compiles
+# the whole pipeline for, so the pipeline would be compiled twice
+function resolve_undiagnosed(deps::DepsProvider{P}, prob::Problem{P};
+                             by::Function = identity, order = nothing) where {P}
+    info = pkg_info(deps, prob)
+    return resolve_prepared(prepare_pkg_info(info, prob, info; order), prob;
+        by, order, diagnose = false)
+end
+
 # What the package data adds to a diagnosis, and only it can: for each
 # conflict, whether a release of some package on the page would settle it (see
 # `Diagnostics.upstream_fixes`). A release is a different registry rather than a
