@@ -821,6 +821,18 @@ function resolver_backend()
     return pkgerror("unknown resolver backend `$(backend)` in JULIA_PKG_RESOLVER; expected `sat` or `maxsum`")
 end
 
+function maxsum_resolve_versions(
+        deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
+        pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, julia_version, preferred_versions
+    )
+    graph = Resolve.Graph(
+        deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
+        pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version, preferred_versions
+    )
+    Resolve.simplify_graph!(graph)
+    return Resolve.resolve(graph)
+end
+
 # Resolve a set of versions given package version specs
 # looks at uuid, version, repo/path,
 # sets version to a VersionNumber
@@ -920,12 +932,13 @@ function resolve_versions!(
             pinned, diagnose_unsat
         )
     else
-        graph = Resolve.Graph(
+        # behind an inference barrier, so that the precompile workload does not
+        # compile the legacy resolver into Pkg's image: it is opt-in, and its
+        # first use may take the compile latency
+        vers = Base.inferencebarrier(maxsum_resolve_versions)(
             deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
-            pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, false, julia_version, preferred_versions
-        )
-        Resolve.simplify_graph!(graph)
-        vers = Resolve.resolve(graph)
+            pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed, julia_version, preferred_versions
+        )::Dict{UUID, VersionNumber}
     end
 
     # Fixup jlls that got their build numbers stripped
