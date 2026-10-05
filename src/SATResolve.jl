@@ -192,9 +192,10 @@ end
 # Version preference: newest first, except that an already-loaded version of a
 # package is preferred over everything else (like the legacy resolver). The
 # resolver detects packages whose list is already in this order for free, so
-# only the packages with a preferred version cost anything.
+# only the packages with a preferred version cost anything. Given even without
+# preferred versions: with one type of order, and not `nothing` too, the
+# resolver is compiled for one call alone.
 function version_order(preferred_versions::Dict{UUID, VersionNumber}, uuid_of::Dict{String, UUID})
-    isempty(preferred_versions) && return nothing
     return function (p::String)
         pref = get(preferred_versions, uuid_of[p], nothing)
         pref === nothing && return (a::VersionNumber, b::VersionNumber) -> a > b
