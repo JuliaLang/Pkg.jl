@@ -13,6 +13,7 @@ using ..Versions: VersionSpec, VersionRange
 using ..Resolve: ResolverError, Fixed, Requires, pkgID, range_compressed_versionspec
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
+const JULIA_NAME = "julia"
 
 const DepsCompressed = Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}}
 const CompatCompressed = Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}}
@@ -22,6 +23,17 @@ const PkgData = Resolver.PkgData{
     Vector{VersionNumber},
     Dict{VersionNumber, Vector{UUID}},
     Dict{VersionNumber, Dict{UUID, VersionSpec}},
+}
+
+# The resolver is run on packages keyed by their display names (see
+# `display_names`) rather than by UUID: its report shows them anyway, and with
+# a single package type its code is compiled into Pkg's image once rather than
+# again for the report.
+const NamedPkgData = Resolver.PkgData{
+    String, VersionNumber, VersionSpec,
+    Vector{VersionNumber},
+    Dict{VersionNumber, Vector{String}},
+    Dict{VersionNumber, Dict{String, VersionSpec}},
 }
 
 # Convert `deps_graph` output into Resolver.jl's `PkgData` representation.
@@ -168,17 +180,23 @@ function build_pkg_data(
     return data, rlist, compat, pin
 end
 
-# package priority order for the resolver's lexicographic optimization
-priority(uuid_to_name::Dict{UUID, String}) = u -> (get(uuid_to_name, u, ""), u)
+# package priority order for the resolver's lexicographic optimization: by
+# name, then UUID
+function priority(uuid_to_name::Dict{UUID, String}, uuid_of::Dict{String, UUID})
+    return function (p::String)
+        u = uuid_of[p]
+        return (get(uuid_to_name, u, ""), u)
+    end
+end
 
 # Version preference: newest first, except that an already-loaded version of a
 # package is preferred over everything else (like the legacy resolver). The
 # resolver detects packages whose list is already in this order for free, so
 # only the packages with a preferred version cost anything.
-function version_order(preferred_versions::Dict{UUID, VersionNumber})
+function version_order(preferred_versions::Dict{UUID, VersionNumber}, uuid_of::Dict{String, UUID})
     isempty(preferred_versions) && return nothing
-    return function (u::UUID)
-        pref = get(preferred_versions, u, nothing)
+    return function (p::String)
+        pref = get(preferred_versions, uuid_of[p], nothing)
         pref === nothing && return (a::VersionNumber, b::VersionNumber) -> a > b
         return function (a::VersionNumber, b::VersionNumber)
             a == pref && return b != pref
@@ -228,77 +246,85 @@ function resolve_versions(
     if !isempty(impossible)
         throw(ResolverError(string("Unsatisfiable requirements detected:\n", join(impossible, "\n"))))
     end
-    prob = Resolver.Problem(rlist; compat, pin)
+    name = display_names(uuid_to_name)
+    named_data = Dict{String, NamedPkgData}(name(u) => named(d, name) for (u, d) in data)
+    uuid_of = Dict{String, UUID}()
+    for u in keys(data)
+        n = name(u)
+        get!(uuid_of, n, u) == u || error("packages $u and $(uuid_of[n]) have the same display name $n")
+    end
+    prob = Resolver.Problem(
+        String[name(u) for u in rlist];
+        compat = Dict{String, VersionSpec}(name(u) => spec for (u, spec) in compat),
+        pin = Dict{String, VersionNumber}(name(u) => v for (u, v) in pin),
+    )
     ans = Resolver.resolve(
-        data, prob;
-        by = priority(uuid_to_name), order = version_order(preferred_versions),
+        named_data, prob;
+        by = priority(uuid_to_name, uuid_of), order = version_order(preferred_versions, uuid_of),
         diagnose = diagnose_unsat, upstream = diagnose_unsat
     )
     if ans isa Diagnostics.Diagnosis
-        report = sprint(show, MIME("text/plain"), named(ans, display_names(uuid_to_name)))
+        report = sprint(show, MIME("text/plain"), without_julia(ans))
         # the report opens with "Unsatisfiable — N conflicts...:"
         throw(ResolverError(replace(report, r"^Unsatisfiable" => "Unsatisfiable requirements detected")))
     elseif ans === nothing
         throw(ResolverError("Unsatisfiable requirements detected"))
     end
-    sol = ans::Dict{UUID, VersionNumber}
-    # match the legacy resolver's output: fixed packages and julia are not returned
-    delete!(sol, JULIA_UUID)
-    for uuid in keys(fixed)
-        delete!(sol, uuid)
+    sol = Dict{UUID, VersionNumber}()
+    for (n, v) in ans::Dict{String, VersionNumber}
+        u = uuid_of[n]
+        # match the legacy resolver's output: fixed packages and julia are not returned
+        (u == JULIA_UUID || haskey(fixed, u)) && continue
+        sol[u] = v
     end
     return sol
 end
 
+named(d::PkgData, name) = Resolver.PkgData(
+    d.versions,
+    Dict{VersionNumber, Vector{String}}(v => String[name(q) for q in qs] for (v, qs) in d.depends),
+    Dict{VersionNumber, Dict{String, VersionSpec}}(
+        v => Dict{String, VersionSpec}(name(q) => spec for (q, spec) in c) for (v, c) in d.compat
+    ),
+)
+
 ## rendering a diagnosis with package names
 
-# The name a package is shown under in a report: its name, or `name [uuid8]`
-# when several packages in the graph share it.
+# The name a package is known by to the resolver and shown under in its report:
+# its name, or `name [uuid8]` when several packages in the graph share it.
 function display_names(uuid_to_name::Dict{UUID, String})
     counts = Dict{String, Int}()
     for name in values(uuid_to_name)
         counts[name] = get(counts, name, 0) + 1
     end
+    # (julia is shown as `julia`, so a package of that name is not)
+    haskey(uuid_to_name, JULIA_UUID) || (counts[JULIA_NAME] = get(counts, JULIA_NAME, 0) + 1)
     return function (u::UUID)
-        u == JULIA_UUID && return "julia"
+        u == JULIA_UUID && return JULIA_NAME
         name = get(uuid_to_name, u, nothing)
         name === nothing && return pkgID(u, uuid_to_name)
         return counts[name] == 1 ? name : pkgID(u, uuid_to_name)
     end
 end
 
-# A diagnosis is plain data keyed by UUID; rebuild it over display names so the
-# resolver's own report renders readably (its `show` prints `string(p)`).
 # The synthetic julia requirement is not something the user can act on, so
 # fixes that ask to drop it are left out, as is julia itself from the
 # versions a fix would allow.
-function named(d::Diagnostics.Diagnosis, name::Function)
+function without_julia(d::Diagnostics.Diagnosis{String, VersionNumber})
     return Diagnostics.Diagnosis(
         [
             Diagnostics.Conflict{String, VersionNumber}(
-                    String[name(p) for p in c.reqs],
-                    [
-                        Diagnostics.Line{String}(
-                            named(l.clause, name), String[name(p) for p in l.through],
-                            l.given, l.proof, l.pivot === nothing ? nothing : name(l.pivot)
-                        )
-                        for l in c.lines
-                    ],
-                    Dict{String, Vector{VersionNumber}}(name(p) => vs for (p, vs) in c.versions),
-                    Dict{String, Vector{Vector{Symbol}}}(name(p) => ks for (p, ks) in c.excluded),
-                    named(c.fixes, name),
+                    c.reqs, c.lines, c.versions, c.excluded, without_julia(c.fixes),
                     Tuple{Vector{Vector{Diagnostics.Action{String}}}, Vector{Diagnostics.Action{String}}}[
-                        ([[named(a, name) for a in b] for b in bs], [named(a, name) for a in us])
-                        for (bs, us) in c.blocks if !any(is_julia_action, us) && !any(b -> any(is_julia_action, b), bs)
+                        (bs, us) for (bs, us) in c.blocks if !any(is_julia_action, us) && !any(b -> any(is_julia_action, b), bs)
                     ],
-                    named(c.upstream, name),
-                    Dict{String, Vector{Tuple{Int, Vector{Int}}}}(name(p) => sh for (p, sh) in c.shadows)
+                    without_julia(c.upstream), c.shadows
                 )
                 for c in d.conflicts
         ],
         [
             Diagnostics.Alternative{String, VersionNumber}(
-                    a.conflicts, a.avoided, [named(m, name) for m in a.menus]
+                    a.conflicts, a.avoided, [without_julia(m) for m in a.menus]
                 )
                 for a in d.alternatives if !any(m -> all(f -> any(is_julia_action, f.actions), m), a.menus)
         ],
@@ -306,30 +332,22 @@ function named(d::Diagnostics.Diagnosis, name::Function)
     )
 end
 
-is_julia_action(a::Diagnostics.Action) = a.pkg == JULIA_UUID
+is_julia_action(a::Diagnostics.Action{String}) = a.pkg == JULIA_NAME
 
-named(a::Diagnostics.Action, name::Function) = Diagnostics.Action(a.kind, name(a.pkg))
+without_julia(sol::Dict{String, VersionNumber}) = filter(((p, _),) -> p != JULIA_NAME, sol)
 
-named(sol::Dict{UUID, VersionNumber}, name::Function) =
-    Dict{String, VersionNumber}(name(p) => v for (p, v) in sol if p != JULIA_UUID)
-
-named(ups::Vector{<:Diagnostics.Upstream}, name::Function) =
+without_julia(ups::Vector{Diagnostics.Upstream{String, VersionNumber}}) =
     [
     Diagnostics.Upstream{String, VersionNumber}(
-            name(u.pkg), u.latest, name(u.dep), u.supports, u.supported, named(u.solution, name)
+            u.pkg, u.latest, u.dep, u.supports, u.supported, without_julia(u.solution)
         )
         for u in ups
 ]
 
-named(fixes::Vector{<:Diagnostics.Fix}, name::Function) =
+without_julia(fixes::Vector{Diagnostics.Fix{String, VersionNumber}}) =
     [
-    Diagnostics.Fix{String, VersionNumber}([named(a, name) for a in fix.actions], named(fix.solution, name))
+    Diagnostics.Fix{String, VersionNumber}(fix.actions, without_julia(fix.solution))
         for fix in fixes if !any(is_julia_action, fix.actions)
 ]
-
-# a clause is a set of literals keyed by package; renaming re-sorts to keep
-# it in normal form
-named(c::Resolver.Clauses.Clause, name::Function) =
-    Resolver.Clauses.Clause{String}(sort!([name(p) => m for (p, m) in c.lits]; by = first))
 
 end # module
