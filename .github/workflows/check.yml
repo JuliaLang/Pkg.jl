@@ -29,6 +29,16 @@ jobs:
         with:
           version: '1.11'
       - uses: julia-actions/cache@v3
+      # runic-action checks every tracked .jl file; untrack the vendored code
+      # (which follows its upstream's style) in this checkout to skip it
+      - run: git rm -r -q --cached vendor
       - uses: fredrikekre/runic-action@v1
         with:
           version: "1.4" # Keep version in sync with .pre-commit-config.yaml
+
+  vendor:
+    name: "Vendored code matches upstream"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: vendor/update_resolver.sh --check

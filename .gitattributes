@@ -1,3 +1,4 @@
 # Check files out exactly as committed, so test fixtures keep their tree hashes
 # whatever the git line-ending config of the machine.
 * -text
+vendor/** linguist-vendored
