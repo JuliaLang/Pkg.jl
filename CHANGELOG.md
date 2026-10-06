@@ -1,6 +1,11 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Pkg now resolves package versions with the exact SAT-based resolver from
+  [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
+  resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each
+  conflict with the chain of compat entries behind it and the verified changes that would fix it. The previous
+  resolver can be selected with `JULIA_PKG_RESOLVER=maxsum`. ([#4738])
 - Manifests now record an `environment_id` (the project `uuid`, or a generated UUID kept from then on) and,
   when the project has a `name`, an `environment_name`. Both follow the project file on every manifest write.
   Julia mixes the id into precompile cache file names, so environments at the same path that share a depot
@@ -249,6 +254,7 @@ Pkg v1.7 Release Notes
 [#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
+[#4738]: https://github.com/JuliaLang/Pkg.jl/pull/4738
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
