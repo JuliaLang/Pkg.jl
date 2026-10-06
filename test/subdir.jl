@@ -383,6 +383,16 @@ end
             @test !isinstalled("Package")
             @test isinstalled("Dep")
             pkg"rm Dep"
+
+            # Reinstall a subdirectory package tracked from a repository by its tree hash
+            # when it is missing from the depot.
+            Pkg.add(Pkg.PackageSpec(url = packages_dir_url, subdir = "dependencies/Dep"))
+            dep_path = dirname(dirname(Base.locate_package(Base.PkgId(dep.uuid, dep.name))))
+            Base.Filesystem.prepare_for_deletion(dep_path)
+            rm(dep_path; recursive = true)
+            Pkg.resolve()
+            @test isdir(dep_path)
+            pkg"rm Dep"
         end #cd
     end
 end
