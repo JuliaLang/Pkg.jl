@@ -1255,6 +1255,30 @@ end
             @test length(args) == 1
             @test args[1].url == "ssh://git@server.com/path/repo.git"
             @test args[1].rev == "branch-name"
+
+            api, args, opts = first(Pkg.pkg"add ssh://git@1.2.3:2222/path/repo.git#branch-name")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@1.2.3:2222/path/repo.git"
+            @test args[1].rev == "branch-name"
+
+            api, args, opts = first(Pkg.pkg"add myorg@vs-ssh.example.com:v3/org/proj/Repo.jl#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "myorg@vs-ssh.example.com:v3/org/proj/Repo.jl"
+            @test args[1].rev == "main"
+
+            api, args, opts = first(Pkg.pkg"add git@server:repo#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@server:repo"
+            @test args[1].rev == "main"
+
+            api, args, opts = first(Pkg.pkg"add file:///tmp/repo#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "file:///tmp/repo"
+            @test args[1].rev == "main"
         end
 
         # Test SSH URLs with IP addresses (issue #1822)
@@ -4007,6 +4031,45 @@ end
             @test_nowarn Pkg.add("Random")
             @test_nowarn Pkg.rm("Random")
         end
+    end
+end
+
+@testset "Pkg.add prefers loaded dependency versions" begin
+    # The subprocess loads this Pkg, so give it a depot holding this Pkg's cache.
+    pkg_cache_depot = mktempdir()
+    copy_this_pkg_cache(pkg_cache_depot)
+    isolate(loaded_depot = true) do
+        script = """
+        using Pkg, Test
+        Pkg.activate(; temp = true)
+        io = IOBuffer()
+        Pkg.add(name = "Example", version = v"0.5.4", io = io)
+        add_output = String(take!(io))
+        @test occursin("[7876af07] + Example v0.5.4", add_output)
+        using Example
+        Pkg.activate(; temp = true)
+        Pkg.add("Example", io = io) # v0.5.5 exists, but v0.5.4 is loaded
+        add_output = String(take!(io))
+        @test occursin("[7876af07] + Example v0.5.5", add_output)
+        Pkg.activate(; temp = true)
+        Pkg.add("Example", io = io, prefer_loaded_versions = true) # v0.5.5 exists, but v0.5.4 is loaded
+        add_output = String(take!(io))
+        @test occursin("was able to add the version of Example that is already loaded", add_output)
+        @test occursin("[7876af07] + Example v0.5.4", add_output)
+        Pkg.activate(; temp = true)
+        # REPL mode default: should prefer loaded version without explicit kwarg
+        Base.ScopedValues.@with Pkg.IN_REPL_MODE => true begin
+            Pkg.add("Example", io = io)
+        end
+        add_output = String(take!(io))
+        @test occursin("was able to add the version of Example that is already loaded", add_output)
+        @test occursin("[7876af07] + Example v0.5.4", add_output)
+        """
+        cmd = addenv(
+            `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
+            "JULIA_DEPOT_PATH" => join([DEPOT_PATH; pkg_cache_depot], Sys.iswindows() ? ";" : ":")
+        )
+        @test Utils.show_output_if_command_errors(cmd)
     end
 end
 

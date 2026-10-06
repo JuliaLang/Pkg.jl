@@ -273,6 +273,47 @@ end
     end
 end
 
+@testset "Pkg.test does not rewrite a workspace member's project (#4356)" begin
+    isolate() do
+        mktempdir() do dir
+            cd(dir) do
+                with_current_env() do
+                    Pkg.generate("A")
+                    Pkg.generate("B")
+
+                    a_uuid = TOML.parsefile("A/Project.toml")["uuid"]
+                    b_project_file = "B/Project.toml"
+                    b_project = TOML.parsefile(b_project_file)
+                    b_project["deps"] = Dict("A" => a_uuid)
+                    b_project["workspace"] = Dict("projects" => ["test"])
+                    Pkg.Types.write_project(b_project, b_project_file)
+
+                    mkpath("B/test")
+                    write("B/test/runtests.jl", "using B, Test\n@test B isa Module\n")
+                    Pkg.Types.write_project(
+                        Dict(
+                            "deps" => Dict(
+                                "B" => b_project["uuid"],
+                                "Test" => string(Base.PkgId(Test).uuid),
+                            ),
+                        ),
+                        "B/test/Project.toml",
+                    )
+                    Pkg.Types.write_project(
+                        Dict("workspace" => Dict("projects" => ["A", "B"])),
+                        "Project.toml",
+                    )
+
+                    project_before = read(b_project_file, String)
+                    Pkg.activate("B")
+                    Pkg.test()
+                    @test read(b_project_file, String) == project_before
+                end
+            end
+        end
+    end
+end
+
 @testset "selective workspace instantiate" begin
     mktempdir() do dir
         path = copy_test_package(dir, "WorkspaceTestInstantiate")
@@ -382,6 +423,26 @@ end
                         @test Base.isprecompiled(Base.identify_package("Example"))
                         @test Base.isprecompiled(Base.identify_package("InnerPkg"))
                     end
+                end
+            end
+        end
+    end
+end
+
+# `Pkg.test` of a workspace member whose test dependencies come from `[extras]`/`[targets]`
+# must resolve the member's relative `[sources]` against the member's own directory, not
+# against the active project (here the workspace root).
+@testset "Pkg.test of a workspace member with relative [sources] from the workspace root" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceTestMemberSources")
+            cd(path) do
+                with_current_env() do
+                    Pkg.activate(".")
+                    Pkg.instantiate()
+                    Pkg.test("B")
+                    # The member's own project file keeps its relative source path
+                    @test TOML.parsefile(joinpath("B", "Project.toml"))["sources"]["A"]["path"] == "../A"
                 end
             end
         end

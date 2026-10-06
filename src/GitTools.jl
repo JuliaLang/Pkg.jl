@@ -4,7 +4,7 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..can_fancyprint, ..printpkgstyle, ..stdout_f
+import ..can_fancyprint, ..printpkgstyle, ..stdout_f, ..ispath_nothrow
 using SHA
 import Base: SHA1
 import LibGit2
@@ -34,7 +34,7 @@ end
 # Shallow clones are only supported for network protocols (HTTP, HTTPS, Git, SSH)
 function is_local_repo(url::AbstractString)
     # Check if it's a local filesystem path
-    ispath(url) && return true
+    ispath_nothrow(url) && return true
     # Check if it uses file:// protocol
     startswith(url, "file://") && return true
     return false
@@ -52,9 +52,9 @@ function isshallow(repo::LibGit2.GitRepo)
     if supports_shallow_clone() && isdefined(LibGit2, :isshallow)
         return LibGit2.isshallow(repo)
     else
-        # Fallback: check for .git/shallow file
-        repo_path = LibGit2.path(repo)
-        shallow_file = joinpath(repo_path, "shallow")
+        # Fallback: check for the shallow file in the repository's git dir.
+        # LibGit2.path(repo) is the worktree path for non-bare repositories.
+        shallow_file = joinpath(LibGit2.gitdir(repo), "shallow")
         return isfile(shallow_file)
     end
 end

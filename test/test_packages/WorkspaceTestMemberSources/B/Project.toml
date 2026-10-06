@@ -1,0 +1,15 @@
+name = "B"
+uuid = "7d3a1c52-5b8e-4f0a-9c61-2e4b8f1d6a02"
+version = "0.1.0"
+
+[deps]
+A = "7d3a1c52-5b8e-4f0a-9c61-2e4b8f1d6a01"
+
+[sources]
+A = {path = "../A"}
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

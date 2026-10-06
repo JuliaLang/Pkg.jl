@@ -234,6 +234,7 @@ mutable struct Graph
     newmsg::Vector{FieldValue}
     diff::Vector{FieldValue}
     cavfld::Vector{FieldValue}
+    preferred_versions::Dict{UUID, VersionNumber}
 
     function Graph(
             deps_compressed::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
@@ -246,7 +247,8 @@ mutable struct Graph
             reqs::Requires,
             fixed::Dict{UUID, Fixed},
             verbose::Bool = false,
-            julia_version::Union{VersionNumber, Nothing} = VERSION
+            julia_version::Union{VersionNumber, Nothing} = VERSION,
+            preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}()
         )
 
         # Tell the resolver about julia itself
@@ -391,7 +393,7 @@ mutable struct Graph
 
         graph = new(
             data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np,
-            FieldValue[], FieldValue[], FieldValue[]
+            FieldValue[], FieldValue[], FieldValue[], Dict{UUID, VersionNumber}(preferred_versions)
         )
 
         _add_fixed!(graph, fixed)
@@ -416,7 +418,8 @@ mutable struct Graph
         ignored = copy(graph.ignored)
         solve_stack = [([copy(gc0) for gc0 in sav_gconstr], copy(sav_ignored)) for (sav_gconstr, sav_ignored) in graph.solve_stack]
 
-        return new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np)
+        preferred_versions = copy(graph.preferred_versions)
+        return new(data, gadj, gmsk, gconstr, adjdict, req_inds, fix_inds, ignored, solve_stack, spp, np, FieldValue[], FieldValue[], FieldValue[], preferred_versions)
     end
 end
 
@@ -1418,8 +1421,14 @@ function build_eq_classes1!(graph::Graph, p0::Int, cmat_workspace::BitMatrix, cv
     eq_sets = [Set{Int}(v0 for v0 in 1:spp[p0] if cvecs[v0] == rvec) for rvec in repr_vecs]
     sort!(eq_sets, by = maximum)
 
-    # each set is represented by its highest-valued member
-    repr_vers = map(maximum, eq_sets)
+    # each set is represented by its highest-valued member,
+    # unless it contains a preferred (already-loaded) version
+    pref_version = get(graph.preferred_versions, pkgs[p0], nothing)
+    pref_idx = pref_version !== nothing ? get(vdict[p0], pref_version, nothing) : nothing
+    repr_vers = map(eq_sets) do eq_set
+        pref_idx !== nothing && pref_idx ∈ eq_set && return pref_idx
+        return maximum(eq_set)
+    end
     # the last representative must always be the uninstalled state
     @assert repr_vers[end] == spp[p0]
 

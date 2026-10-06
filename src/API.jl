@@ -320,7 +320,8 @@ end
 
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel = Operations.default_preserve(),
-        platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true, kwargs...
+        platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true,
+        prefer_loaded_versions::Bool = Pkg.in_repl_mode(), kwargs...
     )
     require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
@@ -376,7 +377,7 @@ function add(
         update_source_if_set(ctx.env, pkg)
     end
 
-    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target)
+    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target, prefer_loaded_versions)
     return
 end
 
@@ -1244,7 +1245,10 @@ function precompile(
             ctx.io
         end
         pkgs_name = String[pkg.name for pkg in pkgs]
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
+        # since JuliaLang/julia#59765 the driver returns the cache files it found or
+        # made, for code loading; that is not part of `Pkg.precompile`'s API
+        Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io)
+        return nothing
     end
 end
 
