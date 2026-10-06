@@ -22,9 +22,7 @@ module PkgTestsInner
         error("The wrong Pkg is being tested")
     end
 
-    # (not checked in vendored code, which is kept as upstream has it)
-    in_vendored(mod) = mod === Pkg.Resolver || (mod !== Pkg && in_vendored(parentmodule(mod)))
-    @test isempty(filter(((m, _),) -> !in_vendored(m.module), Test.detect_closure_boxes(Pkg)))
+    @test isempty(Test.detect_closure_boxes(Pkg))
 
     const original_depot_had_registries = isdir(joinpath(Base.DEPOT_PATH[1], "registries"))
 
