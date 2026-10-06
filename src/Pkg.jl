@@ -164,6 +164,7 @@ const PreserveLevel = Types.PreserveLevel
 """
     Pkg.add(pkg::Union{String, Vector{String}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
     Pkg.add(pkg::Union{PackageSpec, Vector{PackageSpec}}; preserve=PRESERVE_TIERED, target::Symbol=:deps, prefer_loaded_versions::Bool=Pkg.in_repl_mode())
+    Pkg.add(; from::Union{String, Vector{String}}, kwargs...)
 
 Add a package to the current project. This package will be available by using the
 `import` and `using` keywords in the Julia REPL, and if the current project is
@@ -174,6 +175,18 @@ added automatically with a lower bound of the added version.
 
 To add as a weak dependency (in the `[weakdeps]` field) set the kwarg `target=:weakdeps`.
 To add as an extra dep (in the `[extras]` field) set `target=:extras`.
+
+## Adding the dependencies of another environment
+
+The `from` keyword names other environments whose direct dependencies are added: a shared environment as
+`"@name"` (e.g. `"@v1.13"`), a path to a `Project.toml`, or a directory containing one. The dependencies are
+resolved afresh for the active environment, which makes it easy to populate a new default environment from
+the previous Julia version's one. Packages tracked by a git repository in the source environment keep tracking
+it. Packages tracked by path (`develop`) are skipped with a warning. `from` can be combined with packages
+given positionally.
+
+!!! compat "Julia 1.14"
+    The `from` kwarg requires at least Julia 1.14.
 
 ## Loaded Version Preference
 
@@ -232,6 +245,8 @@ Pkg.add(name="Example", version="0.3.1") # Specify version; exact release
 Pkg.add(url="https://github.com/JuliaLang/Example.jl", rev="master") # From url to remote gitrepo
 Pkg.add(url="/remote/mycompany/juliapackages/OurPackage") # From path to local gitrepo
 Pkg.add(url="https://github.com/Company/MonoRepo", subdir="juliapkgs/Package.jl") # With subdir
+Pkg.add(from="@v1.13") # Add the dependencies of the `v1.13` shared environment
+Pkg.add(from="~/myproject/Project.toml") # Add the dependencies of another project
 ```
 
 After the installation of new packages the project will be precompiled. See more at [Environment Precompilation](@ref).

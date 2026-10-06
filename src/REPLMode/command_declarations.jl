@@ -111,17 +111,19 @@ compound_declarations = [
             :name => "add",
             :api => API.add,
             :should_splat => false,
-            :arg_count => 1 => Inf,
-            :arg_parser => ((x, y) -> parse_package(x, y; add_or_dev = true)),
+            :arg_count => 0 => Inf,
+            :arg_parser => parse_add,
             :option_spec => [
                 PSA[:name => "preserve", :takes_arg => true, :api => :preserve => do_preserve],
                 PSA[:name => "weak", :short_name => "w", :api => :target => :weakdeps],
                 PSA[:name => "extra", :short_name => "e", :api => :target => :extras],
+                PSA[:name => "from", :api => :from => true],
             ],
             :completions => :complete_add_dev,
             :description => "add packages to project",
             :help => md"""
                     add [--preserve=<opt>] [-w|--weak] [-e|--extra] pkg[=uuid] [@version] [#rev] ...
+                    add [--preserve=<opt>] [-w|--weak] [-e|--extra] --from env ...
 
                 Add package `pkg` to the current project file. If `pkg` could refer to
                 multiple different packages, specifying `uuid` allows you to disambiguate.
@@ -137,6 +139,13 @@ compound_declarations = [
                 The project will then track that git repository just like it would track a remote repository online.
                 If the package is not located at the top of the git repository, a subdirectory can be specified with
                 `path:subdir/path`.
+
+                With `--from`, each argument names another environment instead of a package: a shared environment
+                as `@name` (e.g. `@v1.13`), a path to a `Project.toml`, or a directory containing one. The direct
+                dependencies of those environments are added, resolved afresh for the active environment. Packages
+                tracked by a git repository in the source environment keep tracking it; packages tracked by path
+                (`develop`) are skipped with a warning. This makes it easy to populate a new default environment
+                from the previous Julia version's one.
 
                 `Pkg` resolves the set of packages in your environment using a tiered approach.
                 The `--preserve` command line option allows you to key into a specific tier in the resolve algorithm.
@@ -177,6 +186,8 @@ compound_declarations = [
                 pkg> add "git@github.com:JuliaLang/Example.jl.git"#master
                 pkg> add https://github.com/Company/MonoRepo:juliapkgs/Package.jl
                 pkg> add Example=7876af07-990d-54b4-ab0e-23690620f79a
+                pkg> add --from @v1.13
+                pkg> add --from ~/myproject/Project.toml
                 ```
                 """,
         ],

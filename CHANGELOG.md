@@ -20,6 +20,9 @@ Pkg v1.14 Release Notes
   recompilation easier to spot. ([#4679])
 - During package source installation, Pkg now reports when a package has an Artifacts.toml but no artifacts match the
   current platform. ([#4646])
+- `pkg> add --from env` and `Pkg.add(from=env)` add the direct dependencies of other environments, given
+  as a shared environment name (`@v1.13`), a path to a `Project.toml`, or a directory containing one. This makes it
+  easy to populate the default environment of a new Julia version from the previous one. ([#4777])
 - Editing a `[sources]` entry directly in the project file (e.g. changing its `rev`) now invalidates the manifest,
   and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
 - Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
@@ -249,6 +252,7 @@ Pkg v1.7 Release Notes
 [#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
+[#4777]: https://github.com/JuliaLang/Pkg.jl/pull/4777
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
