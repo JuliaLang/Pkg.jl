@@ -2061,8 +2061,10 @@ function analyse(
     # tempting — and a fact *is* one action of the page's vocabulary, since the
     # two facts a package can have differ in kind, one asking that the
     # requirement be dropped and the other that the query's limits be lifted.
-    cover = Set{Int}(x for s in secs for L in s.layers for m in L
-                       for o in m for x in o)
+    cover = Set{Int}()
+    for s in secs, L in s.layers, m in L, o in m
+        union!(cover, o)
+    end
 
     selectors = sort!(collect(keys(satx.why)))
     owner = Int[]
@@ -3099,7 +3101,10 @@ function print_chain(io::IO, c::Conflict{P,V}, given::Vector{Line{P}},
     order, con, extra, loose = given_facts(c, given)
     units = derived_units(derived)
     sources = chain_sources(units)
-    mentioned = Set{P}(q for u in units for l in u for q in packages(l.clause))
+    mentioned = Set{P}()
+    for u in units, l in u
+        union!(mentioned, packages(l.clause))
+    end
     seen = Set{P}()
     told = Set{P}()
     acc = Dict{P,Lit}()
@@ -3458,7 +3463,10 @@ function Base.show(io::IO, ::MIME"text/plain", d::Diagnosis)
     extras = heading_extras(d.conflicts)
     # a conflict whose block has an alternative is not the whole of what
     # settles that block, so its menu of one may not say "only"
-    replaced = Set{Int}(i for a in d.alternatives for i in a.conflicts)
+    replaced = Set{Int}()
+    for a in d.alternatives
+        union!(replaced, a.conflicts)
+    end
     for (i, c) in enumerate(d.conflicts)
         println(io)
         print_conflict(io, c, i; others = d.others, alone = i ∉ replaced,
