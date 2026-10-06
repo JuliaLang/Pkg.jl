@@ -598,6 +598,15 @@ function find_reachable(
         issorted(b) || (ord0[p] = sortperm(b))
     end
 
+    return find_reachable_kernel!(reqs, tb, coff, soff, cw, chunks, KQ, K0, ord0)
+end
+
+# Deactivation dictionaries only affect the prepared rank arrays. Share the
+# reachability loop across their concrete representations.
+@noinline function find_reachable_kernel!(reqs, tb, coff, soff, cw, chunks, KQ, K0, ord0)
+    N, ix, infos, ncls, deps, partners =
+        tb.N, tb.ix, tb.infos, tb.ncls, tb.deps, tb.partners
+
     # ------------------------------------------------------------ reverse deps
     # `p` saturating pushes every class of every package that depends on `p`.
     # Which classes those are is already in the dependee's matrix — its
@@ -888,6 +897,20 @@ function mark_necessary!(
         ]
         partners[p] = sort!(prt)
     end
+    return mark_necessary_kernel!(infos, ncls, partners, deacts, kqv, k0v)
+end
+
+# Share the pruning loop across dictionary and rank representations. Setup
+# above converts both to the same array types, so keep this call out of line.
+@noinline function mark_necessary_kernel!(
+    infos :: Vector{PkgInfo{P,V}},
+    ncls :: Vector{Int},
+    partners :: Vector{Vector{NTuple{3,Int}}},
+    deacts :: Vector{Union{Nothing,BitVector}},
+    kqv :: Vector{Union{Nothing,Vector{Int}}},
+    k0v :: Vector{Union{Nothing,Vector{Int}}},
+) where {P,V}
+    N = length(infos)
     # some work buffers
     A = UInt64[]        # candidate class mask
     D = UInt64[]        # per-class domination candidate masks
@@ -1209,8 +1232,53 @@ function drop_unmarked!(
     # first pass: per package, compute the kept classes and kept columns
     # from the (definitive) class flags — all of it before any package
     # is rebuilt, since kept columns are read off the partners' matrices
+    A = UInt64[] # scratch for masks and rebuilding conflict matrices
+    masks = drop_unmarked_masks(info, A)
+    # save original class counts (the matrices are rebuilt in place)
+    N = Dict{P,Int}(p => nclasses(info_p) for (p, info_p) in info)
+    # second pass: shrink each PkgInfo
+    for p in collect(keys(info))
+        info_p = info[p]
+        X = info_p.conflicts
+        m = nclasses(info_p)
+        n = size(X, 2) - 1
+        I, K = masks[p]
+        m′ = count(I)
+        # delete if no active classes
+        if m′ == 0
+            delete!(info, p)
+            reps === nothing || delete!(reps, p)
+            if ranks !== nothing
+                delete!(ranks[1], p)
+                delete!(ranks[2], p)
+            end
+            continue
+        end
+        # keep as is if everything is active (with the column flags
+        # normalized, as rebuilding would leave them)
+        if m′ == m && all(K)
+            X[m+1, 1:n] .= true
+            continue
+        end
+        info′, index = drop_unmarked_pkg(info_p, I, K, N, A)
+        if reps !== nothing
+            r = reps[p]
+            reps[p] = Int[iszero(r[i]) ? 0 : index[r[i]] for i = 1:m if I[i]]
+        end
+        if ranks !== nothing
+            kq, k0 = ranks
+            kq_p, k0_p = kq[p], k0[p]
+            kq[p] = Int[kq_p[i] for i = 1:m if I[i]]
+            k0[p] = Int[k0_p[i] for i = 1:m if I[i]]
+        end
+        info[p] = info′
+    end
+    return info
+end
+
+# These passes do not depend on the optional representative/rank bookkeeping.
+@noinline function drop_unmarked_masks(info::Dict{P, <:PkgInfo{P}}, A) where {P}
     masks = Dict{P, Tuple{BitVector, BitVector}}()
-    A = UInt64[] # active class mask buffer
     for (p, info_p) in info
         X = info_p.conflicts
         m = nclasses(info_p)
@@ -1235,147 +1303,117 @@ function drop_unmarked!(
         end
         masks[p] = (I, K)
     end
-    # save original class counts (the matrices are rebuilt in place)
-    N = Dict{P,Int}(p => nclasses(info_p) for (p, info_p) in info)
-    # second pass: shrink each PkgInfo
-    for p in collect(keys(info))
-        info_p = info[p]
-        # abbreviate components
-        V = info_p.versions
-        C = info_p.classes
-        M = info_p.members
-        S = info_p.shadows
-        D = info_p.depends
-        T = info_p.interacts
-        X = info_p.conflicts
-        m = nclasses(info_p)
-        n = size(X, 2) - 1
-        W = col_words(X)
-        I, K = masks[p]
-        m′ = count(I)
-        # delete if no active classes
-        if m′ == 0
-            delete!(info, p)
-            reps === nothing || delete!(reps, p)
-            if ranks !== nothing
-                delete!(ranks[1], p)
-                delete!(ranks[2], p)
+    return masks
+end
+
+@noinline function drop_unmarked_pkg(info_p::PkgInfo{P}, I, K, N, A) where {P}
+    # abbreviate components
+    V = info_p.versions
+    C = info_p.classes
+    M = info_p.members
+    S = info_p.shadows
+    D = info_p.depends
+    T = info_p.interacts
+    X = info_p.conflicts
+    m = nclasses(info_p)
+    n = size(X, 2) - 1
+    W = col_words(X)
+    m′ = count(I)
+    # the surviving classes keep the versions they hold: a deleted class
+    # takes its members with it, since nothing is left to name them.
+    # dropping classes and columns can only *merge* row-equality classes
+    # (fewer rows to distinguish, fewer columns to differ in), so
+    # restricting the partition stays sound, if possibly finer than the
+    # truth; `pkg_info` is where it is computed exactly
+    keep = falses(length(V))
+    for i = 1:m
+        I[i] || continue
+        for j in M[i]
+            keep[j] = true
+        end
+    end
+    index = cumsum(keep) # old version index => new one (kept ones only)
+    V′ = V[keep]
+    C′ = Vector{Int}(undef, length(V′))
+    M′ = Vector{Vector{Int}}(undef, m′)
+    S′ = similar(S, m′)
+    i′ = 0
+    for i = 1:m
+        I[i] || continue
+        i′ += 1
+        M′[i′] = mem = Int[index[j] for j in M[i]]
+        # a surviving class keeps what it shadows; a deleted one's shadows
+        # went to each of its dominators when `mark_necessary!` deleted it,
+        # and are simply gone when another pass did
+        S′[i′] = S[i]
+        for j in mem
+            C′[j] = i′
+        end
+    end
+    # compute shrunken components
+    D′ = D[K[1:length(D)]]
+    T′ = Dict{P,Int}()
+    b′ = length(D′)
+    for (q, b) in sort!(collect(T), by=last)
+        n′ = count(K[b .+ (1:N[q])])
+        if n′ > 0
+            T′[q] = b′
+            b′ += n′
+        end
+    end
+    R′ = padded_rows(m′)
+    W′ = R′ >> 6
+    X′ = falses(R′, b′ + 1)
+    src = X.chunks
+    dst = X′.chunks
+    # kept-class mask words for the gather below
+    resize!(A, W)
+    col_copy!(A, X, n + 1)
+    clear_rows_above!(A, m)
+    prefix = findlast(I) == m′ # kept classes are 1:m′
+    j′ = 0
+    for j = 1:n
+        K[j] || continue
+        j′ += 1
+        sb = (j - 1) * W
+        db = (j′ - 1) * W′
+        if prefix
+            # kept classes are a prefix: straight word copy
+            nw = (m′ + 63) >> 6
+            @inbounds for w = 1:nw
+                dst[db + w] = src[sb + w]
             end
-            continue
-        end
-        # keep as is if everything is active (with the column flags
-        # normalized, as rebuilding would leave them)
-        if m′ == m && all(K)
-            X[m+1, 1:n] .= true
-            continue
-        end
-        # the surviving classes keep the versions they hold: a deleted class
-        # takes its members with it, since nothing is left to name them.
-        # dropping classes and columns can only *merge* row-equality classes
-        # (fewer rows to distinguish, fewer columns to differ in), so
-        # restricting the partition stays sound, if possibly finer than the
-        # truth; `pkg_info` is where it is computed exactly
-        keep = falses(length(V))
-        for i = 1:m
-            I[i] || continue
-            for j in M[i]
-                keep[j] = true
-            end
-        end
-        index = cumsum(keep) # old version index => new one (kept ones only)
-        V′ = V[keep]
-        C′ = Vector{Int}(undef, length(V′))
-        M′ = Vector{Vector{Int}}(undef, m′)
-        S′ = similar(S, m′)
-        i′ = 0
-        for i = 1:m
-            I[i] || continue
-            i′ += 1
-            M′[i′] = mem = Int[index[j] for j in M[i]]
-            # a surviving class keeps what it shadows; a deleted one's shadows
-            # went to each of its dominators when `mark_necessary!` deleted it,
-            # and are simply gone when another pass did
-            S′[i′] = S[i]
-            for j in mem
-                C′[j] = i′
-            end
-        end
-        if reps !== nothing
-            r = reps[p]
-            reps[p] = Int[iszero(r[i]) ? 0 : index[r[i]] for i = 1:m if I[i]]
-        end
-        if ranks !== nothing
-            kq, k0 = ranks
-            kq_p, k0_p = kq[p], k0[p]
-            kq[p] = Int[kq_p[i] for i = 1:m if I[i]]
-            k0[p] = Int[k0_p[i] for i = 1:m if I[i]]
-        end
-        # compute shrunken components
-        D′ = D[K[1:length(D)]]
-        T′ = Dict{P,Int}()
-        b′ = length(D′)
-        for (q, b) in sort!(collect(T), by=last)
-            n′ = count(K[b .+ (1:N[q])])
-            if n′ > 0
-                T′[q] = b′
-                b′ += n′
-            end
-        end
-        R′ = padded_rows(m′)
-        W′ = R′ >> 6
-        X′ = falses(R′, b′ + 1)
-        src = X.chunks
-        dst = X′.chunks
-        # kept-class mask words for the gather below
-        resize!(A, W)
-        col_copy!(A, X, n + 1)
-        clear_rows_above!(A, m)
-        prefix = findlast(I) == m′ # kept classes are 1:m′
-        j′ = 0
-        for j = 1:n
-            K[j] || continue
-            j′ += 1
-            sb = (j - 1) * W
-            db = (j′ - 1) * W′
-            if prefix
-                # kept classes are a prefix: straight word copy
-                nw = (m′ + 63) >> 6
-                @inbounds for w = 1:nw
-                    dst[db + w] = src[sb + w]
-                end
-                t = m′ & 63
-                t != 0 && @inbounds (dst[db + nw] &= (UInt64(1) << t) - 1)
-            else
-                # gather the kept classes' bits
-                acc = UInt64(0)
-                na = 0
-                dw = db + 1
-                @inbounds for w = 1:W
-                    avail = A[w]
-                    iszero(avail) && continue
-                    v = src[sb + w]
-                    while !iszero(avail)
-                        acc |= ((v >> trailing_zeros(avail)) & 1) << na
-                        avail &= avail - 1
-                        na += 1
-                        if na == 64
-                            dst[dw] = acc
-                            dw += 1
-                            acc = UInt64(0)
-                            na = 0
-                        end
+            t = m′ & 63
+            t != 0 && @inbounds (dst[db + nw] &= (UInt64(1) << t) - 1)
+        else
+            # gather the kept classes' bits
+            acc = UInt64(0)
+            na = 0
+            dw = db + 1
+            @inbounds for w = 1:W
+                avail = A[w]
+                iszero(avail) && continue
+                v = src[sb + w]
+                while !iszero(avail)
+                    acc |= ((v >> trailing_zeros(avail)) & 1) << na
+                    avail &= avail - 1
+                    na += 1
+                    if na == 64
+                        dst[dw] = acc
+                        dw += 1
+                        acc = UInt64(0)
+                        na = 0
                     end
                 end
-                na > 0 && @inbounds (dst[dw] = acc)
             end
+            na > 0 && @inbounds (dst[dw] = acc)
         end
-        @assert j′ == b′
-        X′[1:m′, end] .= true  # kept classes are active
-        X′[m′+1, 1:b′] .= true # kept columns are active
-        # assign new struct into info
-        info[p] = PkgInfo(V′, C′, M′, S′, D′, T′, X′)
     end
-    return info
+    @assert j′ == b′
+    X′[1:m′, end] .= true  # kept classes are active
+    X′[m′+1, 1:b′] .= true # kept columns are active
+    # assign new struct into info
+    return PkgInfo(V′, C′, M′, S′, D′, T′, X′), index
 end
 
 function check_info_structure(
