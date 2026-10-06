@@ -214,6 +214,9 @@ end
                     e
                 end
             end
+            # the files are named with the platform's path separator
+            sub1 = joinpath("Sub1", "Project.toml")
+            sub2 = joinpath("Sub2", "Project.toml")
             # compat entries in different members conflict: the diagnosis
             # attributes each one to the line of the file it is written on, and
             # the fixes say which entry to relax
@@ -236,12 +239,12 @@ end
                 ]
             )
             @test err isa ResolverError
-            @test occursin("Conflict 1: DataFrames (Sub1/Project.toml:2)", err.msg)
-            @test occursin("your compat (Sub1/Project.toml:5) restricts DataFrames", err.msg)
-            @test occursin("your compat (Sub2/Project.toml:5) restricts PrettyTables", err.msg)
-            @test occursin("relax your compat on PrettyTables (Sub2/Project.toml:5)", err.msg)
-            @test occursin("relax your compat on DataFrames (Sub1/Project.toml:5)", err.msg)
-            @test occursin("drop dependency DataFrames (Sub1/Project.toml:2)", err.msg)
+            @test occursin("Conflict 1: DataFrames ($sub1:2)", err.msg)
+            @test occursin("your compat ($sub1:5) restricts DataFrames", err.msg)
+            @test occursin("your compat ($sub2:5) restricts PrettyTables", err.msg)
+            @test occursin("relax your compat on PrettyTables ($sub2:5)", err.msg)
+            @test occursin("relax your compat on DataFrames ($sub1:5)", err.msg)
+            @test occursin("drop dependency DataFrames ($sub1:2)", err.msg)
             @test !occursin("your compat restricts", err.msg)
             # entries on the same package that admit nothing in common are
             # caught before resolving, and listed per file
@@ -265,8 +268,8 @@ end
             )
             @test err isa ResolverError
             @test occursin("workspace compatibility", err.msg)
-            @test occursin("* Sub1/Project.toml: JSON = \"0.21\"", err.msg)
-            @test occursin("* Sub2/Project.toml: JSON = \"1\"", err.msg)
+            @test occursin("* $sub1: JSON = \"0.21\"", err.msg)
+            @test occursin("* $sub2: JSON = \"1\"", err.msg)
         end
     end
 end
