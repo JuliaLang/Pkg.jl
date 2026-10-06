@@ -533,169 +533,7 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
                         continue
                     end
                 end
-                let reg = reg, errors = errors
-                    regpath = pathrepr(reg.path)
-                    let regpath = regpath
-                        if !iswritable(dirname(reg.path))
-                            @warn "Skipping update of registry at $regpath (read-only file system)"
-                            continue
-                        end
-
-                        if reg.tree_info !== nothing
-                            printpkgstyle(io, :Updating, "registry at " * regpath)
-                            old_hash = reg.tree_info
-                            url = get(registry_urls, reg.uuid, nothing)
-                            if url !== nothing
-                                check_registry_state(reg)
-                            end
-                            if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
-                                # TODO: update faster by using a diff, if available
-                                # TODO: DRY with the code in `download_default_registries`
-                                let new_hash = new_hash, url = url
-                                    if registry_read_from_tarball()
-                                        tmp = tempname()
-                                        try
-                                            download_verify(url, nothing, tmp)
-                                        catch err
-                                            push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
-                                            @goto done_tarball_read
-                                        end
-                                        hash = pkg_server_url_hash(url)
-                                        if !verify_archive_tree_hash(tmp, hash)
-                                            push!(errors, (reg.path, "failed to verify download from $(url)"))
-                                            @goto done_tarball_read
-                                        end
-                                        # If we have an uncompressed Pkg server registry, remove it and get the compressed version
-                                        if isdir(reg.path)
-                                            Base.rm(reg.path; recursive = true, force = true)
-                                        end
-                                        registry_path = dirname(reg.path)
-                                        # Detect what we actually got from the server (defensive against servers that don't support zstd yet)
-                                        format = detect_archive_format(tmp)
-                                        ext = format == "zstd" ? ".tar.zst" : ".tar.gz"
-                                        mv(tmp, joinpath(registry_path, reg.name * ext); force = true)
-                                        reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ext)
-                                        atomic_toml_write(joinpath(registry_path, reg.name * ".toml"), reg_info)
-                                        registry_update_log[string(reg.uuid)] = now()
-                                        @label done_tarball_read
-                                    else
-                                        if reg.name == "General" &&
-                                                Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true) &&
-                                                get(ENV, "JULIA_PKG_SERVER", nothing) != ""
-                                            # warn if JULIA_PKG_SERVER is set to a non-empty string or not set
-                                            @info """
-                                            The General registry is installed via unpacked tarball.
-                                            Consider reinstalling it via the newer faster direct from
-                                            tarball format by running:
-                                              pkg> registry rm General; registry add General
-
-                                            """ maxlog = 1
-                                        end
-                                        mktempdir() do tmp
-                                            try
-                                                download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
-                                                registry_update_log[string(reg.uuid)] = now()
-                                            catch err
-                                                push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
-                                                @goto done_tarball_unpack
-                                            end
-                                            tree_info_file = joinpath(tmp, ".tree_info.toml")
-                                            write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
-                                            mv(tmp, reg.path, force = true)
-                                            @label done_tarball_unpack
-                                        end
-                                    end
-                                end
-                            end
-                        elseif isdir(joinpath(reg.path, ".git"))
-                            printpkgstyle(io, :Updating, "registry at " * regpath)
-                            if reg.name == "General" &&
-                                    Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true) &&
-                                    get(ENV, "JULIA_PKG_SERVER", nothing) != ""
-                                # warn if JULIA_PKG_SERVER is set to a non-empty string or not set
-                                @info """
-                                The General registry is installed via git. Consider reinstalling it via
-                                the newer faster direct from tarball format by running:
-                                  pkg> registry rm General; registry add General
-
-                                """ maxlog = 1
-                            end
-                            LibGit2.with(LibGit2.GitRepo(reg.path)) do repo
-                                if LibGit2.isdirty(repo)
-                                    push!(errors, (regpath, "registry dirty"))
-                                    @goto done_git
-                                end
-                                if !LibGit2.isattached(repo)
-                                    push!(errors, (regpath, "registry detached"))
-                                    @goto done_git
-                                end
-                                if !("origin" in LibGit2.remotes(repo))
-                                    push!(errors, (regpath, "origin not in the list of remotes"))
-                                    @goto done_git
-                                end
-                                branch = LibGit2.headname(repo)
-                                try
-                                    # If this is a shallow clone, continue using shallow fetches
-                                    fetch_depth = GitTools.isshallow(repo) ? 1 : 0
-                                    GitTools.fetch(io, repo; refspecs = ["+refs/heads/$branch:refs/remotes/origin/$branch"], depth = fetch_depth)
-                                catch e
-                                    e isa Pkg.Types.PkgError || rethrow()
-                                    push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
-                                    @goto done_git
-                                end
-                                if GitTools.isshallow(repo)
-                                    # A depth-1 fetch into a shallow clone leaves the new tip
-                                    # disconnected from the local HEAD, so it can be neither
-                                    # fast-forwarded to nor rebased onto. The registry is clean
-                                    # and has no local commits, so just move the branch there.
-                                    try
-                                        remote_id = LibGit2.revparseid(repo, "refs/remotes/origin/$branch")
-                                        if remote_id != LibGit2.head_oid(repo)
-                                            LibGit2.reset!(repo, remote_id, LibGit2.Consts.RESET_HARD)
-                                        end
-                                    catch e
-                                        e isa LibGit2.GitError || rethrow()
-                                        push!(errors, (reg.path, "registry failed to reset to origin/$branch"))
-                                        @goto done_git
-                                    end
-                                    registry_update_log[string(reg.uuid)] = now()
-                                    @goto done_git
-                                end
-                                attempts = 0
-                                @label merge
-                                ff_succeeded = try
-                                    LibGit2.merge!(repo; branch = "refs/remotes/origin/$branch", fastforward = true)
-                                catch e
-                                    attempts += 1
-                                    if e isa LibGit2.GitError && e.code == LibGit2.Error.ELOCKED && attempts <= 3
-                                        @warn "Registry update attempt failed because repository is locked. Resetting and retrying." e
-                                        LibGit2.reset!(repo, LibGit2.head_oid(repo), LibGit2.Consts.RESET_HARD)
-                                        sleep(1)
-                                        @goto merge
-                                    elseif e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND
-                                        push!(errors, (reg.path, "branch origin/$branch not found"))
-                                        @goto done_git
-                                    else
-                                        rethrow()
-                                    end
-
-                                end
-
-                                if !ff_succeeded
-                                    try
-                                        LibGit2.rebase!(repo, "origin/$branch")
-                                    catch e
-                                        e isa LibGit2.GitError || rethrow()
-                                        push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
-                                        @goto done_git
-                                    end
-                                end
-                                registry_update_log[string(reg.uuid)] = now()
-                                @label done_git
-                            end
-                        end
-                    end
-                end
+                update_registry(io, reg, registry_urls, registry_update_log, errors)
             end
             if !isempty(errors)
                 warn_str = "Some registries failed to update:"
@@ -708,6 +546,175 @@ function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = t
     end
     save_registry_update_log(registry_update_log)
     return
+end
+
+
+# Keep the update body independent of registry selection and cooldown types.
+@noinline function update_registry(io::IO, reg::RegistryInstance, registry_urls, registry_update_log, errors)
+    let reg = reg, errors = errors
+        regpath = pathrepr(reg.path)
+        let regpath = regpath
+            if !iswritable(dirname(reg.path))
+                @warn "Skipping update of registry at $regpath (read-only file system)"
+                return
+            end
+
+            if reg.tree_info !== nothing
+                printpkgstyle(io, :Updating, "registry at " * regpath)
+                old_hash = reg.tree_info
+                url = get(registry_urls, reg.uuid, nothing)
+                if url !== nothing
+                    check_registry_state(reg)
+                end
+                if url !== nothing && (new_hash = pkg_server_url_hash(url)) != old_hash
+                    # TODO: update faster by using a diff, if available
+                    # TODO: DRY with the code in `download_default_registries`
+                    let new_hash = new_hash, url = url
+                        if registry_read_from_tarball()
+                            tmp = tempname()
+                            try
+                                download_verify(url, nothing, tmp)
+                            catch err
+                                push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
+                                @goto done_tarball_read
+                            end
+                            hash = pkg_server_url_hash(url)
+                            if !verify_archive_tree_hash(tmp, hash)
+                                push!(errors, (reg.path, "failed to verify download from $(url)"))
+                                @goto done_tarball_read
+                            end
+                            # If we have an uncompressed Pkg server registry, remove it and get the compressed version
+                            if isdir(reg.path)
+                                Base.rm(reg.path; recursive = true, force = true)
+                            end
+                            registry_path = dirname(reg.path)
+                            # Detect what we actually got from the server (defensive against servers that don't support zstd yet)
+                            format = detect_archive_format(tmp)
+                            ext = format == "zstd" ? ".tar.zst" : ".tar.gz"
+                            mv(tmp, joinpath(registry_path, reg.name * ext); force = true)
+                            reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ext)
+                            atomic_toml_write(joinpath(registry_path, reg.name * ".toml"), reg_info)
+                            registry_update_log[string(reg.uuid)] = now()
+                            @label done_tarball_read
+                        else
+                            if reg.name == "General" &&
+                                    Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true) &&
+                                    get(ENV, "JULIA_PKG_SERVER", nothing) != ""
+                                # warn if JULIA_PKG_SERVER is set to a non-empty string or not set
+                                @info """
+                                The General registry is installed via unpacked tarball.
+                                Consider reinstalling it via the newer faster direct from
+                                tarball format by running:
+                                  pkg> registry rm General; registry add General
+
+                                """ maxlog = 1
+                            end
+                            mktempdir() do tmp
+                                try
+                                    download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
+                                    registry_update_log[string(reg.uuid)] = now()
+                                catch err
+                                    push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
+                                    @goto done_tarball_unpack
+                                end
+                                tree_info_file = joinpath(tmp, ".tree_info.toml")
+                                write(tree_info_file, "git-tree-sha1 = " * repr(string(new_hash)))
+                                mv(tmp, reg.path, force = true)
+                                @label done_tarball_unpack
+                            end
+                        end
+                    end
+                end
+            elseif isdir(joinpath(reg.path, ".git"))
+                printpkgstyle(io, :Updating, "registry at " * regpath)
+                if reg.name == "General" &&
+                        Base.get_bool_env("JULIA_PKG_GEN_REG_FMT_CHECK", true) &&
+                        get(ENV, "JULIA_PKG_SERVER", nothing) != ""
+                    # warn if JULIA_PKG_SERVER is set to a non-empty string or not set
+                    @info """
+                    The General registry is installed via git. Consider reinstalling it via
+                    the newer faster direct from tarball format by running:
+                      pkg> registry rm General; registry add General
+
+                    """ maxlog = 1
+                end
+                LibGit2.with(LibGit2.GitRepo(reg.path)) do repo
+                    if LibGit2.isdirty(repo)
+                        push!(errors, (regpath, "registry dirty"))
+                        @goto done_git
+                    end
+                    if !LibGit2.isattached(repo)
+                        push!(errors, (regpath, "registry detached"))
+                        @goto done_git
+                    end
+                    if !("origin" in LibGit2.remotes(repo))
+                        push!(errors, (regpath, "origin not in the list of remotes"))
+                        @goto done_git
+                    end
+                    branch = LibGit2.headname(repo)
+                    try
+                        # If this is a shallow clone, continue using shallow fetches
+                        fetch_depth = GitTools.isshallow(repo) ? 1 : 0
+                        GitTools.fetch(io, repo; refspecs = ["+refs/heads/$branch:refs/remotes/origin/$branch"], depth = fetch_depth)
+                    catch e
+                        e isa Pkg.Types.PkgError || rethrow()
+                        push!(errors, (reg.path, "failed to fetch from repo: $(e.msg)"))
+                        @goto done_git
+                    end
+                    if GitTools.isshallow(repo)
+                        # A depth-1 fetch into a shallow clone leaves the new tip
+                        # disconnected from the local HEAD, so it can be neither
+                        # fast-forwarded to nor rebased onto. The registry is clean
+                        # and has no local commits, so just move the branch there.
+                        try
+                            remote_id = LibGit2.revparseid(repo, "refs/remotes/origin/$branch")
+                            if remote_id != LibGit2.head_oid(repo)
+                                LibGit2.reset!(repo, remote_id, LibGit2.Consts.RESET_HARD)
+                            end
+                        catch e
+                            e isa LibGit2.GitError || rethrow()
+                            push!(errors, (reg.path, "registry failed to reset to origin/$branch"))
+                            @goto done_git
+                        end
+                        registry_update_log[string(reg.uuid)] = now()
+                        @goto done_git
+                    end
+                    attempts = 0
+                    @label merge
+                    ff_succeeded = try
+                        LibGit2.merge!(repo; branch = "refs/remotes/origin/$branch", fastforward = true)
+                    catch e
+                        attempts += 1
+                        if e isa LibGit2.GitError && e.code == LibGit2.Error.ELOCKED && attempts <= 3
+                            @warn "Registry update attempt failed because repository is locked. Resetting and retrying." e
+                            LibGit2.reset!(repo, LibGit2.head_oid(repo), LibGit2.Consts.RESET_HARD)
+                            sleep(1)
+                            @goto merge
+                        elseif e isa LibGit2.GitError && e.code == LibGit2.Error.ENOTFOUND
+                            push!(errors, (reg.path, "branch origin/$branch not found"))
+                            @goto done_git
+                        else
+                            rethrow()
+                        end
+
+                    end
+
+                    if !ff_succeeded
+                        try
+                            LibGit2.rebase!(repo, "origin/$branch")
+                        catch e
+                            e isa LibGit2.GitError || rethrow()
+                            push!(errors, (reg.path, "registry failed to rebase on origin/$branch"))
+                            @goto done_git
+                        end
+                    end
+                    registry_update_log[string(reg.uuid)] = now()
+                    @label done_git
+                end
+            end
+        end
+    end
+    return nothing
 end
 
 

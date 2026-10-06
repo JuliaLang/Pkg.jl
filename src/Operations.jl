@@ -3993,12 +3993,24 @@ function print_status(
         uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, deprecated::Bool, extensions::Bool, io::IO,
         mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool = true
     )
+    xs = diff_array(old_env, env; manifest, workspace)
+    return print_status_entries(
+        env, xs, registries, header, uuids, names;
+        manifest, diff, ignore_indent, workspace, outdated, deprecated, extensions, io,
+        mode, hidden_upgrades_info, show_usagetips
+    )
+end
+
+# Share output generation between status and environment-diff calls.
+@noinline function print_status_entries(
+        env::EnvCache, xs, registries::Vector{Registry.RegistryInstance}, header::Symbol,
+        uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, deprecated::Bool, extensions::Bool, io::IO,
+        mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool = true
+    )
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.error_color()), "→", context = io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color = :green), "⌃", context = io)
     heldback_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.warn_color()), "⌅", context = io)
     filter = !isempty(uuids) || !isempty(names)
-    # setup
-    xs = diff_array(old_env, env; manifest, workspace)
     # filter and return early if possible
     if isempty(xs) && !diff
         printpkgstyle(

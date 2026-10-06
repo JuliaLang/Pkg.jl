@@ -216,6 +216,11 @@ function validate(project::Project; file = nothing)
 end
 
 function Project(raw::Dict; file = nothing)
+    return parse_project(raw, file)
+end
+
+# The filename is diagnostic context, not a reason to specialize the parser.
+@noinline function parse_project(raw::Dict, @nospecialize(file))
     project = Project()
     project.other = raw
     project.name = get(raw, "name", nothing)::Union{String, Nothing}
