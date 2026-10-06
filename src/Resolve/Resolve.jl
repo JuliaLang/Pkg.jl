@@ -534,87 +534,117 @@ function enforce_optimality!(sol::Vector{Int}, graph::Graph)
 
             @assert upperbound[p0] == spp[p0]
 
-            # pick the next version that doesn't violate a constraint (if any)
-            bump_range = collect((s0 + 1):spp[p0])
-            bump = let gconstr = gconstr
-                findfirst(v0 -> gconstr[p0][v0], bump_range)
-            end
+            # try each higher allowed version in turn (uninstalling being the last);
+            # the first one that doesn't violate any constraint wins.
+            why[p0] = :constr
+            for new_s0 in (s0 + 1):spp[p0]
+                gconstr[p0][new_s0] || continue
+                try_uninstall = new_s0 == spp[p0] # are we trying to uninstall a package?
 
-            # no such version was found, skip this package
-            bump ≡ nothing && (why[p0] = :constr; continue)
+                # Save the solution and bounds for both attempts.
+                copy!(bk_sol, sol)
+                copy!(bk_lowerbound, lowerbound)
+                copy!(bk_upperbound, upperbound)
+                # Retry a failed bump involving new dependencies once with
+                # propagated constraints. Both attempts use the same walk and bounds.
+                ok = false
+                for propagate in (false, true)
+                    sol[p0] = new_s0
 
-            # assume that we will succeed in bumping the version (otherwise we
-            # roll-back at the end)
+                    # if we're trying to uninstall, the bump is "soft": we don't update the
+                    # lower bound so that the package can be reinstalled later in the pass
+                    # if needed by another package
+                    try_uninstall || (lowerbound[p0] = new_s0) # note that we're in the move_up case
 
-            new_s0 = bump_range[bump]
-            try_uninstall = new_s0 == spp[p0] # are we trying to uninstall a package?
+                    empty!(staged)
+                    empty!(staged_next)
+                    push!(staged, p0)
 
-            copy!(bk_sol, sol)
-            copy!(bk_lowerbound, lowerbound)
-            copy!(bk_upperbound, upperbound)
-            sol[p0] = new_s0
-
-            # if we're trying to uninstall, the bump is "soft": we don't update the
-            # lower bound so that the package can be reinstalled later in the pass
-            # if needed by another package
-            try_uninstall || (lowerbound[p0] = new_s0) # note that we're in the move_up case
-
-            empty!(staged)
-            empty!(staged_next)
-            push!(staged, p0)
-
-            while !isempty(staged)
-                for f0 in staged
-                    for (j1, f1) in enumerate(gadj[f0])
-                        s1 = sol[f1]
-                        msk = gmsk[f0][j1]
-                        if f1 == p0 || try_uninstall
-                            # when uninstalling or looking at p0, no further changes are allowed
-                            bump_range = [s1]
-                        else
-                            lb1 = lowerbound[f1]
-                            ub1 = upperbound[f1]
-                            @assert lb1 ≤ s1 ≤ ub1
-                            if move_up[f1]
-                                s1 > lb1 && @assert s1 == spp[f1]
-                                # the arrangement of the range gives precedence to improving the
-                                # current situation, but allows reinstalling a package if needed
-                                bump_range = vcat(s1:ub1, (s1 - 1):-1:lb1)
-                            else
-                                bump_range = collect(ub1:-1:lb1)
+                    ok = true
+                    has_new_deps = false
+                    if propagate
+                        push_snapshot!(graph)
+                        gconstr = graph.gconstr
+                    end
+                    try
+                        if propagate
+                            for q in 1:np
+                                gconstr[q][1:(lowerbound[q] - 1)] .= false
+                                gconstr[q][(upperbound[q] + 1):end] .= false
                             end
+                            fill!(gconstr[p0], false)
+                            gconstr[p0][new_s0] = true
+                            propagate_constraints!(graph, Set([p0]); log_events = false)
                         end
-                        bump = let gconstr = gconstr
-                            findfirst(v1 -> (gconstr[f1][v1] && msk[v1, sol[f0]]), bump_range)
+                        while ok && !isempty(staged)
+                            for f0 in staged
+                                for (j1, f1) in enumerate(gadj[f0])
+                                    s1 = sol[f1]
+                                    msk = gmsk[f0][j1]
+                                    if f1 == p0 || try_uninstall
+                                        # when uninstalling or looking at p0, no further changes are allowed
+                                        bump_range = [s1]
+                                    else
+                                        lb1 = lowerbound[f1]
+                                        ub1 = upperbound[f1]
+                                        @assert lb1 ≤ s1 ≤ ub1
+                                        if move_up[f1]
+                                            s1 > lb1 && @assert s1 == spp[f1]
+                                            # the arrangement of the range gives precedence to improving the
+                                            # current situation, but allows reinstalling a package if needed
+                                            bump_range = vcat(s1:ub1, (s1 - 1):-1:lb1)
+                                        else
+                                            bump_range = collect(ub1:-1:lb1)
+                                        end
+                                    end
+                                    bump = let gconstr = gconstr
+                                        findfirst(v1 -> (gconstr[f1][v1] && msk[v1, sol[f0]]), bump_range)
+                                    end
+                                    if bump ≡ nothing
+                                        why[p0] = f1 # TODO: improve this? (ideally we might want the path from p0 to f1)
+                                        ok = false
+                                        break
+                                    end
+                                    new_s1 = bump_range[bump]
+                                    has_new_deps |= !move_up[f1] && new_s1 != spp[f1]
+                                    sol[f1] = new_s1
+                                    new_s1 == s1 && continue
+                                    push!(staged_next, f1)
+                                    if move_up[f1]
+                                        lowerbound[f1] = new_s1
+                                    else
+                                        upperbound[f1] = new_s1
+                                    end
+                                end
+                                ok || break
+                            end
+                            staged, staged_next = staged_next, staged
+                            empty!(staged_next)
                         end
-                        if bump ≡ nothing
-                            why[p0] = f1 # TODO: improve this? (ideally we might want the path from p0 to f1)
-                            @goto abort
-                        end
-                        new_s1 = bump_range[bump]
-                        sol[f1] = new_s1
-                        new_s1 == s1 && continue
-                        push!(staged_next, f1)
-                        if move_up[f1]
-                            lowerbound[f1] = new_s1
-                        else
-                            upperbound[f1] = new_s1
+                    catch err
+                        err isa ResolverError || rethrow()
+                        ok = false
+                        why[p0] = :constr
+                    finally
+                        if propagate
+                            pop_snapshot!(graph)
+                            gconstr = graph.gconstr
                         end
                     end
+                    ok && break
+                    # Roll back before retrying or moving to the next version.
+                    copy!(sol, bk_sol)
+                    copy!(lowerbound, bk_lowerbound)
+                    copy!(upperbound, bk_upperbound)
+                    (try_uninstall || !has_new_deps) && break
                 end
-                staged, staged_next = staged_next, staged
-                empty!(staged_next)
+
+                if ok
+                    # the bump was successful, there's nothing more to do for p0
+                    why[p0] = 0
+                    break
+                end
             end
-
-            # if we're here the bump was successful, there's nothing more to do
-            continue
-
-            ## abort the bumping: restore the solution
-            @label abort
-
-            copy!(sol, bk_sol)
-            copy!(lowerbound, bk_lowerbound)
-            copy!(upperbound, bk_upperbound)
         end
         sol ≠ old_sol || break
         # It might be possible in principle to contrive a situation in which

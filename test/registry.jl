@@ -582,4 +582,143 @@ end
     end
 end
 
+@testset "update of a shallow git registry" begin
+    # Registries are cloned with depth 1 and updated with depth-1 fetches. In
+    # a shallow clone the new tip is then disconnected from the local HEAD, so
+    # it cannot be fast-forwarded to, and rebasing the old tip onto it fails.
+    # Local transports do not support shallow fetches, so the shape of such a
+    # clone is recreated here by hand through the `.git/shallow` graft file.
+    temp_pkg_dir() do depot
+        regdir = mktempdir()
+        setup_test_registries(regdir)
+        upstream = joinpath(regdir, "RegistryFoo1")
+        Registry.add(url = upstream; io = devnull)
+        installed = joinpath(depots1(), "registries", "RegistryFoo")
+        @test isdir(joinpath(installed, ".git"))
+        old_head, branch = LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            LibGit2.head_oid(repo), LibGit2.headname(repo)
+        end
+
+        # A new commit upstream
+        write(joinpath(upstream, "README.md"), "updated\n")
+        new_head = LibGit2.with(LibGit2.GitRepo(upstream)) do repo
+            LibGit2.add!(repo, "README.md")
+            LibGit2.commit(repo, "update"; author = Utils.TEST_SIG, committer = Utils.TEST_SIG)
+        end
+
+        # Fetch it as a depth-1 fetch would: the new tip is present but grafted
+        # to have no parent, and so is the old HEAD.
+        LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            LibGit2.fetch(repo; refspecs = ["+refs/heads/$branch:refs/remotes/origin/$branch"])
+        end
+        write(joinpath(installed, ".git", "shallow"), string(old_head) * "\n" * string(new_head) * "\n")
+        LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            @test LibGit2.isshallow(repo)
+            @test !(@test_logs (:warn, "Cannot perform fast-forward merge") LibGit2.merge!(repo; branch = "refs/remotes/origin/$branch", fastforward = true))
+        end
+
+        @test_logs Registry.update(; io = devnull, update_cooldown = Second(0))
+        LibGit2.with(LibGit2.GitRepo(installed)) do repo
+            @test LibGit2.head_oid(repo) == new_head
+            @test !LibGit2.isdirty(repo)
+            @test LibGit2.isattached(repo)
+        end
+        # The checkout follows `core.autocrlf`, which is on by default with Git for Windows
+        @test replace(read(joinpath(installed, "README.md"), String), "\r\n" => "\n") == "updated\n"
+    end
+end
+
+@testset "Offline registry operations" begin
+    mktempdir() do dir
+        setup_test_registries(dir)
+        regpath = joinpath(dir, "RegistryFoo1")
+        reg_uuid = UUID("e9fceed0-5623-4384-aff0-6db4c442647a")
+        depot = joinpath(dir, "depot")
+        project_file = joinpath(mkpath(joinpath(dir, "env")), "Project.toml")
+        write(project_file, "[deps]\n")
+        installed_regpath = joinpath(depot, "registries", "RegistryFoo")
+        requests = String[]
+        server = http_server() do sock, target
+            push!(requests, target)
+            write(sock, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        end
+        old_depots = copy(DEPOT_PATH)
+        old_defaults = copy(Pkg.Registry.DEFAULT_REGISTRIES)
+        old_offline = Pkg.OFFLINE_MODE[]
+        try
+            empty!(DEPOT_PATH)
+            push!(DEPOT_PATH, depot)
+            empty!(Pkg.Registry.DEFAULT_REGISTRIES)
+            push!(Pkg.Registry.DEFAULT_REGISTRIES, RegistrySpec(name = "RegistryFoo", uuid = reg_uuid, url = regpath))
+            withenv("JULIA_PKG_SERVER" => server.url) do
+                Pkg.offline(true)
+                for only_if_empty in (true, false)
+                    @test Pkg.Registry.download_default_registries(devnull; only_if_empty) === false
+                end
+                @test_logs Pkg.Registry.update(; io = devnull)
+                @test !isdir(joinpath(depot, "registries"))
+                @test isempty(requests)
+                rm(joinpath(depot, "registries"); recursive = true, force = true)
+                empty!(requests)
+
+                # Each operation gets a fresh context because resolving rewrites the manifest.
+                for (offline, operation) in (
+                        (true, Pkg.Operations.ensure_manifest_registries!),
+                        (true, Pkg.resolve),
+                        (true, Pkg.update),
+                        (true, ctx -> Pkg.instantiate(ctx; allow_autoprecomp = false)),
+                        (false, ctx -> Pkg.update(ctx; update_registry = false)),
+                        (false, Pkg.resolve),
+                    )
+                    Pkg.offline(offline)
+                    ctx = Pkg.Types.Context(env = EnvCache(project_file), io = devnull)
+                    ctx.env.manifest.registries["RegistryFoo"] = Pkg.Types.ManifestRegistryEntry(
+                        id = "RegistryFoo", uuid = reg_uuid, url = regpath
+                    )
+                    @test_logs operation(ctx)
+                    @test isempty(Pkg.Registry.reachable_registries())
+                    @test isempty(requests)
+                    rm(installed_regpath; recursive = true, force = true)
+                    empty!(requests)
+                end
+
+                # Going online must still install missing manifest and default registries.
+                Pkg.offline(false)
+                ctx = Pkg.Types.Context(env = EnvCache(project_file), io = devnull)
+                ctx.env.manifest.registries["RegistryFoo"] = Pkg.Types.ManifestRegistryEntry(
+                    id = "RegistryFoo", uuid = reg_uuid, url = regpath
+                )
+                @test_logs Pkg.Operations.ensure_manifest_registries!(ctx)
+                @test any(reg -> reg.uuid == reg_uuid, ctx.registries)
+                @test isdir(installed_regpath)
+                Pkg.Registry.rm(; uuid = reg_uuid, io = devnull)
+                @test Pkg.Registry.download_default_registries(devnull) === true
+                @test !isempty(requests)
+                empty!(requests)
+
+                # An offline update must neither query the server nor fetch the git remote.
+                write(joinpath(regpath, "update_marker"), "new registry revision")
+                git_init_and_commit(regpath; msg = "update registry")
+                update_log = Pkg.Registry.get_registry_update_log()
+                Pkg.offline(true)
+                @test_logs Pkg.Registry.update(; io = devnull, update_cooldown = Second(0))
+                @test !isfile(joinpath(installed_regpath, "update_marker"))
+                @test Pkg.Registry.get_registry_update_log() == update_log
+                @test isempty(requests)
+
+                Pkg.offline(false)
+                @test_logs Pkg.Registry.update(; io = devnull, update_cooldown = Second(0))
+                @test isfile(joinpath(installed_regpath, "update_marker"))
+                @test !isempty(requests)
+            end
+        finally
+            Pkg.offline(old_offline)
+            copy!(DEPOT_PATH, old_depots)
+            empty!(Pkg.Registry.DEFAULT_REGISTRIES)
+            append!(Pkg.Registry.DEFAULT_REGISTRIES, old_defaults)
+            server.close()
+        end
+    end
+end
+
 end # module

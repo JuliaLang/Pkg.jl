@@ -305,4 +305,17 @@ end
     end
 end
 
+@testset "is_local_repo" begin
+    is_local_repo = Pkg.GitTools.is_local_repo
+
+    @test is_local_repo(@__DIR__)
+    @test is_local_repo("file:///tmp/some/repo")
+
+    @test !is_local_repo("https://github.com/JuliaLang/Pkg.jl")
+    @test !is_local_repo("git@github.com:JuliaLang/Pkg.jl.git")
+
+    # Longer than PATH_MAX: must answer, not raise
+    @test !is_local_repo("https://user:" * "x"^5000 * "@example.com/repo.git")
+end
+
 end # module

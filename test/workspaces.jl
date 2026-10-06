@@ -210,6 +210,24 @@ end
     end
 end
 
+@testset "precompile deps of other workspace projects" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceTestInstantiate")
+            cd(path) do
+                with_current_env() do
+                    Pkg.instantiate(workspace = true)
+                    # Example is only a dep of the `test` project of the workspace
+                    io = IOBuffer()
+                    Pkg.precompile("Example"; workspace = true, io)
+                    @test occursin("Example", String(take!(io)))
+                    @test_throws Pkg.Types.PkgError Pkg.precompile("DoesNotExist"; workspace = true)
+                end
+            end
+        end
+    end
+end
+
 # Test that workspace child projects with [sources] pointing to parent work correctly
 # This was broken in 1.12.3 due to stale assertions after #4539
 @testset "workspace sources pointing to parent package" begin
@@ -231,6 +249,89 @@ end
                 # The path should remain ".." (project-relative), not "." (manifest-relative)
                 project = TOML.parsefile("docs/Project.toml")
                 @test project["sources"]["WorkspaceSourcesParent"]["path"] == ".."
+            end
+        end
+    end
+end
+
+# Operations in a workspace project must not copy the base project's `[sources]` into
+# it, nor add a source for the base project itself (#4237)
+@testset "sources are not duplicated into workspace projects" begin
+    mktempdir() do dir
+        cd(dir) do
+            with_current_env() do
+                Pkg.generate("PathDep")
+                Pkg.generate("Extra")
+                Pkg.generate("BasePkg")
+                base_uuid = TOML.parsefile("BasePkg/Project.toml")["uuid"]
+                pathdep_uuid = TOML.parsefile("PathDep/Project.toml")["uuid"]
+                Pkg.activate("BasePkg")
+                Pkg.develop(path = "PathDep")
+                d = TOML.parsefile("BasePkg/Project.toml")
+                d["workspace"] = Dict("projects" => ["test"])
+                Pkg.Types.write_project(d, "BasePkg/Project.toml")
+                mkdir("BasePkg/test")
+                Pkg.Types.write_project(
+                    Dict("deps" => Dict("BasePkg" => base_uuid, "PathDep" => pathdep_uuid)),
+                    "BasePkg/test/Project.toml"
+                )
+                Pkg.activate("BasePkg/test")
+                Pkg.develop(path = "Extra")
+                @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
+                project = TOML.parsefile("BasePkg/test/Project.toml")
+                @test collect(keys(project["sources"])) == ["Extra"]
+                base_project = TOML.parsefile("BasePkg/Project.toml")
+                @test base_project["sources"] == Dict("PathDep" => Dict("path" => "../PathDep"))
+                # Resolving keeps things as they are
+                Pkg.resolve()
+                project = TOML.parsefile("BasePkg/test/Project.toml")
+                @test collect(keys(project["sources"])) == ["Extra"]
+                # A source that differs from the one in the base project is still recorded
+                cp("PathDep", "PathDep2")
+                Pkg.develop(path = "PathDep2")
+                project = TOML.parsefile("BasePkg/test/Project.toml")
+                @test project["sources"]["PathDep"]["path"] == "../../PathDep2"
+            end
+        end
+    end
+end
+
+@testset "Pkg.test does not rewrite a workspace member's project (#4356)" begin
+    isolate() do
+        mktempdir() do dir
+            cd(dir) do
+                with_current_env() do
+                    Pkg.generate("A")
+                    Pkg.generate("B")
+
+                    a_uuid = TOML.parsefile("A/Project.toml")["uuid"]
+                    b_project_file = "B/Project.toml"
+                    b_project = TOML.parsefile(b_project_file)
+                    b_project["deps"] = Dict("A" => a_uuid)
+                    b_project["workspace"] = Dict("projects" => ["test"])
+                    Pkg.Types.write_project(b_project, b_project_file)
+
+                    mkpath("B/test")
+                    write("B/test/runtests.jl", "using B, Test\n@test B isa Module\n")
+                    Pkg.Types.write_project(
+                        Dict(
+                            "deps" => Dict(
+                                "B" => b_project["uuid"],
+                                "Test" => string(Base.PkgId(Test).uuid),
+                            ),
+                        ),
+                        "B/test/Project.toml",
+                    )
+                    Pkg.Types.write_project(
+                        Dict("workspace" => Dict("projects" => ["A", "B"])),
+                        "Project.toml",
+                    )
+
+                    project_before = read(b_project_file, String)
+                    Pkg.activate("B")
+                    Pkg.test()
+                    @test read(b_project_file, String) == project_before
+                end
             end
         end
     end
@@ -287,6 +388,73 @@ end
                 ctx = Pkg.Types.Context()
                 @test Pkg.Operations.is_instantiated(ctx.env, false)   # Root project complete (has Crayons)
                 @test !Pkg.Operations.is_instantiated(ctx.env, true)   # Workspace incomplete (missing Example)
+            end
+        end
+    end
+end
+
+# https://github.com/JuliaLang/Pkg.jl/issues/4726
+@testset "workspace precompile reaches every project in the workspace" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceNestedPrecompile")
+            cd(path) do
+                with_current_env() do
+                    Pkg.activate(".")
+                    Pkg.resolve()
+
+                    iob = IOBuffer()
+                    Pkg.precompile(workspace = true, io = iob)
+                    take!(iob)
+
+                    # `Example` is a dependency of the test project of a workspace member,
+                    # so it is two levels down from the project that was precompiled.
+                    Pkg.activate("Inner/test")
+                    @test Base.isprecompiled(Base.identify_package("Example"))
+                    @test Base.isprecompiled(Base.identify_package("InnerPkg"))
+                    Pkg.precompile(io = iob)
+                    @test !occursin("Precompiling", String(take!(iob)))
+                end
+            end
+        end
+    end
+end
+
+@testset "workspace instantiate precompiles the whole workspace" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceNestedPrecompile")
+            cd(path) do
+                with_current_env() do
+                    Pkg.activate(".")
+                    withenv("JULIA_PKG_PRECOMPILE_AUTO" => 1) do
+                        Pkg.instantiate(workspace = true)
+                    end
+
+                    Pkg.activate("Inner/test")
+                    @test Base.isprecompiled(Base.identify_package("Example"))
+                    @test Base.isprecompiled(Base.identify_package("InnerPkg"))
+                end
+            end
+        end
+    end
+end
+
+# `Pkg.test` of a workspace member whose test dependencies come from `[extras]`/`[targets]`
+# must resolve the member's relative `[sources]` against the member's own directory, not
+# against the active project (here the workspace root).
+@testset "Pkg.test of a workspace member with relative [sources] from the workspace root" begin
+    isolate() do
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspaceTestMemberSources")
+            cd(path) do
+                with_current_env() do
+                    Pkg.activate(".")
+                    Pkg.instantiate()
+                    Pkg.test("B")
+                    # The member's own project file keeps its relative source path
+                    @test TOML.parsefile(joinpath("B", "Project.toml"))["sources"]["A"]["path"] == "../A"
+                end
             end
         end
     end

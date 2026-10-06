@@ -14,6 +14,7 @@ include("utils.jl")
 using .Utils
 include("resolve_utils.jl")
 using .ResolveUtils
+import .ResolveUtils: graph_from_data, reqs_from_data, pkguuid
 
 # Check that VersionWeight keeps the same ordering as VersionNumber
 
@@ -699,6 +700,140 @@ end
         "F" => v"1",
     )
     @test resolve_tst(deps_data, reqs_data, want_data)
+
+end
+
+@testset "local optimality pass" begin
+    VERBOSE && @info("SCHEME LOCAL OPTIMALITY")
+    ## The local-optimality pass (`enforce_optimality!`) must not give up on a
+    ## package when only its next version conflicts with an already bumped
+    ## dependency while a later version would be fine.
+    ## ref Pkg.jl issue #4783
+    deps_data = Any[
+        ["J", v"1", "M", "*"],
+        ["J", v"1", "O", "1"],
+        ["J", v"2", "M", "1"],
+        ["J", v"2", "O", "*"],
+        ["J", v"3", "M", "*"],
+        ["J", v"3", "O", "*"],
+        ["M", v"1"],
+        ["M", v"2"],
+        ["O", v"1"],
+        ["O", v"2"],
+    ]
+    reqs_data = Any[
+        ["J", "*"],
+    ]
+    graph = graph_from_data(deps_data)
+    add_reqs!(graph, reqs_from_data(reqs_data, graph))
+    simplify_graph!(graph)
+    idx(p) = graph.data.pdict[pkguuid(p)]
+    vidx(p, vn) = graph.data.vdict[idx(p)][vn]
+    # a feasible but suboptimal configuration, as the maxsum solver may produce:
+    # bumping J to v2 is blocked by M (already at its maximum), but J v3 is fine
+    sol = copy(graph.spp)
+    sol[idx("J")] = vidx("J", v"1")
+    sol[idx("M")] = vidx("M", v"2")
+    sol[idx("O")] = vidx("O", v"1")
+    @test Resolve.verify_solution(sol, graph)
+    Resolve.enforce_optimality!(sol, graph)
+    @test sol[idx("J")] == vidx("J", v"3")
+    @test sol[idx("M")] == vidx("M", v"2")
+    @test sol[idx("O")] == vidx("O", v"2")
+
+    want_data = Dict("J" => v"3", "M" => v"2", "O" => v"2")
+    @test resolve_tst(deps_data, reqs_data, want_data)
+    @testset "installing new dependency chains" begin
+        deps_data = Any[
+            ["A", v"1"],
+            ["A", v"2", "S", "1"],
+            ["A", v"2", "U", "1"],
+            ["S", v"1", "C", "1"],
+            ["U", v"1", "K", "*"],
+            ["K", v"1", "C", "1"],
+            ["K", v"2", "C", "2"],
+            ["C", v"1"],
+            ["C", v"2"],
+        ]
+        # S requires C v1, so K must also use v1. Choosing K v2 before
+        # propagating S's requirement prevents the local walk from bumping A.
+        for unrelated in (false, true)
+            deps = copy(deps_data)
+            reqs = Any[["A", "*"]]
+            if unrelated
+                # An unrelated component that cannot be solved by maximizing
+                # all its required packages must not prevent the bump of A.
+                append!(
+                    deps, Any[
+                        ["X", v"1", "Y", "2"], ["X", v"2", "Y", "1"],
+                        ["Y", v"1"], ["Y", v"2"],
+                    ]
+                )
+                append!(reqs, Any[["X", "*"], ["Y", "*"]])
+            end
+            graph = graph_from_data(deps)
+            add_reqs!(graph, reqs_from_data(reqs, graph))
+            simplify_graph!(graph)
+            idx_chain = p -> graph.data.pdict[pkguuid(p)]
+            vidx_chain = (p, v) -> graph.data.vdict[idx_chain(p)][v]
+            sol = copy(graph.spp)
+            sol[idx_chain("A")] = vidx_chain("A", v"1")
+            if unrelated
+                sol[idx_chain("X")] = vidx_chain("X", v"1")
+                sol[idx_chain("Y")] = vidx_chain("Y", v"2")
+            end
+            @test Resolve.verify_solution(sol, graph)
+            before = deepcopy(graph.gconstr)
+            Resolve.enforce_optimality!(sol, graph)
+            @test Resolve.verify_solution(sol, graph)
+            for (p, v) in ["A" => v"2", "S" => v"1", "U" => v"1", "K" => v"1", "C" => v"1"]
+                @test sol[idx_chain(p)] == vidx_chain(p, v)
+            end
+            if unrelated
+                @test sol[idx_chain("X")] == vidx_chain("X", v"1")
+                @test sol[idx_chain("Y")] == vidx_chain("Y", v"2")
+            end
+            @test graph.gconstr == before
+            @test isempty(graph.solve_stack)
+        end
+        want_data = Dict("A" => v"2", "S" => v"1", "U" => v"1", "K" => v"1", "C" => v"1")
+        @test resolve_tst(deps_data, Any[["A", "*"]], want_data)
+
+        @testset "failed propagation restores the graph" for later_compatible in (false, true)
+            deps = copy(deps_data)
+            # A v2 is impossible: it requires K v2, which conflicts with S.
+            # A v3 optionally permits the same consistent chain as above.
+            append!(
+                deps, Any[
+                    ["A", v"2", "K", "2"],
+                    ["A", v"3", "S", "1"],
+                    ["A", v"3", "U", "1"],
+                ]
+            )
+            later_compatible || push!(deps, ["A", v"3", "K", "2"])
+            graph = graph_from_data(deps)
+            add_reqs!(graph, reqs_from_data(Any[["A", "*"]], graph))
+            # Leave the impossible candidate in the graph to exercise rollback.
+            idx_rollback = p -> graph.data.pdict[pkguuid(p)]
+            vidx_rollback = (p, v) -> graph.data.vdict[idx_rollback(p)][v]
+            sol = copy(graph.spp)
+            for p in graph.fix_inds
+                sol[p] = findfirst(graph.gconstr[p])
+            end
+            sol[idx_rollback("A")] = vidx_rollback("A", v"1")
+            @test Resolve.verify_solution(sol, graph)
+            constr = graph.gconstr
+            before = deepcopy(constr)
+            ignored = graph.ignored
+            before_ignored = copy(ignored)
+            Resolve.enforce_optimality!(sol, graph)
+            @test Resolve.verify_solution(sol, graph)
+            @test sol[idx_rollback("A")] == vidx_rollback("A", later_compatible ? v"3" : v"1")
+            @test graph.gconstr === constr && graph.gconstr == before
+            @test graph.ignored === ignored && graph.ignored == before_ignored
+            @test isempty(graph.solve_stack)
+        end
+    end
 
 end
 

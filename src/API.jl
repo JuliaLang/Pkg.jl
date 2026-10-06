@@ -510,15 +510,20 @@ function append_all_pkgs!(pkgs, ctx, mode; workspace::Bool = false)
             push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
         end
         if workspace
+            uuid_to_idx = Dict{UUID, Int}()
+            for (i, pkg) in pairs(pkgs)
+                isnothing(pkg.uuid) || get!(uuid_to_idx, pkg.uuid, i)
+            end
             for (project_file, project) in ctx.env.workspace
                 for (name::String, uuid::UUID) in project.deps
                     path, repo = get_path_repo(project, project_file, ctx.env.manifest_file, name)
-                    existing = findfirst(p -> p.uuid == uuid, pkgs)
+                    existing = get(uuid_to_idx, uuid, nothing)
                     if existing !== nothing
                         Operations.merge_pkg_source!(pkgs[existing], path, repo)
                         continue
                     end
                     push!(pkgs, PackageSpec(name = name, uuid = uuid, path = path, repo = repo))
+                    uuid_to_idx[uuid] = length(pkgs)
                 end
             end
         end
@@ -542,13 +547,13 @@ function up(
         kwargs...
     )
     Context!(ctx; kwargs...)
-    Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
     if Operations.is_fully_pinned(ctx)
         printpkgstyle(ctx.io, :Update, "All dependencies are pinned - nothing to update.", color = Base.info_color())
         return
     end
     if update_registry
+        Operations.ensure_manifest_registries!(ctx)
         Registry.download_default_registries(ctx.io)
         Operations.update_registries(ctx; force = true)
     end
@@ -1307,7 +1312,8 @@ function precompile(
         ctx::Context, pkgs::Vector{PackageSpec}; internal_call::Bool = false,
         strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
         _from_loading::Bool = false, configs::Union{Base.Precompilation.Config, Vector{Base.Precompilation.Config}} = (`` => Base.CacheFlags()),
-        workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false, kwargs...
+        workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false,
+        skip_dependents::Bool = true, force::Bool = false, kwargs...
     )
     # Handle background precompilation control options via Base
     if monitor
@@ -1333,7 +1339,7 @@ function precompile(
 
     Context!(ctx; kwargs...)
     if !already_instantiated
-        instantiate(ctx; allow_autoprecomp = false, kwargs...)
+        instantiate(ctx; allow_autoprecomp = false, workspace, kwargs...)
         @debug "precompile: instantiated"
     end
 
@@ -1342,6 +1348,16 @@ function precompile(
     if !isfile(ctx.env.project_file)
         return
     end
+
+    # Resolve the names here rather than in Base: `Base.identify_package` only knows
+    # the deps of the active project, not the ones of the other workspace projects.
+    if !isempty(pkgs)
+        project_resolve!(ctx.env, pkgs)
+        project_deps_resolve!(ctx.env, pkgs)
+        manifest_resolve!(ctx.env.manifest, pkgs)
+        ensure_resolved(ctx, ctx.env.manifest, pkgs)
+    end
+    pkgids = Base.PkgId[Base.PkgId(pkg.uuid, pkg.name) for pkg in pkgs]
 
     return activate(dirname(ctx.env.project_file)) do
         # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
@@ -1354,10 +1370,15 @@ function precompile(
         else
             ctx.io.io
         end
-        pkgs_name = String[pkg.name for pkg in pkgs]
         # Allow user to press 'd' to detach when running interactively
         detachable = isinteractive()
-        return Base.Precompilation.precompilepkgs(pkgs_name; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable)
+        # since JuliaLang/julia#59765 the driver returns the cache files it found or
+        # made, for code loading; that is not part of `Pkg.precompile`'s API
+        Base.Precompilation.precompilepkgs(
+            pkgids; internal_call, strict, warn_loaded, timing, _from_loading, configs, manifest = workspace, io, detachable,
+            skip_dependents, force
+        )
+        return nothing
     end
 end
 
@@ -1404,13 +1425,13 @@ function instantiate(
             deps[pkg.name] = string(uuid)
         end
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
-        return instantiate(Context(); manifest = manifest, update_registry = update_registry, allow_autoprecomp = allow_autoprecomp, verbose = verbose, platform = platform, update_on_mismatch = update_on_mismatch, kwargs...)
+        return instantiate(Context(); manifest = manifest, update_registry = update_registry, verbose = verbose, platform = platform, allow_build = allow_build, allow_autoprecomp = allow_autoprecomp, workspace = workspace, julia_version_strict = julia_version_strict, update_on_mismatch = update_on_mismatch, kwargs...)
     end
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
         up(ctx; update_registry = update_registry && allow_registry_update)
-        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+        allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end
     if !isfile(ctx.env.manifest_file) && manifest == true
@@ -1429,7 +1450,7 @@ function instantiate(
         end
         printpkgstyle(ctx.io, :Update, "manifest does not match project or Julia version, falling back to `Pkg.update()`", color = Base.info_color())
         up(ctx; update_registry, mode = workspace ? PKGMODE_MANIFEST : PKGMODE_PROJECT)
-        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+        allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end
 
@@ -1457,7 +1478,7 @@ function instantiate(
     end
     # check if all source code and artifacts are downloaded to exit early
     if Operations.is_instantiated(ctx.env, workspace; platform)
-        allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+        allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end
 
@@ -1529,7 +1550,7 @@ function instantiate(
     # Run build scripts
     allow_build && Operations.build_versions(ctx, union(new_apply, new_git); verbose = verbose)
 
-    return allow_autoprecomp && Pkg._auto_precompile(ctx, already_instantiated = true)
+    return allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
 end
 
 

@@ -215,6 +215,30 @@ end
             @test length(args) == 1
             @test args[1].url == "ssh://git@server.com/path/repo.git"
             @test args[1].rev == "branch-name"
+
+            api, args, opts = first(Pkg.pkg"add ssh://git@1.2.3:2222/path/repo.git#branch-name")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "ssh://git@1.2.3:2222/path/repo.git"
+            @test args[1].rev == "branch-name"
+
+            api, args, opts = first(Pkg.pkg"add myorg@vs-ssh.example.com:v3/org/proj/Repo.jl#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "myorg@vs-ssh.example.com:v3/org/proj/Repo.jl"
+            @test args[1].rev == "main"
+
+            api, args, opts = first(Pkg.pkg"add git@server:repo#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "git@server:repo"
+            @test args[1].rev == "main"
+
+            api, args, opts = first(Pkg.pkg"add file:///tmp/repo#main")
+            @test api == Pkg.add
+            @test length(args) == 1
+            @test args[1].url == "file:///tmp/repo"
+            @test args[1].rev == "main"
         end
 
         # Test SSH URLs with IP addresses (issue #1822)
@@ -722,6 +746,16 @@ end
         @test api == Pkg.precompile
         @test arg == ["Foo", "Bar"]
         @test isempty(opts)
+
+        api, arg, opts = first(Pkg.pkg"precompile --noskip")
+        @test api == Pkg.precompile
+        @test isempty(arg)
+        @test opts == Dict(:skip_dependents => false)
+
+        api, arg, opts = first(Pkg.pkg"precompile --force Foo")
+        @test api == Pkg.precompile
+        @test arg == ["Foo"]
+        @test opts == Dict(:force => true)
     end
 end
 
@@ -1195,6 +1229,28 @@ end
             c, r = test_complete("add Example E")
             @test !("Example" in c) # Example already specified for add command
 
+            # app names and their packages complete for app subcommands (#4804)
+            apps_dir = mkpath(joinpath(first(DEPOT_PATH), "environments", "apps"))
+            write(
+                joinpath(apps_dir, "AppManifest.toml"), """
+                manifest_format = "2.0"
+
+                [[deps.MyApp]]
+                uuid = "5a1d7a52-6f0e-4f7b-9a54-0d2b7d6e8c11"
+                version = "0.1.0"
+
+                    [deps.MyApp.apps.myapp]
+                    julia_command = "julia"
+                """
+            )
+            c, r = test_complete("app rm my")
+            @test "myapp" in c
+            c, r = test_complete("app st My")
+            @test "MyApp" in c
+            c, r = test_complete("app update MyApp my")
+            @test "myapp" in c
+            @test !("MyApp" in c) # MyApp already specified
+
             # help mode
             @test apply_completion("?ad") == "?add"
             @test apply_completion("?act") == "?activate"
@@ -1331,6 +1387,38 @@ end
     end
 end
 
+@testset "tab completion of workspace projects" begin
+    # `test` accepts the projects of the workspace, so they should be completed (#4603)
+    temp_pkg_dir() do project_path
+        mktempdir() do dir
+            path = copy_test_package(dir, "WorkspacePathResolution")
+            Pkg.activate(path)
+            c, r = test_complete("test ")
+            @test "SubProjectA" in c
+            @test "SubProjectB" in c
+            c, r = test_complete("test SubProjectA Sub")
+            @test c == ["SubProjectB"]
+            # from a workspace member, the other projects of the workspace are completed
+            Pkg.activate(joinpath(path, "SubProjectA"))
+            c, r = test_complete("test Sub")
+            @test c == ["SubProjectB"]
+            # `--workspace` completes the deps of every project in the workspace
+            Pkg.activate(path)
+            c, r = test_complete("st ")
+            @test isempty(c)
+            c, r = test_complete("st --workspace ")
+            @test c == ["SubProjectB"]
+            c, r = test_complete("up --workspace Sub")
+            @test c == ["SubProjectB"]
+            c, r = test_complete("precompile --workspace Sub")
+            @test c == ["SubProjectB"]
+            Pkg.activate(joinpath(path, "SubProjectB"))
+            c, r = test_complete("st --workspace Sub")
+            @test c == ["SubProjectB"]
+        end
+    end
+end
+
 @testset "BigProject" begin
     temp_pkg_dir() do project_path
         cd(project_path) do
@@ -1349,7 +1437,7 @@ end
                         add JSON
                         build
                     """
-                    @eval using BigProject
+                    run_in_subprocess("using BigProject")
                     pkg"build BigProject"
                     @test_throws PkgError pkg"add BigProject"
                     json_uuid = Pkg.project().dependencies["JSON"]

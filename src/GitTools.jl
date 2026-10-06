@@ -4,7 +4,7 @@ module GitTools
 
 using ..Pkg
 using ..MiniProgressBars
-import ..can_fancyprint, ..printpkgstyle, ..stdout_f
+import ..can_fancyprint, ..printpkgstyle, ..stdout_f, ..ispath_nothrow
 using SHA
 import Base: SHA1
 import LibGit2
@@ -34,10 +34,17 @@ end
 # Shallow clones are only supported for network protocols (HTTP, HTTPS, Git, SSH)
 function is_local_repo(url::AbstractString)
     # Check if it's a local filesystem path
-    ispath(url) && return true
+    ispath_nothrow(url) && return true
     # Check if it uses file:// protocol
     startswith(url, "file://") && return true
     return false
+end
+
+# Some git servers (e.g. JGit-based ones such as Gerrit and googlesource.com) fail libgit2's
+# shallow negotiation with a `Net` error ("invalid packet line", see #4771) even though full
+# clones and fetches work fine. Such failures are retried without `depth`.
+function is_shallow_fallback_error(err)
+    return err isa LibGit2.GitError && err.class == LibGit2.Error.Net && err.code == LibGit2.Error.ERROR
 end
 
 # Check if a repository is a shallow clone
@@ -45,9 +52,9 @@ function isshallow(repo::LibGit2.GitRepo)
     if supports_shallow_clone() && isdefined(LibGit2, :isshallow)
         return LibGit2.isshallow(repo)
     else
-        # Fallback: check for .git/shallow file
-        repo_path = LibGit2.path(repo)
-        shallow_file = joinpath(repo_path, "shallow")
+        # Fallback: check for the shallow file in the repository's git dir.
+        # LibGit2.path(repo) is the worktree path for non-bare repositories.
+        shallow_file = joinpath(LibGit2.gitdir(repo), "shallow")
         return isfile(shallow_file)
     end
 end
@@ -173,10 +180,17 @@ function clone(io::IO, url, source_path; header = nothing, credentials = nothing
             mkpath(source_path)
             # Only pass depth if shallow clones are supported and depth > 0
             if depth > 0
-                return LibGit2.clone(url, source_path; callbacks, credentials, isbare, depth, kwargs...)
-            else
-                return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
+                try
+                    # `LibGit2.clone` stores the credentials in `callbacks`, so pass a copy in case we retry
+                    return LibGit2.clone(url, source_path; callbacks = copy(callbacks), credentials, isbare, depth, kwargs...)
+                catch err
+                    is_shallow_fallback_error(err) || rethrow()
+                    @debug "Shallow clone of `$url` failed, retrying with a full clone" exception = err
+                    rm(source_path; force = true, recursive = true)
+                    mkpath(source_path)
+                end
             end
+            return LibGit2.clone(url, source_path; callbacks, credentials, isbare, kwargs...)
         end
     catch err
         rm(source_path; force = true, recursive = true)
@@ -249,10 +263,15 @@ function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = noth
         else
             # Only pass depth if shallow clones are supported and depth > 0
             if depth > 0
-                return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, depth, kwargs...)
-            else
-                return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
+                try
+                    # `LibGit2.fetch` stores the credentials in `callbacks`, so pass a copy in case we retry
+                    return LibGit2.fetch(repo; remoteurl, callbacks = copy(callbacks), credentials, refspecs, depth, kwargs...)
+                catch err
+                    is_shallow_fallback_error(err) || rethrow()
+                    @debug "Shallow fetch from `$remoteurl` failed, retrying with a full fetch" exception = err
+                end
             end
+            return LibGit2.fetch(repo; remoteurl, callbacks, credentials, refspecs, kwargs...)
         end
     catch err
         err isa LibGit2.GitError || rethrow()

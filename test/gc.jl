@@ -10,8 +10,8 @@ using ..Utils
         Pkg.activate(project_path)
         Pkg.add(TEST_PKG.name)
         @test isinstalled(TEST_PKG)
-        @eval import $(Symbol(TEST_PKG.name))
-        @test_throws SystemError open(pathof(eval(Symbol(TEST_PKG.name))), "w") do io end  # check read-only
+        source = Base.locate_package(Base.PkgId(TEST_PKG.uuid, TEST_PKG.name))
+        @test_throws SystemError open(source, "w") do io end  # check read-only
         Pkg.rm(TEST_PKG.name)
         @test !isinstalled(TEST_PKG)
         pkgdir = joinpath(Pkg.depots1(), "packages")

@@ -1,6 +1,10 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Manifests now record an `environment_id` (the project `uuid`, or a generated UUID kept from then on) and,
+  when the project has a `name`, an `environment_name`. Both follow the project file on every manifest write.
+  Julia mixes the id into precompile cache file names, so environments at the same path that share a depot
+  no longer overwrite each other's caches. Writing them bumps the manifest format to `"2.2"`. ([#4824])
 - Artifact selection hooks can now load dependencies from their package's `[deps]`. Pkg runs hooks against the resolved
   manifest and installs dependency artifacts first, preventing selectors from loading stale, incompatible versions.
   Active-project and workspace preferences are visible to hooks, hook results are cached for the duration of the
@@ -19,6 +23,13 @@ Pkg v1.14 Release Notes
 - `pkg> add --from env` and `Pkg.add(from=env)` add the direct dependencies of other environments, given
   as a shared environment name (`@v1.13`), a path to a `Project.toml`, or a directory containing one. This makes it
   easy to populate the default environment of a new Julia version from the previous one. ([#4777])
+- Editing a `[sources]` entry directly in the project file (e.g. changing its `rev`) now invalidates the manifest,
+  and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
+- Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
+  nor add a `[sources]` entry for a package that is itself a project of the workspace. ([#4237])
+- `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
+  when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
+  those paths are now resolved against the member's directory. ([#4830])
 
 Pkg v1.13 Release Notes
 =======================
@@ -242,3 +253,6 @@ Pkg v1.7 Release Notes
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4777]: https://github.com/JuliaLang/Pkg.jl/pull/4777
+[#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
+[#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
+[#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237

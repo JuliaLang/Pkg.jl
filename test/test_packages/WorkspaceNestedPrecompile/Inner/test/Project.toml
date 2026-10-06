@@ -1,0 +1,4 @@
+[deps]
+Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+InnerPkg = "e1eab5ce-1f70-4f4b-a5e4-4e9ab3a2e3b4"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

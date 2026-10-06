@@ -1,0 +1,6 @@
+name = "InnerPkg"
+uuid = "e1eab5ce-1f70-4f4b-a5e4-4e9ab3a2e3b4"
+version = "0.1.0"
+
+[workspace]
+projects = ["test"]

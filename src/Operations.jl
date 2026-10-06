@@ -93,6 +93,7 @@ tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version
 # Try to download all registries referenced in `ctx.env.manifest.registries`.
 # Warn if some fail, but don't error (packages may still work with the registries we have).
 function ensure_manifest_registries!(ctx::Context)
+    OFFLINE_MODE[] && return
     manifest_regs = ctx.env.manifest.registries
     isempty(manifest_regs) && return
 
@@ -177,21 +178,21 @@ function load_direct_deps(
         append!(pkgs_direct, load_project_deps(project, path, env.manifest, env.manifest_file, pkgs; preserve))
     end
 
-    unique_uuids = Set{UUID}(pkg.uuid for pkg in pkgs_direct)
-    for uuid in unique_uuids
-        idxs = findall(pkg -> pkg.uuid == uuid, pkgs_direct)
-        # TODO: Assert that projects do not have conflicting sources
-        pkg = pkgs_direct[idxs[1]]
-        idx_to_drop = Int[]
-        for i in Iterators.drop(idxs, 1)
-            merge_pkg_source!(pkg, pkgs_direct[i])
-            push!(idx_to_drop, i)
+    # Merge source information for dependencies shared by workspace projects.
+    first_idx = Dict{UUID, Int}()
+    deduped = PackageSpec[]
+    for pkg in pkgs_direct
+        idx = get(first_idx, pkg.uuid, nothing)
+        if isnothing(idx)
+            push!(deduped, pkg)
+            first_idx[pkg.uuid] = length(deduped)
+        else
+            # TODO: Assert that projects do not have conflicting sources
+            merge_pkg_source!(deduped[idx], pkg)
         end
-        sort!(unique!(idx_to_drop))
-        deleteat!(pkgs_direct, idx_to_drop)
     end
 
-    return vcat(pkgs, pkgs_direct)
+    return vcat(pkgs, deduped)
 end
 
 function load_project_deps(
@@ -199,28 +200,37 @@ function load_project_deps(
         preserve::PreserveLevel = PRESERVE_DIRECT
     )
     pkgs_direct = PackageSpec[]
-    if project.name !== nothing && project.uuid !== nothing && findfirst(pkg -> pkg.uuid == project.uuid, pkgs) === nothing
+    existing_uuids = Set{UUID}(pkg.uuid for pkg in pkgs if !isnothing(pkg.uuid))
+    if !isnothing(project.name) && !isnothing(project.uuid) && !(project.uuid in existing_uuids)
         path = Types.relative_project_path(manifest_file, dirname(project_file))
         pkg = PackageSpec(; name = project.name, uuid = project.uuid, version = project.version, path)
         push!(pkgs_direct, pkg)
     end
 
     for (name::String, uuid::UUID) in project.deps
-        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        uuid in existing_uuids && continue
         path, repo = get_path_repo(project, project_file, manifest_file, name)
         entry = manifest_info(manifest, uuid)
+        if entry === nothing
+            push!(pkgs_direct, PackageSpec(; uuid, name, path, repo))
+            continue
+        end
+        # `[sources]` takes precedence over the manifest, which may be stale: a path source
+        # discards a recorded tree hash and repo, a repo source discards a recorded path.
+        tree_hash = entry.tree_hash
+        if path !== nothing
+            tree_hash = nothing
+            repo = GitRepo()
+        else
+            repo == GitRepo() && (repo = entry.repo)
+            repo.source === nothing && (path = entry.path)
+        end
         push!(
-            pkgs_direct, entry === nothing ?
-                PackageSpec(; uuid, name, path, repo) :
-                PackageSpec(;
-                    uuid = uuid,
-                    name = name,
-                    path = path === nothing ? entry.path : path,
-                    repo = repo == GitRepo() ? entry.repo : repo,
-                    pinned = entry.pinned,
-                    tree_hash = entry.tree_hash, # TODO should tree_hash be changed too?
-                    version = load_version(entry.version, isfixed(entry), preserve),
-                )
+            pkgs_direct, PackageSpec(;
+                uuid, name, path, repo, tree_hash,
+                pinned = entry.pinned,
+                version = load_version(entry.version, isfixed(entry), preserve),
+            )
         )
     end
     return pkgs_direct
@@ -231,8 +241,9 @@ function load_manifest_deps(
         preserve::PreserveLevel = PRESERVE_ALL
     )
     pkgs = copy(pkgs)
+    seen_uuids = Set{UUID}(pkg.uuid for pkg in pkgs if !isnothing(pkg.uuid))
     for (uuid, entry) in manifest
-        findfirst(pkg -> pkg.uuid == uuid, pkgs) === nothing || continue # do not duplicate packages
+        uuid in seen_uuids && continue
         push!(
             pkgs, PackageSpec(
                 uuid = uuid,
@@ -244,6 +255,7 @@ function load_manifest_deps(
                 version = load_version(entry.version, isfixed(entry), preserve),
             )
         )
+        push!(seen_uuids, uuid)
     end
     return pkgs
 end
@@ -402,7 +414,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     prune_manifest(env)
 
     env.manifest.registries = registry_entries
-    env.manifest.manifest_format = v"2.1.0"
+    env.manifest.manifest_format = v"2.2.0"
     return record_project_hash(env)
 end
 
@@ -620,12 +632,12 @@ is_tracking_repo(pkg) = (pkg.repo.source !== nothing || pkg.repo.rev !== nothing
 is_tracking_registry(pkg) = !is_tracking_path(pkg) && !is_tracking_repo(pkg)
 isfixed(pkg) = !is_tracking_registry(pkg) || pkg.pinned
 
-function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec})
+function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{PackageSpec}, seen::Set{UUID} = Set{UUID}(p.uuid for p in developed if !isnothing(p.uuid)))
     source = source_path(env.manifest_file, pkg)
     source_env = EnvCache(projectfile_path(source))
     pkgs = load_project_deps(source_env.project, source_env.project_file, source_env.manifest, source_env.manifest_file)
     for pkg in pkgs
-        if any(x -> x.uuid == pkg.uuid, developed)
+        if pkg.uuid in seen
             continue
         end
         if is_tracking_path(pkg)
@@ -637,9 +649,11 @@ function collect_developed!(env::EnvCache, pkg::PackageSpec, developed::Vector{P
                 source_path(source_env.manifest_file, pkg)
             )
             push!(developed, pkg)
-            collect_developed!(env, pkg, developed)
+            push!(seen, pkg.uuid)
+            collect_developed!(env, pkg, developed, seen)
         elseif is_tracking_repo(pkg)
             push!(developed, pkg)
+            push!(seen, pkg.uuid)
         end
     end
     return
@@ -647,8 +661,9 @@ end
 
 function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
     developed = PackageSpec[]
+    seen = Set{UUID}()
     for pkg in filter(is_tracking_path, pkgs)
-        collect_developed!(env, pkg, developed)
+        collect_developed!(env, pkg, developed, seen)
     end
     return developed
 end
@@ -828,9 +843,11 @@ function resolve_versions!(
     # recursive search for packages which are tracking a path
     developed = collect_developed(env, pkgs)
     # But we only want to use information for those packages that we don't know about
+    pkg_uuids = Set{UUID}(pkg.uuid for pkg in pkgs if !isnothing(pkg.uuid))
     for pkg in developed
-        if !any(x -> x.uuid == pkg.uuid, pkgs)
+        if !(pkg.uuid in pkg_uuids)
             push!(pkgs, pkg)
+            push!(pkg_uuids, pkg.uuid)
         end
     end
     # this also sets pkg.version for fixed packages
@@ -842,8 +859,9 @@ function resolve_versions!(
     end
     fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version; env_uuids)
     for new_pkg in new_fixed_pkgs
-        any(x -> x.uuid == new_pkg.uuid, pkgs) && continue
+        new_pkg.uuid in pkg_uuids && continue
         push!(pkgs, new_pkg)
+        push!(pkg_uuids, new_pkg.uuid)
     end
     # non fixed packages are `add`ed by version: their version is either restricted or free
     # fixed packages are `dev`ed or `add`ed by repo
@@ -903,8 +921,9 @@ function resolve_versions!(
     vers = vers_fix
 
     # update vector of package versions
+    pkg_index = Dict{UUID, Int}(pkg.uuid => i for (i, pkg) in pairs(pkgs))
     for (uuid, ver) in vers
-        idx = findfirst(p -> p.uuid == uuid, pkgs)
+        idx = get(pkg_index, uuid, nothing)
         if idx !== nothing
             pkg = pkgs[idx]
             # Fixed packages are not returned by resolve (they already have their version set)
@@ -1679,6 +1698,10 @@ end
 function selector_environment(env::EnvCache)
     manifest = deepcopy(env.manifest)
     abspath!(env, manifest)
+    # Selectors don't depend on the environment's identity, and the id may be first written
+    # after installation, so leave it out to keep the cached selection valid.
+    manifest.environment_id = nothing
+    manifest.environment_name = nothing
     projects = map(enumerate(Base.get_projects_workspace_to_root(env.project_file))) do (i, file)
         project = deepcopy(i == 1 ? env.project : env.workspace[file])
         project.manifest = nothing
@@ -2148,6 +2171,8 @@ function prune_deps(iterator, keep::Set{UUID})
 end
 
 function record_project_hash(env::EnvCache)
+    # `[sources]` is part of the hash, so update it first to match what `write_env` will write
+    Types.update_project_sources!(env)
     return env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
 end
 
@@ -2397,30 +2422,32 @@ end
 # Operations #
 ##############
 function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
-    drop = UUID[]
+    drop = Set{UUID}()
     # find manifest-mode drops
     if mode == PKGMODE_MANIFEST
         for pkg in pkgs
             info = manifest_info(ctx.env.manifest, pkg.uuid)
             if info !== nothing
-                pkg.uuid in drop || push!(drop, pkg.uuid)
+                push!(drop, pkg.uuid)
             else
                 str = has_name(pkg) ? pkg.name : string(pkg.uuid)
                 @warn("`$str` not in manifest, ignoring")
             end
         end
     end
-    # drop reverse dependencies
-    while !isempty(drop)
-        clean = true
-        for (uuid, entry) in ctx.env.manifest
-            deps = values(entry.deps)
-            isempty(drop ∩ deps) && continue
-            uuid ∉ drop || continue
-            push!(drop, uuid)
-            clean = false
+    # Drop packages that transitively depend on a removed manifest entry.
+    if !isempty(drop)
+        dependents = manifest_dependents_map(ctx.env.manifest)
+        worklist = collect(drop)
+        while !isempty(worklist)
+            uuid = pop!(worklist)
+            for r in get(dependents, uuid, ())
+                if r ∉ drop
+                    push!(drop, r)
+                    push!(worklist, r)
+                end
+            end
         end
-        clean && break
     end
     # find project-mode drops
     if mode == PKGMODE_PROJECT
@@ -2432,7 +2459,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
                     error("project file name mismatch for `$uuid`: $(pkg.name) ≠ $name")
                 pkg.uuid == uuid ||
                     error("project file UUID mismatch for `$name`: $(pkg.uuid) ≠ $uuid")
-                uuid in drop || push!(drop, uuid)
+                push!(drop, uuid)
                 found = true
                 break
             end
@@ -2716,6 +2743,33 @@ function add_compat_entries!(ctx::Context, pkgs::Vector{PackageSpec})
     return
 end
 
+# Packages that were already in the manifest and now have another version or source,
+# plus everything that depends on them. Their caches no longer match, so an `add` that
+# changes them precompiles them too instead of leaving that to the next load.
+function changed_packages_and_dependents(env::EnvCache)
+    affected = Set{UUID}()
+    for (uuid, old) in env.original_manifest
+        new = get(env.manifest, uuid, nothing)
+        new === nothing && continue
+        if new.version != old.version || new.tree_hash != old.tree_hash || new.path != old.path
+            push!(affected, uuid)
+        end
+    end
+    isempty(affected) && return PackageSpec[]
+    grew = true
+    while grew
+        grew = false
+        for (uuid, entry) in env.manifest
+            uuid in affected && continue
+            if any(in(affected), values(entry.deps))
+                push!(affected, uuid)
+                grew = true
+            end
+        end
+    end
+    return PackageSpec[PackageSpec(; name = env.manifest[uuid].name, uuid) for uuid in affected]
+end
+
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}, new_git = Set{UUID}();
         allow_autoprecomp::Bool = true, preserve::PreserveLevel = default_preserve(), platform::AbstractPlatform = HostPlatform(),
@@ -2803,7 +2857,11 @@ function add(
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
         build_versions(ctx, union(new_apply, new_git))
-        allow_autoprecomp && Pkg._auto_precompile(ctx, pkgs)
+        if allow_autoprecomp
+            added = Set(pkg.uuid for pkg in pkgs)
+            affected = filter(pkg -> !(pkg.uuid in added), changed_packages_and_dependents(ctx.env))
+            Pkg._auto_precompile(ctx, vcat(pkgs, affected))
+        end
     else
         record_project_hash(ctx.env)
         write_env(ctx.env)
@@ -2838,9 +2896,31 @@ end
 # load version constraint
 # if version isa VersionNumber -> set tree_hash too
 up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel) = false
+# Whether the `[sources]` repo of a package still describes what its manifest entry recorded.
+# A `rev` (or `subdir`) that is left out of the source is filled in by `handle_repo_add!`, so
+# only compare those when the source specifies them.
+function source_repo_matches_entry(source_repo::GitRepo, entry::PackageEntry)
+    source_repo.source == entry.repo.source || return false
+    source_repo.rev === nothing || source_repo.rev == entry.repo.rev || return false
+    source_repo.subdir === nothing || source_repo.subdir == entry.repo.subdir || return false
+    return true
+end
+
 function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel)
     # With [sources], `pkg` can have a path or repo here
     entry.version !== nothing || return false # no version to set
+    # `[sources]` are keyed by name, so the entry only applies to `pkg` if the project lists
+    # `pkg` under that name (a stale manifest may hold a different package with the same name)
+    source_applies = get(ctx.env.project.deps, pkg.name, nothing) == pkg.uuid
+    if source_applies && source_path === nothing && pkg.path === nothing && source_repo.source !== nothing && !source_repo_matches_entry(source_repo, entry)
+        # The `[sources]` entry was edited directly (e.g. a new `rev`) so the tree hash recorded
+        # in the manifest is stale and the repo has to be re-resolved regardless of `level`, see #4157.
+        pkg.repo = source_repo
+        pkg.tree_hash = nothing
+        new = Types.handle_repo_add!(ctx, pkg)
+        pkg.version = entry.version
+        return new
+    end
     if entry.pinned || level == UPLEVEL_FIXED
         pkg.version = entry.version
         if pkg.path === nothing
@@ -3393,6 +3473,10 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     end
     # collect relevant info from source
     source_env = EnvCache(projectfile_path(source_path))
+    # `[sources]` paths are relative to the package's own project file; make them absolute
+    # before they move into the sandbox project, which `sandbox` resolves against the active
+    # project instead (e.g. the workspace root when testing a workspace member)
+    abspath!(source_env, source_env.project)
     # collect regular dependencies
     test_project.deps = source_env.project.deps
     test_project.sources = source_env.project.sources
@@ -3681,7 +3765,17 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
     end
 end
 
-function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance})
+function manifest_dependents_map(manifest::Manifest)
+    dependents = Dict{UUID, Vector{UUID}}()
+    for (uuid, entry) in manifest
+        for dep in values(entry.deps)
+            push!(get!(() -> UUID[], dependents, dep), uuid)
+        end
+    end
+    return dependents
+end
+
+function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance}; dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing)
     pkg.version isa VersionNumber || return nothing # Can happen when there is no manifest
     manifest, project = env.manifest, env.project
     packages_holding_back = String[]
@@ -3718,20 +3812,17 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     manifest_info = get(manifest, pkg.uuid, nothing)
     manifest_info === nothing && return nothing
 
-    # Check compat of dependencies
-    for (uuid, dep_pkg) in manifest
-        is_stdlib(uuid) && continue
-        if !(pkg.uuid in values(dep_pkg.deps))
-            continue
-        end
-        dep_info = get(manifest, uuid, nothing)
-        dep_info === nothing && continue
+    # Check compatibility bounds imposed by dependents.
+    isnothing(dependents) && (dependents = manifest_dependents_map(manifest))
+    for dep_uuid in get(dependents, pkg.uuid, ())
+        is_stdlib(dep_uuid) && continue
+        dep_pkg = get(manifest, dep_uuid, nothing)
+        isnothing(dep_pkg) && continue
         for reg in regs
-            reg_pkg = get(reg, uuid, nothing)
+            reg_pkg = get(reg, dep_uuid, nothing)
             reg_pkg === nothing && continue
             info = Registry.registry_info(reg, reg_pkg)
-            # Query compressed deps and compat for the specific dependency version (optimized: only fetch this pkg's compat)
-            compat_info_v_uuid = Registry.query_compat_for_version(info, dep_info.version, pkg.uuid)
+            compat_info_v_uuid = Registry.query_compat_for_version(info, dep_pkg.version, pkg.uuid)
             compat_info_v_uuid === nothing && continue
             if !(max_version in compat_info_v_uuid)
                 push!(packages_holding_back, dep_pkg.name)
@@ -3761,9 +3852,12 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
 end
 
 function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manifest = true, workspace = false)
-    function index_pkgs(pkgs, uuid)
-        idx = findfirst(pkg -> pkg.uuid == uuid, pkgs)
-        return idx === nothing ? nothing : pkgs[idx]
+    function index_by_uuid(pkgs)
+        index = Dict{Union{UUID, Nothing}, PackageSpec}()
+        for pkg in pkgs
+            get!(index, pkg.uuid, pkg)
+        end
+        return index
     end
     # load deps
     if workspace
@@ -3782,8 +3876,10 @@ function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manife
         old = manifest ? load_all_deps_loadable(old_env) : load_project_deps(old_env.project, old_env.project_file, old_env.manifest, old_env.manifest_file)
     end
     # merge old and new into single array
+    old_index = index_by_uuid(old)
+    new_index = index_by_uuid(new)
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
-    return Tuple{T, S, S}[(uuid, index_pkgs(old, uuid), index_pkgs(new, uuid))::Tuple{T, S, S} for uuid in all_uuids]
+    return Tuple{T, S, S}[(uuid, get(old_index, uuid, nothing), get(new_index, uuid, nothing))::Tuple{T, S, S} for uuid in all_uuids]
 end
 
 function is_package_downloaded(
@@ -3925,6 +4021,7 @@ function print_status(
     lpadding = 2
 
     package_statuses = PackageStatusData[]
+    manifest_dependents = manifest_dependents_map(env.manifest)
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
             continue
@@ -3938,7 +4035,7 @@ function print_status(
         cinfo = nothing
         ext_info = nothing
         if !isnothing(new) && !is_stdlib(new.uuid)
-            cinfo = status_compat_info(new, env, registries)
+            cinfo = status_compat_info(new, env, registries; dependents = manifest_dependents)
             if cinfo !== nothing
                 latest_version = false
             end

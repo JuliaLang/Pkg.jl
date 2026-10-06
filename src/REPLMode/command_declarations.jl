@@ -11,7 +11,7 @@ compound_declarations = [
             :option_spec => [
                 PSA[:name => "coverage", :api => :coverage => true],
             ],
-            :completions => :complete_installed_packages,
+            :completions => :complete_test_packages,
             :description => "run tests for packages",
             :help => md"""
                     test [--coverage] [pkg[=uuid]] ...
@@ -433,18 +433,27 @@ compound_declarations = [
             :description => "precompile all the project dependencies",
             :option_spec => [
                 PSA[:name => "workspace", :api => :workspace => true],
+                PSA[:name => "noskip", :api => :skip_dependents => false],
+                PSA[:name => "force", :api => :force => true],
                 PSA[:name => "monitor", :api => :monitor => true],
                 PSA[:name => "stop", :api => :stop => true],
                 PSA[:name => "cancel", :api => :cancel => true],
             ],
             :help => md"""
-                    precompile [--workspace]
+                    precompile [--workspace] [--noskip] [--force]
                     precompile [--monitor | --stop | --cancel]
-                    precompile [--workspace] pkgs...
+                    precompile [--workspace] [--noskip] [--force] pkgs...
 
                 Precompile all or specified dependencies of the project in parallel.
                 The `startup.jl` file is disabled during precompilation unless julia is started with `--startup-file=yes`.
                 The `workspace` option will precompile all packages in the workspace and not only the active project.
+
+                When a package fails to precompile, the packages that depend on it are skipped rather than
+                attempted, since loading the failed dependency would fail again. Pass `--noskip` to attempt them
+                anyway, for example when a package only loads that dependency on some platforms.
+
+                `--force` recompiles packages even if their cache files are already up to date. Standard
+                libraries are never recompiled by this.
 
                 Errors will only throw when precompiling the top-level dependencies, given that
                 not all manifest dependencies may be loaded by the top-level dependencies on the given system.
@@ -554,14 +563,14 @@ compound_declarations = [
                 PSA[:name => "all", :api => :collect_delay => nothing],
                 PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
             ],
-            :description => "garbage collect packages not used for a significant time",
+            :description => "garbage collect packages not used by any project",
             :help => md"""
-                    gc [-v|--verbose] [--all]
+                    gc [-v|--verbose]
 
-                Free disk space by garbage collecting packages not used for a significant time.
-                The `--all` option will garbage collect all packages which can not be immediately
-                reached from any existing project.
+                Free disk space by garbage collecting packages, artifacts, repos and
+                scratchspaces that can not be reached from any existing project.
                 Use verbose mode for detailed output.
+                The `--all` option is accepted for backwards compatibility but has no effect.
                 """,
         ],
         PSA[

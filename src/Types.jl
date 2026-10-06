@@ -342,6 +342,9 @@ Base.hash(x::ManifestRegistryEntry, h::UInt) =
 Base.@kwdef mutable struct Manifest
     julia_version::Union{Nothing, VersionNumber} = nothing # only set to VERSION when resolving
     project_hash::Union{Nothing, SHA1} = nothing
+    # identity of the environment, kept in step with the project uuid and name (see `update_environment_info!`)
+    environment_id::Union{Nothing, UUID} = nothing
+    environment_name::Union{Nothing, String} = nothing
     manifest_format::VersionNumber = v"2.0.0"
     deps::Dict{UUID, PackageEntry} = Dict{UUID, PackageEntry}()
     registries::Dict{String, ManifestRegistryEntry} = Dict{String, ManifestRegistryEntry}()
@@ -676,7 +679,23 @@ function load_workspace_weak_deps(env::EnvCache)
     return weakdeps
 end
 
-# only hash the deps and compat fields as they are the only fields that affect a resolve
+# The `[sources]` of every project in the workspace as a set of strings per package name.
+# Paths are made manifest-relative so that the result does not depend on which project
+# of the workspace is the active one.
+function load_workspace_sources(env::EnvCache)
+    sources = Dict{String, Set{String}}()
+    for (project_file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
+        for name in keys(project.sources)
+            path, repo = get_path_repo(project, project_file, env.manifest_file, name)
+            fields = (; path, url = repo.source, rev = repo.rev, subdir = repo.subdir)
+            str = join((string(k, "=", v) for (k, v) in pairs(fields) if v !== nothing), ",")
+            push!(get!(Set{String}, sources, name), str)
+        end
+    end
+    return sources
+end
+
+# only hash the deps, compat and sources fields as they are the only fields that affect a resolve
 function workspace_resolve_hash(env::EnvCache)
     # Handle deps in both [deps] and [weakdeps]
     deps = Dict{String, UUID}()
@@ -700,6 +719,16 @@ function workspace_resolve_hash(env::EnvCache)
     println(iob)
     for (name, compat) in sort!(collect(compats); by = first)
         println(iob, name, "=", compat)
+    end
+    # A changed `[sources]` entry (e.g. a new `rev`) must invalidate the manifest, see #4157.
+    # The section is only appended when there are sources so that the hash of environments
+    # without any stays the same as before it was included.
+    sources = load_workspace_sources(env)
+    if !isempty(sources)
+        println(iob)
+        for (name, source) in sort!(collect(sources); by = first)
+            println(iob, name, "=", join(sort!(collect(source)), ";"))
+        end
     end
     str = String(take!(iob))
     return bytes2hex(sha1(str))
@@ -1406,13 +1435,30 @@ manifest_info(::Manifest, uuid::Nothing) = nothing
 function manifest_info(manifest::Manifest, uuid::UUID)::Union{PackageEntry, Nothing}
     return get(manifest, uuid, nothing)
 end
-function write_env(
-        env::EnvCache; update_undo = true,
-        skip_writing_project::Bool = false,
-        skip_readonly_check::Bool = false
-    )
-    # Verify that the generated manifest is consistent with `sources`
+# Whether the `[sources]` entry for `name` in `project` (if any) is the source
+# recorded in the manifest entry.
+function source_matches_entry(project::Project, project_file::String, manifest_file::String, name::String, entry::PackageEntry)
+    haskey(project.sources, name) || return false
+    path, repo = get_path_repo(project, project_file, manifest_file, name)
+    if path !== nothing
+        return entry.path !== nothing && normpath(entry.path) == normpath(path)
+    end
+    entry.repo == GitRepo() && return false
+    return (repo.source === nothing || repo.source == entry.repo.source) &&
+        (repo.rev === nothing || repo.rev == entry.repo.rev) &&
+        (repo.subdir === nothing || repo.subdir == entry.repo.subdir)
+end
+
+# Record the path/repo of the direct dependencies from the manifest in the project's
+# `[sources]`, so the project keeps tracking the same source when it is re-resolved.
+# In a workspace, entries are not added for packages that are themselves projects of
+# the workspace (the workspace already locates them) and for sources that another
+# project of the workspace already declares (#4237).
+function update_project_sources!(env::EnvCache)
+    workspace_uuids = Set{UUID}(proj.uuid for proj in values(env.workspace) if proj.uuid !== nothing)
+    env.project.uuid === nothing || push!(workspace_uuids, env.project.uuid)
     for (pkg, uuid) in env.project.deps
+        # Verify that the generated manifest is consistent with `sources`
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
         if path !== nothing
@@ -1426,20 +1472,65 @@ function write_env(
                 @assert entry.repo.subdir == repo.subdir
             end
         end
-        if entry !== nothing
-            if entry.path !== nothing
-                # Convert path from manifest-relative to project-relative before writing
-                project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
-                env.project.sources[pkg] = Dict("path" => project_relative_path)
-            elseif entry.repo != GitRepo()
-                d = Dict{String, String}()
-                entry.repo.source !== nothing && (d["url"] = entry.repo.source)
-                entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
-                entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
-                env.project.sources[pkg] = d
+        entry === nothing && continue
+        # Only existing entries are updated for workspace members and for sources that are
+        # already declared in another project of the workspace. Some commands drop the entry
+        # and rely on it being re-added here, so consult the project as it was on disk too.
+        if !haskey(env.project.sources, pkg) && !haskey(env.original_project.sources, pkg)
+            uuid in workspace_uuids && continue
+            declared_elsewhere = any(env.workspace) do (project_file, project)
+                get(project.deps, pkg, nothing) == uuid &&
+                    source_matches_entry(project, project_file, env.manifest_file, pkg, entry)
             end
+            declared_elsewhere && continue
+        end
+        if entry.path !== nothing
+            # Convert path from manifest-relative to project-relative before writing
+            project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
+            env.project.sources[pkg] = Dict("path" => project_relative_path)
+        elseif entry.repo != GitRepo()
+            d = Dict{String, String}()
+            entry.repo.source !== nothing && (d["url"] = entry.repo.source)
+            entry.repo.rev !== nothing && (d["rev"] = entry.repo.rev)
+            entry.repo.subdir !== nothing && (d["subdir"] = entry.repo.subdir)
+            env.project.sources[pkg] = d
         end
     end
+    return env.project
+end
+
+# The project whose directory holds the manifest: the root project of a workspace,
+# otherwise the active project.
+function manifest_project(env::EnvCache)
+    root_project_file = find_root_base_project(env.project_file)
+    root_project_file == env.project_file && return env.project
+    return get(env.workspace, root_project_file) do
+        isfile(root_project_file) ? read_project(root_project_file) : env.project
+    end
+end
+
+# Keep the manifest's `environment_id` and `environment_name` in step with the project:
+# the id copies the project uuid if there is one, otherwise it is generated once and then
+# kept, so environments that share a project path still have distinct identities (Base
+# mixes the id into precompile cache file names). The name mirrors the project name.
+function update_environment_info!(env::EnvCache)
+    project = manifest_project(env)
+    manifest = env.manifest
+    if project.uuid !== nothing
+        manifest.environment_id = project.uuid
+    elseif manifest.environment_id === nothing
+        manifest.environment_id = uuid4()
+    end
+    manifest.environment_name = project.name
+    return manifest
+end
+
+function write_env(
+        env::EnvCache; update_undo = true,
+        skip_writing_project::Bool = false,
+        skip_readonly_check::Bool = false
+    )
+    update_project_sources!(env)
 
     # Check if the environment is readonly before attempting to write
     if env.project.readonly && !skip_readonly_check
@@ -1448,6 +1539,11 @@ function write_env(
 
     if (env.project != env.original_project) && (!skip_writing_project)
         write_project(env, skip_readonly_check)
+    end
+    # an existing manifest picks up the environment info on any write; one is never
+    # created just for it
+    if !env.project.readonly && (env.manifest != env.original_manifest || isfile(env.manifest_file))
+        update_environment_info!(env)
     end
     if env.manifest != env.original_manifest
         write_manifest(env)
