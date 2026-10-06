@@ -218,6 +218,11 @@ function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project
 end
 
 function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
+    return parse_manifest(raw, manifest_path_str(f_or_io), f_or_io isa IO)
+end
+
+# Share parsing across constructor specializations and diagnostic input types.
+@noinline function parse_manifest(raw::Dict{String, Any}, manifest_path::String, streamed::Bool)::Manifest
     julia_version = haskey(raw, "julia_version") ? VersionNumber(raw["julia_version"]::String) : nothing
     project_hash = haskey(raw, "project_hash") ? SHA1(raw["project_hash"]::String) : nothing
     environment_id = haskey(raw, "environment_id") ? UUID(raw["environment_id"]::String) : nothing
@@ -225,10 +230,10 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
 
     manifest_format = VersionNumber(raw["manifest_format"]::String)
     if !in(manifest_format.major, 1:2)
-        if f_or_io isa IO
+        if streamed
             @warn "Unknown Manifest.toml format version detected in streamed manifest. Unexpected behavior may occur" manifest_format
         else
-            @warn "Unknown Manifest.toml format version detected in file `$(f_or_io)`. Unexpected behavior may occur" manifest_format maxlog = 1 _id = Symbol(f_or_io)
+            @warn "Unknown Manifest.toml format version detected in file `$(manifest_path)`. Unexpected behavior may occur" manifest_format maxlog = 1 _id = Symbol(manifest_path)
         end
     end
     stage1 = Dict{String, Vector{Stage1}}()
@@ -271,7 +276,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
                     end
                 catch
                     # TODO: Should probably not unconditionally log something
-                    # @debug "Could not parse manifest entry for `$name`" f_or_io
+                    # @debug "Could not parse manifest entry for `$name`" manifest_path
                     rethrow()
                 end
                 entry.other = info
@@ -297,7 +302,7 @@ function Manifest(raw::Dict{String, Any}, f_or_io::Union{String, IO})::Manifest
         end
         other[k] = v
     end
-    return validate_manifest(julia_version, project_hash, environment_id, environment_name, manifest_format, stage1, other, registries, f_or_io)
+    return validate_manifest(julia_version, project_hash, environment_id, environment_name, manifest_format, stage1, other, registries, manifest_path)
 end
 
 function read_manifest(f_or_io::Union{String, IO})

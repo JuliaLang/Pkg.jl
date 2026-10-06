@@ -616,6 +616,18 @@ end
 const UsageDict = Dict{String, DateTime}
 const UsageByDepotDict = Dict{String, UsageDict}
 
+# Share path collection across usage logs without nested generator types.
+@noinline function unique_usage_paths(usage_by_depot::UsageByDepotDict)
+    paths = String[]
+    seen = Set{String}()
+    for usage in values(usage_by_depot), path in keys(usage)
+        path in seen && continue
+        push!(seen, path)
+        push!(paths, path)
+    end
+    return paths
+end
+
 """
     gc(ctx::Context=Context(); verbose=false, force=false, kwargs...)
 
@@ -712,9 +724,9 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     end
 
     # Next, figure out which files are still existent
-    all_manifest_tomls = unique(f for (_, files) in manifest_usage_by_depot for f in keys(files))
-    all_artifact_tomls = unique(f for (_, files) in artifact_usage_by_depot for f in keys(files))
-    all_scratch_dirs = unique(f for (_, dirs) in scratch_usage_by_depot for f in keys(dirs))
+    all_manifest_tomls = unique_usage_paths(manifest_usage_by_depot)
+    all_artifact_tomls = unique_usage_paths(artifact_usage_by_depot)
+    all_scratch_dirs = unique_usage_paths(scratch_usage_by_depot)
     all_scratch_parents = Set{String}()
     for (depot, parents) in scratch_parents_by_depot
         for parent in values(parents)
