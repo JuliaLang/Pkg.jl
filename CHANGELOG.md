@@ -10,6 +10,8 @@ Pkg v1.14 Release Notes
   when the project has a `name`, an `environment_name`. Both follow the project file on every manifest write.
   Julia mixes the id into precompile cache file names, so environments at the same path that share a depot
   no longer overwrite each other's caches. Writing them bumps the manifest format to `"2.2"`. ([#4824])
+- `Pkg.test` starts the test process with `--quiet`, so that Julia does not report the routine
+  precompilation that loading triggers there. ([#4857])
 - Artifact selection hooks can now load dependencies from their package's `[deps]`. Pkg runs hooks against the resolved
   manifest and installs dependency artifacts first, preventing selectors from loading stale, incompatible versions.
   Active-project and workspace preferences are visible to hooks, hook results are cached for the duration of the
@@ -258,3 +260,4 @@ Pkg v1.7 Release Notes
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
+[#4857]: https://github.com/JuliaLang/Pkg.jl/pull/4857
