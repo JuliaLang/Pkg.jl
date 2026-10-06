@@ -56,19 +56,48 @@ function build_pkg_data(
         fixed::Dict{UUID, Fixed},
         julia_version::Union{VersionNumber, Nothing},
         pinned::Dict{UUID, VersionNumber},
+        compat_sources::Dict{UUID, Dict{String, VersionSpec}},
     )
     # The requirement version specs, the compat of the projects and the pins
     # are the user's own constraints: they go to the resolver as such, so a
     # failed resolve can attribute them and suggest relaxing them.
     compat = Dict{UUID, VersionSpec}()
+    # In a workspace, a requirement's spec is the intersection of the compat
+    # entries of every project file. Each entry goes to the resolver as a
+    # constraint of its own, under a kind naming where it was declared, so that
+    # a failed resolve can say which file's entry to relax and where in it; the
+    # intersected spec is passed only where it says more than the entries do
+    # (an explicit version request, say).
+    sourced = Dict{Symbol, Dict{UUID, VersionSpec}}()
     pin = Dict{UUID, VersionNumber}()
     for (u, spec) in reqs
         (u == JULIA_UUID || haskey(fixed, u)) && continue
         if haskey(pinned, u)
             pin[u] = pinned[u]
-        else
-            compat[u] = spec
+            continue
         end
+        sources = sort!(collect(get(compat_sources, u, Dict{String, VersionSpec}())); by = first)
+        if isempty(sources)
+            compat[u] = spec
+            continue
+        end
+        # what a spec admits is decided on the versions there are, since
+        # VersionSpec equality is syntactic
+        vers = get(pkg_versions, u, VersionNumber[])
+        admitted(s::VersionSpec) = Set{VersionNumber}(v for v in vers if v in s)
+        by_spec = admitted(spec)
+        by_files = mapreduce(admitted ∘ last, intersect, sources)
+        # the files' entries are attributed only where the spec honours them:
+        # a stdlib's spec is let float regardless of what the files say
+        if by_spec ⊈ by_files
+            compat[u] = spec
+            continue
+        end
+        for (source, s) in sources
+            length(admitted(s)) == length(vers) && continue # admits everything
+            get!(Dict{UUID, VersionSpec}, sourced, Resolver.sourced_kind(:compat, source))[u] = s
+        end
+        by_spec == by_files || (compat[u] = spec)
     end
     rlist = collect(keys(reqs))
     # The active and workspace projects are fixed packages but not
@@ -80,6 +109,9 @@ function build_pkg_data(
         for (q, spec) in fx.requires
             q == JULIA_UUID && julia_version === nothing && continue
             q ∉ fx.weak && push!(rlist, q)
+            # a project's compat on a package already attributed to its file
+            # is not folded in a second time as the user's
+            any(c -> haskey(c, q), values(sourced)) && continue
             compat[q] = intersect(get(compat, q, VersionSpec()), spec)
         end
     end
@@ -177,7 +209,7 @@ function build_pkg_data(
             data[uuid] = Resolver.PkgData(vers, depends, compat_v)
         end
     end
-    return data, rlist, compat, pin
+    return data, rlist, compat, sourced, pin
 end
 
 # package priority order for the resolver's lexicographic optimization: by
@@ -220,11 +252,13 @@ function resolve_versions(
         julia_version::Union{VersionNumber, Nothing},
         preferred_versions::Dict{UUID, VersionNumber};
         pinned::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}(),
+        compat_sources::Dict{UUID, Dict{String, VersionSpec}} = Dict{UUID, Dict{String, VersionSpec}}(),
+        req_sources::Dict{UUID, Vector{String}} = Dict{UUID, Vector{String}}(),
         diagnose_unsat::Bool = true,
     )
-    data, rlist, compat, pin = build_pkg_data(
+    data, rlist, compat, sourced, pin = build_pkg_data(
         deps_compressed, compat_compressed, weak_deps_compressed, weak_compat_compressed,
-        pkg_versions, pkg_versions_per_registry, reqs, fixed, julia_version, pinned
+        pkg_versions, pkg_versions_per_registry, reqs, fixed, julia_version, pinned, compat_sources
     )
     # a requirement whose version spec or pin matches no available version can
     # never resolve; report it directly, with the versions that do exist
@@ -242,6 +276,13 @@ function resolve_versions(
         elseif haskey(compat, u) && !any(in(compat[u]), avail)
             vers = range_compressed_versionspec(copy(avail))
             push!(impossible, " * $id: no available version matches the requirement `$(compat[u])`, available versions are: $vers")
+        else
+            for kind in sort!(collect(keys(sourced)))
+                c = sourced[kind]
+                haskey(c, u) && !any(in(c[u]), avail) || continue
+                vers = range_compressed_versionspec(copy(avail))
+                push!(impossible, " * $id: no available version matches the compat `$(c[u])` in $(Resolver.kind_source(kind)), available versions are: $vers")
+            end
         end
     end
     if !isempty(impossible)
@@ -254,10 +295,18 @@ function resolve_versions(
         n = name(u)
         get!(uuid_of, n, u) == u || error("packages $u and $(uuid_of[n]) have the same display name $n")
     end
+    # in a workspace the requirements say which project files list them, so
+    # that a fix dropping one can say where to drop it from
+    reqs_with_sources = isempty(req_sources) ? String[name(u) for u in rlist] :
+        [name(u) => get(req_sources, u, String[]) for u in rlist]
+    named_sourced = Dict{Symbol, Dict{String, VersionSpec}}(
+        kind => Dict{String, VersionSpec}(name(u) => spec for (u, spec) in c) for (kind, c) in sourced
+    )
     prob = Resolver.Problem(
-        String[name(u) for u in rlist];
+        reqs_with_sources;
         compat = Dict{String, VersionSpec}(name(u) => spec for (u, spec) in compat),
         pin = Dict{String, VersionNumber}(name(u) => v for (u, v) in pin),
+        named_sourced...,
     )
     ans = Resolver.resolve(
         named_data, prob;
@@ -312,8 +361,8 @@ end
 # fixes that ask to drop it are left out, as is julia itself from the
 # versions a fix would allow.
 function without_julia(d::Diagnostics.Diagnosis{String, VersionNumber})
-    return Diagnostics.Diagnosis(
-        [
+    return Diagnostics.Diagnosis{String, VersionNumber}(
+        Diagnostics.Conflict{String, VersionNumber}[
             Diagnostics.Conflict{String, VersionNumber}(
                     c.reqs, c.lines, c.versions, c.excluded, without_julia(c.fixes),
                     Tuple{Vector{Vector{Diagnostics.Action{String}}}, Vector{Diagnostics.Action{String}}}[
@@ -323,13 +372,19 @@ function without_julia(d::Diagnostics.Diagnosis{String, VersionNumber})
                 )
                 for c in d.conflicts
         ],
-        [
+        Diagnostics.Alternative{String, VersionNumber}[
             Diagnostics.Alternative{String, VersionNumber}(
                     a.conflicts, a.avoided, [without_julia(m) for m in a.menus]
                 )
                 for a in d.alternatives if !any(m -> all(f -> any(is_julia_action, f.actions), m), a.menus)
         ],
-        d.others
+        d.others,
+        # a diagnosis rebuilt here is not one whose own search was cut short
+        false,
+        false,
+        # where the query said each requirement is required from: the project
+        # files of a workspace, which a heading and a fix that drops one name
+        d.sources
     )
 end
 
