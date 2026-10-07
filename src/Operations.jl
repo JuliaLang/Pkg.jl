@@ -85,6 +85,23 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
     return abspath(depots1(), "packages", name, slug_default)
 end
 
+# The version slugs of every installed version of the package `name` across all depots.
+# Checking a slug against this set is much cheaper than `find_installed` when many
+# versions of a package have to be checked, as during an installed-only resolve.
+function installed_version_slugs(name::String)
+    slugs = Set{String}()
+    for depot in depots()
+        dir = joinpath(depot, "packages", name)
+        isdir(dir) || continue
+        union!(slugs, readdir(dir))
+    end
+    return slugs
+end
+function is_version_installed(slugs::Set{String}, uuid::UUID, sha1::SHA1)
+    # 4 used to be the default slug length, see `find_installed`
+    return Base.version_slug(uuid, sha1) in slugs || Base.version_slug(uuid, sha1, 4) in slugs
+end
+
 # more accurate name is `should_be_tracking_registered_version`
 # the only way to know for sure is to key into the registries
 tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION) =
@@ -1216,6 +1233,8 @@ function deps_graph(
     for fixed_uuids in map(fx -> keys(fx.requires), values(fixed))
         union!(uuids, fixed_uuids)
     end
+    # Only used when `installed_only`; computed once instead of per version checked
+    platform = installed_only ? HostPlatform() : nothing
 
     # Collect all weak dependency UUIDs from fixed packages
     # (weak deps of registry packages and stdlibs are added during graph traversal below)
@@ -1317,15 +1336,20 @@ function deps_graph(
 
                     # Build filtered version list for this registry
                     reg_valid_versions = Set{VersionNumber}()
+                    # Installed versions of this package, looked up once per package rather than
+                    # probing the depots for every version
+                    installed_slugs = installed_only ? installed_version_slugs(pkg.name) : nothing
                     for v in keys(info.version_info)
                         # Filter yanked and if we are in offline mode also downloaded packages
                         Registry.isyanked(info, v) && continue
                         if installed_only
-                            pkg_spec = PackageSpec(name = pkg.name, uuid = pkg.uuid, version = v, tree_hash = Registry.treehash(info, v))
+                            tree_hash = Registry.treehash(info, v)
+                            is_version_installed(installed_slugs::Set{String}, pkg.uuid, tree_hash) || continue
+                            pkg_spec = PackageSpec(name = pkg.name, uuid = pkg.uuid, version = v, tree_hash = tree_hash)
                             # Resolution has not happened yet, so there is no environment to run
                             # artifact selectors in; a version with a selector counts as installed
                             # once its source is present. Installing it still runs the selector.
-                            is_package_downloaded(env.manifest_file, pkg_spec; run_selectors = false) || continue
+                            is_package_downloaded(env.manifest_file, pkg_spec; platform = platform::Platform, run_selectors = false) || continue
                         end
 
                         # Skip package version that are not the same as external packages in sysimage
@@ -1356,11 +1380,16 @@ function deps_graph(
                         push!(pkg_versions_per_reg, reg_valid_versions)
                     end
 
-                    # Collect all dependency UUIDs for discovery
+                    # Collect all dependency UUIDs for discovery. Only the dependencies of
+                    # versions that passed the filtering above can take part in the resolution,
+                    # so dependencies of e.g. yanked or (in offline mode) not installed versions
+                    # are not followed. This keeps the graph small when few versions are valid.
                     for (vrange, deps_set) in info.deps
+                        any(v -> v in vrange, reg_valid_versions) || continue
                         union!(uuids, deps_set)
                     end
                     for (vrange, deps_set) in info.weak_deps
+                        any(v -> v in vrange, reg_valid_versions) || continue
                         union!(uuids, deps_set)
                         union!(all_weak_uuids, deps_set)
                     end
