@@ -1,4 +1,15 @@
-const PSA = Pair{Symbol, Any}
+# `PSA[k => v, ...]` builds a `Vector{Pair{Symbol, Any}}` without specializing on the
+# types of the entries, as a typed array literal would for every declaration.
+struct PSABuilder end
+const PSA = PSABuilder()
+function Base.getindex(::PSABuilder, @nospecialize(xs::Pair...))
+    v = Vector{Pair{Symbol, Any}}(undef, length(xs))
+    for i in 1:length(xs)
+        x = xs[i]
+        v[i] = Pair{Symbol, Any}(getfield(x, :first)::Symbol, getfield(x, :second))
+    end
+    return v
+end
 
 compound_declarations = [
     "package" => CommandDeclaration[

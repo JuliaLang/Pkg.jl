@@ -179,6 +179,7 @@ manifest_path_str(f_or_io::IO) = "streamed manifest"
 manifest_path_str(path::String) = path
 
 function validate_manifest(julia_version::Union{Nothing, VersionNumber}, project_hash::Union{Nothing, SHA1}, environment_id::Union{Nothing, UUID}, environment_name::Union{Nothing, String}, manifest_format::VersionNumber, stage1::Dict{String, Vector{Stage1}}, other::Dict{String, Any}, registries::Dict{String, ManifestRegistryEntry}, f_or_io)
+    @nospecialize julia_version project_hash environment_id environment_name
     manifest_path = manifest_path_str(f_or_io)
     # expand vector format deps
     for (name, infos) in stage1, info in infos

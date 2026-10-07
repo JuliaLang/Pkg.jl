@@ -341,7 +341,7 @@ function is_instantiated(env::EnvCache, workspace::Bool = false; platform = Host
     return true
 end
 
-function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version, registries::Vector{Registry.RegistryInstance})
+function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, @nospecialize(julia_version::Union{VersionNumber, Nothing}), registries::Vector{Registry.RegistryInstance})
     manifest = env.manifest
     empty!(manifest)
 
@@ -589,11 +589,11 @@ function reset_all_compat!(proj::Project)
 end
 
 function collect_project(
-        pkg::Union{PackageSpec, Nothing}, path::String, manifest_file::String, julia_version;
+        @nospecialize(pkg::Union{PackageSpec, Nothing}), path::String, manifest_file::String, @nospecialize(julia_version::Union{VersionNumber, Nothing});
         # For projects that are loaded into the env (the active project and the workspace
         # members) the caller passes the in-memory project and its file, since the project
         # may have modifications that have not been written to disk yet.
-        loaded::Union{Nothing, Tuple{String, Project}} = nothing
+        @nospecialize(loaded::Union{Nothing, Tuple{String, Project}} = nothing)
     )
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
@@ -670,7 +670,7 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
 end
 
 function collect_fixed!(
-        env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version;
+        env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, @nospecialize(julia_version::Union{VersionNumber, Nothing});
         # A `[sources]` entry in a dependency's project file must not take over such a
         # package for which the environment already has a source for, see #4750.
         env_uuids::Set{UUID} = Set{UUID}()
@@ -943,7 +943,7 @@ end
 # adds any other packages which may be in the dependency graph
 # all versioned packages should have a `tree_hash`
 function resolve_versions!(
-        env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
+        env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, @nospecialize(julia_version::Union{VersionNumber, Nothing}),
         installed_only::Bool, preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}();
         diagnose_unsat::Bool = true
     )
@@ -1196,7 +1196,7 @@ const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
-        reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
+        reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, @nospecialize(julia_version::Union{VersionNumber, Nothing}),
         installed_only::Bool
     )
     uuids = Set{UUID}()
@@ -2119,9 +2119,18 @@ function artifact_suffix(artifact_counts)
     return ""
 end
 
+# The fields of a `PackageSpec` or `PackageEntry` that downloading uses, so that the
+# download code below is compiled once for both.
+struct DownloadPkg
+    name::Union{Nothing, String}
+    uuid::Union{Nothing, UUID}
+    version::Union{Nothing, Types.VersionTypes, String}
+    tree_hash::Union{Nothing, SHA1}
+end
+
 function download_source(ctx::Context, pkgs; readonly::Bool = true)
     pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
-    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
+    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{DownloadPkg, Set{String}, String}}[]
     for pkg in pkgs
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
@@ -2140,9 +2149,15 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
 
         FileWatching.mkpidlock(() -> ispath(path), pidfile, stale_age = pidfile_stale_age) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
-        push!(pkgs_to_install, (; pkg, urls, path))
+        push!(pkgs_to_install, (; pkg = DownloadPkg(pkg.name, pkg.uuid, pkg.version, pkg.tree_hash), urls, path))
     end
+    return download_source(ctx, pkgs_to_install, readonly, pidfile_stale_age)
+end
 
+function download_source(
+        ctx::Context, pkgs_to_install::Vector{NamedTuple{(:pkg, :urls, :path), Tuple{DownloadPkg, Set{String}, String}}},
+        readonly::Bool, pidfile_stale_age::Int
+    )
     length(pkgs_to_install) == 0 && return Set{UUID}()
 
     ########################################
@@ -2217,7 +2232,7 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
         fancyprint = can_fancyprint(ctx.io)
         try
             for i in 1:length(pkgs_to_install)
-                pkg::eltype(pkgs), exc_or_success_or_nothing, bt_or_pathurls = take!(results)
+                pkg::DownloadPkg, exc_or_success_or_nothing, bt_or_pathurls = take!(results)
                 if exc_or_success_or_nothing isa Exception
                     exc = exc_or_success_or_nothing
                     pkgerror("Error when installing package $(pkg.name):\n", sprint(Base.showerror, exc, bt_or_pathurls))
@@ -3928,7 +3943,7 @@ function manifest_dependents_map(manifest::Manifest)
     return dependents
 end
 
-function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance}; dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing)
+function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance}; @nospecialize(dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing))
     pkg.version isa VersionNumber || return nothing # Can happen when there is no manifest
     manifest, project = env.manifest, env.project
     packages_holding_back = String[]
