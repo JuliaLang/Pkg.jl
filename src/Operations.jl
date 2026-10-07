@@ -1106,7 +1106,7 @@ function resolve_versions!(
                     pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
                 end
                 deps_for_version = Registry.query_deps_for_version(
-                    deps_map_compressed, weak_deps_map_compressed,
+                    deps_map_compressed, weak_deps_map_compressed, pkg_versions_per_registry,
                     pkg.uuid, pkg.version
                 )
                 for uuid in deps_for_version
@@ -3975,6 +3975,9 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
             reg_pkg = get(reg, dep_uuid, nothing)
             reg_pkg === nothing && continue
             info = Registry.registry_info(reg, reg_pkg)
+            # Only consult registries that actually contain the dependent's version,
+            # otherwise another registry's compat ranges get applied to a version it does not have
+            haskey(info.version_info, dep_pkg.version) || continue
             compat_info_v_uuid = Registry.query_compat_for_version(info, dep_pkg.version, pkg.uuid)
             compat_info_v_uuid === nothing && continue
             if !(max_version in compat_info_v_uuid)

@@ -139,18 +139,23 @@ function query_deps_for_version(
 end
 
 # Helper function to query deps for a specific version from multi-registry maps
+# Only queries a registry if the version actually exists in that registry, so that
+# a registry's deps ranges are never applied to versions it does not contain
 function query_deps_for_version(
         deps_map::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
         weak_deps_map::Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}},
+        versions_per_registry_map::Dict{UUID, Vector{Set{VersionNumber}}},
         uuid::UUID,
         version::VersionNumber
     )::Set{UUID}
     result = Set{UUID}()
     deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, deps_map, uuid)
     weak_deps_list = get(Vector{Dict{VersionRange, Set{UUID}}}, weak_deps_map, uuid)
+    versions_per_registry = get(Vector{Set{VersionNumber}}, versions_per_registry_map, uuid)
 
     # Query each registry's data
     for i in eachindex(deps_list)
+        version in versions_per_registry[i] || continue
         deps_compressed = deps_list[i]
         weak_deps_compressed = weak_deps_list[i]
         union!(result, query_deps_for_version(deps_compressed, weak_deps_compressed, version))

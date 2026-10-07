@@ -32,6 +32,10 @@ Pkg v1.14 Release Notes
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
+- When a package is registered in several registries, the dependencies and compat of a version are now taken only
+  from registries that actually contain that version. Previously a registry's `Deps.toml` entries could leak into the
+  manifest for a version the registry does not have, and `Pkg.status(outdated = true)` could report a dependent as
+  holding a package back based on compat from a registry lacking the dependent's version. ([#4849])
 
 Pkg v1.13 Release Notes
 =======================
@@ -258,3 +262,5 @@ Pkg v1.7 Release Notes
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
+[#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
+[#4849]: https://github.com/JuliaLang/Pkg.jl/issues/4849
