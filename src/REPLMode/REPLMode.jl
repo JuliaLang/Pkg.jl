@@ -32,12 +32,23 @@ end
 # TODO assert names matching lex regex
 # assert now so that you don't fail at user time
 # see function `REPLMode.api_options`
-function OptionSpec(;
-        name::String,
-        short_name::Union{Nothing, String} = nothing,
-        takes_arg::Bool = false,
-        api::Pair{Symbol, <:Any}
-    )::OptionSpec
+# Declarations are read from a `Dict` rather than splatted as keyword arguments, which
+# would compile a keyword call for every combination of keys and value types.
+function declaration_dict(dec::Vector{Pair{Symbol, Any}}, allowed::Tuple{Vararg{Symbol}})
+    d = Dict{Symbol, Any}(dec)
+    for k in keys(d)
+        k in allowed || error("unknown key `$k` in declaration $dec")
+    end
+    return d
+end
+
+function OptionSpec(dec::OptionDeclaration)
+    d = declaration_dict(dec, (:name, :short_name, :takes_arg, :api))
+    name = d[:name]::String
+    short_name = get(d, :short_name, nothing)::Union{Nothing, String}
+    takes_arg = get(d, :takes_arg, false)::Bool
+    api_pair = d[:api]::Pair{Symbol}
+    api = Pair{Symbol, Any}(getfield(api_pair, :first), getfield(api_pair, :second))
     takes_arg && @assert hasmethod(api.second, Tuple{String})
     return OptionSpec(name, short_name, api, takes_arg)
 end
@@ -45,7 +56,7 @@ end
 function OptionSpecs(decs::Vector{OptionDeclaration})
     specs = Dict{String, OptionSpec}()
     for x in decs
-        opt_spec = OptionSpec(; x...)
+        opt_spec = OptionSpec(x)
         @assert !haskey(specs, opt_spec.name) # don't overwrite
         specs[opt_spec.name] = opt_spec
         if opt_spec.short_name !== nothing
@@ -81,18 +92,23 @@ mutable struct CommandSpec
 end
 
 default_parser(xs, options) = unwrap(xs)
-function CommandSpec(;
-        name::Union{Nothing, String} = nothing,
-        short_name::Union{Nothing, String} = nothing,
-        api::Union{Nothing, Function} = nothing,
-        should_splat::Bool = true,
-        option_spec::Vector{OptionDeclaration} = OptionDeclaration[],
-        help::Union{Nothing, Markdown.MD} = nothing,
-        description::Union{Nothing, String} = nothing,
-        completions::Union{Nothing, Symbol, Function} = nothing,
-        arg_count::Pair = (0 => 0),
-        arg_parser::Function = default_parser,
-    )::CommandSpec
+function CommandSpec(dec::CommandDeclaration)
+    d = declaration_dict(
+        dec, (
+            :name, :short_name, :api, :should_splat, :option_spec, :help,
+            :description, :completions, :arg_count, :arg_parser,
+        )
+    )
+    name = get(d, :name, nothing)::Union{Nothing, String}
+    short_name = get(d, :short_name, nothing)::Union{Nothing, String}
+    api = get(d, :api, nothing)::Union{Nothing, Function}
+    should_splat = get(d, :should_splat, true)::Bool
+    option_spec = get(d, :option_spec, OptionDeclaration[])::Vector{OptionDeclaration}
+    help = get(d, :help, nothing)::Union{Nothing, Markdown.MD}
+    description = get(d, :description, nothing)::Union{Nothing, String}
+    completions = get(d, :completions, nothing)::Union{Nothing, Symbol, Function}
+    arg_count = get(d, :arg_count, 0 => 0)::Pair
+    arg_parser = get(d, :arg_parser, default_parser)::Function
     name === nothing        && error("Supply a canonical name")
     description === nothing && error("Supply a description")
     api === nothing         && error("Supply API dispatch function for `$(name)`")
@@ -106,7 +122,7 @@ end
 function CommandSpecs(declarations::Vector{CommandDeclaration})
     specs = Dict{String, CommandSpec}()
     for dec in declarations
-        spec = CommandSpec(; dec...)
+        spec = CommandSpec(dec)
         @assert !haskey(specs, spec.canonical_name) "duplicate spec entry"
         specs[spec.canonical_name] = spec
         if spec.short_name !== nothing
