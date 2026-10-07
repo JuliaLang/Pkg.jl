@@ -52,11 +52,9 @@ jobs:
             julia-version: '1.13-nightly'
             pkg-server: "pkg.julialang.org"
     steps:
-      - name: Set git to use LF and fix TEMP on windows
-        if: matrix.os == 'windows-latest'
+      - name: Fix TEMP (windows)
+        if: runner.os == 'Windows'
         run: |
-          git config --global core.autocrlf false
-          git config --global core.eol lf
           # See https://github.com/actions/virtual-environments/issues/712
           echo "TMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
           echo "TEMP=${USERPROFILE}\AppData\Local\Temp" >> ${GITHUB_ENV}
