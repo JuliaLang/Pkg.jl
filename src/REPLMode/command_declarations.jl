@@ -249,15 +249,21 @@ compound_declarations = [
             :arg_count => 1 => 1,
             :option_spec => [
                 PSA[:name => "workspace", :api => :workspace => true],
+                PSA[:name => "forward", :short_name => "f", :api => :forward => true],
             ],
             :arg_parser => parse_package,
             :completions => :complete_all_installed_packages,
             :description => "shows why a package is in the manifest",
             :help => md"""
-                    why [--workspace] pkg[=uuid] ...
+                    why [--workspace] [-f|--forward] pkg[=uuid] ...
 
-                Show the reason why packages are in the manifest, printed as a path through the
-                dependency graph starting at the direct dependencies.
+                Show the reason why packages are in the manifest, printed as a tree with the
+                package at the root and the packages that depend on it below, down to the
+                direct dependencies of the project (highlighted). With `--forward` the tree is
+                printed top-down instead, starting at the direct dependencies and only following
+                the paths that lead to the package. The arrows on the tree branches point from
+                a package to the package it depends on. Subtrees that have already been shown
+                elsewhere in the tree are marked with `(*)` and not repeated.
                 The `workspace` option can be used to show the path from any dependency of a project in
                 the workspace.
 

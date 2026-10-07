@@ -36,6 +36,11 @@ Pkg v1.14 Release Notes
   from registries that actually contain that version. Previously a registry's `Deps.toml` entries could leak into the
   manifest for a version the registry does not have, and `Pkg.status(outdated = true)` could report a dependent as
   holding a package back based on compat from a registry lacking the dependent's version. ([#4849])
+- `Pkg.why` now prints a tree instead of listing every path through the dependency graph, which could
+  run to thousands of lines for widely used packages. The package is the root, the packages that depend
+  on it are nested below down to the project's direct dependencies (highlighted), and a subtree already
+  shown elsewhere is marked with `(*)`. The new `forward` keyword (`--forward`/`-f` in the REPL) prints
+  the paths top-down from the direct dependencies instead. ([#4839])
 
 Pkg v1.13 Release Notes
 =======================
@@ -264,3 +269,4 @@ Pkg v1.7 Release Notes
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
 [#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
 [#4849]: https://github.com/JuliaLang/Pkg.jl/issues/4849
+[#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
