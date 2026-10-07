@@ -515,21 +515,22 @@ end
 function update(regs::Vector{RegistrySpec}; io::IO = stderr_f(), force::Bool = true, depots = [depots1()], update_cooldown = Second(1))
     Pkg.OFFLINE_MODE[] && return
     registry_update_log = get_registry_update_log()
+    cooldown = Millisecond(update_cooldown)
     for depot in depots
-        depot_regs = isempty(regs) ? reachable_registries(; depots = depot) : regs
         regdir = joinpath(depot, "registries")
         isdir(regdir) || mkpath(regdir)
         create_cachedir_tag(regdir)
         # only allow one julia process to update registries in this depot at a time
         FileWatching.mkpidlock(joinpath(regdir, ".pid"), stale_age = 10) do
+            depot_regs = isempty(regs) ? reachable_registries(; depots = depot) : regs
             errors = Tuple{String, String}[]
             registry_urls = pkg_server_registry_urls()
             for reg in unique(r -> r.uuid, find_installed_registries(io, depot_regs; depots = [depot]); seen = Set{UUID}())
                 prev_update = get(registry_update_log, string(reg.uuid), nothing)::Union{Nothing, DateTime}
                 if prev_update !== nothing
                     diff = now() - prev_update
-                    if diff < update_cooldown
-                        @debug "Skipping updating registry $(reg.name) since it is on cooldown: $(Dates.canonicalize(Millisecond(update_cooldown) - diff)) left"
+                    if diff < cooldown
+                        @debug "Skipping updating registry $(reg.name) since it is on cooldown: $(Dates.canonicalize(cooldown - diff)) left"
                         continue
                     end
                 end
