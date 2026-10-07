@@ -58,6 +58,8 @@ Pkg v1.13 Release Notes
   from registries that actually contain that version. Previously a registry's `Deps.toml` entries could leak into the
   manifest for a version the registry does not have, and `Pkg.status(outdated = true)` could report a dependent as
   holding a package back based on compat from a registry lacking the dependent's version. ([#4849])
+- `Pkg.resolve` and `Pkg.pin` no longer fail with "Did not find subdirectory" for a package tracked from a git repo
+  `subdir` whose manifest entry is not installed in the depot yet, e.g. on a fresh machine with a committed manifest. ([#4851])
 
 Pkg v1.12 Release Notes
 =======================
@@ -227,3 +229,4 @@ Pkg v1.7 Release Notes
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
 [#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
 [#4849]: https://github.com/JuliaLang/Pkg.jl/issues/4849
+[#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851
