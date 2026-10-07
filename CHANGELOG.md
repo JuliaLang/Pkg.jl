@@ -10,6 +10,10 @@ Pkg v1.14 Release Notes
   when the project has a `name`, an `environment_name`. Both follow the project file on every manifest write.
   Julia mixes the id into precompile cache file names, so environments at the same path that share a depot
   no longer overwrite each other's caches. Writing them bumps the manifest format to `"2.2"`. ([#4824])
+- `Pkg.add`, `Pkg.update` and `Pkg.resolve` now accept `lazy=true` (`--lazy` in the REPL) to update the project
+  and manifest without installing anything new. The manifest is the same as without it. Sources of package versions that
+  are not already in the manifest are downloaded to a temporary directory to read their project files. Run
+  `Pkg.instantiate()` to finish installing.
 - Artifact selection hooks can now load dependencies from their package's `[deps]`. Pkg runs hooks against the resolved
   manifest and installs dependency artifacts first, preventing selectors from loading stale, incompatible versions.
   Active-project and workspace preferences are visible to hooks, hook results are cached for the duration of the

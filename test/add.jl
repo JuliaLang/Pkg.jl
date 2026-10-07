@@ -920,6 +920,81 @@ end
     end
 end
 
+@testset "add/update/resolve: lazy" begin
+    isolate(loaded_depot = false) do
+        mktempdir() do dir
+            Pkg.activate(dir)
+            Pkg.add("libpng_jll"; lazy = true)
+            env = Pkg.Types.EnvCache()
+            entry = only(e for e in values(env.manifest) if e.name == "libpng_jll")
+            srcdir = Pkg.Operations.find_installed(entry.name, entry.uuid, entry.tree_hash)
+            # the source is only read for the manifest, not installed
+            @test !ispath(srcdir)
+            @test !Pkg.Operations.is_instantiated(env)
+            # an unchanged entry keeps what was read before instead of downloading again
+            io = IOBuffer()
+            Pkg.add("Example"; lazy = true, io)
+            output = String(take!(io))
+            @test occursin(r"Downloaded.*Example", output)
+            @test !occursin(r"Downloaded.*libpng_jll", output)
+            manifest = read(joinpath(dir, "Manifest.toml"), String)
+            # a plain add of packages that are already in the manifest finishes installing them
+            Pkg.add(["libpng_jll", "Example"])
+            @test Pkg.Operations.is_instantiated(Pkg.Types.EnvCache())
+            @test read(joinpath(dir, "Manifest.toml"), String) == manifest
+
+            # a new manifest gets a new generated `environment_id`
+            without_id(str) = replace(str, r"^environment_id = .*\n"m => "")
+            rm(joinpath(dir, "Manifest.toml"))
+            Pkg.resolve(; lazy = true)
+            @test without_id(read(joinpath(dir, "Manifest.toml"), String)) == without_id(manifest)
+            Pkg.update(; lazy = true)
+            @test haskey(Pkg.Types.EnvCache().manifest, entry.uuid)
+            Pkg.REPLMode.pkgstr("up --lazy")
+            Pkg.REPLMode.pkgstr("resolve --lazy")
+            Pkg.REPLMode.pkgstr("add --lazy Example")
+            @test haskey(Pkg.Types.EnvCache().manifest, exuuid)
+        end
+        # repos are checked out into the depot, so they are installed fully, including a repo
+        # that is only checked out while resolving because it is in the `[sources]` of another
+        mktempdir() do dir
+            uuid_a = UUID("7b5fdcc5-d0e7-4f7e-9d4b-47b6b0d5e3a1")
+            uuid_b = UUID("0f3a5e2c-8e11-4a64-9c52-3a4c1d7e9b10")
+            path_b = joinpath(dir, "BuildB")
+            mkpath(joinpath(path_b, "src"))
+            write(joinpath(path_b, "Project.toml"), "name = \"BuildB\"\nuuid = \"$uuid_b\"\n")
+            write(joinpath(path_b, "src", "BuildB.jl"), "module BuildB end")
+            write_build(path_b, """touch("built")""")
+            git_init_and_commit(path_b)
+            path_a = joinpath(dir, "BuildA")
+            mkpath(joinpath(path_a, "src"))
+            write(
+                joinpath(path_a, "Project.toml"), """
+                name = "BuildA"
+                uuid = "$uuid_a"
+
+                [deps]
+                BuildB = "$uuid_b"
+
+                [sources]
+                BuildB = {url = $(repr(path_b))}
+                """
+            )
+            write(joinpath(path_a, "src", "BuildA.jl"), "module BuildA end")
+            write_build(path_a, """touch("built")""")
+            git_init_and_commit(path_a)
+            Pkg.activate(joinpath(dir, "env"))
+            Pkg.add(; url = path_a, lazy = true)
+            manifest = Pkg.Types.EnvCache().manifest
+            for uuid in (uuid_a, uuid_b)
+                entry = manifest[uuid]
+                srcdir = Pkg.Operations.find_installed(entry.name, entry.uuid, entry.tree_hash)
+                @test isfile(joinpath(srcdir, "deps", "built"))
+            end
+        end
+    end
+end
+
 @testset "Issue #4345: pidfile in writable location when depot is readonly" begin
     isolate(loaded_depot = false) do
         mktempdir() do readonly_depot
