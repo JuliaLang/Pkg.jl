@@ -401,6 +401,91 @@ temp_pkg_dir() do project_path
         end
     end
 
+    # A monorepo subpackage installed from its repo only has its own directory on disk, so
+    # a `[sources]` path to a sibling must not stop its tests from resolving.
+    @testset "test installed package with [sources] path outside it" begin
+        isolate() do
+            mktempdir() do tmp
+                example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+                repo = joinpath(tmp, "mono")
+                runtests = """
+                using Test, Example
+                @test pkgversion(Example) < v"999"
+                """
+                targets_pkg = joinpath(repo, "lib", "TargetsPkg")
+                mkpath(joinpath(targets_pkg, "src"))
+                mkpath(joinpath(targets_pkg, "test"))
+                write(
+                    joinpath(targets_pkg, "Project.toml"), """
+                    name = "TargetsPkg"
+                    uuid = "00000000-0000-0000-0000-0000000a0001"
+                    version = "0.1.0"
+
+                    [deps]
+                    Example = "$example_uuid"
+
+                    [sources]
+                    Example = {path = "../Example"}
+
+                    [extras]
+                    Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+                    [targets]
+                    test = ["Test"]
+                    """
+                )
+                write(joinpath(targets_pkg, "src", "TargetsPkg.jl"), "module TargetsPkg\nusing Example\nend")
+                write(joinpath(targets_pkg, "test", "runtests.jl"), runtests)
+                testproj_pkg = joinpath(repo, "lib", "TestProjectPkg")
+                testproj_uuid = "00000000-0000-0000-0000-0000000a0002"
+                mkpath(joinpath(testproj_pkg, "src"))
+                mkpath(joinpath(testproj_pkg, "test"))
+                write(
+                    joinpath(testproj_pkg, "Project.toml"), """
+                    name = "TestProjectPkg"
+                    uuid = "$testproj_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath(testproj_pkg, "src", "TestProjectPkg.jl"), "module TestProjectPkg end")
+                write(
+                    joinpath(testproj_pkg, "test", "Project.toml"), """
+                    [deps]
+                    Example = "$example_uuid"
+                    Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+                    TestProjectPkg = "$testproj_uuid"
+
+                    [sources]
+                    Example = {path = "../../Example"}
+                    TestProjectPkg = {path = ".."}
+                    """
+                )
+                write(joinpath(testproj_pkg, "test", "runtests.jl"), runtests)
+                # The sibling exists in the repo but not in the installed subdirectories.
+                mkpath(joinpath(repo, "lib", "Example", "src"))
+                write(
+                    joinpath(repo, "lib", "Example", "Project.toml"), """
+                    name = "Example"
+                    uuid = "$example_uuid"
+                    version = "999.0.0"
+                    """
+                )
+                write(joinpath(repo, "lib", "Example", "src", "Example.jl"), "module Example end")
+                git_init_and_commit(repo)
+
+                Pkg.activate(joinpath(tmp, "env"))
+                Pkg.add(
+                    [
+                        Pkg.PackageSpec(url = repo, subdir = "lib/TargetsPkg"),
+                        Pkg.PackageSpec(url = repo, subdir = "lib/TestProjectPkg"),
+                    ]
+                )
+                Pkg.test("TargetsPkg")
+                Pkg.test("TestProjectPkg")
+            end
+        end
+    end
+
     # Regression test for https://github.com/JuliaLang/Pkg.jl/issues/4650
     # The deved package's own manifest (here the workspace root manifest) is stale and
     # records a `[sources]` path dependency as registry-tracked. The tree hash must not be
