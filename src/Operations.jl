@@ -3510,9 +3510,28 @@ function abspath!(env::EnvCache, project::Project)
     return project
 end
 
+function path_inside(path::String, root::String)
+    path, root = normpath(path), normpath(root)
+    return path == root || startswith(path, joinpath(root, ""))
+end
+
+# An installed package is only its own directory, so a path source that leads out of it
+# points at a sibling in its repository (e.g. a monorepo) that isn't there. Use the registry.
+function drop_external_path_sources!(project::Project, pkg_root::String)
+    filter!(project.sources) do (name, source)
+        path = get(source, "path", nothing)
+        path === nothing && return true
+        inside = path_inside(path, pkg_root)
+        inside || @debug "Ignoring `[sources]` path of $name outside the installed package" path
+        return inside
+    end
+    return project
+end
+
 function sandbox_with_temp_env(
         fn::Function, ctx::Context, target::PackageSpec, tmp::String,
         has_sandbox_project::Bool, sandbox_env::EnvCache;
+        installed_root::Union{Nothing, String},
         force_latest_compatible_version::Bool,
         allow_earlier_backwards_compatible_versions::Bool,
         allow_reresolve::Bool
@@ -3521,6 +3540,9 @@ function sandbox_with_temp_env(
         temp_ctx = Context()
         if has_sandbox_project
             abspath!(sandbox_env, temp_ctx.env.project)
+        end
+        if installed_root !== nothing
+            drop_external_path_sources!(temp_ctx.env.project, installed_root)
         end
         temp_ctx.env.project.deps[target.name] = target.uuid
 
@@ -3605,7 +3627,17 @@ function sandbox(
         sandbox_env = Types.EnvCache(projectfile_path(sandbox_path))
         abspath!(sandbox_env, sandbox_env.manifest)
         abspath!(sandbox_env, sandbox_env.project)
+        target_entry = manifest_info(ctx.env.manifest, target.uuid)
+        installed_root = target_entry !== nothing && target_entry.tree_hash !== nothing ?
+            dirname(sandbox_path) : nothing
         for (uuid, entry) in sandbox_env.manifest.deps
+            # a committed manifest of an installed package can track siblings in its
+            # repository by path, like path sources; leave those to the registry too
+            if installed_root !== nothing && entry.path !== nothing &&
+                    !path_inside(entry.path, installed_root)
+                @debug "Ignoring manifest path of $(entry.name) outside the installed package" entry.path
+                continue
+            end
             entry_working = get(working_manifest, uuid, nothing)
             if entry_working === nothing
                 working_manifest[uuid] = entry
@@ -3629,6 +3661,7 @@ function sandbox(
         # sandbox
         sandbox_with_temp_env(
             fn, ctx, target, tmp, has_sandbox_project, sandbox_env;
+            installed_root,
             force_latest_compatible_version,
             allow_earlier_backwards_compatible_versions,
             allow_reresolve,

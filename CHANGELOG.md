@@ -43,6 +43,9 @@ Pkg v1.14 Release Notes
   the paths top-down from the direct dependencies instead. ([#4839])
 - `Pkg.resolve` and `Pkg.pin` no longer fail with "Did not find subdirectory" for a package tracked from a git repo
   `subdir` whose manifest entry is not installed in the depot yet, e.g. on a fresh machine with a committed manifest. ([#4851])
+- `Pkg.test` and `Pkg.build` of an installed (not developed) package no longer fail with "expected package ... to exist
+  at path" when it points at sibling packages of its repository by path, as monorepo subpackages do, through
+  `[sources]` or a committed test manifest. Those paths are ignored and the dependencies resolve from the registry. ([#4861])
 
 Pkg v1.13 Release Notes
 =======================
@@ -267,6 +270,7 @@ Pkg v1.7 Release Notes
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4738]: https://github.com/JuliaLang/Pkg.jl/pull/4738
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
+[#4861]: https://github.com/JuliaLang/Pkg.jl/pull/4861
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
 [#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
