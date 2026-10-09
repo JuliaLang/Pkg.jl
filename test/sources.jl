@@ -402,8 +402,9 @@ temp_pkg_dir() do project_path
     end
 
     # A monorepo subpackage installed from its repo only has its own directory on disk, so
-    # a `[sources]` path to a sibling must not stop its tests from resolving.
-    @testset "test installed package with [sources] path outside it" begin
+    # a path to a sibling, in `[sources]` or a committed test manifest, must not stop its
+    # tests from resolving.
+    @testset "test installed package with a path outside it" begin
         isolate() do
             mktempdir() do tmp
                 example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
@@ -461,6 +462,36 @@ temp_pkg_dir() do project_path
                     """
                 )
                 write(joinpath(testproj_pkg, "test", "runtests.jl"), runtests)
+                # tracks the sibling through a committed test manifest instead of [sources]
+                manifest_pkg = joinpath(repo, "lib", "ManifestPkg")
+                mkpath(joinpath(manifest_pkg, "src"))
+                mkpath(joinpath(manifest_pkg, "test"))
+                write(
+                    joinpath(manifest_pkg, "Project.toml"), """
+                    name = "ManifestPkg"
+                    uuid = "00000000-0000-0000-0000-0000000a0003"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath(manifest_pkg, "src", "ManifestPkg.jl"), "module ManifestPkg end")
+                write(
+                    joinpath(manifest_pkg, "test", "Project.toml"), """
+                    [deps]
+                    Example = "$example_uuid"
+                    Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+                    """
+                )
+                write(
+                    joinpath(manifest_pkg, "test", "Manifest.toml"), """
+                    manifest_format = "2.0"
+
+                    [[deps.Example]]
+                    path = "../../Example"
+                    uuid = "$example_uuid"
+                    version = "999.0.0"
+                    """
+                )
+                write(joinpath(manifest_pkg, "test", "runtests.jl"), runtests)
                 # The sibling exists in the repo but not in the installed subdirectories.
                 mkpath(joinpath(repo, "lib", "Example", "src"))
                 write(
@@ -478,10 +509,12 @@ temp_pkg_dir() do project_path
                     [
                         Pkg.PackageSpec(url = repo, subdir = "lib/TargetsPkg"),
                         Pkg.PackageSpec(url = repo, subdir = "lib/TestProjectPkg"),
+                        Pkg.PackageSpec(url = repo, subdir = "lib/ManifestPkg"),
                     ]
                 )
                 Pkg.test("TargetsPkg")
                 Pkg.test("TestProjectPkg")
+                Pkg.test("ManifestPkg")
             end
         end
     end

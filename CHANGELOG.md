@@ -44,8 +44,8 @@ Pkg v1.14 Release Notes
 - `Pkg.resolve` and `Pkg.pin` no longer fail with "Did not find subdirectory" for a package tracked from a git repo
   `subdir` whose manifest entry is not installed in the depot yet, e.g. on a fresh machine with a committed manifest. ([#4851])
 - `Pkg.test` and `Pkg.build` of an installed (not developed) package no longer fail with "expected package ... to exist
-  at path" when it declares path `[sources]` to sibling packages of its repository, as monorepo subpackages do. Those
-  sources are ignored and the dependencies resolve from the registry. ([#4861])
+  at path" when it points at sibling packages of its repository by path, as monorepo subpackages do, through
+  `[sources]` or a committed test manifest. Those paths are ignored and the dependencies resolve from the registry. ([#4861])
 
 Pkg v1.13 Release Notes
 =======================
