@@ -13,6 +13,9 @@ Example = "0.5"
 
 After a compatibility entry is put into the project file, `up` can be used to apply it.
 
+To ignore the compatibility constraints that other packages put on a package, for example to try a new
+version of it that a dependency does not allow yet, use the [`[compat-overrides]`](@ref compat-overrides) section instead.
+
 The format of the version specifier is described in detail below.
 
 !!! info

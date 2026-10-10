@@ -558,6 +558,7 @@ end
 #######################################
 get_compat(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].val : Types.VersionSpec()
 get_compat_str(proj::Project, name::String) = haskey(proj.compat, name) ? proj.compat[name].str : nothing
+get_compat_override(proj::Project, name::String) = haskey(proj.compat_overrides, name) ? proj.compat_overrides[name].val : nothing
 
 # Helper to check if compat is compatible with a non-upgradable stdlib, warn if not, and return appropriate VersionSpec
 function check_stdlib_compat(name::String, uuid::UUID, compat::VersionSpec, project::Project, project_file::String, julia_version)
@@ -624,14 +625,19 @@ function collect_project(
     if !isnothing(julia_compat) && !isnothing(julia_version) && !(julia_version in julia_compat)
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
     end
+    # A `[compat-overrides]` entry replaces every other constraint on the package, including the
+    # project's own `[compat]`. Only the projects loaded into the environment apply theirs.
+    function constraint(name, uuid)
+        override = loaded === nothing ? nothing : get_compat_override(project, name)
+        override === nothing || return override
+        return get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
+    end
     for (name, uuid) in project.deps
         dep_path, repo = get_path_repo(project, project_file, manifest_file, name)
-        vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
-        push!(deps, PackageSpec(name = name, uuid = uuid, version = vspec, path = dep_path, repo = repo))
+        push!(deps, PackageSpec(name = name, uuid = uuid, version = constraint(name, uuid), path = dep_path, repo = repo))
     end
     for (name, uuid) in project.weakdeps
-        vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
-        push!(deps, PackageSpec(name, uuid, vspec))
+        push!(deps, PackageSpec(name, uuid, constraint(name, uuid)))
         push!(weakdeps, uuid)
     end
     # `[compat]` for an `[extras]` package of a loaded project constrains it if it is in
@@ -823,10 +829,23 @@ end
 # i.e. dropbuild(v"2.0.1-rc1.21321") == v"2.0.1-rc1"
 dropbuild(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch, isempty(v.prerelease) ? () : (v.prerelease[1],))
 
+# The `[compat-overrides]` of the workspace for `name`, or `nothing` if there is none
+function get_compat_override_workspace(env, name)
+    override = nothing
+    for project in Iterators.flatten(((env.project,), values(env.workspace)))
+        o = get_compat_override(project, name)
+        o === nothing && continue
+        override = override === nothing ? o : intersect(override, o)
+    end
+    return override
+end
+
 function get_compat_workspace(env, name)
     # Are we allowing packages with the same name and different uuids
     # in different project files in the same workspace? In that case,
     # need to pass in a UUID here instead of a name.
+    override = get_compat_override_workspace(env, name)
+    override === nothing || return override
     compat = get_compat(env.project, name)
     for (_, project) in env.workspace
         compat = intersect(compat, get_compat(project, name))
@@ -1063,7 +1082,15 @@ function resolve_versions!(
             pinned[pkg.uuid] = pkg.version
         end
     end
-    deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only)
+    compat_overrides = Dict{UUID, VersionSpec}()
+    for project in Iterators.flatten(((env.project,), values(env.workspace)))
+        for name in keys(project.compat_overrides)
+            uuid = get(project.deps, name, get(project.weakdeps, name, nothing))
+            uuid === nothing && continue
+            compat_overrides[uuid] = get_compat_override_workspace(env, name)
+        end
+    end
+    deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed, pkg_versions_map, pkg_versions_per_registry, uuid_to_name, reqs, fixed = deps_graph(env, registries, names, reqs, fixed, julia_version, installed_only; compat_overrides)
     if resolver_backend() === :sat
         vers = SATResolve.resolve_versions(
             deps_map_compressed, compat_map_compressed, weak_deps_map_compressed, weak_compat_map_compressed,
@@ -1225,7 +1252,7 @@ const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
         reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, @nospecialize(julia_version::Union{VersionNumber, Nothing}),
-        installed_only::Bool
+        installed_only::Bool; compat_overrides::Dict{UUID, VersionSpec} = Dict{UUID, VersionSpec}()
     )
     uuids = Set{UUID}()
     union!(uuids, keys(reqs))
@@ -1445,6 +1472,27 @@ function deps_graph(
             fixed_filtered[uuid] = Resolve.Fixed(fx.version, filtered_requires, filtered_weak)
         end
         fixed = fixed_filtered
+    end
+
+    # `[compat-overrides]` replace the compat that every package has on the overridden packages.
+    # The registry data is shared, so the entries are rebuilt rather than mutated.
+    if !isempty(compat_overrides)
+        override(requires) = Resolve.Requires(uuid => get(compat_overrides, uuid, spec) for (uuid, spec) in requires)
+        function override_compat(compressed::Dict{VersionRange, Dict{UUID, VersionSpec}})
+            overridden = Dict{VersionRange, Dict{UUID, VersionSpec}}()
+            for (vrange, compat) in compressed
+                overridden[vrange] = override(compat)
+            end
+            return overridden
+        end
+        for compat_compressed in (all_compat_compressed, weak_compat_compressed), uuid in collect(keys(compat_compressed))
+            compat_compressed[uuid] = map(override_compat, compat_compressed[uuid])
+        end
+        fixed_overridden = Dict{UUID, Resolve.Fixed}()
+        for (uuid, fx) in fixed
+            fixed_overridden[uuid] = Resolve.Fixed(fx.version, override(fx.requires), fx.weak)
+        end
+        fixed = fixed_overridden
     end
 
     return all_deps_compressed, all_compat_compressed, weak_deps_compressed, weak_compat_compressed, pkg_versions, pkg_versions_per_registry, uuid_to_name, reqs, fixed
@@ -2687,6 +2735,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     filter!(ctx.env.project.compat) do (name, _)
         name == "julia" || name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.extras) || name in keys(ctx.env.project.weakdeps)
     end
+    filter!(ctx.env.project.compat_overrides) do (name, _)
+        name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.weakdeps)
+    end
     filter!(ctx.env.project.sources) do (name, _)
         name in keys(ctx.env.project.deps) || name in keys(ctx.env.project.extras)
     end
@@ -3703,8 +3754,9 @@ function gen_target_project(ctx::Context, pkg::PackageSpec, source_path::String,
     # collect compat entries
     for (name, uuid) in test_project.deps
         compat = get_compat_str(source_env.project, name)
-        compat === nothing && continue
-        set_compat(test_project, name, compat)
+        compat === nothing || set_compat(test_project, name, compat)
+        override = get(source_env.project.compat_overrides, name, nothing)
+        override === nothing || (test_project.compat_overrides[name] = override)
     end
     return test_project
 end
