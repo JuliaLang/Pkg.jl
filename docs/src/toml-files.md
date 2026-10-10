@@ -163,10 +163,14 @@ corresponding manifest file.
 
 Each entry in the `[sources]` section supports the following keys:
 
-- **`url`**: The URL of the Git repository. Cannot be used with `path`.
-- **`rev`**: The Git revision (branch name, tag, or commit hash) to use. Only valid with `url`.
+- **`url`**: The URL of the Git repository.
+- **`rev`**: The Git revision (branch name, tag, or commit hash) to use.
 - **`subdir`**: A subdirectory within the repository containing the package.
-- **`path`**: A local filesystem path to the package. Cannot be used with `url` or `rev`. This will `dev` the package.
+- **`path`**: A local filesystem path to the package, relative to `Project.toml`. This will `dev` the package.
+
+!!! tip "Simultaneous `path` and `url`/`rev` entries"
+    If both a `path` and an `url`/`rev` entry is provided, `path` takes precedence *if it exists locally*; if not, the repository is used. This can be useful for a package that is checked out next to the project using it: whoever has that checkout works against it, while everyone else transparently gets the repository. If neither the path nor the repository exists, an error is raised.
+    Simultaneous entries require Julia 1.14+ (and are an error in earlier versions).
 
 This might in practice look something like:
 

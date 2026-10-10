@@ -4,6 +4,24 @@
 listed_deps(project::Project; include_weak::Bool) =
     vcat(collect(keys(project.deps)), collect(keys(project.extras)), include_weak ? collect(keys(project.weakdeps)) : String[])
 
+# Whether a `[sources]` entry lists both a local `path` *and* a fall-back repo (`url`/`rev`)
+has_repo_fallback(source::Dict{String, String}) =
+    haskey(source, "path") && (haskey(source, "url") || haskey(source, "rev"))
+has_repo_fallback(::Nothing) = false
+
+# A repo source naming a directory on this machine, either as a plain path or as a `file://`
+# URL, can be checked for right away; a remote repository is left for git to report on.
+function local_repo_path(url::String, manifest_file::String)
+    if startswith(url, "file://")
+        path = chop(url; head = ncodeunits("file://"), tail = 0)
+        # A Windows file URL carries a leading slash before the drive letter
+        return Sys.iswindows() ? lstrip(path, '/') : path
+    end
+    isurl(url) && return nothing
+    # A relative repo path is relative to the manifest, like elsewhere for `repo.source`
+    return isabspath(url) ? url : normpath(joinpath(dirname(abspath(manifest_file)), url))
+end
+
 function get_path_repo(project::Project, project_file::String, manifest_file::String, name::String)
     source = get(project.sources, name, nothing)
     if source === nothing
@@ -13,8 +31,21 @@ function get_path_repo(project::Project, project_file::String, manifest_file::St
     url = get(source, "url", nothing)::Union{String, Nothing}
     rev = get(source, "rev", nothing)::Union{String, Nothing}
     subdir = get(source, "subdir", nothing)::Union{String, Nothing}
-    if path !== nothing && url !== nothing
-        pkgerror("`path` and `url` are conflicting specifications")
+    if !isnothing(path) && (!isnothing(url) || !isnothing(rev))
+        # An entry may include both a local `path` and a repo (`url`/`rev`): `path` takes
+        # precedence if it exists, otherwise the package is tracked by the repo
+        if isdir(joinpath(dirname(abspath(project_file)), path))
+            url = rev = nothing
+        else
+            repo_path = isnothing(url) ? nothing : local_repo_path(url, manifest_file)
+            if !isnothing(repo_path) && !isdir(repo_path)
+                pkgerror(
+                    "neither source listed for `$(name)` in `$(project_file)` exists ",
+                    "(path `$(path)`", isnothing(url) ? "" : ", url `$(url)`", ")"
+                )
+            end
+            path = nothing
+        end
     end
     repo = GitRepo(url, rev, subdir)
     # Convert path from project-relative to manifest-relative
@@ -135,9 +166,6 @@ function read_project_sources(raw::Dict{String, Any}, project::Project)
         end
         for key in keys(source)
             key in valid_keys || pkgerror("Invalid key `$key` in `source` section")
-        end
-        if haskey(source, "path") && (haskey(source, "url") || haskey(source, "rev"))
-            pkgerror("Both `path` and `url` or `rev` are specified in `source` section")
         end
         sources[name] = source
     end
