@@ -575,6 +575,10 @@ end
         @test api == Pkg.why
         @test first(opts).name == "Foo"
         @test_throws PkgError Pkg.pkg"why Foo Bar"
+        api, args, opts = first(Pkg.pkg"why --forward Foo")
+        @test api == Pkg.why
+        @test first(args).name == "Foo"
+        @test opts == Dict(:forward => true)
     end
 end
 

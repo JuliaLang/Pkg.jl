@@ -54,7 +54,7 @@ function build_pkg_data(
         pkg_versions_per_registry::Dict{UUID, Vector{Set{VersionNumber}}},
         reqs::Requires,
         fixed::Dict{UUID, Fixed},
-        julia_version::Union{VersionNumber, Nothing},
+        @nospecialize(julia_version::Union{VersionNumber, Nothing}),
         pinned::Dict{UUID, VersionNumber},
         compat_sources::Dict{UUID, Dict{String, VersionSpec}},
     )
@@ -249,7 +249,7 @@ function resolve_versions(
         uuid_to_name::Dict{UUID, String},
         reqs::Requires,
         fixed::Dict{UUID, Fixed},
-        julia_version::Union{VersionNumber, Nothing},
+        @nospecialize(julia_version::Union{VersionNumber, Nothing}),
         preferred_versions::Dict{UUID, VersionNumber};
         pinned::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}(),
         compat_sources::Dict{UUID, Dict{String, VersionSpec}} = Dict{UUID, Dict{String, VersionSpec}}(),

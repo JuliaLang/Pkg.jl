@@ -720,6 +720,23 @@ function workspace_resolve_hash(env::EnvCache)
     for (name, compat) in sort!(collect(compats); by = first)
         println(iob, name, "=", compat)
     end
+    # `[compat]` for `[extras]` packages also constrains a resolve (see `collect_project`).
+    # Only appended when present so that the hash of environments without any stays the same.
+    extras_compats = Dict{String, VersionSpec}()
+    for project in Iterators.flatten(((env.project,), values(env.workspace)))
+        for name in keys(project.extras)
+            haskey(alldeps, name) && continue
+            haskey(project.compat, name) || continue
+            compat = Pkg.Operations.get_compat(project, name)
+            extras_compats[name] = intersect(get(extras_compats, name, VersionSpec()), compat)
+        end
+    end
+    if !isempty(extras_compats)
+        println(iob)
+        for (name, compat) in sort!(collect(extras_compats); by = first)
+            println(iob, name, "=", compat)
+        end
+    end
     # A changed `[sources]` entry (e.g. a new `rev`) must invalidate the manifest, see #4157.
     # The section is only appended when there are sources so that the hash of environments
     # without any stays the same as before it was included.
@@ -1099,7 +1116,18 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                     obj_branch = get_object_or_branch(repo, rev_or_hash)
                 end
                 if obj_branch === nothing
-                    pkgerror("Did not find rev $(rev_or_hash) in repository")
+                    if pkg.tree_hash === nothing
+                        pkgerror("Did not find rev $(rev_or_hash) in repository `$(repo_source_typed)`")
+                    else
+                        pkgerror(
+                            "Did not find tree $(rev_or_hash) of $(err_rep(pkg)) in repository `$(repo_source_typed)`. ",
+                            "The manifest records a tree that is no longer reachable from the repository, ",
+                            "for example because its history was rewritten. ",
+                            looks_like_commit_hash(pkg.repo.rev) ?
+                                "It was added at commit `$(pkg.repo.rev)`, which is not reachable either; add the package again at a rev that still exists." :
+                                "Update the package to resolve it again from `$(pkg.repo.rev)`."
+                        )
+                    end
                 end
             end
             gitobject, isbranch = obj_branch
@@ -1116,12 +1144,16 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
             tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
-            if pkg.repo.subdir !== nothing
+            # When the lookup was by `pkg.tree_hash` the object is already the tree of the
+            # package itself: for a subdir package the manifest records the hash of the
+            # subdirectory, not of the repository root. Only descend into the subdir when
+            # the lookup was by rev, where the object is the commit's root tree.
+            if pkg.repo.subdir !== nothing && pkg.tree_hash === nothing
                 try
                     tree_hash_object = tree_hash_object[pkg.repo.subdir]
                 catch e
                     e isa KeyError || rethrow()
-                    pkgerror("Did not find subdirectory `$(pkg.repo.subdir)`")
+                    pkgerror("Did not find subdirectory `$(pkg.repo.subdir)` in repository `$(repo_source_typed)` at rev `$(pkg.repo.rev)`")
                 end
             end
             @assert pkg.path === nothing

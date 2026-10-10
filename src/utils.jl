@@ -183,29 +183,32 @@ permissions.
 The `kws` are passed to `TOML.print`.
 """
 function atomic_toml_write(path::String, data; private::Bool = false, kws...)
-    dir = dirname(path)
-    isempty(dir) && (dir = pwd())
-
+    io = IOBuffer()
+    TOML.print(io, data; kws...)
     mode = if private
-        0o600
+        UInt(0o600)
     elseif isfile(path)
         # Keep the permissions of an existing file, like `open(path, "w")` would
         filemode(path) & 0o777
     else
         nothing
     end
+    return atomic_write(path, take!(io), mode)
+end
 
+function atomic_write(path::String, content::Vector{UInt8}, @nospecialize(mode::Union{Nothing, UInt}))
+    dir = dirname(path)
+    isempty(dir) && (dir = pwd())
     # The temp dir is next to the destination so that the move is an atomic rename. `mktemp`
     # is not used since it always creates files with mode 0o600, which `mv` would preserve.
-    return mktempdir(dir) do temp_dir
+    temp_dir = mktempdir(dir)
+    try
         temp_path = joinpath(temp_dir, basename(path))
-        open(temp_path, "w") do temp_io
-            TOML.print(temp_io, data; kws...)
-        end
-        if mode !== nothing
-            chmod(temp_path, mode)
-        end
-        mv(temp_path, path; force = true)
+        write(temp_path, content)
+        mode === nothing || chmod(temp_path, mode)
+        return mv(temp_path, path; force = true)
+    finally
+        Base.rm(temp_dir; force = true, recursive = true)
     end
 end
 

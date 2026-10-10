@@ -34,6 +34,17 @@ Pkg v1.14 Release Notes
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
+- When a package is registered in several registries, the dependencies and compat of a version are now taken only
+  from registries that actually contain that version. Previously a registry's `Deps.toml` entries could leak into the
+  manifest for a version the registry does not have, and `Pkg.status(outdated = true)` could report a dependent as
+  holding a package back based on compat from a registry lacking the dependent's version. ([#4849])
+- `Pkg.why` now prints a tree instead of listing every path through the dependency graph, which could
+  run to thousands of lines for widely used packages. The package is the root, the packages that depend
+  on it are nested below down to the project's direct dependencies (highlighted), and a subtree already
+  shown elsewhere is marked with `(*)`. The new `forward` keyword (`--forward`/`-f` in the REPL) prints
+  the paths top-down from the direct dependencies instead. ([#4839])
+- `Pkg.resolve` and `Pkg.pin` no longer fail with "Did not find subdirectory" for a package tracked from a git repo
+  `subdir` whose manifest entry is not installed in the depot yet, e.g. on a fresh machine with a committed manifest. ([#4851])
 
 Pkg v1.13 Release Notes
 =======================
@@ -261,3 +272,7 @@ Pkg v1.7 Release Notes
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
 [#4857]: https://github.com/JuliaLang/Pkg.jl/pull/4857
+[#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
+[#4849]: https://github.com/JuliaLang/Pkg.jl/issues/4849
+[#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
+[#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851

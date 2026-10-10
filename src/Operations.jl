@@ -85,6 +85,23 @@ function find_installed(name::String, uuid::UUID, sha1::SHA1)
     return abspath(depots1(), "packages", name, slug_default)
 end
 
+# The version slugs of every installed version of the package `name` across all depots.
+# Checking a slug against this set is much cheaper than `find_installed` when many
+# versions of a package have to be checked, as during an installed-only resolve.
+function installed_version_slugs(name::String)
+    slugs = Set{String}()
+    for depot in depots()
+        dir = joinpath(depot, "packages", name)
+        isdir(dir) || continue
+        union!(slugs, readdir(dir))
+    end
+    return slugs
+end
+function is_version_installed(slugs::Set{String}, uuid::UUID, sha1::SHA1)
+    # 4 used to be the default slug length, see `find_installed`
+    return Base.version_slug(uuid, sha1) in slugs || Base.version_slug(uuid, sha1, 4) in slugs
+end
+
 # more accurate name is `should_be_tracking_registered_version`
 # the only way to know for sure is to key into the registries
 tracking_registered_version(pkg::Union{PackageSpec, PackageEntry}, julia_version = VERSION) =
@@ -341,7 +358,7 @@ function is_instantiated(env::EnvCache, workspace::Bool = false; platform = Host
     return true
 end
 
-function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, julia_version, registries::Vector{Registry.RegistryInstance})
+function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, @nospecialize(julia_version::Union{VersionNumber, Nothing}), registries::Vector{Registry.RegistryInstance})
     manifest = env.manifest
     empty!(manifest)
 
@@ -589,11 +606,11 @@ function reset_all_compat!(proj::Project)
 end
 
 function collect_project(
-        pkg::Union{PackageSpec, Nothing}, path::String, manifest_file::String, julia_version;
+        @nospecialize(pkg::Union{PackageSpec, Nothing}), path::String, manifest_file::String, @nospecialize(julia_version::Union{VersionNumber, Nothing});
         # For projects that are loaded into the env (the active project and the workspace
         # members) the caller passes the in-memory project and its file, since the project
         # may have modifications that have not been written to disk yet.
-        loaded::Union{Nothing, Tuple{String, Project}} = nothing
+        @nospecialize(loaded::Union{Nothing, Tuple{String, Project}} = nothing)
     )
     deps = PackageSpec[]
     weakdeps = Set{UUID}()
@@ -616,6 +633,17 @@ function collect_project(
         vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
         push!(deps, PackageSpec(name, uuid, vspec))
         push!(weakdeps, uuid)
+    end
+    # `[compat]` for an `[extras]` package of a loaded project constrains it if it is in
+    # the environment (e.g. as an indirect dependency) without adding it: a weak requirement.
+    if loaded !== nothing
+        for (name, uuid) in project.extras
+            (haskey(project.deps, name) || haskey(project.weakdeps, name)) && continue
+            haskey(project.compat, name) || continue
+            vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
+            push!(deps, PackageSpec(name, uuid, vspec))
+            push!(weakdeps, uuid)
+        end
     end
     if pkg !== nothing
         if project.version !== nothing
@@ -670,7 +698,7 @@ function collect_developed(env::EnvCache, pkgs::Vector{PackageSpec})
 end
 
 function collect_fixed!(
-        env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, julia_version;
+        env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, @nospecialize(julia_version::Union{VersionNumber, Nothing});
         # A `[sources]` entry in a dependency's project file must not take over such a
         # package for which the environment already has a source for, see #4750.
         env_uuids::Set{UUID} = Set{UUID}()
@@ -943,7 +971,7 @@ end
 # adds any other packages which may be in the dependency graph
 # all versioned packages should have a `tree_hash`
 function resolve_versions!(
-        env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, julia_version,
+        env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, @nospecialize(julia_version::Union{VersionNumber, Nothing}),
         installed_only::Bool, preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}();
         diagnose_unsat::Bool = true
     )
@@ -1106,7 +1134,7 @@ function resolve_versions!(
                     pkgerror("version $(pkg.version) of package $(pkg.name) is not available. Available versions: $(join(available_versions, ", "))")
                 end
                 deps_for_version = Registry.query_deps_for_version(
-                    deps_map_compressed, weak_deps_map_compressed,
+                    deps_map_compressed, weak_deps_map_compressed, pkg_versions_per_registry,
                     pkg.uuid, pkg.version
                 )
                 for uuid in deps_for_version
@@ -1196,7 +1224,7 @@ const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
 const PKGORIGIN_HAVE_VERSION = :version in fieldnames(Base.PkgOrigin)
 function deps_graph(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, uuid_to_name::Dict{UUID, String},
-        reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, julia_version,
+        reqs::Resolve.Requires, fixed::Dict{UUID, Resolve.Fixed}, @nospecialize(julia_version::Union{VersionNumber, Nothing}),
         installed_only::Bool
     )
     uuids = Set{UUID}()
@@ -1205,6 +1233,8 @@ function deps_graph(
     for fixed_uuids in map(fx -> keys(fx.requires), values(fixed))
         union!(uuids, fixed_uuids)
     end
+    # Only used when `installed_only`; computed once instead of per version checked
+    platform = installed_only ? HostPlatform() : nothing
 
     # Collect all weak dependency UUIDs from fixed packages
     # (weak deps of registry packages and stdlibs are added during graph traversal below)
@@ -1306,15 +1336,20 @@ function deps_graph(
 
                     # Build filtered version list for this registry
                     reg_valid_versions = Set{VersionNumber}()
+                    # Installed versions of this package, looked up once per package rather than
+                    # probing the depots for every version
+                    installed_slugs = installed_only ? installed_version_slugs(pkg.name) : nothing
                     for v in keys(info.version_info)
                         # Filter yanked and if we are in offline mode also downloaded packages
                         Registry.isyanked(info, v) && continue
                         if installed_only
-                            pkg_spec = PackageSpec(name = pkg.name, uuid = pkg.uuid, version = v, tree_hash = Registry.treehash(info, v))
+                            tree_hash = Registry.treehash(info, v)
+                            is_version_installed(installed_slugs::Set{String}, pkg.uuid, tree_hash) || continue
+                            pkg_spec = PackageSpec(name = pkg.name, uuid = pkg.uuid, version = v, tree_hash = tree_hash)
                             # Resolution has not happened yet, so there is no environment to run
                             # artifact selectors in; a version with a selector counts as installed
                             # once its source is present. Installing it still runs the selector.
-                            is_package_downloaded(env.manifest_file, pkg_spec; run_selectors = false) || continue
+                            is_package_downloaded(env.manifest_file, pkg_spec; platform = platform::Platform, run_selectors = false) || continue
                         end
 
                         # Skip package version that are not the same as external packages in sysimage
@@ -1345,11 +1380,16 @@ function deps_graph(
                         push!(pkg_versions_per_reg, reg_valid_versions)
                     end
 
-                    # Collect all dependency UUIDs for discovery
+                    # Collect all dependency UUIDs for discovery. Only the dependencies of
+                    # versions that passed the filtering above can take part in the resolution,
+                    # so dependencies of e.g. yanked or (in offline mode) not installed versions
+                    # are not followed. This keeps the graph small when few versions are valid.
                     for (vrange, deps_set) in info.deps
+                        any(v -> v in vrange, reg_valid_versions) || continue
                         union!(uuids, deps_set)
                     end
                     for (vrange, deps_set) in info.weak_deps
+                        any(v -> v in vrange, reg_valid_versions) || continue
                         union!(uuids, deps_set)
                         union!(all_weak_uuids, deps_set)
                     end
@@ -2119,9 +2159,18 @@ function artifact_suffix(artifact_counts)
     return ""
 end
 
+# The fields of a `PackageSpec` or `PackageEntry` that downloading uses, so that the
+# download code below is compiled once for both.
+struct DownloadPkg
+    name::Union{Nothing, String}
+    uuid::Union{Nothing, UUID}
+    version::Union{Nothing, Types.VersionTypes, String}
+    tree_hash::Union{Nothing, SHA1}
+end
+
 function download_source(ctx::Context, pkgs; readonly::Bool = true)
     pidfile_stale_age = 10 # recommended value is about 3-5x an estimated normal download time (i.e. 2-3s)
-    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{eltype(pkgs), Set{String}, String}}[]
+    pkgs_to_install = NamedTuple{(:pkg, :urls, :path), Tuple{DownloadPkg, Set{String}, String}}[]
     for pkg in pkgs
         tracking_registered_version(pkg, ctx.julia_version) || continue
         path = source_path(ctx.env.manifest_file, pkg, ctx.julia_version)
@@ -2140,9 +2189,15 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
 
         FileWatching.mkpidlock(() -> ispath(path), pidfile, stale_age = pidfile_stale_age) && continue
         urls = find_urls(ctx.registries, pkg.uuid)
-        push!(pkgs_to_install, (; pkg, urls, path))
+        push!(pkgs_to_install, (; pkg = DownloadPkg(pkg.name, pkg.uuid, pkg.version, pkg.tree_hash), urls, path))
     end
+    return download_source(ctx, pkgs_to_install, readonly, pidfile_stale_age)
+end
 
+function download_source(
+        ctx::Context, pkgs_to_install::Vector{NamedTuple{(:pkg, :urls, :path), Tuple{DownloadPkg, Set{String}, String}}},
+        readonly::Bool, pidfile_stale_age::Int
+    )
     length(pkgs_to_install) == 0 && return Set{UUID}()
 
     ########################################
@@ -2217,7 +2272,7 @@ function download_source(ctx::Context, pkgs; readonly::Bool = true)
         fancyprint = can_fancyprint(ctx.io)
         try
             for i in 1:length(pkgs_to_install)
-                pkg::eltype(pkgs), exc_or_success_or_nothing, bt_or_pathurls = take!(results)
+                pkg::DownloadPkg, exc_or_success_or_nothing, bt_or_pathurls = take!(results)
                 if exc_or_success_or_nothing isa Exception
                     exc = exc_or_success_or_nothing
                     pkgerror("Error when installing package $(pkg.name):\n", sprint(Base.showerror, exc, bt_or_pathurls))
@@ -3929,7 +3984,7 @@ function manifest_dependents_map(manifest::Manifest)
     return dependents
 end
 
-function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance}; dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing)
+function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance}; @nospecialize(dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing))
     pkg.version isa VersionNumber || return nothing # Can happen when there is no manifest
     manifest, project = env.manifest, env.project
     packages_holding_back = String[]
@@ -3976,6 +4031,9 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
             reg_pkg = get(reg, dep_uuid, nothing)
             reg_pkg === nothing && continue
             info = Registry.registry_info(reg, reg_pkg)
+            # Only consult registries that actually contain the dependent's version,
+            # otherwise another registry's compat ranges get applied to a version it does not have
+            haskey(info.version_info, dep_pkg.version) || continue
             compat_info_v_uuid = Registry.query_compat_for_version(info, dep_pkg.version, pkg.uuid)
             compat_info_v_uuid === nothing && continue
             if !(max_version in compat_info_v_uuid)

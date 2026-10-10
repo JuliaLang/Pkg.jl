@@ -528,6 +528,50 @@ end
     end
 end
 
+@testset "compat for extras" begin
+    # A `[compat]` entry for a package listed in `[extras]` constrains that package when it is
+    # in the environment as an indirect dependency, without making it a direct dependency.
+    isolate(loaded_depot = true) do
+        mktempdir() do tempdir
+            path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "DependsOnExample"))
+            Pkg.add(path = path)
+            @test Pkg.dependencies()[exuuid].version > v"0.5.3"
+            project_file = Base.active_project()
+            project = TOML.parsefile(project_file)
+            project["extras"] = Dict("Example" => string(exuuid))
+            project["compat"] = Dict("Example" => "0.5.0 - 0.5.3")
+            open(io -> TOML.print(io, project), project_file, "w")
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            @test !haskey(Pkg.project().dependencies, "Example")
+            # instantiating from scratch honors it too
+            rm(joinpath(dirname(project_file), "Manifest.toml"))
+            Pkg.instantiate()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            # the manifest is consistent with the project, so `resolve` is a no-op
+            Pkg.resolve()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            # editing the compat entry invalidates the manifest
+            project["compat"]["Example"] = "0.5.0 - 0.5.4"
+            open(io -> TOML.print(io, project), project_file, "w")
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.4"
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
+            # the extras package is not installed when nothing depends on it
+            Pkg.rm("DependsOnExample")
+            @test !haskey(Pkg.dependencies(), exuuid)
+            # lifting the compat entry lets the package update again
+            Pkg.add(path = path)
+            @test Pkg.dependencies()[exuuid].version == v"0.5.4"
+            delete!(project["compat"], "Example")
+            open(io -> TOML.print(io, project), project_file, "w")
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version > v"0.5.4"
+        end
+    end
+end
+
 @testset "rm" begin
     # simple rm
     isolate(loaded_depot = true) do
