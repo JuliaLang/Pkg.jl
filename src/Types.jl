@@ -1505,6 +1505,9 @@ function update_project_sources!(env::EnvCache)
             end
         end
         entry === nothing && continue
+        # NB: an entry that lists both a `path` and a repo (`url`/`rev`) is left as it is
+        #     (which of the two is in use is decided by whether the path exists)
+        has_repo_fallback(get(env.project.sources, pkg, nothing)) && continue
         # Only existing entries are updated for workspace members and for sources that are
         # already declared in another project of the workspace. Some commands drop the entry
         # and rely on it being re-added here, so consult the project as it was on disk too.
