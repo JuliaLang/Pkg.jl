@@ -166,9 +166,9 @@ end
             @test "General" in m[example_uuid].registries
 
             # Write and read back to verify round-trip
-            mktemp() do path, io
-                Pkg.Types.write_manifest(io, m)
-                close(io)
+            mktempdir() do dir
+                path = joinpath(dir, "Manifest.toml")
+                open(io -> Pkg.Types.write_manifest(io, m), path, "w")
                 m2 = Pkg.Types.read_manifest(path)
                 @test m.deps == m2.deps
                 @test m.julia_version == m2.julia_version
@@ -197,9 +197,9 @@ end
             @test !haskey(m.other, "environment_id")
 
             # Write and read back to verify round-trip
-            mktemp() do path, io
-                Pkg.Types.write_manifest(io, m)
-                close(io)
+            mktempdir() do dir
+                path = joinpath(dir, "Manifest.toml")
+                open(io -> Pkg.Types.write_manifest(io, m), path, "w")
                 @test Pkg.Types.read_manifest(path) == m
             end
 

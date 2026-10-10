@@ -1285,7 +1285,8 @@ function precompile(
     end
     pkgids = Base.PkgId[Base.PkgId(pkg.uuid, pkg.name) for pkg in pkgs]
 
-    return activate(dirname(ctx.env.project_file)) do
+    # the project file itself: a script with inline project metadata has no directory to activate
+    return activate(ctx.env.project_file) do
         # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
         # `IOContext{IO}` and takes `ctx.io` as is. Before that it specialized on the
         # stream, and only the unwrapped variants come precompiled, apart from a pipe,
@@ -1337,7 +1338,7 @@ function instantiate(
         copy!(ctx.registries, Registry.reachable_registries())
     end
     Operations.ensure_manifest_registries!(ctx)
-    if !isfile(ctx.env.project_file) && isfile(ctx.env.manifest_file)
+    if !isfile(ctx.env.project_file) && Types.manifest_exists(ctx.env)
         _manifest = Pkg.Types.read_manifest(ctx.env.manifest_file)
         # Skip the version check when update_on_mismatch is set; the recursion below
         # will detect the mismatch via manifest_is_mismatched and fall back to update.
@@ -1353,14 +1354,14 @@ function instantiate(
         Types.write_project(Dict("deps" => deps), ctx.env.project_file)
         return instantiate(Context(); manifest = manifest, update_registry = update_registry, verbose = verbose, platform = platform, allow_build = allow_build, allow_autoprecomp = allow_autoprecomp, workspace = workspace, julia_version_strict = julia_version_strict, update_on_mismatch = update_on_mismatch, kwargs...)
     end
-    if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
+    if (!Types.manifest_exists(ctx.env) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
         up(ctx; update_registry = update_registry && allow_registry_update)
         allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end
-    if !isfile(ctx.env.manifest_file) && manifest == true
+    if !Types.manifest_exists(ctx.env) && manifest == true
         pkgerror("expected manifest file at `$(ctx.env.manifest_file)` but it does not exist")
     end
 
@@ -1630,7 +1631,7 @@ function activate(; temp = false, shared = false, prev = false, io::IO = stderr_
     end
     Base.ACTIVE_PROJECT[] = nothing
     p = Base.active_project()
-    p === nothing || printpkgstyle(io, :Activating, "project at $(pathrepr(dirname(p)))")
+    p === nothing || _print_activating(io, p)
     _warn_loaded_module_path_mismatch(io)
     add_snapshot_to_undo()
     return nothing
@@ -1652,6 +1653,17 @@ function _activate_dep(dep_name::AbstractString)
         end
     end
 end
+function _print_activating(io::IO, p::AbstractString)
+    if Types.is_script(p)
+        n = Base.has_project_block(p) ? "" : "new "
+        printpkgstyle(io, :Activating, "$(n)script at $(pathrepr(p))")
+    else
+        n = ispath(p) ? "" : "new "
+        printpkgstyle(io, :Activating, "$(n)project at $(pathrepr(dirname(p)))")
+    end
+    return
+end
+
 function activate(path::AbstractString; shared::Bool = false, temp::Bool = false, io::IO = stderr_f())
     temp && pkgerror("Can not give `path` argument when creating a temporary environment")
     if !shared
@@ -1659,7 +1671,8 @@ function activate(path::AbstractString; shared::Bool = false, temp::Bool = false
         # 1. if path exists, activate that
         # 2. if path exists in deps, and the dep is deved, activate that path (`devpath` above)
         # 3. activate the non-existing directory (e.g. as in `pkg> activate .` for initing a new env)
-        if Pkg.isdir_nothrow(path)
+        # 4. a file that is not a project file is a script with inline project metadata
+        if Pkg.isdir_nothrow(path) || Types.is_script(path)
             fullpath = abspath(path)
         else
             fullpath = _activate_dep(path)
@@ -1689,10 +1702,7 @@ function activate(path::AbstractString; shared::Bool = false, temp::Bool = false
     end
     Base.ACTIVE_PROJECT[] = Base.load_path_expand(fullpath)
     p = Base.active_project()
-    if p !== nothing
-        n = ispath(p) ? "" : "new "
-        printpkgstyle(io, :Activating, "$(n)project at $(pathrepr(dirname(p)))")
-    end
+    p === nothing || _print_activating(io, p)
     _warn_loaded_module_path_mismatch(io)
     add_snapshot_to_undo()
     return nothing
