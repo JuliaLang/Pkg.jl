@@ -60,6 +60,9 @@ Pkg v1.13 Release Notes
   holding a package back based on compat from a registry lacking the dependent's version. ([#4849])
 - `Pkg.resolve` and `Pkg.pin` no longer fail with "Did not find subdirectory" for a package tracked from a git repo
   `subdir` whose manifest entry is not installed in the depot yet, e.g. on a fresh machine with a committed manifest. ([#4851])
+- `Pkg.test` and `Pkg.build` of an installed (not developed) package no longer fail with "expected package ... to exist
+  at path" when it points at sibling packages of its repository by path, as monorepo subpackages do, through
+  `[sources]` or a committed test manifest. Those paths are ignored and the dependencies resolve from the registry. ([#4861])
 
 Pkg v1.12 Release Notes
 =======================
@@ -230,3 +233,4 @@ Pkg v1.7 Release Notes
 [#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
 [#4849]: https://github.com/JuliaLang/Pkg.jl/issues/4849
 [#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851
+[#4861]: https://github.com/JuliaLang/Pkg.jl/pull/4861
