@@ -212,12 +212,51 @@ function build_pkg_data(
     return data, rlist, compat, sourced, pin
 end
 
-# package priority order for the resolver's lexicographic optimization: by
-# name, then UUID
-function priority(uuid_to_name::Dict{UUID, String}, uuid_of::Dict{String, UUID})
+# The number of packages each package can pull in: the size of its transitive
+# dependency closure over the dependencies of all its versions.
+function closure_sizes(data::Dict{UUID, PkgData})
+    uuids = collect(keys(data))
+    index = Dict{UUID, Int}(u => i for (i, u) in enumerate(uuids))
+    adj = Vector{Vector{Int}}(undef, length(uuids))
+    for (i, u) in enumerate(uuids)
+        deps = Set{Int}()
+        for qs in values(data[u].depends), q in qs
+            j = get(index, q, nothing)
+            j === nothing || push!(deps, j)
+        end
+        adj[i] = collect(deps)
+    end
+    sizes = Dict{UUID, Int}()
+    seen = falses(length(uuids))
+    stack = Int[]
+    for (i, u) in enumerate(uuids)
+        fill!(seen, false)
+        n = 0
+        push!(stack, i)
+        while !isempty(stack)
+            for j in adj[pop!(stack)]
+                seen[j] && continue
+                seen[j] = true
+                n += 1
+                push!(stack, j)
+            end
+        end
+        sizes[u] = n
+    end
+    return sizes
+end
+
+# Package priority order for the resolver's lexicographic optimization, which
+# maximizes the packages of a layer one at a time in this order: packages that
+# can pull in more packages first, then by name and UUID. A package goes before
+# its own dependencies, so that it is not held back to an old release by one of
+# them having been maximized first: ordered by name alone, Distributions would
+# be maximized before Turing and force it many minor releases back for a few
+# patch releases of its own.
+function priority(uuid_to_name::Dict{UUID, String}, uuid_of::Dict{String, UUID}, sizes::Dict{UUID, Int})
     return function (p::String)
         u = uuid_of[p]
-        return (get(uuid_to_name, u, ""), u)
+        return (-sizes[u], get(uuid_to_name, u, ""), u)
     end
 end
 
@@ -310,7 +349,7 @@ function resolve_versions(
     )
     ans = Resolver.resolve(
         named_data, prob;
-        by = priority(uuid_to_name, uuid_of), order = version_order(preferred_versions, uuid_of),
+        by = priority(uuid_to_name, uuid_of, closure_sizes(data)), order = version_order(preferred_versions, uuid_of),
         diagnose = diagnose_unsat, upstream = diagnose_unsat
     )
     if ans isa Diagnostics.Diagnosis
