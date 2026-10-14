@@ -29,6 +29,10 @@ Pkg v1.14 Release Notes
   and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
 - Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
   nor add a `[sources]` entry for a package that is itself a project of the workspace. ([#4237])
+- New `[compat-overrides]` section in the project file. An entry replaces every compatibility constraint on
+  a package, including those of the packages that depend on it, with the given one, e.g. to try a new version
+  of a package that a dependency has not been updated to allow yet. Only the overrides of the active project
+  (and its workspace) apply. ([#4841])
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
@@ -46,6 +50,9 @@ Pkg v1.14 Release Notes
 - A `[sources]` entry may now give both a local `path` *and* a repo `url`/`rev` to fall back on. The path is used if it
   exists and the repository otherwise, so a local checkout can shadow the repository without the entry being edited.
   ([#4764])
+- `Pkg.test` and `Pkg.build` of an installed (not developed) package no longer fail with "expected package ... to exist
+  at path" when it points at sibling packages of its repository by path, as monorepo subpackages do, through
+  `[sources]` or a committed test manifest. Those paths are ignored and the dependencies resolve from the registry. ([#4861])
 
 Pkg v1.13 Release Notes
 =======================
@@ -270,6 +277,8 @@ Pkg v1.7 Release Notes
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4738]: https://github.com/JuliaLang/Pkg.jl/pull/4738
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
+[#4841]: https://github.com/JuliaLang/Pkg.jl/pull/4841
+[#4861]: https://github.com/JuliaLang/Pkg.jl/pull/4861
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
 [#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
