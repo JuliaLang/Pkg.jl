@@ -1516,6 +1516,19 @@ end
     @inferred Pkg.REPLMode.CompoundSpecs(Pair{String, Vector{Pkg.REPLMode.CommandDeclaration}}[])
 end
 
+@testset "keyword `CommandSpec` constructor" begin
+    opt = Pkg.REPLMode.OptionDeclaration([:name => "force", :short_name => "f", :api => :force => true])
+    spec = Pkg.REPLMode.CommandSpec(
+        name = "status", short_name = "st", api = identity, option_spec = [opt],
+        help = Markdown.parse("help"), description = "desc",
+    )
+    @test spec.canonical_name == "status"
+    @test spec.short_name == "st"
+    @test spec.option_specs["f"].api == (:force => true)
+    @test Pkg.REPLMode.OptionSpec(name = "x", api = :x => true).name == "x"
+    @test_throws ErrorException Pkg.REPLMode.CommandSpec(name = "x", api = identity, description = "d", bogus = 1)
+end
+
 # To be used to reply to a prompt
 function withreply(f, ans)
     p = Pipe()

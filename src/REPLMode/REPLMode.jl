@@ -52,6 +52,8 @@ function OptionSpec(dec::OptionDeclaration)
     takes_arg && @assert hasmethod(api.second, Tuple{String})
     return OptionSpec(name, short_name, api, takes_arg)
 end
+# Keyword form used by packages that extend the Pkg REPL (e.g. CondaPkg, PreferenceTools)
+OptionSpec(; kw...) = OptionSpec(collect(Pair{Symbol, Any}, kw))
 
 function OptionSpecs(decs::Vector{OptionDeclaration})
     specs = Dict{String, OptionSpec}()
@@ -118,6 +120,7 @@ function CommandSpec(dec::CommandDeclaration)
         OptionSpecs(option_spec), completions, description, help
     )
 end
+CommandSpec(; kw...) = CommandSpec(collect(Pair{Symbol, Any}, kw))
 
 function CommandSpecs(declarations::Vector{CommandDeclaration})
     specs = Dict{String, CommandSpec}()
