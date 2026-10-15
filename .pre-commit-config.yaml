@@ -1,3 +1,5 @@
+# vendor/ holds unmodified upstream code (see vendor/update_resolver.sh)
+exclude: ^vendor/
 repos:
   - repo: 'https://github.com/pre-commit/pre-commit-hooks'
     rev: v5.0.0

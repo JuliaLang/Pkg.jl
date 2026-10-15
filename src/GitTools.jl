@@ -135,7 +135,7 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
     end
 end
 
-function clone(io::IO, url, source_path; header = nothing, credentials = nothing, isbare = false, depth::Integer = 0, kwargs...)
+function clone(io::IO, url, source_path; @nospecialize(header::Union{Nothing, AbstractString} = nothing), credentials = nothing, isbare = false, depth::Integer = 0, kwargs...)
     url = String(url)::String
     source_path = String(source_path)::String
     @assert !isdir(source_path) || isempty(readdir(source_path))
@@ -215,10 +215,8 @@ function geturl(repo)
     end
 end
 
-function fetch(io::IO, repo::LibGit2.GitRepo, remoteurl = nothing; header = nothing, credentials = nothing, refspecs::Vector{String} = [""], depth::Integer = 0, kwargs...)
-    if remoteurl === nothing
-        remoteurl = geturl(repo)
-    end
+function fetch(io::IO, repo::LibGit2.GitRepo, @nospecialize(remoteurl::Union{Nothing, AbstractString} = nothing); @nospecialize(header::Union{Nothing, AbstractString} = nothing), credentials = nothing, refspecs::Vector{String} = [""], depth::Integer = 0, kwargs...)
+    remoteurl = remoteurl === nothing ? geturl(repo) : String(remoteurl)::String
 
     # Disable shallow fetches for local repos (not supported) or if LibGit2 doesn't support it
     if depth > 0 && (is_local_repo(remoteurl) || !supports_shallow_clone())

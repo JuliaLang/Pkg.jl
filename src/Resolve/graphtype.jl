@@ -652,10 +652,11 @@ pkgID_color(pkgID) = CONFLICT_COLORS[mod1(hash(pkgID), end)]
 
 logstr(pkgID) = logstr(pkgID, pkgID)
 function logstr(pkgID, args...)
-    # workout the string with the color codes, check stderr to decide if color is enabled
-    return sprint(args; context = stderr::IO) do io, iargs
-        printstyled(io, iargs...; color = pkgID_color(pkgID))
-    end
+    # workout the string with the color codes, check stderr to decide if color is enabled.
+    # Use a fixed IO type to avoid recompiling this for every type of stderr.
+    io = IOContext(IOBuffer(), :color => get(stderr, :color, false)::Bool)
+    printstyled(io, args...; color = pkgID_color(pkgID))
+    return String(take!(io.io))
 end
 
 """

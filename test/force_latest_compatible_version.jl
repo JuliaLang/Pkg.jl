@@ -19,7 +19,7 @@ function get_exception_and_message(f::Function)
 end
 
 const exception_type_1 = Pkg.Resolve.ResolverError
-const message_1 = "Unsatisfiable requirements detected for package"
+const message_1 = "Unsatisfiable requirements detected"
 const message_2 = "Dependency does not have a [compat] entry"
 
 const test_package_parent_dir = joinpath(
@@ -143,10 +143,15 @@ end
                 cp(joinpath(test_package_parent_dir, "NewOnly"), test_package; force = true)
                 Utils.isolate(loaded_depot = true) do
                     Pkg.activate(test_package)
-                    Pkg.instantiate()
-                    Pkg.build()
+                    # The `[compat]` entry for the `[extras]` package constrains the
+                    # project's own resolve too, so instantiating already fails
+                    ex, msg = get_exception_and_message() do
+                        Pkg.instantiate()
+                    end
+                    @test ex isa exception_type_1
+                    @test occursin(message_1, msg)
 
-                    # The manifest is unsatisfiable regardless of the kwargs
+                    # And `Pkg.test` is unsatisfiable regardless of the kwargs
                     for force_latest_compatible_version in [false, true]
                         @testset "default value of `allow_earlier_backwards_compatible_versions`" begin
                             test_unsatisfiable(; force_latest_compatible_version)

@@ -493,12 +493,19 @@ end
 end
 
 if Pkg.Registry.registry_use_pkg_server()
+    function general_registry_uses_cache()
+        reg = only(filter(r -> r.name == "General", Pkg.Registry.reachable_registries()))
+        return reg.cache !== nothing && reg.in_memory_registry === nothing &&
+            Pkg.Registry.get_registry_type(reg) == :packed
+    end
+
     @testset "compressed registry" begin
         # Unpacking the General registry takes minutes on Windows (three
         # times here: two adds and one update), so only the compressed
         # variant runs there; the unpacked code path is platform independent.
-        for unpack in (Sys.iswindows() ? (nothing,) : (true, nothing))
-            withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack) do
+        variants = Sys.iswindows() ? ((nothing, nothing),) : ((true, nothing), (nothing, nothing), (nothing, false))
+        for (unpack, use_cache) in variants
+            withenv("JULIA_PKG_UNPACK_REGISTRY" => unpack, "JULIA_PKG_REGISTRY_CACHE" => use_cache) do
                 temp_pkg_dir(; linked_reg = false) do depot
                     # These get restored by temp_pkg_dir
                     Pkg.Registry.DEFAULT_REGISTRIES[1].path = nothing
@@ -509,7 +516,28 @@ if Pkg.Registry.registry_use_pkg_server()
                     # the server may serve the registry gzip- or zstd-compressed
                     tarballs = filter(isfile, [joinpath(DEPOT_PATH[1], "registries", "General$ext") for ext in (".tar.gz", ".tar.zst")])
                     @test !isempty(tarballs) != something(unpack, false)
+                    # Compressed registries are read through an on-disk cache of the uncompressed contents
+                    cache_dir = joinpath(DEPOT_PATH[1], "registries", ".cache")
+                    if unpack === nothing && use_cache === nothing
+                        # A cache with a corrupt blob offset is rejected and rebuilt.
+                        reg_info = Pkg.TOML.parsefile(joinpath(DEPOT_PATH[1], "registries", "General.toml"))
+                        tree_hash = Base.SHA1(reg_info["git-tree-sha1"])
+                        cache_path = Pkg.Registry.registry_cache_path(only(tarballs), tree_hash)
+                        @test Pkg.Registry.load_or_build_registry_cache(only(tarballs), tree_hash) !== nothing
+                        open(cache_path, "r+") do io
+                            seek(io, 36) # registry name offset
+                            write(io, typemax(UInt32))
+                        end
+                        @test Pkg.Registry.load_registry_cache(cache_path, tree_hash) === nothing
+                    end
                     Pkg.add("Example")
+                    if unpack == true || use_cache == false
+                        @test !isdir(cache_dir)
+                    else
+                        @test general_registry_uses_cache()
+                        @test readdir(cache_dir) == [basename(cache_path)]
+                        @test filesize(cache_path) > 7
+                    end
 
                     # Write some bad git-tree-sha1 here so that Pkg.update will have to update the registry
                     if unpack == true
@@ -530,11 +558,40 @@ if Pkg.Registry.registry_use_pkg_server()
                         )
                     end
                     Pkg.update()
+                    if unpack === nothing && use_cache === nothing
+                        # The updated registry uses a cache too
+                        @test general_registry_uses_cache()
+                        @test length(filter(startswith("General-"), readdir(cache_dir))) == 1
+                    end
                     Pkg.Registry.rm(name = "General")
                     @test isempty(filter(x -> x != "CACHEDIR.TAG", readdir(joinpath(DEPOT_PATH[1], "registries"))))
                 end
             end
         end
+    end
+end
+
+@testset "registry cache filenames" begin
+    mktempdir() do dir
+        cache_dir = joinpath(dir, ".cache")
+        mkpath(cache_dir)
+        hash = "0123456789abcdef0123456789abcdef01234567"
+        foo_tar = joinpath(dir, "Foo.tar.gz")
+        dotted_tar = joinpath(dir, "My.A.tar.zst")
+        @test basename(Pkg.Registry.registry_cache_path(dotted_tar, Base.SHA1(hash))) ==
+            "My.A-$hash.v$(Pkg.Registry.CACHE_VERSION).bin"
+
+        foo_cache = joinpath(cache_dir, "Foo-$hash.v$(Pkg.Registry.CACHE_VERSION).bin")
+        foo_temp = foo_cache * ".tmp-123-456"
+        foo_other_version = joinpath(cache_dir, "Foo-$hash.v999.bin")
+        foo_bar_cache = joinpath(cache_dir, "Foo-Bar-$hash.v$(Pkg.Registry.CACHE_VERSION).bin")
+        foreach(touch, (foo_cache, foo_temp, foo_other_version, foo_bar_cache))
+
+        Pkg.Registry.remove_registry_cache(foo_tar)
+        @test !isfile(foo_cache)
+        @test !isfile(foo_temp)
+        @test isfile(foo_other_version)
+        @test isfile(foo_bar_cache)
     end
 end
 
@@ -709,7 +766,8 @@ end
                 Pkg.offline(false)
                 @test_logs Pkg.Registry.update(; io = devnull, update_cooldown = Second(0))
                 @test isfile(joinpath(installed_regpath, "update_marker"))
-                @test !isempty(requests)
+                # Updating a git-only registry does not need to query the package server.
+                @test isempty(requests)
             end
         finally
             Pkg.offline(old_offline)

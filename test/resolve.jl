@@ -14,7 +14,7 @@ include("utils.jl")
 using .Utils
 include("resolve_utils.jl")
 using .ResolveUtils
-import .ResolveUtils: graph_from_data, reqs_from_data, pkguuid
+import .ResolveUtils: graph_from_data, reqs_from_data, pkguuid, storeuuid
 
 # Check that VersionWeight keeps the same ordering as VersionNumber
 
@@ -900,6 +900,36 @@ end
 
     @test sanity_tst(deps_data, problematic_data)
     @test_throws ResolverError resolve_tst(deps_data, reqs_data)
+end
+
+@testset "SAT resolver maximizes dependents before their dependencies" begin
+    # Requiring `Root`, which depends on `Dist` and `Turing`: the newest `Turing`
+    # only supports the older `Dist`. Maximizing `Dist` first (it sorts first by
+    # name) would hold `Turing` back, but `Turing` can pull in `Dist`, so it goes
+    # first and gets its newest version.
+    SATResolve = Pkg.SATResolve
+    VersionRange = Pkg.Versions.VersionRange
+    uuid_to_name = Dict{UUID, String}()
+    root, dist, turing = (storeuuid(p, uuid_to_name) for p in ("Root", "Dist", "Turing"))
+    deps = Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}}(
+        root => [Dict(VersionRange("1") => Set([dist, turing]))],
+        dist => [Dict{VersionRange, Set{UUID}}()],
+        turing => [Dict(VersionRange("1-2") => Set([dist]))],
+    )
+    compat = Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}}(
+        root => [Dict{VersionRange, Dict{UUID, VersionSpec}}()],
+        dist => [Dict{VersionRange, Dict{UUID, VersionSpec}}()],
+        turing => [Dict(VersionRange("2") => Dict(dist => VersionSpec("1")))],
+    )
+    weak_deps = Dict{UUID, Vector{Dict{VersionRange, Set{UUID}}}}(u => [Dict{VersionRange, Set{UUID}}()] for u in keys(deps))
+    weak_compat = Dict{UUID, Vector{Dict{VersionRange, Dict{UUID, VersionSpec}}}}(u => [Dict{VersionRange, Dict{UUID, VersionSpec}}()] for u in keys(deps))
+    versions = Dict{UUID, Vector{VersionNumber}}(root => [v"1"], dist => [v"1", v"2"], turing => [v"1", v"2"])
+    versions_per_registry = Dict{UUID, Vector{Set{VersionNumber}}}(u => [Set(vs)] for (u, vs) in versions)
+    sol = SATResolve.resolve_versions(
+        deps, compat, weak_deps, weak_compat, versions, versions_per_registry, uuid_to_name,
+        Requires(root => VersionSpec()), Dict{UUID, Fixed}(), nothing, Dict{UUID, VersionNumber}()
+    )
+    @test sol == Dict(root => v"1", dist => v"1", turing => v"2")
 end
 
 @testset "Stdlib resolve smoketest" begin

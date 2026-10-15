@@ -1,0 +1,17 @@
+name = "Resolver"
+uuid = "ecd60e94-5748-11e9-04dc-1fe0f95e4121"
+authors = ["Stefan Karpinski <stefan@karpinski.org>"]
+version = "0.2.0"
+
+[deps]
+Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+libpicosat_jll = "6b231c3b-13f8-5ced-86ae-8860c7f75d86"
+
+[extras]
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Pkg", "Random", "TOML", "Test"]

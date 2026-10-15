@@ -1,6 +1,11 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Pkg now resolves package versions with the exact SAT-based resolver from
+  [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
+  resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each
+  conflict with the chain of compat entries behind it and the verified changes that would fix it. The previous
+  resolver can be selected with `JULIA_PKG_RESOLVER=maxsum`. ([#4738])
 - Manifests now record an `environment_id` (the project `uuid`, or a generated UUID kept from then on) and,
   when the project has a `name`, an `environment_name`. Both follow the project file on every manifest write.
   Julia mixes the id into precompile cache file names, so environments at the same path that share a depot
@@ -27,9 +32,27 @@ Pkg v1.14 Release Notes
   and `Pkg.resolve` checks out the new source instead of keeping the previously recorded tree hash. ([#4157])
 - Pkg operations in a workspace project no longer copy the `[sources]` of other projects in the workspace into it,
   nor add a `[sources]` entry for a package that is itself a project of the workspace. ([#4237])
+- New `[compat-overrides]` section in the project file. An entry replaces every compatibility constraint on
+  a package, including those of the packages that depend on it, with the given one, e.g. to try a new version
+  of a package that a dependency has not been updated to allow yet. Only the overrides of the active project
+  (and its workspace) apply. ([#4841])
 - `Pkg.test` of a workspace member from the workspace root no longer fails with "expected package ... to exist at path"
   when the member declares relative path `[sources]` and its test dependencies come from `[extras]`/`[targets]`;
   those paths are now resolved against the member's directory. ([#4830])
+- When a package is registered in several registries, the dependencies and compat of a version are now taken only
+  from registries that actually contain that version. Previously a registry's `Deps.toml` entries could leak into the
+  manifest for a version the registry does not have, and `Pkg.status(outdated = true)` could report a dependent as
+  holding a package back based on compat from a registry lacking the dependent's version. ([#4849])
+- `Pkg.why` now prints a tree instead of listing every path through the dependency graph, which could
+  run to thousands of lines for widely used packages. The package is the root, the packages that depend
+  on it are nested below down to the project's direct dependencies (highlighted), and a subtree already
+  shown elsewhere is marked with `(*)`. The new `forward` keyword (`--forward`/`-f` in the REPL) prints
+  the paths top-down from the direct dependencies instead. ([#4839])
+- `Pkg.resolve` and `Pkg.pin` no longer fail with "Did not find subdirectory" for a package tracked from a git repo
+  `subdir` whose manifest entry is not installed in the depot yet, e.g. on a fresh machine with a committed manifest. ([#4851])
+- `Pkg.test` and `Pkg.build` of an installed (not developed) package no longer fail with "expected package ... to exist
+  at path" when it points at sibling packages of its repository by path, as monorepo subpackages do, through
+  `[sources]` or a committed test manifest. Those paths are ignored and the dependencies resolve from the registry. ([#4861])
 
 Pkg v1.13 Release Notes
 =======================
@@ -254,5 +277,11 @@ Pkg v1.7 Release Notes
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
 [#4777]: https://github.com/JuliaLang/Pkg.jl/pull/4777
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
+[#4841]: https://github.com/JuliaLang/Pkg.jl/pull/4841
+[#4861]: https://github.com/JuliaLang/Pkg.jl/pull/4861
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
+[#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
+[#4849]: https://github.com/JuliaLang/Pkg.jl/issues/4849
+[#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
+[#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851

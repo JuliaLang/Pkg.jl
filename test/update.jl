@@ -528,6 +528,115 @@ end
     end
 end
 
+@testset "compat for extras" begin
+    # A `[compat]` entry for a package listed in `[extras]` constrains that package when it is
+    # in the environment as an indirect dependency, without making it a direct dependency.
+    isolate(loaded_depot = true) do
+        mktempdir() do tempdir
+            path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "DependsOnExample"))
+            Pkg.add(path = path)
+            @test Pkg.dependencies()[exuuid].version > v"0.5.3"
+            project_file = Base.active_project()
+            project = TOML.parsefile(project_file)
+            project["extras"] = Dict("Example" => string(exuuid))
+            project["compat"] = Dict("Example" => "0.5.0 - 0.5.3")
+            open(io -> TOML.print(io, project), project_file, "w")
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            @test !haskey(Pkg.project().dependencies, "Example")
+            # instantiating from scratch honors it too
+            rm(joinpath(dirname(project_file), "Manifest.toml"))
+            Pkg.instantiate()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            # the manifest is consistent with the project, so `resolve` is a no-op
+            Pkg.resolve()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            # editing the compat entry invalidates the manifest
+            project["compat"]["Example"] = "0.5.0 - 0.5.4"
+            open(io -> TOML.print(io, project), project_file, "w")
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.4"
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
+            # the extras package is not installed when nothing depends on it
+            Pkg.rm("DependsOnExample")
+            @test !haskey(Pkg.dependencies(), exuuid)
+            # lifting the compat entry lets the package update again
+            Pkg.add(path = path)
+            @test Pkg.dependencies()[exuuid].version == v"0.5.4"
+            delete!(project["compat"], "Example")
+            open(io -> TOML.print(io, project), project_file, "w")
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version > v"0.5.4"
+        end
+    end
+end
+
+@testset "compat-overrides" begin
+    write_project(file, project) = open(io -> TOML.print(io, project), file, "w")
+    # an override replaces the compat of a fixed (developed) dependency and the project's own
+    isolate(loaded_depot = true) do
+        mktempdir() do tempdir
+            path = copy_test_package(tempdir, "DependsOnExample")
+            dep_project = TOML.parsefile(joinpath(path, "Project.toml"))
+            dep_project["compat"] = Dict("Example" => "= 0.3.0")
+            write_project(joinpath(path, "Project.toml"), dep_project)
+            Pkg.develop(path = path)
+            @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+            project_file = Base.active_project()
+            project = TOML.parsefile(project_file)
+            project["weakdeps"] = Dict("Example" => string(exuuid))
+            project["compat"] = Dict("Example" => "0.3")
+            project["compat-overrides"] = Dict("Example" => "0.5.0 - 0.5.3")
+            write_project(project_file, project)
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            @test !haskey(Pkg.project().dependencies, "Example")
+            rm(joinpath(dirname(project_file), "Manifest.toml"))
+            Pkg.instantiate()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.3"
+            # editing the override invalidates the manifest
+            project["compat-overrides"]["Example"] = "0.5.0 - 0.5.4"
+            write_project(project_file, project)
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === false
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.5.4"
+            @test Pkg.is_manifest_current(Pkg.Types.Context()) === true
+            # the override survives a round trip through Pkg and is pruned with its package
+            Pkg.add("Example")
+            project = TOML.parsefile(project_file)
+            @test project["compat-overrides"] == Dict("Example" => "0.5.0 - 0.5.4")
+            Pkg.rm("Example")
+            @test !haskey(TOML.parsefile(project_file), "compat-overrides")
+            # without the override the compat entries apply again
+            Pkg.update()
+            @test Pkg.dependencies()[exuuid].version == v"0.3.0"
+        end
+    end
+    # an override replaces the compat of a registered dependency
+    isolate(loaded_depot = true) do
+        mktempdir() do tempdir
+            Pkg.activate(tempdir)
+            Pkg.Registry.add(path = joinpath(@__DIR__, "test_packages", "ExtensionExamples", "ExtensionRegistry"))
+            Pkg.add("HasExtensions") # has `Example = "0.5"` in the registry
+            @test Pkg.dependencies()[exuuid].version >= v"0.5.0"
+            project_file = Base.active_project()
+            project = TOML.parsefile(project_file)
+            project["weakdeps"] = Dict("Example" => string(exuuid))
+            project["compat-overrides"] = Dict("Example" => "0.3")
+            write_project(project_file, project)
+            Pkg.update()
+            @test v"0.3.0" <= Pkg.dependencies()[exuuid].version < v"0.4.0"
+        end
+    end
+    # the package must be listed, like for `compat`
+    mktempdir() do tempdir
+        project_file = joinpath(tempdir, "Project.toml")
+        write_project(project_file, Dict("compat-overrides" => Dict("Example" => "0.3")))
+        @test_throws PkgError("Compat override `Example` not listed in `deps` or `weakdeps` section at $(repr(project_file)).") Pkg.Types.read_project(project_file)
+    end
+end
+
 @testset "rm" begin
     # simple rm
     isolate(loaded_depot = true) do
