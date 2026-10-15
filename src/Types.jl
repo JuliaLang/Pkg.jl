@@ -697,7 +697,7 @@ function load_workspace_sources(env::EnvCache)
 end
 
 # only hash the deps, compat and sources fields as they are the only fields that affect a resolve
-function workspace_resolve_hash(env::EnvCache)
+function workspace_resolve_hash(env::EnvCache; include_sources::Bool = true)
     # Handle deps in both [deps] and [weakdeps]
     deps = Dict{String, UUID}()
     for pkg in Pkg.Operations.load_direct_deps(env)
@@ -754,7 +754,7 @@ function workspace_resolve_hash(env::EnvCache)
     # A changed `[sources]` entry (e.g. a new `rev`) must invalidate the manifest, see #4157.
     # The section is only appended when there are sources so that the hash of environments
     # without any stays the same as before it was included.
-    sources = load_workspace_sources(env)
+    sources = include_sources ? load_workspace_sources(env) : Dict{String, Set{String}}()
     if !isempty(sources)
         println(iob)
         for (name, source) in sort!(collect(sources); by = first)
@@ -763,6 +763,36 @@ function workspace_resolve_hash(env::EnvCache)
     end
     str = String(take!(iob))
     return bytes2hex(sha1(str))
+end
+
+"""
+    project_resolve_hash(env::EnvCache, julia_version)
+
+The `project_hash` that the Pkg of `julia_version` records in a manifest. A manifest resolved
+for an older Julia needs that version's hash, or it reports the manifest as out of date with
+the project. A newer Julia than this one gets this Pkg's hash.
+"""
+function project_resolve_hash(env::EnvCache, julia_version::Union{Nothing, VersionNumber})
+    julia_version === nothing && return workspace_resolve_hash(env)
+    v = Base.thispatch(julia_version)
+    v >= v"1.12" && return workspace_resolve_hash(env; include_sources = v >= v"1.13.1")
+    project = env.project
+    deps = project.deps
+    if v >= v"1.11"
+        # Deps listed in both [deps] and [weakdeps] were left out
+        deps = filter(((name, uuid),) -> get(project.weakdeps, name, nothing) != uuid, deps)
+    end
+    iob = IOBuffer()
+    for (name, uuid) in sort!(collect(deps); by = first)
+        println(iob, name, "=", uuid)
+    end
+    for (name, compat) in sort!(collect(project.compat); by = first)
+        spec = string(compat.val)
+        # Version ranges were printed without spaces around the dash
+        v < v"1.11" && (spec = replace(spec, r" ?- ?" => "-"))
+        println(iob, name, "=", spec)
+    end
+    return bytes2hex(sha1(take!(iob)))
 end
 
 
@@ -1562,6 +1592,9 @@ end
 function update_environment_info!(env::EnvCache)
     project = manifest_project(env)
     manifest = env.manifest
+    # A manifest for a Julia version that has no environment info is left without it
+    manifest_format_for(manifest.julia_version) >= v"2.2.0" || return manifest
+    manifest.manifest_format = max(manifest.manifest_format, v"2.2.0")
     if project.uuid !== nothing
         manifest.environment_id = project.uuid
     elseif manifest.environment_id === nothing
