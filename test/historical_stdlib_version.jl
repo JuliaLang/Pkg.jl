@@ -228,7 +228,7 @@ end
 
     @testset "project hash and manifest format of Julia $version" for (version, written) in manifests
         julia_version = VersionNumber(version)
-        env_dir = JuliaVersionManifests.environment(julia_version, written["manifest"])
+        env_dir = JuliaVersionManifests.environment(written["project"], written["manifest"])
         for (field, update) in (("manifest", false), ("expected", true))
             update && JuliaVersionManifests.update_project!(env_dir)
             raw = TOML.parse(written[field])
@@ -242,7 +242,7 @@ end
     @testset "resolving for Julia $version" for (version, written) in manifests
         julia_version = VersionNumber(version)
         isolate(loaded_depot = true) do
-            env_dir = JuliaVersionManifests.environment(julia_version, written["manifest"])
+            env_dir = JuliaVersionManifests.environment(written["project"], written["manifest"])
             JuliaVersionManifests.update_project!(env_dir)
             Pkg.activate(env_dir) do
                 Pkg.add(Pkg.PackageSpec(name = "JSON", version = v"0.21.4"); julia_version)
