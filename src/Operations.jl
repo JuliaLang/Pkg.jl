@@ -387,8 +387,9 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, ju
     prune_manifest(env)
 
     env.manifest.registries = registry_entries
-    env.manifest.manifest_format = v"2.1.0"
-    return record_project_hash(env)
+    # Write the manifest the way the Pkg of the Julia version it was resolved for does
+    env.manifest.manifest_format = Types.manifest_format_for(julia_version)
+    return record_project_hash(env, julia_version)
 end
 
 # This has to be done after the packages have been downloaded
@@ -404,6 +405,11 @@ function fixups_from_projectfile!(ctx::Context)
             p = stdlibs[pkg.uuid]
             pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
             # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
+            # Until it does, keep the extensions of an entry that kept its version
+            old = manifest_info(env.original_manifest, pkg.uuid)
+            if old !== nothing && old.version == pkg.version
+                pkg.exts = old.exts
+            end
             # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
             for (name, uuid) in pkg.weakdeps
                 if !(uuid in p.deps)
@@ -1810,10 +1816,10 @@ function prune_deps(iterator, keep::Set{UUID})
     return
 end
 
-function record_project_hash(env::EnvCache)
+function record_project_hash(env::EnvCache, julia_version::Union{Nothing, VersionNumber} = VERSION)
     # `[sources]` is part of the hash, so update it first to match what `write_env` will write
     Types.update_project_sources!(env)
-    return env.manifest.other["project_hash"] = Types.workspace_resolve_hash(env)
+    return env.manifest.other["project_hash"] = Types.project_resolve_hash(env, julia_version)
 end
 
 #########
@@ -2124,7 +2130,7 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode::PackageMode)
     end
     # only keep reachable manifest entries
     prune_manifest(ctx.env)
-    record_project_hash(ctx.env)
+    record_project_hash(ctx.env, ctx.julia_version)
     # update project & manifest
     write_env(ctx.env)
     return show_update(ctx.env, ctx.registries; io = ctx.io)
@@ -2441,7 +2447,7 @@ function add(
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
 
-        record_project_hash(ctx.env)
+        record_project_hash(ctx.env, ctx.julia_version)
         write_env(ctx.env)
         show_update(ctx.env, ctx.registries; io = ctx.io)
 
@@ -2477,7 +2483,7 @@ function add(
 
         # if env is a package add compat entries
         add_compat_entries!(ctx, pkgs)
-        record_project_hash(ctx.env) # compat entries changed the hash after it was last recorded in update_manifest!
+        record_project_hash(ctx.env, ctx.julia_version) # compat entries changed the hash after it was last recorded in update_manifest!
 
         write_env(ctx.env) # write env before building
         show_update(ctx.env, ctx.registries; io = ctx.io)
@@ -2488,7 +2494,7 @@ function add(
             Pkg._auto_precompile(ctx, vcat(pkgs, affected))
         end
     else
-        record_project_hash(ctx.env)
+        record_project_hash(ctx.env, ctx.julia_version)
         write_env(ctx.env)
         names_str = join(names, ", ")
         printpkgstyle(ctx.io, :Added, "$names_str to [$(target)]")
