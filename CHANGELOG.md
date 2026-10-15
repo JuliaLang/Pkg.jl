@@ -275,6 +275,7 @@ Pkg v1.7 Release Notes
 [#4678]: https://github.com/JuliaLang/Pkg.jl/pull/4678
 [#4679]: https://github.com/JuliaLang/Pkg.jl/pull/4679
 [#4747]: https://github.com/JuliaLang/Pkg.jl/pull/4747
+[#4738]: https://github.com/JuliaLang/Pkg.jl/pull/4738
 [#4777]: https://github.com/JuliaLang/Pkg.jl/pull/4777
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4841]: https://github.com/JuliaLang/Pkg.jl/pull/4841
