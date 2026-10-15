@@ -3113,6 +3113,8 @@ end
 # Packages that were already in the manifest and now have another version or source,
 # plus everything that depends on them. Their caches no longer match, so an `add` that
 # changes them precompiles them too instead of leaving that to the next load.
+# Only direct dependencies are returned, since precompilation looks packages up by name
+# from the project; the others are reached as their dependencies.
 function changed_packages_and_dependents(env::EnvCache)
     affected = Set{UUID}()
     for (uuid, old) in env.original_manifest
@@ -3134,7 +3136,8 @@ function changed_packages_and_dependents(env::EnvCache)
             end
         end
     end
-    return PackageSpec[PackageSpec(; name = env.manifest[uuid].name, uuid) for uuid in affected]
+    direct = Set{UUID}(values(env.project.deps))
+    return PackageSpec[PackageSpec(; name = env.manifest[uuid].name, uuid) for uuid in affected if uuid in direct]
 end
 
 function add(
