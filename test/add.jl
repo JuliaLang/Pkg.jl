@@ -716,6 +716,67 @@ end
     end
 end
 
+@testset "add: dependencies of other environments" begin
+    isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
+            example_uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+            empty_uuid = UUID("26187899-7657-4a90-a2f6-e79e0214bedc")
+            simple_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
+            # A shared source environment with a registered, a git-tracked and a dev'd package.
+            repo = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "EmptyPackage"))
+            devd = joinpath(tempdir, "SimplePackage")
+            cp(joinpath(@__DIR__, "test_packages", "SimplePackage"), devd)
+            src = joinpath(DEPOT_PATH[1], "environments", "srcenv")
+            Pkg.activate(src)
+            Pkg.add("Example")
+            Pkg.add(path = repo)
+            Pkg.develop(path = devd)
+            skipped = (:warn, r"Skipping SimplePackage which is tracked by path")
+            # `@name` from the REPL: git-tracked packages keep their source, dev'd packages are skipped.
+            Pkg.activate(joinpath(tempdir, "dst1"))
+            @test_logs skipped match_mode = :any Pkg.REPLMode.pkgstr("add --from @srcenv")
+            @test Set(values(Pkg.project().dependencies)) == Set([example_uuid, empty_uuid])
+            @test Pkg.dependencies()[example_uuid].is_tracking_registry
+            @test Pkg.dependencies()[empty_uuid].is_tracking_repo
+            # Project file path through the API, combined with a package given positionally.
+            Pkg.activate(joinpath(tempdir, "dst2"))
+            @test_logs skipped match_mode = :any Pkg.add("Example"; from = joinpath(src, "Project.toml"))
+            @test Set(values(Pkg.project().dependencies)) == Set([example_uuid, empty_uuid])
+            # Directory, added as weak dependencies.
+            Pkg.activate(joinpath(tempdir, "dst3"))
+            @test_logs skipped match_mode = :any Pkg.add(from = [src], target = :weakdeps)
+            @test isempty(Pkg.project().dependencies)
+            @test Set(keys(Pkg.Types.EnvCache().project.weakdeps)) == Set(["Example", "EmptyPackage"])
+            # A project file without a manifest but with `[sources]` uses the sources.
+            nomanifest = joinpath(tempdir, "nomanifest")
+            mkpath(nomanifest)
+            write(
+                joinpath(nomanifest, "Project.toml"), """
+                [deps]
+                EmptyPackage = "$empty_uuid"
+                SimplePackage = "$simple_uuid"
+
+                [sources]
+                EmptyPackage = {url = "$(escape_string(repo))"}
+                SimplePackage = {path = "$(escape_string(devd))"}
+                """
+            )
+            Pkg.activate(joinpath(tempdir, "dst4"))
+            @test_logs skipped match_mode = :any Pkg.add(from = nomanifest)
+            @test Set(values(Pkg.project().dependencies)) == Set([empty_uuid])
+            @test Pkg.dependencies()[empty_uuid].is_tracking_repo
+            # Errors.
+            @test_throws "shared environment `@does_not_exist` does not exist" Pkg.add(from = "@does_not_exist")
+            @test_throws "does not exist at" Pkg.add(from = joinpath(tempdir, "does_not_exist"))
+            @test_throws "could not find project file" Pkg.add(from = tempdir)
+            @test_throws "to itself" Pkg.add(from = dirname(Base.active_project()))
+            mkpath(joinpath(tempdir, "empty"))
+            touch(joinpath(tempdir, "empty", "Project.toml"))
+            @test_throws "no dependencies to add" Pkg.add(from = joinpath(tempdir, "empty", "Project.toml"))
+        end
+    end
+end
+
 @testset "add: resolve tiers" begin
     # The MetaGraphs version tested below relied on a JLD2 version
     # that couldn't actually be loaded on julia 1.9+ so General

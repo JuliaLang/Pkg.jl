@@ -318,15 +318,103 @@ function develop(
     return
 end
 
+# `add --from`: resolve a reference to another environment (`@name`, a project file, or
+# a directory containing one) to its project file.
+function project_ref_file(ref::String)
+    if startswith(ref, '@')
+        # Not `Base.load_path_expand`, which creates a missing named environment.
+        name = ref[2:end]
+        path = nothing
+        for depot in Pkg.depots()
+            candidate = joinpath(Pkg.envdir(depot), name)
+            if isdir(candidate) && basename(abspath(candidate)) == name
+                path = candidate
+                break
+            end
+        end
+        path === nothing && pkgerror("shared environment `$ref` does not exist")
+    else
+        path = abspath(expanduser(ref))
+    end
+    if isdir(path)
+        project_file = projectfile_path(path; strict = true)
+        project_file === nothing && pkgerror(
+            "could not find project file (Project.toml or JuliaProject.toml) in $(pathrepr(path))"
+        )
+        return project_file
+    elseif isfile(path)
+        return path
+    else
+        pkgerror("environment `$ref` does not exist at $(pathrepr(path))")
+    end
+end
+
+# Expand references to other environments into `PackageSpec`s for their direct
+# dependencies, skipping any package already in `pkgs`. Packages tracked by a git
+# repository keep their source, packages tracked by path are skipped since `add`
+# cannot reproduce a `develop`.
+function project_deps_specs(ctx::Context, refs::Vector{String}, pkgs::Vector{PackageSpec})
+    pkgs = copy(pkgs)
+    first_new = length(pkgs) + 1
+    for ref in refs
+        project_file = project_ref_file(ref)
+        if isfile(ctx.env.project_file) && Base.samefile(project_file, ctx.env.project_file)
+            pkgerror("cannot add the dependencies of the active project $(pathrepr(project_file)) to itself")
+        end
+        project = read_project(project_file)
+        env_dir = dirname(project_file)
+        manifest_file = project.manifest !== nothing ?
+            (isabspath(project.manifest) ? project.manifest : abspath(env_dir, project.manifest)) :
+            manifestfile_path(env_dir; strict = true)
+        manifest = manifest_file === nothing ? Manifest() : read_manifest(manifest_file)
+        manifest_dir = manifest_file === nothing ? env_dir : dirname(manifest_file)
+        isempty(project.deps) && @warn "The environment at $(pathrepr(project_file)) has no dependencies"
+        for (name, uuid) in project.deps
+            any(pkg -> pkg.uuid == uuid || pkg.name == name, pkgs) && continue
+            pkg = PackageSpec(; name, uuid)
+            entry = manifest_info(manifest, uuid)
+            source_entry = get(project.sources, name, nothing)
+            if entry !== nothing && entry.path !== nothing
+                @warn "Skipping $name which is tracked by path at $(pathrepr(abspath(manifest_dir, entry.path))) in $(pathrepr(project_file)), use `develop` to add it"
+                continue
+            elseif entry !== nothing && entry.repo.source !== nothing
+                pkg.repo = GitRepo(source = entry.repo.source, rev = entry.repo.rev, subdir = entry.repo.subdir)
+                base_dir = manifest_dir
+            elseif source_entry !== nothing && haskey(source_entry, "path")
+                @warn "Skipping $name which is tracked by path at $(pathrepr(abspath(env_dir, source_entry["path"]))) in $(pathrepr(project_file)), use `develop` to add it"
+                continue
+            elseif source_entry !== nothing
+                pkg.repo = GitRepo(
+                    source = get(source_entry, "url", nothing),
+                    rev = get(source_entry, "rev", nothing),
+                    subdir = get(source_entry, "subdir", nothing),
+                )
+                base_dir = env_dir
+            end
+            if pkg.repo.source !== nothing && !isurl(pkg.repo.source) && !isabspath(pkg.repo.source)
+                pkg.repo.source = abspath(base_dir, pkg.repo.source)
+            end
+            push!(pkgs, pkg)
+        end
+    end
+    length(pkgs) < first_new && pkgerror("no dependencies to add")
+    return pkgs
+end
+
 function add(
         ctx::Context, pkgs::Vector{PackageSpec}; preserve::PreserveLevel = Operations.default_preserve(),
         platform::AbstractPlatform = HostPlatform(), target::Symbol = :deps, allow_autoprecomp::Bool = true,
-        prefer_loaded_versions::Bool = Pkg.in_repl_mode(), kwargs...
+        prefer_loaded_versions::Bool = Pkg.in_repl_mode(),
+        from::Union{Nothing, AbstractString, AbstractVector{<:AbstractString}} = nothing, kwargs...
     )
-    require_not_empty(pkgs, :add)
+    from === nothing && require_not_empty(pkgs, :add)
     Context!(ctx; kwargs...)
     Operations.ensure_manifest_registries!(ctx)
     check_readonly(ctx)
+    if from !== nothing
+        refs = from isa AbstractString ? [String(from)] : String[String(x) for x in from]
+        pkgs = project_deps_specs(ctx, refs, pkgs)
+    end
 
     for pkg in pkgs
         check_package_name(pkg.name, "add")
