@@ -211,7 +211,7 @@ end
 end
 
 module JuliaVersionManifests
-include(joinpath(@__DIR__, "manifest", "julia_version.jl"))
+    include(joinpath(@__DIR__, "manifest", "julia_version.jl"))
 end
 
 @testset "Manifests written for other versions of Julia" begin

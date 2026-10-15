@@ -25,17 +25,17 @@ function project_toml(julia_version::VersionNumber)
     sources = julia_version >= v"1.11"
     sources && push!(deps, "LocalPkg = \"$LOCAL_PKG_UUID\"")
     return """
-        [deps]
-        $(join(sort(deps), "\n"))
+    [deps]
+    $(join(sort(deps), "\n"))
 
-        [weakdeps]
-        LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-        $(sources ? "\n[sources]\nLocalPkg = {path = \"LocalPkg\"}\n" : "")
-        [compat]
-        JSON = "0.21.3 - 0.21"
-        LinearAlgebra = "1"
-        julia = "1.10"
-        """
+    [weakdeps]
+    LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+    $(sources ? "\n[sources]\nLocalPkg = {path = \"LocalPkg\"}\n" : "")
+    [compat]
+    JSON = "0.21.3 - 0.21"
+    LinearAlgebra = "1"
+    julia = "1.10"
+    """
 end
 
 # A new environment for `julia_version`, with `manifest` as its manifest if given
