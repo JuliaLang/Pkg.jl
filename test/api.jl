@@ -366,6 +366,51 @@ end
     end
 end
 
+@testset "add precompiles the dependents of indirect dependencies it changes" begin
+    isolate() do
+        cd_tempdir() do tmp
+            Pkg.activate(".")
+            mkpath(joinpath("UsesExample", "src"))
+            write(
+                joinpath("UsesExample", "Project.toml"), """
+                name = "UsesExample"
+                uuid = "5d3e2b35-6a3c-4c1e-9d1f-0b6a4e7c2f11"
+                version = "0.1.0"
+
+                [deps]
+                Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+                """
+            )
+            write(joinpath("UsesExample", "src", "UsesExample.jl"), "module UsesExample\nimport Example\nend\n")
+            Pkg.develop(path = "UsesExample")
+            Pkg.precompile()
+            mkpath(joinpath("PinsExample", "src"))
+            write(
+                joinpath("PinsExample", "Project.toml"), """
+                name = "PinsExample"
+                uuid = "0c3f61a2-8f0e-4c5e-b6a4-3f6d2a9c1e77"
+                version = "0.1.0"
+
+                [deps]
+                Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+
+                [compat]
+                Example = "=0.5.1"
+                """
+            )
+            write(joinpath("PinsExample", "src", "PinsExample.jl"), "module PinsExample\nimport Example\nend\n")
+            git_init_and_commit("PinsExample")
+            iob = IOBuffer()
+            withenv("JULIA_PKG_PRECOMPILE_AUTO" => 1) do
+                Pkg.add(path = "PinsExample"; io = iob)
+            end
+            @test Pkg.dependencies()[UUID("7876af07-990d-54b4-ab0e-23690620f79a")].version == v"0.5.1"
+            @test occursin("UsesExample", String(take!(iob)))
+            @test Base.isprecompiled(Base.identify_package("UsesExample"); ignore_loaded = true)
+        end
+    end
+end
+
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin
     @test_throws Pkg.Types.PkgError("`Example.jl` is not a valid package name. Perhaps you meant `Example`") Pkg.API.check_package_name("Example.jl")
 end
