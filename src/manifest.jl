@@ -340,6 +340,20 @@ end
 ###########
 # WRITING #
 ###########
+"""
+    manifest_format_for(julia_version)
+
+The manifest format that the Pkg of `julia_version` writes, the newest one for `nothing`.
+A newer Julia than this one may write a newer format, which this Pkg cannot know, so it
+gets this Pkg's format.
+"""
+function manifest_format_for(julia_version::Union{Nothing, VersionNumber})
+    julia_version === nothing && return v"2.2.0"
+    julia_version < v"1.13.0-" && return v"2.0.0"
+    julia_version < v"1.14.0-" && return v"2.1.0"
+    return v"2.2.0"
+end
+
 function destructure(manifest::Manifest)::Dict
     function entry!(entry, key, value; default = nothing)
         return if value == default
@@ -349,12 +363,10 @@ function destructure(manifest::Manifest)::Dict
         end
     end
 
-    if !isempty(manifest.registries) && manifest.manifest_format < v"2.1.0"
-        manifest.manifest_format = v"2.1.0"
-    end
-    if (manifest.environment_id !== nothing || manifest.environment_name !== nothing) && manifest.manifest_format < v"2.2.0"
-        manifest.manifest_format = v"2.2.0"
-    end
+    # Registries are only part of the manifest from format 2.1, and the environment
+    # info and syntax versions from 2.2
+    write_registries = manifest.manifest_format >= v"2.1.0"
+    write_v2_2 = manifest.manifest_format >= v"2.2.0"
 
     unique_name = Dict{String, Bool}()
     for (uuid, entry) in manifest
@@ -372,10 +384,10 @@ function destructure(manifest::Manifest)::Dict
         if !isnothing(manifest.project_hash)
             raw["project_hash"] = manifest.project_hash
         end
-        if !isnothing(manifest.environment_id)
+        if write_v2_2 && !isnothing(manifest.environment_id)
             raw["environment_id"] = manifest.environment_id
         end
-        if !isnothing(manifest.environment_name)
+        if write_v2_2 && !isnothing(manifest.environment_name)
             raw["environment_name"] = manifest.environment_name
         end
         raw["manifest_format"] = string(manifest.manifest_format.major, ".", manifest.manifest_format.minor)
@@ -383,7 +395,7 @@ function destructure(manifest::Manifest)::Dict
         for (k, v) in manifest.other
             raw[k] = v
         end
-        if !isempty(manifest.registries)
+        if write_registries && !isempty(manifest.registries)
             regs = Dict{String, Any}()
             for (id, entry) in manifest.registries
                 regs[id] = registry_entry_toml(entry)
@@ -416,12 +428,12 @@ function destructure(manifest::Manifest)::Dict
         entry!(new_entry, "repo-rev", entry.repo.rev)
         entry!(new_entry, "repo-subdir", entry.repo.subdir)
         syntax_ver = entry.julia_syntax_version
-        if syntax_ver !== nothing
+        if write_v2_2 && syntax_ver !== nothing
             entry!(new_entry, "syntax", Dict("julia_version" => string(syntax_ver)))
         end
 
         # Write registries as a vector (or nothing if empty)
-        if !isempty(entry.registries)
+        if write_registries && !isempty(entry.registries)
             if length(entry.registries) == 1
                 # For backwards compatibility, write a single registry as a string
                 entry!(new_entry, "registries", entry.registries[1])

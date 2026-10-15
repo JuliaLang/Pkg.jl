@@ -210,6 +210,49 @@ end
     HistoricalStdlibVersions.unregister!()
 end
 
+module JuliaVersionManifests
+    include(joinpath(@__DIR__, "manifest", "julia_version.jl"))
+end
+
+@testset "Manifests written for other versions of Julia" begin
+    HistoricalStdlibVersions.register!()
+    manifests = JuliaVersionManifests.manifests()
+
+    # A release can change the manifest format or the project hash, so every released
+    # minor version needs manifests written by it; `manifest/julia_version.jl` adds them
+    @testset "manifests from every release before this one" begin
+        covered = Set(Base.thisminor(VersionNumber(v)) for v in keys(manifests))
+        released = Set(Base.thisminor(v) for v in first.(Pkg.Types.STDLIBS_BY_VERSION) if v"1.10" <= v < Base.thisminor(VERSION))
+        @test isempty(setdiff(released, covered))
+    end
+
+    @testset "project hash and manifest format of Julia $version" for (version, written) in manifests
+        julia_version = VersionNumber(version)
+        env_dir = JuliaVersionManifests.environment(julia_version, written["manifest"])
+        for (field, update) in (("manifest", false), ("expected", true))
+            update && JuliaVersionManifests.update_project!(env_dir)
+            raw = TOML.parse(written[field])
+            env = Pkg.Types.EnvCache(joinpath(env_dir, "Project.toml"))
+            @test Pkg.Types.project_resolve_hash(env, julia_version) == raw["project_hash"]
+            @test Pkg.Types.manifest_format_for(julia_version) == VersionNumber(raw["manifest_format"])
+        end
+    end
+
+    # Resolving for the release from this Julia has to write the manifest the release wrote
+    @testset "resolving for Julia $version" for (version, written) in manifests
+        julia_version = VersionNumber(version)
+        isolate(loaded_depot = true) do
+            env_dir = JuliaVersionManifests.environment(julia_version, written["manifest"])
+            JuliaVersionManifests.update_project!(env_dir)
+            Pkg.activate(env_dir) do
+                Pkg.add(Pkg.PackageSpec(name = "JSON", version = v"0.21.4"); julia_version)
+            end
+            @test read(joinpath(env_dir, "Manifest.toml"), String) == written["expected"]
+        end
+    end
+    HistoricalStdlibVersions.unregister!()
+end
+
 HelloWorldC_jll_UUID = Base.UUID("dca1746e-5efc-54fc-8249-22745bc95a49")
 GMP_jll_UUID = Base.UUID("781609d7-10c4-51f6-84f2-b8444358ff6d")
 OpenBLAS_jll_UUID = Base.UUID("4536629a-c528-5b80-bd46-f80d51c5b363")
