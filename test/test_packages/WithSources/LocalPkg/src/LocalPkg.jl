@@ -1,5 +1,5 @@
 module LocalPkg
 
-greet() = print("Hello World!")
+greet() = "Hello World!"
 
 end # module LocalPkg
