@@ -160,6 +160,55 @@ set JULIA_APPS_JULIA_CMD=C:\path\to\different\julia.exe
 myapp input.txt
 ```
 
+## Trimmed apps
+
+!!! compat "Julia 1.14"
+    Trimmed apps require at least Julia 1.14.
+
+An app can ask to be compiled into a native executable with
+[JuliaC.jl](https://github.com/JuliaLang/JuliaC.jl) and `--trim`, which starts in
+milliseconds instead of loading Julia and the package first. The app names a project in
+the package that provides JuliaC, usually a [workspace](@ref Workspaces) member, so the
+package controls which JuliaC versions build it:
+
+```toml
+# Project.toml
+
+[apps]
+myapp = { build = "build" }
+
+[workspace]
+projects = ["build"]
+```
+
+```toml
+# build/Project.toml
+
+[deps]
+JuliaC = "acedd4c2-ced6-4a15-accc-2607eb759ba2"
+MyPackage = "..."
+
+[compat]
+JuliaC = "0.3"
+```
+
+When such an app is installed with `app add` or updated with `app update`, Pkg resolves
+the dependencies of the build project (without the package itself), compiles the app with
+its JuliaC against the versions resolved for the app, and bundles the executable with the
+Julia libraries it needs. The shim in `~/.julia/bin` then runs that executable, so the app
+keeps working if the Julia it was built with is removed. The build needs a C compiler.
+
+Trimming is experimental, and only code whose calls can all be resolved at compile time
+can be trimmed (see the Julia manual on `juliac`). If the build fails, Pkg warns and the
+app runs with `julia` as usual. Some differences from apps that run with `julia`:
+
+- Apps installed with `app develop` always run with `julia`, so changes to the source
+  take effect immediately.
+- Julia flags (`julia_flags` and arguments before `--`) do not apply to the executable;
+  all arguments go to the app.
+- Set the environment variable `JULIA_PKG_APP_TRIM=false` when installing to skip the
+  build and run the app with `julia`.
+
 ## Installing Julia apps
 
 The installation of Julia apps is similar to [installing Julia libraries](@ref Managing-Packages) but instead of using e.g. `Pkg.add` or `pkg> add` one uses `Pkg.Apps.add` or `pkg> app add`.

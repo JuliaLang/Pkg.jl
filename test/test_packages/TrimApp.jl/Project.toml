@@ -1,0 +1,9 @@
+name = "TrimApp"
+uuid = "0e5dd5a4-55a4-4bd4-b4a2-a9c62c4d5a51"
+version = "0.1.0"
+
+[apps]
+trimapp = { build = "build" }
+
+[workspace]
+projects = ["build"]

@@ -21,6 +21,8 @@ julia_bin_path() = joinpath(first(DEPOT_PATH), "bin")
 julia_executable() = joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
 shim_filename(name) = name * (Sys.iswindows() ? ".bat" : "")
 shim_path(name) = joinpath(julia_bin_path(), shim_filename(name))
+app_build_dir(pkgname) = joinpath(app_env_dir(pkgname), "build")
+app_exe_path(pkgname, appname) = joinpath(app_build_dir(pkgname), "bin", appname * (Sys.iswindows() ? ".exe" : ""))
 
 app_context() = Context(env = EnvCache(joinpath(app_env_folder(), "Project.toml")))
 
@@ -276,7 +278,7 @@ function _resolve(manifest::Manifest, pkgname = nothing)
         end
 
         # TODO: Julia path
-        generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), julia_executable())
+        generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), julia_executable(); trimmed = true)
     end
     return write_manifest(manifest, app_manifest_file())
 end
@@ -350,6 +352,7 @@ function _add(pkg::PackageSpec)
     end
     # Like for the other operations, only precompile if auto-precompilation is enabled
     Pkg.should_autoprecompile() && precompile(pkg.name)
+    build_trimmed_apps(pkg.name, pkg.uuid, sourcepath, project.apps)
 
     @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
     return check_apps_in_path(project.apps)
@@ -517,9 +520,11 @@ function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing; io::IO = stdo
             if !is_pkg && pkg_or_app !== nothing && appname !== pkg_or_app
                 continue
             end
-            julia_cmd = contractuser(appinfo.julia_command)
+            exe = app_exe_path(info.name, appname)
+            cmd = appinfo.build !== nothing && info.path === nothing && isfile(exe) ? "$(contractuser(exe)) (trimmed)" :
+                contractuser(appinfo.julia_command)
             printstyled(io, "  $(appname)", color = :green)
-            printstyled(io, " $(julia_cmd) \n", color = :gray)
+            printstyled(io, " $(cmd) \n", color = :gray)
         end
     end
     return
@@ -599,6 +604,7 @@ function _rm(pkg_or_app::Union{PackageSpec, Nothing})
             @info "Deleted app $(app.name)"
             delete!(pkg.apps, app.name)
             rm_shim(app.name; force = true)
+            pkg.path === nothing && Base.rm(app_exe_path(pkg.name, app.name); force = true)
             if isempty(pkg.apps)
                 delete!(manifest.deps, uuid)
                 if pkg.path === nothing
@@ -638,12 +644,101 @@ for f in (:develop, :add)
 end
 
 
+##################
+# Trimmed builds #
+##################
+
+# Apps that name a `build` project are also compiled to a native executable
+# with the JuliaC.jl from that project, which the shim runs in place of julia.
+# Trimming is experimental, so a failed build only warns and the app keeps
+# running with julia. `JULIA_PKG_APP_TRIM=false` skips the build.
+function trim_enabled()
+    return get(ENV, "JULIA_PKG_APP_TRIM", "true") != "false"
+end
+
+# The build project lives in the read-only package source, so its dependencies
+# are resolved in a copy. The package itself is left out: the app is compiled
+# against the app environment, and only the tools run from this one.
+function build_tools_project(pkgname::String, uuid::UUID, sourcepath::String, build::String, dir::String)
+    projectfile = projectfile_path(joinpath(sourcepath, build); strict = true)
+    projectfile === nothing && pkgerror("no project file found in `$build`")
+    raw = TOML.parsefile(projectfile)
+    deps = Dict{String, Any}(k => v for (k, v) in get(Dict{String, Any}, raw, "deps") if v != string(uuid))
+    haskey(deps, "JuliaC") || pkgerror("the project in `$build` does not depend on JuliaC")
+    compat = Dict{String, Any}(k => v for (k, v) in get(Dict{String, Any}, raw, "compat") if k != pkgname)
+    mkpath(dir)
+    open(joinpath(dir, "Project.toml"), "w") do io
+        TOML.print(io, Dict{String, Any}("deps" => deps, "compat" => compat); sorted = true)
+    end
+    Pkg.activate(dir) do
+        Pkg.instantiate()
+    end
+    return dir
+end
+
+function build_trimmed_apps(pkgname::String, uuid::UUID, sourcepath::String, apps; io::IO = Pkg.stderr_f())
+    trimmed = sort!([app for app in values(apps) if app.build !== nothing]; by = app -> app.name)
+    (isempty(trimmed) || !trim_enabled()) && return
+    build_dir = app_build_dir(pkgname)
+    Base.rm(build_dir; force = true, recursive = true)
+    project_dir = joinpath(build_dir, "project")
+    mkpath(project_dir)
+    # Compile against the versions already resolved for the app environment
+    write(joinpath(project_dir, "Project.toml"), "[deps]\n$pkgname = \"$uuid\"\n")
+    cp(joinpath(app_env_dir(pkgname), "Manifest.toml"), joinpath(project_dir, "Manifest.toml"))
+    log = joinpath(build_dir, "build.log")
+    tools = Dict{String, Union{String, Nothing}}()
+    for app in trimmed
+        validate_app_name(app.name)
+        validate_submodule_name(app.submodule)
+        tools_dir = get!(tools, app.build) do
+            try
+                build_tools_project(pkgname, uuid, sourcepath, app.build, joinpath(build_dir, "tools", string(length(tools) + 1)))
+            catch err
+                err isa InterruptException && rethrow()
+                Pkg.printpkgstyle(
+                    io, :Failed, "setting up `$(app.build)` for trimmed apps of $pkgname, so they will run with julia: $(sprint(showerror, err))";
+                    color = Base.warn_color()
+                )
+                nothing
+            end
+        end
+        tools_dir === nothing && continue
+        module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
+        entry = joinpath(project_dir, "$(app.name).jl")
+        write(entry, "import $module_spec.main\n")
+        # Run JuliaC in a clean environment, not one inherited from this session
+        sep = Sys.iswindows() ? ';' : ':'
+        cmd = addenv(
+            `$(julia_executable()) --startup-file=no --project=$tools_dir -m JuliaC
+             --output-exe $(app.name) --bundle $build_dir --trim=safe --experimental
+             --project=$project_dir $entry`,
+            "JULIA_LOAD_PATH" => "@$(sep)@stdlib", "JULIA_PROJECT" => nothing,
+            "JULIA_DEPOT_PATH" => join(DEPOT_PATH, sep)
+        )
+        Pkg.printpkgstyle(io, :Compiling, "trimmed app $(app.name) (log: $(contractuser(log)))")
+        t = time()
+        ok = open(log, "a") do logio
+            success(pipeline(ignorestatus(cmd); stdout = logio, stderr = logio))
+        end
+        if ok && isfile(app_exe_path(pkgname, app.name))
+            Pkg.printpkgstyle(io, :Compiled, "trimmed app $(app.name) in $(round(time() - t; digits = 1)) seconds")
+        else
+            Base.rm(app_exe_path(pkgname, app.name); force = true)
+            msg = "compiling trimmed app $(app.name), so it will run with julia. See $(contractuser(log))"
+            Pkg.printpkgstyle(io, :Failed, msg; color = Base.warn_color())
+        end
+    end
+    return
+end
+
+
 #########
 # Shims #
 #########
 
 const SHIM_COMMENT = Sys.iswindows() ? "REM " : "#"
-const SHIM_VERSION = 1.4
+const SHIM_VERSION = 1.5
 const SHIM_HEADER = """$SHIM_COMMENT This file is generated by the Julia package manager.
 $SHIM_COMMENT Shim version: $SHIM_VERSION"""
 
@@ -654,23 +749,25 @@ function stacked_depots()
     return String[normpath(d) for d in DEPOT_PATH[2:end] if normpath(d) ∉ bundled]
 end
 
-function generate_shims_for_apps(pkgname, apps, env, julia)
+# Developed apps always run from their source with julia, so they get no trimmed executable
+function generate_shims_for_apps(pkgname, apps, env, julia; trimmed::Bool = false)
     for app in values(apps)
-        generate_shim(pkgname, app, env, julia)
+        generate_shim(pkgname, app, env, julia; trimmed)
     end
     return
 end
 
-function generate_shim(pkgname, app::AppInfo, env, julia)
+function generate_shim(pkgname, app::AppInfo, env, julia; trimmed::Bool = false)
     validate_package_name(pkgname)
     validate_app_name(app.name)
     validate_submodule_name(app.submodule)
 
     module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
+    exe = trimmed && app.build !== nothing ? app_exe_path(pkgname, app.name) : nothing
 
     julia_bin_filename = shim_path(app.name)
-    content = Sys.iswindows() ? windows_shim(julia, module_spec, env, app.julia_flags) :
-        shell_shim(julia, module_spec, env, app.julia_flags)
+    content = Sys.iswindows() ? windows_shim(julia, module_spec, env, app.julia_flags; exe) :
+        shell_shim(julia, module_spec, env, app.julia_flags; exe)
     overwrite_file_if_different(julia_bin_filename, content)
     return if Sys.isunix()
         chmod(julia_bin_filename, 0o755)
@@ -678,7 +775,13 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector{String})
+# A path inside the depot as a shell word relative to `$depot`, so that the depot can be relocated
+function depot_relative_sh(path, depot)
+    startswith(path, joinpath(depot, "")) || return Base.shell_escape(path)
+    return "\"\$depot/$(join(splitpath(relpath(path, depot)), '/'))\""
+end
+
+function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector{String}; exe = nothing)
     julia_escaped = Base.shell_escape(julia)
     module_spec_escaped = Base.shell_escape(module_spec)
     julia_flags_escaped = join(Base.shell_escape.(julia_flags), " ")
@@ -686,14 +789,18 @@ function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector
 
     depot = normpath(first(DEPOT_PATH))
     depot_escaped = Base.shell_escape(depot)
-    env = normpath(env)
     # Environments inside the depot are located relative to it so that the
     # depot can be relocated (developed projects keep their absolute path)
-    load_path_part = if startswith(env, joinpath(depot, ""))
-        "\"\$depot/$(join(splitpath(relpath(env, depot)), '/'))\""
-    else
-        Base.shell_escape(env)
-    end
+    load_path_part = depot_relative_sh(normpath(env), depot)
+
+    exe_part = exe === nothing ? "" : """
+
+        # Run the trimmed executable when it was built, otherwise run the app with julia
+        exe=$(depot_relative_sh(normpath(exe), depot))
+        if [ -x "\$exe" ]; then
+            exec "\$exe" "\$@"
+        fi
+        """
 
     # Stacked depots stay baked in so packages installed in them remain loadable
     depot_path_part = "\"\$depot:\"" * join(Base.shell_escape(d) * ":" for d in stacked_depots())
@@ -711,7 +818,7 @@ function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector
     if [ ! -e "\$depot/environments/apps/AppManifest.toml" ]; then
         depot=$depot_escaped
     fi
-
+    $exe_part
     # Pin Julia paths for the child process
     # (the trailing ':' appends the default system depots)
     export JULIA_DEPOT_PATH=$depot_path_part
@@ -757,7 +864,7 @@ function escape_batch_set_value(s::AbstractString)
     return replace(s, "%" => "%%")
 end
 
-function windows_shim(julia::String, module_spec::String, env, julia_flags::Vector{String})
+function windows_shim(julia::String, module_spec::String, env, julia_flags::Vector{String}; exe = nothing)
     # Flags end up unquoted on the command line so escape cmd metacharacters
     flags_escaped = join((replace(Base.shell_escape_wincmd(f), "%" => "%%") for f in julia_flags), " ")
     flags_part = isempty(julia_flags) ? "" : " $flags_escaped"
@@ -775,6 +882,23 @@ function windows_shim(julia::String, module_spec::String, env, julia_flags::Vect
     # Stacked depots stay baked in so packages installed in them remain loadable
     depot_path = "%depot%;" * join(escape_batch_set_value(d) * ";" for d in stacked_depots())
 
+    exe_part = if exe === nothing
+        ""
+    else
+        exe = normpath(exe)
+        exe_path = startswith(exe, joinpath(depot, "")) ? "%depot%\\$(escape_batch_set_value(relpath(exe, depot)))" :
+            escape_batch_set_value(exe)
+        """
+
+        rem --- Run the trimmed executable when it was built, otherwise run the app with julia ---
+        set "exe=$exe_path"
+        if not exist "%exe%" goto __julia
+        "%exe%" %*
+        exit /b %errorlevel%
+        :__julia
+        """
+    end
+
     return """
     @echo off
     setlocal EnableExtensions DisableDelayedExpansion
@@ -785,7 +909,7 @@ function windows_shim(julia::String, module_spec::String, env, julia_flags::Vect
     rem --- that a relocated depot keeps working; fall back to the install time depot
     for %%I in ("%~dp0..") do set "depot=%%~fI"
     if not exist "%depot%\\environments\\apps\\AppManifest.toml" set "depot=$(escape_batch_set_value(depot))"
-
+    $exe_part
     rem --- Environment (no delayed expansion here to keep '!' literal) ---
     rem --- (the trailing ';' appends the default system depots) ---
     set "JULIA_LOAD_PATH=$load_path"
