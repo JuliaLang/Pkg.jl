@@ -1,6 +1,10 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Apps can set `build` to a project in the package that depends on JuliaC.jl, to be compiled into a native
+  executable with that JuliaC when installed with `app add` or updated with `app update`. The shim runs the
+  executable, which starts in milliseconds and does not depend on the Julia it was built with, and falls back to
+  `julia` if the build fails. Developed apps and `JULIA_PKG_APP_TRIM=false` skip the build. Experimental.
 - Pkg now resolves package versions with the exact SAT-based resolver from
   [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
   resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each

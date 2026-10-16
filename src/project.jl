@@ -103,7 +103,14 @@ function read_project_apps(raw::Dict{String, Any}, project::Project)
         else
             pkgerror("Expected `julia_flags` for app `$name` to be an array of strings")
         end
-        appinfos[name] = AppInfo(name, nothing, submodule, julia_flags, other)
+        build = get(info, "build", nothing)
+        if build !== nothing
+            build isa String || pkgerror("Expected `build` for app `$name` to be a path")
+            if isabspath(build) || ".." in splitpath(normpath(build))
+                pkgerror("Expected `build` for app `$name` to be a relative path inside the package")
+            end
+        end
+        appinfos[name] = AppInfo(name, nothing, submodule, julia_flags, build, other)
     end
     return appinfos
 end
