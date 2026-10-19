@@ -90,6 +90,36 @@ temp_pkg_dir() do project_path
         end
     end
 
+    @testset "rm in a project with a path source and no manifest (#4870)" begin
+        mktempdir() do tmp
+            mkpath(joinpath(tmp, "A", "src"))
+            write(
+                joinpath(tmp, "A", "Project.toml"), """
+                name = "A"
+                uuid = "11111111-1111-1111-1111-111111111111"
+                version = "0.1.0"
+                """
+            )
+            write(joinpath(tmp, "A", "src", "A.jl"), "module A end")
+            mkpath(joinpath(tmp, "env"))
+            write(
+                joinpath(tmp, "env", "Project.toml"), """
+                [deps]
+                A = "11111111-1111-1111-1111-111111111111"
+                Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+                [sources]
+                A = {path = "../A"}
+                """
+            )
+            with_pkg_env(joinpath(tmp, "env")) do
+                Pkg.rm("Random")
+                @test collect(keys(Pkg.project().dependencies)) == ["A"]
+                @test Pkg.project().sources["A"] == Dict("path" => "../A")
+            end
+        end
+    end
+
     @testset "recursive [sources] via repo URLs" begin
         isolate() do
             mktempdir() do tmp
