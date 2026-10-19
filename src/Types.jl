@@ -1203,8 +1203,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             @assert pkg.path === nothing
             pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
-            # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
-            if has_uuid(pkg)
+            # If we already resolved a uuid and name, we can bail early if this package is already installed at the current tree_hash
+            if has_uuid(pkg) && has_name(pkg)
                 error_if_in_sysimage(pkg)
                 version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
                 isdir(version_path) && return false
