@@ -1421,12 +1421,17 @@ function ensure_resolved(
         push!(unresolved_names, pkg.uuid)
     end
     isempty(unresolved_uuids) && isempty(unresolved_names) && return
+    # standard libraries that are not in a registry can only be given by path or URL
+    stdlib_names = registry ? Set(info.name for info in values(stdlib_infos())) : Set{String}()
+    not_found = any(((name, uuids),) -> isempty(uuids) && !(name in stdlib_names), unresolved_uuids)
     msg = sprint(context = ctx.io) do io
         if !isempty(unresolved_uuids)
             print(io, "The following package names could not be resolved:")
             for (name, uuids) in sort!(collect(unresolved_uuids), by = lowercase ∘ first)
                 print(io, "\n * $name (")
-                if length(uuids) == 0
+                if length(uuids) == 0 && name in stdlib_names
+                    print(io, "a standard library that is not in a registry, so it has to be given by path or URL)")
+                elseif length(uuids) == 0
                     what = ["project", "manifest"]
                     registry && push!(what, "registry")
                     print(io, "not found in ")
@@ -1452,7 +1457,7 @@ function ensure_resolved(
                 println(io, " * $uuid")
             end
         end
-        if registry && any(isempty, values(unresolved_uuids))
+        if registry && not_found
             print(io, general_registry_hint(ctx.registries))
         end
     end

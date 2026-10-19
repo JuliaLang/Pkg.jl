@@ -38,6 +38,8 @@ simple_package_uuid = UUID("fc6b7c0f-8a2f-4256-bbf4-8c72c30df5be")
         ) Pkg.develop(name = "Example", rev = "master")
         # Adding an unregistered package by name.
         @test_throws PkgError Pkg.develop("ThisIsHopefullyRandom012856014925701382")
+        # A standard library that is not in a registry (#4074)
+        @test_throws r"Test \(a standard library that is not in a registry, so it has to be given by path or URL\)$" Pkg.develop("Test")
         # Wrong UUID
         @test_throws PkgError Pkg.develop(Pkg.PackageSpec("Example", UUID(UInt128(1))))
         # Missing UUID
