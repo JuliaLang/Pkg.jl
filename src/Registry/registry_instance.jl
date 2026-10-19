@@ -796,7 +796,17 @@ registry_info(registry::RegistryInstance, pkg::PkgEntry) = init_package_info!(re
                 r.cache = load_or_build_registry_cache(compressed_tar, tree_info)
             end
             if r.cache === nothing
-                r.in_memory_registry = uncompress_registry(compressed_tar)
+                r.in_memory_registry = try
+                    uncompress_registry(compressed_tar)
+                catch err
+                    err isa InterruptException && rethrow()
+                    reg_toml = getfield(r, :path)
+                    Pkg.Types.pkgerror(
+                        "failed to read the registry tarball `$(compressed_tar)`, it may be corrupt: ",
+                        sprint(showerror, err), ". Remove `$(compressed_tar)` and `$(reg_toml)` ",
+                        "and add the registry again with `Pkg.Registry.add`."
+                    )
+                end
             end
         end
 
