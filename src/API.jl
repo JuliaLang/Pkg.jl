@@ -631,6 +631,11 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, w
     if all_pkgs
         !isempty(pkgs) && pkgerror("cannot specify packages when operating on all packages")
         append_all_pkgs!(pkgs, ctx, PKGMODE_MANIFEST; workspace)
+        # the projects themselves cannot be freed
+        workspace_uuids = Set(p.uuid for p in values(ctx.env.workspace))
+        filter!(pkg -> !(Types.is_project_uuid(ctx.env, pkg.uuid) || pkg.uuid in workspace_uuids), pkgs)
+        # the path or repo filled in from [sources] is what gets freed, so only keep name and uuid
+        map!(pkg -> PackageSpec(name = pkg.name, uuid = pkg.uuid), pkgs, pkgs)
     else
         require_not_empty(pkgs, :free)
     end
