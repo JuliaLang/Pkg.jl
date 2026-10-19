@@ -1520,7 +1520,7 @@ function deps_graph(
                     push!(unavailable_weak_uuids, uuid)
                     continue
                 end
-                pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
+                pkgerror("cannot find name corresponding to UUID $(uuid) in a registry", Types.general_registry_hint(registries))
             end
             uuid_to_name[uuid] = name
             entry = manifest_info(env.manifest, uuid)

@@ -1394,6 +1394,13 @@ end
 
 include("fuzzysorting.jl")
 
+# A package that cannot be found may well be in General, so suggest adding it
+# when it is not installed
+function general_registry_hint(registries)
+    any(reg -> reg.uuid == UUID("23338594-aafe-5451-b93e-139f81909106"), registries) && return ""
+    return "\nThe General registry is not installed; add it with `pkg> registry add General`."
+end
+
 # Ensure that all packages are fully resolved
 function ensure_resolved(
         ctx::Context, manifest::Manifest,
@@ -1444,6 +1451,9 @@ function ensure_resolved(
             for uuid in unresolved_names
                 println(io, " * $uuid")
             end
+        end
+        if registry && any(isempty, values(unresolved_uuids))
+            print(io, general_registry_hint(ctx.registries))
         end
     end
     pkgerror(msg)

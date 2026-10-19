@@ -343,6 +343,15 @@ end
         end
     end
 
+    @testset "hint to add General when a package cannot be found (#2978)" begin
+        temp_pkg_dir(; linked_reg = false) do depot # starts without registries
+            regdir = mktempdir()
+            setup_test_registries(regdir)
+            Pkg.Registry.add(url = joinpath(regdir, "RegistryFoo1"))
+            @test_throws r"General registry is not installed; add it with `pkg> registry add General`" Pkg.add("Example")
+        end
+    end
+
     @testset "deprecated package" begin
         temp_pkg_dir() do depot
             # Set up test registries with an extra deprecated package
