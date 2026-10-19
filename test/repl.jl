@@ -672,6 +672,9 @@ end
             @test args == [Pkg.PackageSpec(; name = "Example"), Pkg.PackageSpec(; name = "Random")]
             @test isempty(opts)
         end
+        # identifier characters that `\w` does not match (#2168)
+        api, args, opts = first(Pkg.pkg"rm ∂Foo ∂Bar.jl")
+        @test args == [Pkg.PackageSpec(; name = "∂Foo"), Pkg.PackageSpec(; name = "∂Bar")]
     end
 end
 

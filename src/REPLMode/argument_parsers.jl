@@ -442,6 +442,9 @@ function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = fa
     elseif occursin(name_uuid_re, word)
         m = match(name_uuid_re, word)
         return PackageSpec(String(something(m.captures[1])), UUID(something(m.captures[2])))
+    elseif Base.isidentifier(chopsuffix(word, ".jl"))
+        # names with identifier characters that `\w` does not match, e.g. `∂Foo` (#2168)
+        return PackageSpec(String(chopsuffix(word, ".jl")))
     else
         pkgerror("Unable to parse `$word` as a package.")
     end
