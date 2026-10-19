@@ -17,8 +17,8 @@ struct FieldValue
     l3::Int64
     FieldValue(
         l0::Integer = 0,
-        l1::VersionWeight = zero(VersionWeight),
-        l2::VersionWeight = zero(VersionWeight),
+        l1::VersionWeight = VersionWeight(),
+        l2::VersionWeight = VersionWeight(),
         l3::Integer = 0
     ) = new(l0, l1, l2, l3)
 end
@@ -36,8 +36,6 @@ function Base.show(io::IO, a::FieldValue)
 end
 
 const Field = Vector{FieldValue}
-
-Base.zero(::Type{FieldValue}) = FieldValue()
 
 Base.typemin(::Type{FieldValue}) = (x = typemin(Int64); y = typemin(VersionWeight); FieldValue(x, y, y, x))
 

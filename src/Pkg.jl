@@ -1138,5 +1138,7 @@ Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false
 PREV_ENV_PATH[] = ""
 Types.STDLIB[] = nothing
 empty!(Registry.REGISTRY_CACHE)
+empty!(API.undo_entries)
+API.saved_initial_snapshot[] = false
 
 end # module

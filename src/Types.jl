@@ -1537,6 +1537,7 @@ function update_project_sources!(env::EnvCache)
         # Verify that the generated manifest is consistent with `sources`
         path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg)
         entry = manifest_info(env.manifest, uuid)
+        entry === nothing && continue
         if path !== nothing
             @assert normpath(entry.path) == normpath(path)
         end
@@ -1548,7 +1549,6 @@ function update_project_sources!(env::EnvCache)
                 @assert entry.repo.subdir == repo.subdir
             end
         end
-        entry === nothing && continue
         # Only existing entries are updated for workspace members and for sources that are
         # already declared in another project of the workspace. Some commands drop the entry
         # and rely on it being re-added here, so consult the project as it was on disk too.

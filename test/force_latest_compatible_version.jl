@@ -50,6 +50,47 @@ end
         @test Pkg.Operations.get_earliest_backwards_compatible_version(v"0.0.3") == v"0.0.3"
     end
 
+    # Versions that don't support the Julia version in use are not forced (#4349)
+    @testset "get_latest_compatible_version respects julia compat" begin
+        mktempdir() do dir
+            uuid = Base.UUID("434900a5-6b1e-4b8a-9b0e-7d3c3c1d4349")
+            write(
+                joinpath(dir, "Registry.toml"), """
+                name = "JuliaCompatRegistry"
+                uuid = "4349c0a5-6b1e-4b8a-9b0e-7d3c3c1d4349"
+                [packages]
+                $uuid = { name = "SomePkg", path = "SomePkg" }
+                """
+            )
+            mkpath(joinpath(dir, "SomePkg"))
+            write(joinpath(dir, "SomePkg", "Package.toml"), "name = \"SomePkg\"\nuuid = \"$uuid\"\nrepo = \"https://example.com/SomePkg.jl.git\"\n")
+            write(
+                joinpath(dir, "SomePkg", "Versions.toml"), """
+                ["0.1.0"]
+                git-tree-sha1 = "0000000000000000000000000000000000000001"
+                ["0.2.0"]
+                git-tree-sha1 = "0000000000000000000000000000000000000002"
+                """
+            )
+            write(
+                joinpath(dir, "SomePkg", "Compat.toml"), """
+                ["0.1"]
+                julia = "1.10.0-1"
+                ["0.2"]
+                julia = "1.12.0-1"
+                """
+            )
+            registries = [Pkg.Registry.RegistryInstance(dir)]
+            spec = Pkg.Types.semver_spec("0.1, 0.2")
+            latest(julia_version) = Pkg.Operations.get_latest_compatible_version(
+                Pkg.Types.Context(; registries, julia_version), uuid, spec
+            )
+            @test latest(v"1.11.0") == v"0.1.0"
+            @test latest(v"1.12.0") == v"0.2.0"
+            @test latest(nothing) == v"0.2.0"
+        end
+    end
+
     @testset "`force_latest_compatible_version` kwarg to `Pkg.test`" begin
         @testset "OldOnly1: `SomePkg = \"=0.1.0\"`" begin
             mktempdir() do tmp_dir

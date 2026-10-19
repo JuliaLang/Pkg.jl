@@ -306,6 +306,41 @@ using Test
         @test occursin("set \"julia_cmd=C:\\julia %%20\\bin\\julia.exe\"", content)
     end
 
+    if !Sys.iswindows()
+        # A shim run through a symlink finds the depot it is in, also after the depot
+        # was moved from where it was installed (#4770)
+        @testset "shim run through a symlink" begin
+            mktempdir() do tmp
+                depot = joinpath(tmp, "staging-depot")
+                mkpath(joinpath(depot, "bin"))
+                mkpath(joinpath(depot, "environments", "apps"))
+                touch(joinpath(depot, "environments", "apps", "AppManifest.toml"))
+                pushfirst!(DEPOT_PATH, depot)
+                shim = try
+                    Pkg.Apps.shell_shim("julia", "MyApp", joinpath(depot, "environments", "apps", "MyApp"), String[])
+                finally
+                    popfirst!(DEPOT_PATH)
+                end
+                write(joinpath(depot, "bin", "myapp"), shim)
+                chmod(joinpath(depot, "bin", "myapp"), 0o755)
+                final = joinpath(tmp, "opt", "depot")
+                mkpath(dirname(final))
+                mv(depot, final)
+                bindir = mkpath(joinpath(tmp, "usr", "bin"))
+                symlink(relpath(joinpath(final, "bin", "myapp"), bindir), joinpath(bindir, "myapp"))
+                symlink(joinpath(bindir, "myapp"), joinpath(tmp, "myapp"))
+                printer = joinpath(tmp, "printer.sh")
+                write(printer, "#!/bin/sh\necho \"\$JULIA_DEPOT_PATH\"\n")
+                chmod(printer, 0o755)
+                withenv("JULIA_APPS_JULIA_CMD" => printer) do
+                    for exe in (joinpath(bindir, "myapp"), joinpath(tmp, "myapp"))
+                        @test startswith(read(`$exe`, String), realpath(final) * ":")
+                    end
+                end
+            end
+        end
+    end
+
     if Sys.iswindows()
         # Run a shim whose julia executable path contains a space (#4741)
         isolate(loaded_depot = true) do

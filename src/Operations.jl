@@ -181,6 +181,9 @@ function merge_pkg_source!(pkg::PackageSpec, path::Union{Nothing, String}, repo:
     if pkg.repo.rev === nothing && repo.rev !== nothing
         pkg.repo.rev = repo.rev
     end
+    if pkg.repo.subdir === nothing && repo.subdir !== nothing
+        pkg.repo.subdir = repo.subdir
+    end
     return
 end
 merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
@@ -4914,8 +4917,24 @@ function get_latest_compatible_version(
     )
     all_registered_versions = get_all_registered_versions(ctx, uuid)
     compatible_versions = filter(in(compat_spec), all_registered_versions)
+    # Versions that don't support the Julia version in use can't be installed
+    julia_compatible_versions = filter(v -> supports_julia_version(ctx, uuid, v), compatible_versions)
+    isempty(julia_compatible_versions) || (compatible_versions = julia_compatible_versions)
     latest_compatible_version = maximum(compatible_versions)
     return latest_compatible_version
+end
+
+function supports_julia_version(ctx::Types.Context, uuid::Base.UUID, version::VersionNumber)
+    ctx.julia_version === nothing && return true
+    for reg in ctx.registries
+        pkg = get(reg, uuid, nothing)
+        pkg === nothing && continue
+        info = Registry.registry_info(reg, pkg)
+        haskey(info.version_info, version) || continue
+        julia_compat = Registry.query_compat_for_version(info, version, JULIA_UUID)
+        (julia_compat === nothing || ctx.julia_version in julia_compat) && return true
+    end
+    return false
 end
 
 function get_all_registered_versions(

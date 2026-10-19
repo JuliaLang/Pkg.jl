@@ -1099,6 +1099,37 @@ end
     end
 end
 
+# The first operation of a session can be undone also without `Pkg.activate`, as with
+# `julia --project` (#4413)
+@testset "undo the first operation of a session" begin
+    # No undo state is left over from the precompile workload
+    @test run_in_subprocess("using Pkg; print(Pkg.API.saved_initial_snapshot[], ' ', length(Pkg.API.undo_entries))") == "false 0"
+    random_uuid = UUID("9a3f8284-a2c9-5f02-9a11-845980a1fd5c")
+    temp_pkg_dir() do project_path
+        prev_active = Base.ACTIVE_PROJECT[]
+        try
+            write(joinpath(project_path, "Project.toml"), "[deps]\nRandom = \"$random_uuid\"\n")
+            Base.ACTIVE_PROJECT[] = joinpath(project_path, "Project.toml")
+            function new_session()
+                empty!(Pkg.API.undo_entries)
+                Pkg.API.saved_initial_snapshot[] = false
+            end
+            new_session()
+            Pkg.resolve()
+            @test haskey(Pkg.Types.Context().env.manifest, random_uuid)
+            Pkg.undo()
+            @test !haskey(Pkg.Types.Context().env.manifest, random_uuid)
+            new_session()
+            Pkg.add("Unicode")
+            @test haskey(Pkg.project().dependencies, "Unicode")
+            Pkg.undo()
+            @test !haskey(Pkg.project().dependencies, "Unicode")
+        finally
+            Base.ACTIVE_PROJECT[] = prev_active
+        end
+    end
+end
+
 @testset "subdir functionality" begin
     temp_pkg_dir() do project_path
         with_temp_env() do
