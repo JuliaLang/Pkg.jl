@@ -633,6 +633,7 @@ compound_declarations = [
             :should_splat => false,
             :arg_count => 0 => Inf,
             :arg_parser => ((x, y) -> parse_registry(x, y; add = true)),
+            :completions => :complete_registry_add,
             :description => "add package registries",
             :help => md"""
                     registry add reg...

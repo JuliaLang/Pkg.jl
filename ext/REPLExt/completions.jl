@@ -22,6 +22,9 @@ function complete_activate(options, partial, i1, i2; hint::Bool, arguments = [])
     end
 end
 
+complete_registry_add(options, partial, i1, i2; hint::Bool, arguments = []) =
+    complete_local_dir(partial, i1, i2)
+
 function complete_local_dir(s, i1, i2)
     expanded_user = false
     oldi2 = i2

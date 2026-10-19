@@ -1284,6 +1284,7 @@ end
             @test apply_completion("add ./tes") == (Sys.iswindows() ? "add ./testdir\\" : "add ./testdir/")
             c, r = test_complete("dev ./")
             @test (Sys.iswindows() ? ("testdir\\" in c) : ("testdir/" in c))
+            @test apply_completion("registry add ./tes") == (Sys.iswindows() ? "registry add ./testdir\\" : "registry add ./testdir/")
 
             # complete subdirs
             c, r = test_complete("add testdir/f")
