@@ -32,6 +32,10 @@ function generate()
     io = IOBuffer()
     println(
         io, """
+        ```@meta
+        EditURL = "../../src/REPLMode/command_declarations.jl"
+        ```
+
         # [**11.** REPL Mode Reference](@id REPL-Mode-Reference)
 
         This section describes available commands in the Pkg REPL.

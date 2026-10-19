@@ -453,6 +453,8 @@ SomePackage = "b3785f31-9d33-4cdf-bc73-f646780f1739"
 SomePackage = "1.2"
 ```
 
+A weak dependency can be added with `pkg> add --weak SomePackage` (Julia 1.11+) instead of editing the project file by hand.
+
 The current usage of this is almost solely limited to "extensions" which is described in the next section.
 
 ## Conditional loading of code in packages (Extensions)
@@ -537,11 +539,17 @@ In `Pkg` output, extension names are always shown together with their parent pac
     know about them, the extensions will not load. This is because the manifest lacks some information that tells Julia
     when it should load these packages. So make sure you use a manifest generated at least the Julia version you are using.
 
+!!! note
+    After editing `[weakdeps]` or `[extensions]` by hand, run `pkg> resolve` in the environments that use the package
+    (for example one where it is `dev`ed), so that their manifests pick up the change. Until then, the extension will not load there.
+
 ### Behavior of extensions
 
 A user that depends only on `Plotting` will not pay the cost of the "extension" inside the `ContourExt` module.
 It is only when the `Contour` package actually gets loaded that the `ContourExt` extension is loaded too
 and provides the new functionality.
+It does not matter how `Contour` gets loaded: directly with `using Contour`, or indirectly as a dependency
+of some other package, as long as it is loaded from the same environment as `Plotting`.
 
 In our example, the new functionality is an additional _method_, which we add to an existing _function_ from the parent package `Plotting`.
 Implementing such methods is among the most standard use cases of package extensions.

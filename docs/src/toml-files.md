@@ -19,6 +19,11 @@ The project file describes the project on a high level, for example, the package
 dependencies and compatibility constraints are listed in the project file. The file entries
 are described below.
 
+A project file with both a `name` and a `uuid` entry describes a [package](@ref Glossary),
+and the project itself is then treated as one: for example, `Pkg.build`, `Pkg.test` and
+precompilation include it, and `using Name` loads its code from `src/Name.jl`. A project that
+is only used as an environment, for example for scripts or a data analysis, needs neither entry.
+
 !!! note
     Pkg preserves unknown top-level fields and tables when it rewrites
     `Project.toml`, allowing external tools to use them for project metadata.
@@ -139,6 +144,9 @@ Pkg.readonly(false)
 ```
 
 When readonly mode is enabled, the status display will show `(readonly)` next to the project name to indicate the environment is protected from modifications.
+
+!!! compat
+    The `readonly` field requires Julia 1.13+.
 
 
 ### The `[deps]` section
@@ -286,6 +294,9 @@ Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 Example = "2"
 ```
 
+!!! compat
+    The `[compat-overrides]` section requires Julia 1.14+.
+
 ### [The `[workspace]` section](@id Workspaces)
 
 A project file can define a workspace by giving a set of projects that is part of that workspace.
@@ -308,6 +319,9 @@ This structure is particularly beneficial for developers using a monorepo approa
 
 Workspaces can be nested: a project that itself defines a workspace can also be part of another workspace.
 In this case, the workspaces are "merged" with a single manifest being stored alongside the "root project" (the project that doesn't have another workspace including it).
+
+!!! compat
+    Workspaces require Julia 1.12+.
 
 ### The `[extras]` section (legacy)
 

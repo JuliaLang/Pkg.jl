@@ -159,6 +159,14 @@ Shared environments can be activated with the `--shared` flag to `activate`:
 
 Shared environments have a `@` before their name in the Pkg REPL prompt.
 
+!!! note "Loading packages from the default environment"
+    The default [`LOAD_PATH`](https://docs.julialang.org/en/v1/base/constants/#Base.LOAD_PATH) includes
+    the `@v#.#` environment, so packages added there can be loaded with `using` even when another project is active.
+    Such a package then uses the active environment's versions of any dependencies that are also in that
+    environment, which may not be versions it is compatible with and can lead to confusing errors.
+    If a project needs a package, `add` it to the project. See
+    [Environment stacks](https://docs.julialang.org/en/v1/manual/code-loading/#Environment-stacks) in the Julia manual.
+
 ### Copying the dependencies of another environment
 
 The `--from` flag to `add` adds the direct dependencies of other environments instead of individual packages.
