@@ -541,4 +541,49 @@ end
     end
 end
 
+# A `subdir` in `[sources]` must be kept when another workspace project depends on the
+# same package without a source (#4831)
+@testset "workspace keeps the subdir of a source declared in another project" begin
+    isolate() do
+        mktempdir() do dir
+            function write_package(path, name, uuid)
+                mkpath(joinpath(path, "src"))
+                write(joinpath(path, "Project.toml"), "name = \"$name\"\nuuid = \"$uuid\"\nversion = \"0.1.0\"\n")
+                write(joinpath(path, "src", "$name.jl"), "module $name end\n")
+            end
+            # A repository with one package at the root and one in `lib/Sub`
+            repo = joinpath(dir, "Mono")
+            write_package(repo, "Mono", "11111111-1111-1111-1111-111111111111")
+            write_package(joinpath(repo, "lib", "Sub"), "Sub", "22222222-2222-2222-2222-222222222222")
+            git_init_and_commit(repo)
+
+            ws = joinpath(dir, "workspace")
+            mkpath(joinpath(ws, "test"))
+            write(
+                joinpath(ws, "Project.toml"), """
+                [deps]
+                Sub = "22222222-2222-2222-2222-222222222222"
+
+                [workspace]
+                projects = ["test"]
+                """
+            )
+            write(
+                joinpath(ws, "test", "Project.toml"), """
+                [deps]
+                Sub = "22222222-2222-2222-2222-222222222222"
+
+                [sources]
+                Sub = {url = $(repr(repo)), subdir = "lib/Sub"}
+                """
+            )
+            with_pkg_env(ws) do
+                Pkg.resolve()
+                manifest = Pkg.Types.read_manifest(joinpath(ws, "Manifest.toml"))
+                @test manifest[UUID("22222222-2222-2222-2222-222222222222")].repo.subdir == "lib/Sub"
+            end
+        end
+    end
+end
+
 end # module

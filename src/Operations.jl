@@ -181,6 +181,9 @@ function merge_pkg_source!(pkg::PackageSpec, path::Union{Nothing, String}, repo:
     if pkg.repo.rev === nothing && repo.rev !== nothing
         pkg.repo.rev = repo.rev
     end
+    if pkg.repo.subdir === nothing && repo.subdir !== nothing
+        pkg.repo.subdir = repo.subdir
+    end
     return
 end
 merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
