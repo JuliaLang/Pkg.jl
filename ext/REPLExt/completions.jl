@@ -187,7 +187,10 @@ function complete_installed_packages_and_compat(options, partial; hint::Bool, ar
     end
     return map(vcat(collect(keys(env.project.deps)), "julia")) do d
         compat_str = Operations.get_compat_str(env.project, d)
-        isnothing(compat_str) ? d : string(d, " ", compat_str)
+        isnothing(compat_str) && return d
+        # quote entries like `0.4, 0.5` so that they parse as a single argument (#3562)
+        occursin(r"[\s,]", compat_str) && (compat_str = string('"', compat_str, '"'))
+        return string(d, " ", compat_str)
     end
 end
 

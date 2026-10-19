@@ -1659,6 +1659,14 @@ end
 
             # Should not throw BoundsError
             Pkg.API._compat(test_ctx; input_io)
+
+            # completing a compat entry with several specifiers quotes it (#3562)
+            Pkg.compat("Example", "0.4, 0.5"; io = devnull)
+            @test apply_completion("compat Exa") == "compat Example \"0.4, 0.5\""
+            Pkg.REPLMode.TEST_MODE[] = true
+            api, pkg, compat_str, opts = first(Pkg.REPLMode.pkgstr(apply_completion("compat Exa")))
+            @test (pkg, compat_str) == ("Example", "0.4, 0.5")
+            Pkg.REPLMode.TEST_MODE[] = false
         end
     end
 end
