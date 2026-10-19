@@ -339,7 +339,7 @@ compound_declarations = [
             :completions => :complete_installed_packages,
             :description => "run the build script for packages",
             :help => md"""
-                    build [-v|--verbose] pkg[=uuid] ...
+                    build [-v|--verbose] [pkg[=uuid] ...]
 
                 Run the build script in `deps/build.jl` for `pkg` and all of its dependencies in depth-first recursive order.
                 If no packages are given, run the build scripts for all packages in the manifest.
@@ -420,21 +420,22 @@ compound_declarations = [
             :completions => :complete_installed_packages,
             :description => "update packages in manifest",
             :help => md"""
-                    [up|update] [-p|--project]  [--workspace] [opts] pkg[=uuid] [@version] ...
-                    [up|update] [-m|--manifest] [--workspace] [opts] pkg[=uuid] [@version] ...
+                    [up|update] [-p|--project]  [--workspace] [opts] [pkg[=uuid] ...]
+                    [up|update] [-m|--manifest] [--workspace] [opts] [pkg[=uuid] ...]
 
                     opts: --major | --minor | --patch | --fixed
                           --preserve=<all/direct/none>
                           --lazy
 
-                Update `pkg` within the constraints of the indicated version
-                specifications. These specifications are of the form `@1`, `@1.2` or `@1.2.3`, allowing
-                any version with a prefix that matches, or ranges thereof, such as `@1.2-3.4.5`.
-                In `--project` mode, package specifications only match project packages, while
-                in `--manifest` mode they match any manifest package. Bound level options force
-                the following packages to be upgraded only within the current major, minor,
-                patch version; if the `--fixed` upgrade level is given, then the following
-                packages will not be upgraded at all.
+                Update the given packages, or all packages if none are given, to newer versions compatible
+                with the project. The bound level option is the largest version bump allowed (default `--major`):
+                `--minor` keeps the current major version, `--patch` the current minor version, and with
+                `--fixed` packages are not upgraded at all.
+                When no packages are given, in `--project` mode (the default) the bound level only applies to
+                the project's direct dependencies, while in `--manifest` mode it applies to every package in the manifest.
+                Given packages can be any package in the manifest. By default only they are updated
+                (`--preserve=all`); `--preserve=direct` also allows their dependencies that are not direct
+                dependencies of the project to update, and `--preserve=none` allows all their dependencies to update.
                 The `--workspace` option includes packages from all projects in the workspace
                 when no packages are specified.
                 With `--lazy`, the project and manifest are updated but nothing new is installed, and

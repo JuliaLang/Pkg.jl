@@ -7,7 +7,9 @@ This mechanism is also used to provide the binary dependencies for packages buil
 ## Basic Usage
 
 `Pkg` artifacts are declared in an `Artifacts.toml` file, which can be placed in your current directory or in the root of your package.
-Currently, `Pkg` supports downloading of tarfiles (which can be compressed) from a URL.
+Currently, `Pkg` supports downloading of tar archives compressed with gzip, bzip2, xz or zstd from a URL.
+The compression format is detected from the file contents, not from the URL or file name.
+Other kinds of files, such as zip archives or installers, are not unpacked and must be repackaged as a tarball first (see [Using Artifacts](@ref)).
 Following is a minimal `Artifacts.toml` file which will permit the downloading of a `socrates.tar.gz` file from `github.com`.
 In this example, a single artifact, given the name `socrates`, is defined.
 
@@ -108,6 +110,7 @@ The `socrates` artifact is marked as `lazy`, which means that it will not be aut
 
 The `c_simple` artifact showcases a platform-dependent artifact, where each entry in the `c_simple` array contains keys that help the calling package choose the appropriate download based on the particulars of the host machine.
 Note that each artifact contains both a `git-tree-sha1` and a `sha256` for each download entry.  This is to ensure that the downloaded tarball is secure before attempting to unpack it, as well as enforcing that all tarballs must expand to the same overall tree hash.
+Since an artifact is a directory tree, each `download` entry must point to a tarball, even if the artifact consists of a single file.
 
 The `processed_output` artifact contains no `download` stanza, and so cannot be installed.
 An artifact such as this would be the result of code that was previously run, generating a new artifact and binding the resultant hash to a name within this project.
@@ -119,47 +122,46 @@ As a motivating example, let us imagine that we are writing a package that needs
 While we could just download the dataset during a build step into the package directory, and many packages currently do precisely this, that has some significant drawbacks:
 
 * First, it modifies the package directory, making package installation stateful, which we want to avoid.
-  In the future, we would like to reach the point where packages can be installed completely read-only, instead of being able to modify themselves after installation.
+  Packages installed with `Pkg.add` are read-only and should not modify themselves after installation.
 
 * Second, the downloaded data is not shared across different versions of our package.
   If we have three different versions of the package installed for use by various projects, then we need three different copies of the data, even if it hasn't changed between those versions.
   Moreover, each time we upgrade or downgrade the package unless we do something clever (and probably brittle), we have to download the data again.
 
-With artifacts, we will instead check to see if our `iris` artifact already exists on-disk and only if it doesn't will we download and install it, after which we can bind the result into our `Artifacts.toml` file:
+With artifacts, we instead package the dataset as a tarball once, host it somewhere, and record it in the `Artifacts.toml` file of our package.
+This is a one-off step done by the package author, not something the package code does: the resulting `Artifacts.toml` is committed to the package repository and is never modified by the installed package.
 
 ```julia
 using Pkg.Artifacts
 
 # This is the path to the Artifacts.toml we will manipulate
-artifact_toml = joinpath(@__DIR__, "Artifacts.toml")
+artifact_toml = joinpath("path", "to", "MyPackage", "Artifacts.toml")
 
-# Query the `Artifacts.toml` file for the hash bound to the name "iris"
-# (returns `nothing` if no such binding exists)
-iris_hash = artifact_hash("iris", artifact_toml)
-
-# If the name was not bound, or the hash it was bound to does not exist, create it!
-if iris_hash == nothing || !artifact_exists(iris_hash)
-    # create_artifact() returns the content-hash of the artifact directory once we're finished creating it
-    iris_hash = create_artifact() do artifact_dir
-        # We create the artifact by simply downloading a few files into the new artifact directory
-        iris_url_base = "https://archive.ics.uci.edu/ml/machine-learning-databases/iris"
-        download("$(iris_url_base)/iris.data", joinpath(artifact_dir, "iris.csv"))
-        download("$(iris_url_base)/bezdekIris.data", joinpath(artifact_dir, "bezdekIris.csv"))
-        download("$(iris_url_base)/iris.names", joinpath(artifact_dir, "iris.names"))
-    end
-
-    # Now bind that hash within our `Artifacts.toml`.  `force = true` means that if it already exists,
-    # just overwrite with the new content-hash.  Unless the source files change, we do not expect
-    # the content hash to change, so this should not cause unnecessary version control churn.
-    bind_artifact!(artifact_toml, "iris", iris_hash)
+# create_artifact() returns the content-hash of the artifact directory once we're finished creating it
+iris_hash = create_artifact() do artifact_dir
+    # We create the artifact by simply downloading a few files into the new artifact directory
+    iris_url_base = "https://archive.ics.uci.edu/ml/machine-learning-databases/iris"
+    download("$(iris_url_base)/iris.data", joinpath(artifact_dir, "iris.csv"))
+    download("$(iris_url_base)/bezdekIris.data", joinpath(artifact_dir, "bezdekIris.csv"))
+    download("$(iris_url_base)/iris.names", joinpath(artifact_dir, "iris.names"))
 end
 
-# Get the path of the iris dataset, either newly created or previously generated.
-# this should be something like `~/.julia/artifacts/dbd04e28be047a54fbe9bf67e934be5b5e0d357a`
-iris_dataset_path = artifact_path(iris_hash)
+# Pack the artifact into a tarball, which we then upload somewhere (e.g. as a GitHub release asset).
+# archive_artifact() returns the sha256 hash of the tarball.
+tarball_sha256 = archive_artifact(iris_hash, "iris.tar.gz")
+
+# Now bind that hash within our `Artifacts.toml`, together with the location of the uploaded tarball.
+# `force = true` means that if a binding already exists, it is overwritten.
+bind_artifact!(artifact_toml, "iris", iris_hash;
+               download_info = [("https://example.com/iris.tar.gz", tarball_sha256)],
+               force = true)
 ```
 
-For the specific use case of using artifacts that were previously bound, we have the shorthand notation `artifact"name"` which will automatically search for the `Artifacts.toml` file contained within the current package, look up the given artifact by name, install it if it is not yet installed, then return the path to that given artifact.
+The same approach works for data that is not available as a tarball, such as a single file or a zip archive: download (and if necessary extract) it inside `create_artifact()` and archive the result.
+If the tarball is already hosted somewhere, [ArtifactUtils.jl](https://github.com/JuliaPackaging/ArtifactUtils.jl) can compute the hashes and add the binding with `add_artifact!`.
+
+Within the package code, artifacts that were previously bound are accessed with the shorthand notation `artifact"name"`, which will automatically search for the `Artifacts.toml` file contained within the current package, look up the given artifact by name, and return the path to that given artifact.
+Artifacts are installed together with the package that uses them, except for `lazy` artifacts, which are downloaded on first use (this requires `using LazyArtifacts`).
 An example of this shorthand notation is given below:
 
 ```julia
@@ -167,7 +169,7 @@ using Pkg.Artifacts
 
 # For this to work, an `Artifacts.toml` file must be in the current working directory
 # (or in the root of the current package) and must define a mapping for the "iris"
-# artifact.  If it does not exist on-disk, it will be downloaded.
+# artifact.
 iris_dataset_path = artifact"iris"
 ```
 
@@ -224,6 +226,9 @@ Note that while that hash was previously overridden, it is no longer, and theref
 Most methods that are affected by overrides can ignore overrides by setting `honor_overrides=false` as a keyword argument within them.
 For UUID/name-based overrides to work, `Artifacts.toml` files must be loaded with the knowledge of the UUID of the loading package.
 This is deduced automatically by the `artifacts""` string macro, however, if you are for some reason manually using the `Pkg.Artifacts` API within your package and you wish to honor overrides, you must provide the package UUID to API calls like `artifact_meta()` and `ensure_artifact_installed()` via the `pkg_uuid` keyword argument.
+
+`Overrides.toml` replaces whole artifacts.
+To instead replace a single library or executable of a JLL package (e.g. with one installed on the system) while keeping the rest of its artifact, see [Overriding specific products](https://docs.binarybuilder.org/stable/jll/#Overriding-specific-products) in the BinaryBuilder documentation.
 
 ## Extending Platform Selection
 

@@ -322,6 +322,25 @@ And if you also want to allow dependencies of Example that are also in the proje
 ```julia-repl
 (@v1.10) pkg> up --preserve=none Example
 ```
+
+### Why is a package not at its latest version?
+
+A package can be held back, or even downgraded when you add another package, by the compatibility requirements
+of other packages in the environment. `status` marks such packages with `⌅`, and `status --outdated` shows the
+latest version and which of the package's dependents (or your own `[compat]`) don't allow it:
+
+```julia-repl
+(@v1.14) pkg> status --outdated
+Status `~/.julia/environments/v1.14/Project.toml`
+⌅ [756980fe] D v0.1.0 (<v0.2.1): B
+```
+
+Add `-m` to also include packages that are only in the manifest, and use `why D` to see which packages depend on `D`.
+To get the full explanation, ask for the version you expected, for example with `add D@0.2.1`.
+This fails with a report of what conflicts with it (see [Interpreting and resolving version conflicts](@ref conflicts)),
+which may also point out that a new release of a dependent, here `B`, is needed.
+If so, check whether that package already supports the newer version on its development branch, or open an issue asking for it.
+
 ## Pinning a package
 
 A pinned package will never be updated. A package can be pinned using `pin`, for example:
@@ -376,31 +395,23 @@ julia> print(read(joinpath(homedir(), ".julia/scratchspaces/44cfe95a-1eb2-52ea-b
 An environment consists of a set of mutually-compatible packages.
 Sometimes, you can find yourself in a situation in which two packages you'd like to use simultaneously
 have incompatible requirements.
-In such cases you'll get an "Unsatisfiable requirements" error:
+In such cases you'll get an "Unsatisfiable requirements" error.
+For example, with a package `B` already in the environment, adding a package `A` might give:
 
-```@setup conflict
-using Pkg
-include(joinpath(pkgdir(Pkg), "test", "resolve_utils.jl"))
-using .ResolveUtils
-deps_data = Any[["A", v"1.0.0", "C", v"0.2"],
-                ["B", v"1.0.0", "D", v"0.1"],
-                ["C", v"0.1.0", "D", v"0.1"],
-                ["C", v"0.1.1", "D", v"0.1"],
-                ["C", v"0.2.0", "D", v"0.2"],
-                ["D", v"0.1.0"],
-                ["D", v"0.2.0"],
-                ["D", v"0.2.1"]]
-reqs_data = Any[["A", "*"],
-                ["B", "*"]]
+```julia-repl
+(@v1.14) pkg> add A
+   Resolving package versions...
+ERROR: Unsatisfiable requirements detected — 1 conflict:
+
+Conflict 1: A and B
+  • A 1.0.0 requires C 0.2.0
+  • C 0.2.0 allows no version of B (through D)
+  Fix it by any one of:
+    1. drop dependency A
+       → allows: B 1.0.0
+    2. drop dependency B
+       → allows: A 1.0.0, C 0.2.0
 ```
-
-```@example conflict
-print("pkg> add A\n", try resolve_tst(deps_data, reqs_data) catch e sprint(showerror, e) end)   # hide
-```
-
-This message means that a package named `D` has a version conflict.
-Even if you have never `add`ed `D` directly, this kind of error can arise
-if `D` is required by other packages that you are trying to use.
 
 !!! note
     When tackling these conflicts, first consider that the bigger a project gets, the more likely this is to happen.
@@ -411,81 +422,20 @@ if `D` is required by other packages that you are trying to use.
     for the task you're working on, and keep the dependencies there minimal. To read more see
     [Working with Environments](@ref Working-with-Environments)
 
-The error message has a lot of crucial information.
-It may be easiest to interpret piecewise:
+The heading `Conflict 1: A and B` names the requirements that cannot be satisfied together:
+`A`, which we are adding, and `B`, which is already in the project.
+The bullets below it are the chain of facts from the registry that leads to the conflict:
 
-```
-Unsatisfiable requirements detected for package D [756980fe]:
- D [756980fe] log:
- ├─possible versions are: [0.1.0, 0.2.0-0.2.1] or uninstalled
-```
-means that `D` has three released versions, `v0.1.0`, `v0.2.0`, and `v0.2.1`.
-You also have the option of not having it installed at all.
-Each of these options might have different implications for the set of other packages that can be installed.
+- `A 1.0.0 requires C 0.2.0`: `A` (whose only release is `v1.0.0`) depends on `C`, and only `v0.2.0` of `C` is compatible with it.
+- `C 0.2.0 allows no version of B (through D)`: `C` `v0.2.0` cannot be installed together with any version of `B`.
+  The packages in parentheses are those the conflict passes through: here `C` `v0.2.0` requires `v0.2` of `D`
+  while `B` requires `v0.1` of `D`.
 
-Crucially, notice the stroke characters (vertical and horizontal lines) and their indentation.
-Together, these connect *messages* to specific *packages*.
-For instance the right stroke of `├─` indicates that the message to its right (`possible versions...`)
-is connected to the package pointed to by its vertical stroke (`D`).
-This same principle applies to the next line:
-
-```
- ├─restricted by compatibility requirements with B [f4259836] to versions: 0.1.0
-```
-The vertical stroke here is also aligned under `D`, and thus this message
-is in reference to `D`.
-Specifically, there's some other package `B` that depends on version `v0.1.0` of `D`.
-Notice that this is not the newest version of `D`.
-
-Next comes some information about `B`:
-
-```
- │ └─B [f4259836] log:
- │   ├─possible versions are: 1.0.0 or uninstalled
- │   └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
-```
-The two lines below the first have a vertical stroke that aligns with `B`,
-and thus they provide information about `B`.
-They tell you that `B` has just one release, `v1.0.0`.
-You've not specified a particular version of `B` (`restricted to versions *` means that any version will do),
-but the `explicit requirement` means that you've asked for `B` to be part of your environment,
-for example by `pkg> add B`.
-You might have asked for `B` previously, and the requirement is still active.
-
-The conflict becomes clear with the line
-```
-└─restricted by compatibility requirements with C [c99a7cb2] to versions: 0.2.0 — no versions left
-```
-
-Here again, the vertical stroke aligns with `D`: this means that `D` is *also* required by another package, `C`.
-`C` requires `v0.2.0` of `D`, and this conflicts with `B`'s need for `v0.1.0` of `D`.
-This explains the conflict.
-
-But wait, you might ask, what is `C` and why do I need it at all?
-The next few lines introduce the problem:
-
-```
-   └─C [c99a7cb2] log:
-     ├─possible versions are: [0.1.0-0.1.1, 0.2.0] or uninstalled
-     └─restricted by compatibility requirements with A [29c70717] to versions: 0.2.0
-```
-These provide more information about `C`, revealing that it has 3 released versions: `v0.1.0`, `v0.1.1`, and `v0.2.0`.
-Moreover, `C` is required by another package `A`.
-Indeed, `A`'s requirements are such that we need `v0.2.0` of `C`.
-`A`'s origin is revealed on the next lines:
-
-```
-       └─A [29c70717] log:
-         ├─possible versions are: 1.0.0 or uninstalled
-         └─restricted to versions * by an explicit requirement, leaving only versions 1.0.0
-```
-
-So we can see that `A` was explicitly required, and in this case, it's because we were trying to
-`add` it to our environment.
-
-In summary, we explicitly asked to use `A` and `B`, but this gave a conflict for `D`.
-The reason was that `B` and `C` require conflicting versions of `D`.
-Even though `C` isn't something we asked for explicitly, it was needed by `A`.
+So even though we never asked for `C` or `D`, they matter because `A` and `B` depend on them.
+The report ends with the changes to your own requirements that would fix the conflict,
+each followed (after `→ allows:`) by the versions the resolver would then pick.
+Here the only options are to not have `A` or `B` in the environment, since the incompatibility comes from the
+compatibility requirements of the packages themselves.
 
 To fix such errors, you have a number of options:
 
