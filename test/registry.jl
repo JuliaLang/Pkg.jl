@@ -130,6 +130,8 @@ end
             ## Registry API
             for reg in (
                     "General",
+                    SubString("General"), # #3420
+                    [SubString("General")],
                     RegistrySpec("General"),
                     RegistrySpec(name = "General"),
                     RegistrySpec(name = "General", path = general_path),
