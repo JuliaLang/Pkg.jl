@@ -366,6 +366,34 @@ end
 
         @test_throws PkgError("`repo` is a private field of PackageSpec and should not be set directly") Pkg.add([Pkg.PackageSpec(; repo = Pkg.Types.GitRepo(source = "someurl"))])
     end
+    # the suggested `add` for a held back package must not include a build number (#4821)
+    isolate(loaded_depot = true) do
+        newreg = joinpath(DEPOT_PATH[1], "registries", "BuildReg")
+        mkpath(joinpath(newreg, "E", "Example"))
+        write(
+            joinpath(newreg, "Registry.toml"), """
+            name = "BuildReg"
+            uuid = "$(uuid4())"
+            repo = "https://example.com/BuildReg.git"
+
+            [packages]
+            $exuuid = { name = "Example", path = "E/Example" }
+            """
+        )
+        write(
+            joinpath(newreg, "E", "Example", "Package.toml"), """
+            name = "Example"
+            uuid = "$exuuid"
+            repo = "https://github.com/JuliaLang/Example.jl.git"
+            """
+        )
+        write(joinpath(newreg, "E", "Example", "Versions.toml"), "[\"0.5.99+1\"]\ngit-tree-sha1 = \"$("0"^40)\"\n")
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.compat("Example", "=0.5.3")
+        iob = IOBuffer()
+        Pkg.update("Example"; io = iob)
+        @test occursin("try `add Example@0.5.99`", String(take!(iob)))
+    end
 end
 
 @testset "update: caching" begin

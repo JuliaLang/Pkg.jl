@@ -3489,6 +3489,8 @@ function up(
                 if cinfo !== nothing
                     packages_holding_back, max_version, max_version_compat = cinfo
                     if current_version < max_version
+                        # version specifiers have no build numbers
+                        max_version = VersionNumber(max_version.major, max_version.minor, max_version.patch)
                         printpkgstyle(
                             ctx.io, :Info, "$(pkg.name) can be updated but at the cost of upgrading/downgrading other packages. " *
                                 "To force upgrade to the latest version, try `add $(pkg.name)@$(max_version)`", color = Base.info_color()
