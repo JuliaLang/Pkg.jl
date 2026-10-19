@@ -526,7 +526,7 @@ function detect_archive_format(tarball_path::AbstractString)
     end
 
     magic = open(tarball_path, "r") do io
-        read(io, min(6, file_size))
+        read(io, min(262, file_size))
     end
 
     # Check magic bytes for various formats
@@ -550,6 +550,10 @@ function detect_archive_format(tarball_path::AbstractString)
     if length(magic) >= 4 && magic[1:4] == [0x04, 0x22, 0x4D, 0x18]
         return "lz4"
     end
+    # Uncompressed tar: "ustar" at offset 257 of the first header (POSIX and GNU)
+    if length(magic) >= 262 && magic[258:262] == codeunits("ustar")
+        return "tar"
+    end
     return "unknown"
 end
 
@@ -557,9 +561,13 @@ end
     get_extract_cmd(tarball_path::AbstractString)
 
 Get the decompression command for a tarball by detecting format via magic bytes.
+For an uncompressed tarball, this is `tarball_path` itself. Either way, the result
+can be passed to `open` to read the tar stream.
 """
 function get_extract_cmd(tarball_path::AbstractString)
     format = detect_archive_format(tarball_path)
+    # 7z would extract the members of a tar file rather than pass it through
+    format == "tar" && return tarball_path
     # 7z appears to normalize paths internally, which can cause mis-resolution
     # if symbolic links are present
     tarball_path = realpath(tarball_path)
