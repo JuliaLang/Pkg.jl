@@ -706,6 +706,27 @@ end
             @test isdir(Pkg.dependencies()[empty_package].source)
         end
     end
+    # A file in the HEAD of the clone cache that is a directory in the added tree (#4842)
+    isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
+            empty_package = UUID("26187899-7657-4a90-a2f6-e79e0214bedc")
+            path = joinpath(tempdir, "EmptyPackage")
+            cp(joinpath(@__DIR__, "test_packages", "EmptyPackage"), path)
+            write(joinpath(path, "test"), "a file\n")
+            git_init_and_commit(path)
+            Pkg.add(path = path)
+            rm(joinpath(path, "test"))
+            mkdir(joinpath(path, "test"))
+            write(joinpath(path, "test", "runtests.jl"), "")
+            c2 = LibGit2.with(LibGit2.GitRepo(path)) do repo
+                LibGit2.remove!(repo, "test")
+                LibGit2.add!(repo, "test/runtests.jl")
+                LibGit2.commit(repo, "file to dir"; author = Utils.TEST_SIG, committer = Utils.TEST_SIG)
+            end
+            Pkg.add(url = path, rev = string(c2))
+            @test isfile(joinpath(Pkg.dependencies()[empty_package].source, "test", "runtests.jl"))
+        end
+    end
     # Now we test packages added by URL.
     isolate(loaded_depot = true) do
         # Details: `master` is past `0.1.0`

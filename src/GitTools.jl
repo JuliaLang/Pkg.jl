@@ -126,12 +126,18 @@ function ensure_clone(io::IO, target_path, url; kwargs...)
 end
 
 function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, path::String)
-    return GC.@preserve path begin
-        opts = LibGit2.CheckoutOptions(
-            checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
-            target_directory = Base.unsafe_convert(Cstring, path)
-        )
-        LibGit2.checkout_tree(repo, tree, options = opts)
+    # Compare against the empty tree rather than the repo's HEAD/index, which can make
+    # libgit2 fail with "null OID cannot exist" (#4842); `path` is a fresh directory anyway.
+    # libgit2 knows the empty tree without it being in the object database.
+    return LibGit2.with(LibGit2.GitTree(repo, "4b825dc642cb6eb9a060e54bf8d69288fbee4904")) do baseline
+        GC.@preserve path baseline begin
+            opts = LibGit2.CheckoutOptions(
+                checkout_strategy = LibGit2.Consts.CHECKOUT_FORCE,
+                target_directory = Base.unsafe_convert(Cstring, path),
+                baseline = baseline.ptr
+            )
+            LibGit2.checkout_tree(repo, tree, options = opts)
+        end
     end
 end
 
