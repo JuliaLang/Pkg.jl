@@ -1914,9 +1914,11 @@ function install_collected_artifacts!(
                     # TODO: Implement as a new MiniMultiProgressBar
                     main_bar = MiniProgressBar(; indent = 2, header = "Installing artifacts", color = :green, mode = :int, always_reprint = true)
                     main_bar.max = length(download_states)
+                    # `sprint` draws into a buffer, which does not know the width of the terminal
+                    context = IOContext(io, :displaysize => displaysize(io))
                     while !is_done[]
                         main_bar.current = count(x -> x.state == :done, values(download_states))
-                        local str = sprint(context = io) do iostr
+                        local str = sprint(; context) do iostr
                             first[] || print(iostr, ansi_cleartoend)
                             n_printed = 1
                             show_progress(iostr, main_bar; carriagereturn = false)
@@ -2399,6 +2401,8 @@ function download_source(
         )
         bar.max = length(pkgs_to_install)
         fancyprint = can_fancyprint(ctx.io)
+        # `sprint` draws into a buffer, which does not know the width of the terminal
+        context = IOContext(ctx.io, :displaysize => displaysize(ctx.io))
         try
             for i in 1:length(pkgs_to_install)
                 pkg::DownloadPkg, exc_or_success_or_nothing, bt_or_pathurls = take!(results)
@@ -2413,7 +2417,7 @@ function download_source(
                 (urls, path) = bt_or_pathurls::Tuple{Set{String}, String}
                 success || push!(missed_packages, (; pkg, urls, path))
                 bar.current = i
-                str = sprint(; context = ctx.io) do io
+                str = sprint(; context) do io
                     if success
                         fancyprint && print_progress_bottom(io)
                         vstr = if pkg.version !== nothing

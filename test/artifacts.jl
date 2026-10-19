@@ -1273,10 +1273,12 @@ end
 # from its own task.
 struct CapturedIO <: IO
     fancy::Bool
+    displaysize::Tuple{Int, Int}
     buf::IOBuffer
     lock::ReentrantLock
 end
-CapturedIO(; fancy::Bool) = CapturedIO(fancy, IOBuffer(), ReentrantLock())
+CapturedIO(; fancy::Bool, displaysize = (24, 80)) = CapturedIO(fancy, displaysize, IOBuffer(), ReentrantLock())
+Base.displaysize(io::CapturedIO) = io.displaysize
 Base.write(io::CapturedIO, b::UInt8) = @lock io.lock write(io.buf, b)
 Base.unsafe_write(io::CapturedIO, p::Ptr{UInt8}, n::UInt) = @lock io.lock unsafe_write(io.buf, p, n)
 Base.take!(io::CapturedIO) = @lock io.lock take!(io.buf)
@@ -1298,7 +1300,8 @@ Pkg.can_fancyprint(io::CapturedIO) = io.fancy
                 """
             )
             Pkg.activate(project_path)
-            io = CapturedIO(; fancy)
+            # narrower than the default width of 80 (#3996)
+            io = CapturedIO(; fancy, displaysize = (24, 50))
             t = @async Pkg.instantiate(; io)
             @test timedwait(() -> isready(srv.requested) || istaskdone(t), 120) == :ok
             istaskdone(t) && wait(t) # failed before reaching the download; show why
@@ -1316,6 +1319,11 @@ Pkg.can_fancyprint(io::CapturedIO) = io.fancy
             output = String(take!(io))
             if fancy
                 @test occursin("Installing artifacts", output)
+                # the progress bars fit the terminal (other output, e.g. paths, may be wider)
+                lines = split(replace(output, r"\e\[[0-9;?]*[A-Za-z]" => ""), r"[\r\n]")
+                bar_lines = filter(l -> occursin("Installing artifacts", l), lines)
+                @test !isempty(bar_lines)
+                @test maximum(textwidth, bar_lines) <= 50
                 # the progress bar was torn down, cursor restored, before the interrupt propagated
                 @test endswith(output, ansi_enablecursor)
             end
