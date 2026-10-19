@@ -695,6 +695,17 @@ end
             @test Pkg.dependencies()[empty_package].name == "EmptyPackage"
         end
     end
+    # A local bare repository can be added by path (#659)
+    isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
+            empty_package = UUID("26187899-7657-4a90-a2f6-e79e0214bedc")
+            path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "EmptyPackage"))
+            bare = joinpath(tempdir, "EmptyPackage.git")
+            close(LibGit2.clone(path, bare; isbare = true))
+            Pkg.add(path = bare)
+            @test isdir(Pkg.dependencies()[empty_package].source)
+        end
+    end
     # Now we test packages added by URL.
     isolate(loaded_depot = true) do
         # Details: `master` is past `0.1.0`

@@ -1090,7 +1090,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 # Regular git repo: .git is a directory
                 git_info_path = git_path
             end
-            if !isdir(git_info_path)
+            # A bare repository has no `.git` and no working tree to check for changes
+            is_bare = !isdir(git_info_path) && try
+                LibGit2.with(LibGit2.isbare, LibGit2.GitRepo(repo_source))
+            catch err
+                err isa LibGit2.GitError || rethrow()
+                false
+            end
+            if !isdir(git_info_path) && !is_bare
                 local msg = "Did not find a git repository at `$(repo_source)`"
                 if isfile(joinpath(repo_source, "Project.toml")) || isfile(joinpath(repo_source, "JuliaProject.toml"))
                     msg *= ", perhaps you meant `Pkg.develop`?"
@@ -1098,7 +1105,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(repo_source)) # check for valid git HEAD
-            let repo_source = repo_source
+            is_bare || let repo_source = repo_source
                 LibGit2.with(LibGit2.GitRepo(repo_source)) do repo
                     if LibGit2.isdirty(repo)
                         @warn "The repository at `$(repo_source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."
