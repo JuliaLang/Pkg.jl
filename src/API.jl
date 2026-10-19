@@ -161,9 +161,10 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
         function $f(pkgs::Vector{PackageSpec}; io::IO = $(f === :status ? :stdout_f : :stderr_f)(), kwargs...)
             $(f != :precompile) && Registry.download_default_registries(io)
             ctx = Context()
-            # Save initial environment for undo/redo functionality
+            # Save initial environment for undo/redo functionality. Read it fresh from
+            # disk, `ctx.env` is mutated in place by the operation.
             if $(f != :precompile) && !saved_initial_snapshot[]
-                add_snapshot_to_undo(ctx.env)
+                add_snapshot_to_undo()
                 saved_initial_snapshot[] = true
             end
             kwargs = merge((; kwargs...), (:io => io,))
@@ -576,7 +577,14 @@ function up(
     return
 end
 
-resolve(; io::IO = stderr_f(), kwargs...) = resolve(Context(; io); kwargs...)
+function resolve(; io::IO = stderr_f(), kwargs...)
+    # Save initial environment for undo/redo functionality, see the convenience calls above
+    if !saved_initial_snapshot[]
+        add_snapshot_to_undo()
+        saved_initial_snapshot[] = true
+    end
+    return resolve(Context(; io); kwargs...)
+end
 function resolve(ctx::Context; skip_writing_project::Bool = false, kwargs...)
     up(ctx; level = UPLEVEL_FIXED, mode = PKGMODE_MANIFEST, update_registry = false, skip_writing_project, kwargs...)
     return nothing
