@@ -9,11 +9,11 @@ may optionally have a manifest file:
 - **Project file:** a file in the root directory of a project, named
   `Project.toml` (or `JuliaProject.toml`), describing metadata about the project,
   including its name, UUID (for packages), authors, license, and the names and
-  UUIDs of packages and libraries that it depends on.
+  UUIDs of packages that it depends on.
 
 - **Manifest file:** a file in the root directory of a project, named
   `Manifest.toml` (or `JuliaManifest.toml`), describing a complete dependency graph
-  and exact versions of each package and library used by a project. The file name may
+  and exact versions of each package used by a project. The file name may
   also be suffixed by `-v{major}.{minor}.toml` which Julia will prefer if the version
   matches `VERSION`, allowing multiple environments to be maintained for different Julia
   versions.
@@ -92,9 +92,16 @@ For each registered version of a package, the following information is provided:
 Dependencies and compatibility are stored in a compressed but human-readable
 format using ranges of package versions.
 
+**Artifact:** an immutable directory tree of data that is not a Julia package,
+such as platform-specific binaries or a dataset, identified by the git tree hash
+of its contents. A project binds names to artifacts, together with where to
+download them from, in an `Artifacts.toml` file. JLL packages use artifacts to
+provide binary dependencies. See [Artifacts](@ref) for details.
+
 **Depot:** a directory on a system where various package-related resources live,
 including:
 
+- `artifacts`: installed artifacts
 - `environments`: shared named environments (e.g. `v1.0`, `devtools`)
 - `clones`: bare clones of package repositories
 - `compiled`: cached compiled package images (`.ji` files)
@@ -103,6 +110,7 @@ including:
 - `logs`: log files (e.g. `manifest_usage.toml`, `repl_history.jl`)
 - `packages`: installed package versions
 - `registries`: clones of registries (e.g. `General`)
+- `scratchspaces`: mutable package-specific data (see [Scratch.jl](https://github.com/JuliaPackaging/Scratch.jl))
 
 **Load path:** a stack of environments where package identities, their
 dependencies, and entry points are searched for. The load path is controlled in
