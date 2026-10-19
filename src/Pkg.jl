@@ -414,13 +414,18 @@ const why = API.why
 
 """
     Pkg.update(; level::UpgradeLevel=UPLEVEL_MAJOR, mode::PackageMode = PKGMODE_PROJECT, preserve::PreserveLevel, workspace::Bool = false, lazy::Bool = false)
-    Pkg.update(pkg::Union{String, Vector{String}})
-    Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}})
+    Pkg.update(pkg::Union{String, Vector{String}}; kwargs...)
+    Pkg.update(pkg::Union{PackageSpec, Vector{PackageSpec}}; kwargs...)
 
-If no positional argument is given, update all packages in the manifest if `mode` is `PKGMODE_MANIFEST` and packages in both manifest and project if `mode` is `PKGMODE_PROJECT`.
-If no positional argument is given, `level` can be used to control by how much packages are allowed to be upgraded (major, minor, patch, fixed).
+Update packages to newer versions compatible with the project. `level` controls by how much packages
+are allowed to be upgraded (major, minor, patch, fixed).
 
-If packages are given as positional arguments, the `preserve` argument can be used to control what other packages are allowed to update:
+If no positional argument is given, all packages are updated. With `mode = PKGMODE_PROJECT` (the default), `level`
+only restricts the project's direct dependencies, not indirect ones; with `mode = PKGMODE_MANIFEST`, it restricts
+every package in the manifest.
+
+If packages are given as positional arguments (any package in the manifest), the `preserve` argument
+can be used to control what other packages are allowed to update:
 - `PRESERVE_ALL` (default): Only allow `pkg` to update.
 - `PRESERVE_DIRECT`: Only allow `pkg` and indirect dependencies that are not a direct dependency in the project to update.
 - `PRESERVE_NONE`: Allow `pkg` and all its indirect dependencies to update.
@@ -476,15 +481,18 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["Test"]
 ```
 
-The tests are executed in a new process with the same `check-bounds` setting as the current Julia session and by default `startup-file=no`.
+The tests are executed in a new process with the same `check-bounds`, `inline`, `track-allocation` and `color` settings
+as the current Julia session, with `--depwarn=yes` (unless the session uses `--depwarn=error`), `--warn-overwrite=yes`,
+and by default `--startup-file=no`.
 If using the startup file (`~/.julia/config/startup.jl`) is desired, start julia with `--startup-file=yes`.
 
 Inlining of functions during testing can be disabled (for better coverage accuracy)
 by starting julia with `--inline=no`. The tests can be run as if different command line arguments were
-passed to julia by passing the arguments instead to the `julia_args` keyword argument, e.g.
+passed to julia by passing the arguments instead to the `julia_args` keyword argument, which take precedence
+over the flags above, e.g.
 
 ```julia
-Pkg.test("foo"; julia_args=["--inline"])
+Pkg.test("foo"; julia_args=["--inline=no", "--warn-overwrite=no"])
 ```
 
 To pass some command line arguments to be used in the tests themselves, pass the arguments to the
@@ -689,12 +697,14 @@ Request a `ProjectInfo` struct which contains information about the active proje
 const project = API.project
 
 """
-    Pkg.instantiate(; verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false, update_on_mismatch=false)
+    Pkg.instantiate(; manifest=nothing, verbose = false, workspace=false, io::IO=stderr, julia_version_strict=false, update_on_mismatch=false)
 
 If a `Manifest.toml` file exists in the active project, download all
 the packages declared in that manifest.
 Otherwise, resolve a set of feasible packages from the `Project.toml` files
 and install them.
+`manifest=false` resolves versions from the project files even if a manifest exists
+(like `pkg> instantiate --project`), while `manifest=true` errors if there is no manifest.
 `verbose = true` prints the build output to `stdout`/`stderr` instead of
 redirecting to the `build.log` file.
 `workspace=true` will also instantiate all projects in the workspace.
@@ -721,8 +731,10 @@ const instantiate = API.instantiate
 """
     Pkg.resolve(; io::IO=stderr, lazy::Bool=false)
 
-Update the current manifest with potential changes to the dependency graph
-from packages that are tracking a path.
+Run package resolution and update the manifest to match the project, keeping the versions of packages
+already in the manifest. Commands like [`Pkg.add`](@ref) and [`Pkg.rm`](@ref) do this automatically, but it is
+needed when the manifest is out of sync, e.g. after adding dependencies to `Project.toml` by hand or
+when the dependencies of a package tracking a path (see [`Pkg.develop`](@ref)) have changed.
 
 With `lazy=true`, the manifest is updated but nothing new is installed. Run [`Pkg.instantiate`](@ref)
 to finish installing. See [`Pkg.add`](@ref).
