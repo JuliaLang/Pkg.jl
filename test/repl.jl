@@ -31,6 +31,10 @@ exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
     pkg"?    add"
     pkg"help add"
     @test_throws PkgError pkg"helpadd"
+    # aliases of sub commands include the super command (#3471)
+    help_text = string(Pkg.REPLMode.gen_help())
+    @test occursin("`update`, `up`", help_text)
+    @test occursin("`registry update`, `registry up`", help_text)
 end
 
 @testset "accidental" begin
