@@ -438,7 +438,7 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, @n
 end
 
 """
-    get_project_syntax_version(p::Project) -> VersionNumber
+    get_project_syntax_version(p::Project, julia_version = VERSION) -> VersionNumber
 
 Extract the syntax version from a Project.
 
@@ -447,13 +447,13 @@ this precedence order:
 
 1. If `syntax.julia_version` is present in the Project.toml, use that value
 2. If `compat.julia` is specified, use the minimum version from the compat range
-3. Otherwise, default to the current Julia VERSION
+3. Otherwise, default to `julia_version`, the Julia version the manifest is written for
 
 This information is used to populate the `syntax.julia_version` field in the
 Manifest.toml, allowing Base's loading system to parse each package with the
 correct syntax version.
 """
-function get_project_syntax_version(p::Project)::VersionNumber
+function get_project_syntax_version(p::Project, julia_version::Union{VersionNumber, Nothing} = VERSION)::VersionNumber
     # First check syntax.julia_version entry in Project.other
     if p.julia_syntax_version !== nothing
         return p.julia_syntax_version
@@ -470,8 +470,8 @@ function get_project_syntax_version(p::Project)::VersionNumber
         end
     end
 
-    # Finally, if neither of those are set, default to the current Julia version
-    return dropbuild(VERSION)
+    # Finally, if neither of those are set, default to the Julia version
+    return dropbuild(something(julia_version, VERSION))
 end
 
 # This has to be done after the packages have been downloaded
@@ -489,10 +489,11 @@ function fixups_from_projectfile!(ctx::Context; tmpdir::Union{Nothing, String} =
             p = stdlibs[pkg.uuid]
             pkg.weakdeps = Dict{String, Base.UUID}(stdlibs[uuid].name => uuid for uuid in p.weakdeps)
             # pkg.exts = p.exts # TODO: STDLIBS_BY_VERSION doesn't record this
-            # Until it does, keep the extensions of an entry that kept its version
+            # Until it does, keep the extensions and syntax version of an entry that kept its version
             old = manifest_info(env.original_manifest, pkg.uuid)
             if old !== nothing && old.version == pkg.version
                 pkg.exts = old.exts
+                pkg.julia_syntax_version = old.julia_syntax_version
             end
             # pkg.entryfile = p.entryfile # TODO: STDLIBS_BY_VERSION doesn't record this
             for (name, uuid) in pkg.weakdeps
@@ -517,7 +518,7 @@ function fixups_from_projectfile!(ctx::Context; tmpdir::Union{Nothing, String} =
                 pkg.weakdeps = p.weakdeps
                 pkg.exts = p.exts
                 pkg.entryfile = p.entryfile
-                pkg.julia_syntax_version = get_project_syntax_version(p)
+                pkg.julia_syntax_version = get_project_syntax_version(p, ctx.julia_version)
 
                 for (name, _) in p.weakdeps
                     if !haskey(p.deps, name)
@@ -559,7 +560,7 @@ function reuse_project_info!(ctx::Context)
         old_entry === nothing && continue
         syntax_version = old_entry.julia_syntax_version
         (old_entry.tree_hash == entry.tree_hash && syntax_version !== nothing) || continue
-        syntax_version == dropbuild(VERSION) ||
+        syntax_version == dropbuild(something(ctx.julia_version, VERSION)) ||
             syntax_version == registry_julia_compat_lower(ctx.registries, uuid, entry.version) || continue
         entry.weakdeps = copy(old_entry.weakdeps)
         entry.exts = copy(old_entry.exts)

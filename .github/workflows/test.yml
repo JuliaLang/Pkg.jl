@@ -92,7 +92,13 @@ jobs:
         # native code of package images, so Pkg is compiled from scratch in
         # every test worker and in every julia process the tests spawn,
         # which roughly doubles the time of the test suite.
-        run: julia --color=yes -e 'using Pkg; Pkg.activate("."); Pkg.test(; coverage = false, julia_args = ["--check-bounds=yes", "--depwarn=error"])'
+        #
+        # TODO: Restore `--check-bounds=yes` once
+        # https://github.com/julia-actions/julia-runtest/pull/169 is merged.
+        # Nightly no longer bundles the bounds-checked stdlib pkgimages, so
+        # test subprocesses would have to precompile Pkg, which the tests
+        # disallow.
+        run: julia --color=yes -e 'using Pkg; Pkg.activate("."); Pkg.test(; coverage = false, julia_args = ["--depwarn=error"])'
         env:
           JULIA_PKG_SERVER: ${{ matrix.pkg-server }}
           JULIA_TEST_VERBOSE_LOGS_DIR: ${{ github.workspace }}
