@@ -14,7 +14,7 @@ import Base: StaleCacheKey
 
 import ..depots, ..depots1, ..logdir, ..devdir, ..printpkgstyle, ..manifest_rel_path
 import ..Operations, ..GitTools, ..Pkg, ..Registry
-import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..safe_realpath
+import ..can_fancyprint, ..pathrepr, ..isurl, ..PREV_ENV_PATH, ..safe_realpath, ..normalize_path_for_toml
 using ..Types, ..TOML
 using ..Types: VersionTypes
 using Base.BinaryPlatforms
@@ -207,9 +207,12 @@ function update_source_if_set(env, pkg)
             source["rev"] = pkg.repo.rev
         end
         if pkg.path !== nothing
-            # pkg.path is manifest-relative, but sources store project-relative paths
-            source["path"] = Types.manifest_path_to_project_path(
-                env.project_file, env.manifest_file, pkg.path
+            # pkg.path is manifest-relative, but sources store project-relative paths, in the form
+            # `write_project` writes (forward slashes on Windows) so an unchanged path compares equal
+            source["path"] = normalize_path_for_toml(
+                Types.manifest_path_to_project_path(
+                    env.project_file, env.manifest_file, pkg.path
+                )
             )
         end
 
