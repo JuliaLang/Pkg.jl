@@ -260,7 +260,8 @@ end
 # COMPLETION INTERFACE #
 ########################
 function default_commands()
-    names = collect(keys(SPECS))
+    # `package` is only an optional prefix of the default commands (#4108)
+    names = filter(!=("package"), collect(keys(SPECS)))
     append!(names, map(x -> getproperty(x, :canonical_name), values(SPECS["package"])))
     return sort(unique(names))
 end

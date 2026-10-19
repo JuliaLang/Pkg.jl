@@ -1207,6 +1207,12 @@ end
             @test "--manifest" in c
             c, r = test_complete("rem")
             @test "remove" in c
+            # `package` is an optional prefix, not a command (#4108)
+            c, r = test_complete("")
+            @test "registry" in c
+            @test !("package" in c)
+            c, r = test_complete("package ")
+            @test "add" in c
             @test apply_completion("rm E") == "rm Example"
             @test apply_completion("add Exampl") == "add Example"
             c, r = test_complete("free Exa")
