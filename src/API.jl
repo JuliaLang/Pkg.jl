@@ -1454,7 +1454,9 @@ function instantiate(
     if (!isfile(ctx.env.manifest_file) && manifest === nothing) || manifest == false
         # given no manifest exists, only allow invoking a registry update if there are project deps
         allow_registry_update = isfile(ctx.env.project_file) && !isempty(ctx.env.project.deps)
-        up(ctx; update_registry = update_registry && allow_registry_update)
+        # `up` always updates the registries; skip that if done earlier in this session
+        update_registry && allow_registry_update && Operations.update_registries(ctx; force = false)
+        up(ctx; update_registry = false)
         allow_autoprecomp && Pkg._auto_precompile(ctx; already_instantiated = true, workspace)
         return
     end

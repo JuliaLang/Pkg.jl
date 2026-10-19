@@ -685,6 +685,29 @@ end
     end
 end
 
+# Without a manifest, `instantiate` does not update a registry that was already updated in
+# this session (#3555)
+@testset "instantiate without a manifest updates registries once per session" begin
+    temp_pkg_dir() do depot
+        regdir = mktempdir()
+        setup_test_registries(regdir)
+        Registry.add(url = joinpath(regdir, "RegistryFoo1"); io = devnull)
+        env = mktempdir()
+        write(joinpath(env, "Project.toml"), "[deps]\nRandom = \"9a3f8284-a2c9-5f02-9a11-845980a1fd5c\"\n")
+        Pkg.activate(env)
+        old_updated = Pkg.UPDATED_REGISTRY_THIS_SESSION[]
+        try
+            io = IOBuffer()
+            Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true
+            Pkg.instantiate(; io)
+            @test !occursin("Updating registry", String(take!(io)))
+            @test isfile(joinpath(env, "Manifest.toml"))
+        finally
+            Pkg.UPDATED_REGISTRY_THIS_SESSION[] = old_updated
+        end
+    end
+end
+
 @testset "Offline registry operations" begin
     mktempdir() do dir
         setup_test_registries(dir)
