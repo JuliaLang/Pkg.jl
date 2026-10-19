@@ -845,6 +845,20 @@ end
             @test occursin(TEST_PKG.name, sprint(showerror, e))
         end
     end
+    # the project's [compat] entry is named in the error (#2738)
+    isolate(loaded_depot = true) do
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.compat("Example", "=0.5.3")
+        err = try
+            Pkg.add(name = "Example", version = "0.5.4")
+        catch e
+            e
+        end
+        @test err isa ResolverError
+        @test occursin("project compatibility 0.5.3", err.msg)
+        project_file = Pkg.Types.Context().env.project_file
+        @test occursin(r"\* " * project_file * r":\d+: Example = \"=0.5.3\"", err.msg)
+    end
 end
 
 @testset "API details" begin

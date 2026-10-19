@@ -1015,11 +1015,16 @@ function workspace_sources(env::EnvCache)
 end
 
 # The error for a requirement that no version satisfies together with the
-# compat of the project(s): in a workspace, say which files declare compat
-# for the package, since the intersection alone does not tell whose entry to change.
+# compat of the project(s): say which files declare compat for the package,
+# since the intersection alone does not tell which entry to change.
 function compat_conflict_message(env::EnvCache, pkg::PackageSpec, compat::VersionSpec)
-    isempty(env.workspace) &&
-        return "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+    if isempty(env.workspace)
+        msg = "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+        str = get_compat_str(env.project, pkg.name)
+        str === nothing && return msg
+        source = entry_source(env.project_file, toml_entry_lines(env.project_file), ("compat",), pkg.name)
+        return msg * "\nThe project has a compat entry for $(pkg.name):\n * $source: $(pkg.name) = $(repr(str))"
+    end
     msg = "empty intersection between $(pkg.name)@$(pkg.version) and workspace compatibility $(compat)\n"
     msg *= "The following workspace projects have compat entries for $(pkg.name):"
     for (file, project) in workspace_project_files(env)
