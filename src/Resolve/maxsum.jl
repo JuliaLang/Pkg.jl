@@ -76,8 +76,8 @@ mutable struct Messages
         # external fields: favor newest versions over older, and no-version over all;
         #                  explicit requirements use level l1 instead of l2
         fv(p0, v0) = p0 ∈ req_inds ?
-            FieldValue(0, vweight[p0][v0], zero(VersionWeight), (v0 == spp[p0])) :
-            FieldValue(0, zero(VersionWeight), vweight[p0][v0], (v0 == spp[p0]))
+            FieldValue(0, vweight[p0][v0], VersionWeight(), (v0 == spp[p0])) :
+            FieldValue(0, VersionWeight(), vweight[p0][v0], (v0 == spp[p0]))
         fld = [[fv(p0, v0) for v0 in 1:spp[p0]] for p0 in 1:np]
 
         initial_fld = [copy(f0) for f0 in fld]
@@ -105,7 +105,7 @@ function reset_messages!(msgs::Messages, graph::Graph)
     ignored = graph.ignored
     for p0 in 1:np
         ignored[p0] && continue
-        map(m -> fill!(m, zero(FieldValue)), msg[p0])
+        map(m -> fill!(m, FieldValue()), msg[p0])
         copyto!(fld[p0], initial_fld[p0])
         gconstr0 = gconstr[p0]
         for v0 in 1:spp[p0]
@@ -176,7 +176,7 @@ function update!(p0::Int, graph::Graph, msgs::Messages)
     msg = msgs.msg
     fld = msgs.fld
 
-    maxdiff = zero(FieldValue)
+    maxdiff = FieldValue()
 
     gadj0 = gadj[p0]
     msg0 = msg[p0]
@@ -261,7 +261,7 @@ Base.iterate(perm::NodePerm, state...) = iterate(perm.p, state...)
 # Call update for all nodes (i.e. packages) in
 # random order
 function iterate!(graph::Graph, msgs::Messages, perm::NodePerm)
-    maxdiff = zero(FieldValue)
+    maxdiff = FieldValue()
     shuffle!(perm)
     for p0 in perm
         graph.ignored[p0] && continue
@@ -409,7 +409,7 @@ function converge!(graph::Graph, msgs::Messages, strace::SolutionTrace, perm::No
             end
             return :unsat
         end
-        maxdiff == zero(FieldValue) && break
+        maxdiff == FieldValue() && break
     end
 
     # if maxsum has found some forbidden states, remove
