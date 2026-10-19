@@ -51,6 +51,9 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
         else
             completions = [joinpath(dirname(s), x) for x in completions]
         end
+        # keep the typed `~` so that completions extend the input, e.g. for hints (#3914)
+        home = joinpath(homedir(), "")
+        completions = [startswith(x, home) ? "~" * x[lastindex(home):end] : x for x in completions]
         return completions, i1:oldi2, true
     end
     prefix = splitdir(s)[2]

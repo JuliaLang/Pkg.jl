@@ -1314,12 +1314,14 @@ end
                 try
                     mkdir(expanduser(tildepath))
                     c, r = test_complete("dev ~/JuliaPkgTest744a75")
-                    @test joinpath(homedir(), dirname, "") in c
+                    # completions keep the `~` so they extend the input (#3914)
+                    @test "~/$dirname/" in c
+                    @test apply_completion("dev ~/JuliaPkgTest744a75") == "dev ~/$dirname/"
                 finally
                     rm(expanduser(tildepath); force = true)
                 end
                 c, r = test_complete("dev ~")
-                @test joinpath(homedir(), "") in c
+                @test "~/" in c
 
                 # nested directories
                 nested_dirs = "foo/bar/baz"
@@ -1327,7 +1329,7 @@ end
                 try
                     mkpath(expanduser(tildepath))
                     c, r = test_complete("dev ~/foo/bar/b")
-                    @test joinpath(homedir(), nested_dirs, "") in c
+                    @test "~/$nested_dirs/" in c
                 finally
                     rm(expanduser(tildepath); force = true)
                 end
