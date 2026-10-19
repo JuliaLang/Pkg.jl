@@ -737,6 +737,8 @@ end
         @test artifact_hash("foo_txt", artifacts_toml; platform = win32) == hash
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform = linux64) == artifact_path(hash2)
         @test ensure_artifact_installed("foo_txt", artifacts_toml; platform = win32) == artifact_path(hash)
+        # No mapping for the requested platform (#1465)
+        @test_throws r"Artifact 'foo_txt' in .* has no mapping for platform x86_64-apple-darwin; available platforms: .*x86_64-linux-gnu" ensure_artifact_installed("foo_txt", artifacts_toml; platform = Platform("x86_64", "macos"))
 
         # Default HostPlatform() adds a compare_strategy key that doesn't get picked up from
         # the Artifacts.toml
