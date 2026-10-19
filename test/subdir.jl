@@ -393,7 +393,10 @@ end
             @test isinstalled(dep)
             pkg"rm Package"
 
-            Pkg.develop(Pkg.PackageSpec(url = packages_dir_url, subdir = "dependencies/Dep"))
+            # The repo is already in the dev dir, so it is not cloned again (#2055)
+            iob = IOBuffer()
+            Pkg.develop(Pkg.PackageSpec(url = packages_dir_url, subdir = "dependencies/Dep"); io = iob)
+            @test !occursin("Cloning", String(take!(iob)))
             @test !isinstalled("Package")
             @test isinstalled("Dep")
             pkg"rm Dep"

@@ -960,15 +960,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     repo_path = tempname()
     cloned = false
     package_path = pkg.repo.subdir === nothing ? repo_path : joinpath(repo_path, pkg.repo.subdir)
-    if !has_name(pkg)
-        # Resolve manifest-relative path to absolute before passing to git
-        repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
-            Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
-            pkg.repo.source
-        LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, repo_source_resolved))
-        cloned = true
-        resolve_projectfile!(pkg, package_path)
-    end
+    # With a subdir, the develop path only depends on the repo name
     if pkg.repo.subdir !== nothing
         repo_name = split(pkg.repo.source, '/', keepempty = false)[end]
         # Make the develop path prettier.
@@ -979,7 +971,22 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             repo_name = chop(repo_name, tail = 3)
         end
         dev_path = devpath(ctx.env, repo_name, shared)
-    else
+    end
+    if !has_name(pkg)
+        if pkg.repo.subdir !== nothing && isdir(dev_path)
+            # The repo is already checked out, no need to clone it to find the package name
+            resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir))
+        else
+            # Resolve manifest-relative path to absolute before passing to git
+            repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+                Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
+                pkg.repo.source
+            LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, repo_source_resolved))
+            cloned = true
+            resolve_projectfile!(pkg, package_path)
+        end
+    end
+    if pkg.repo.subdir === nothing
         dev_path = devpath(ctx.env, pkg.name, shared)
     end
     if isdir(dev_path)
