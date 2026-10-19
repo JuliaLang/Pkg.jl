@@ -2098,6 +2098,13 @@ function handle_package_input!(pkg::PackageSpec)
     if pkg.version === nothing
         pkg.version = VersionSpec()
     end
+    # build metadata, e.g. `2024.2.0+0` of a JLL, is not part of version specifiers
+    # so treat it as an exact version number
+    if pkg.version isa AbstractString && occursin('+', pkg.version)
+        v = tryparse(VersionNumber, pkg.version)
+        v === nothing && pkgerror("invalid version `$(pkg.version)`: build metadata (`+...`) requires an exact version number")
+        pkg.version = v
+    end
     if !(pkg.version isa VersionNumber)
         pkg.version = VersionSpec(pkg.version)
     end
