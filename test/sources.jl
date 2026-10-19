@@ -120,6 +120,47 @@ temp_pkg_dir() do project_path
         end
     end
 
+    # On Windows, `update_project_sources!` used to store a relative `[sources]` path with backslashes, so
+    # the project always compared as modified and Project.toml was rewritten on every resolve/update
+    # (with identical content, since `write_project` turns the separators back into forward slashes)
+    @testset "an unchanged relative [sources] path does not rewrite Project.toml" begin
+        isolate() do
+            mktempdir() do tmp
+                local_pkg_uuid = UUID("00000000-0000-0000-0000-000000000002")
+                mkpath(joinpath(tmp, "LocalPkg", "src"))
+                write(
+                    joinpath(tmp, "LocalPkg", "Project.toml"), """
+                    name = "LocalPkg"
+                    uuid = "$local_pkg_uuid"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath(tmp, "LocalPkg", "src", "LocalPkg.jl"), "module LocalPkg end")
+
+                # Not the layout `write_project` produces, so any rewrite shows up as changed bytes
+                mkpath(joinpath(tmp, "env"))
+                project_file = joinpath(tmp, "env", "Project.toml")
+                project_content = """
+                [deps]
+                LocalPkg = "$local_pkg_uuid"
+
+                [sources]
+                LocalPkg = { path = "../LocalPkg" }
+                """
+                write(project_file, project_content)
+
+                Pkg.activate(joinpath(tmp, "env"))
+                Pkg.resolve()
+                @test read(project_file, String) == project_content
+                Pkg.update()
+                @test read(project_file, String) == project_content
+                Pkg.update()
+                @test read(project_file, String) == project_content
+                @test isfile(joinpath(tmp, "env", "Manifest.toml"))
+            end
+        end
+    end
+
     @testset "recursive [sources] via repo URLs" begin
         isolate() do
             mktempdir() do tmp
