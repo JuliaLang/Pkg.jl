@@ -425,7 +425,10 @@ end
 function parse_package_identifier(pkg_id::PackageIdentifier; add_or_develop = false)::PackageSpec
     word = pkg_id.val
     if add_or_develop
-        if occursin(name_re, word) && isdir(expanduser(word))
+        # only hint about package directories whose name matches exactly, so that e.g.
+        # `add Test` does not hint about a `test` folder on case-insensitive filesystems (#4527)
+        if occursin(name_re, word) && isdir(expanduser(word)) && word in readdir() &&
+                Types.projectfile_path(word; strict = true) !== nothing
             @info "Use `./$word` to add or develop the local directory at `$(Base.contractuser(abspath(word)))`."
         end
         if isurl(word)

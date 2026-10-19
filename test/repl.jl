@@ -488,7 +488,15 @@ end
             ) Pkg.pkg"add some/really/random/Dir"
             # warn if not explicit about adding directory
             mkdir("Example")
+            touch(joinpath("Example", "Project.toml"))
             @test_logs (:info, r"Use `./Example` to add or develop the local directory at `.*`.") match_mode = :any Pkg.pkg"add Example"
+            # but not for directories that aren't packages or only match case-insensitively (#4527)
+            Pkg.REPLMode.TEST_MODE[] = true
+            mkdir("Random")
+            @test_logs Pkg.pkg"add Random"
+            mkdir("test")
+            touch(joinpath("test", "Project.toml"))
+            @test_logs Pkg.pkg"add Test"
         end
     end
     # quoted local paths
