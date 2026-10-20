@@ -630,7 +630,7 @@ end
     end
 end
 
-@testset "only the first copy of a registry is used (#3463)" begin
+@testset "only the first copy of a registry is used (#3463, #3939)" begin
     mktempdir() do dir
         depots = [joinpath(dir, "depot1"), joinpath(dir, "depot2")]
         for depot in depots
@@ -655,6 +655,12 @@ end
             @test length(regs) == 1
             @test only(regs).path == joinpath(depots[1], "registries", "Foo")
             @test length(Pkg.Registry.reachable_registries(; all_copies = true)) == 2
+            # a registry only in a lower depot is not updated by `registry up` (#3939)
+            @test !occursin("not updated by `registry up`", str)
+            rm(joinpath(depots[1], "registries"); recursive = true)
+            Pkg.Registry.status(io)
+            str = String(take!(io))
+            @test occursin("in $(Pkg.pathrepr(depots[2])), not updated by `registry up`", str)
         finally
             append!(empty!(DEPOT_PATH), old_depot_path)
             Pkg.offline(offline)
