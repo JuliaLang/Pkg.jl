@@ -2561,9 +2561,12 @@ end
 
 function dependency_order_visit!(
         order::Dict{UUID, Int}, seen::Vector{UUID}, counter::Base.RefValue{Int},
-        env::EnvCache, uuid::UUID
+        env::EnvCache, uuid::UUID, cycles::Vector{Vector{UUID}}
     )
-    uuid in seen && return @warn("Dependency graph not a DAG, linearizing anyway")
+    if uuid in seen
+        push!(cycles, push!(seen[findfirst(==(uuid), seen):end], uuid))
+        return
+    end
     haskey(order, uuid) && return
     push!(seen, uuid)
     deps = if Types.is_project_uuid(env, uuid)
@@ -2573,7 +2576,7 @@ function dependency_order_visit!(
         values(entry.deps)
     end
     for dep in deps
-        dependency_order_visit!(order, seen, counter, env, dep)
+        dependency_order_visit!(order, seen, counter, env, dep, cycles)
     end
     pop!(seen)
     counter[] += 1
@@ -2581,12 +2584,13 @@ function dependency_order_visit!(
     return
 end
 
-function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID, Int}
+# The dependency cycles found are pushed to `cycles`, each as a path that starts and ends with the same package.
+function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID}; cycles::Vector{Vector{UUID}} = Vector{UUID}[])::Dict{UUID, Int}
     order = Dict{UUID, Int}()
     seen = UUID[]
     counter = Ref(0)
     for uuid in uuids
-        dependency_order_visit!(order, seen, counter, env, uuid)
+        dependency_order_visit!(order, seen, counter, env, uuid, cycles)
     end
     return order
 end
@@ -2695,7 +2699,16 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_r
         ispath(buildfile(path)) && push!(builds, (uuid, name, path, version))
     end
     # toposort builds by dependencies
-    order = dependency_order_uuids(ctx.env, UUID[first(build) for build in builds])
+    build_uuids = UUID[first(build) for build in builds]
+    cycles = Vector{UUID}[]
+    order = dependency_order_uuids(ctx.env, build_uuids; cycles)
+    for cycle in cycles
+        any(in(build_uuids), cycle) || continue
+        names = map(cycle) do uuid
+            Types.is_project_uuid(ctx.env, uuid) ? ctx.env.pkg.name : manifest_info(ctx.env.manifest, uuid).name
+        end
+        @warn "Dependency cycle `$(join(names, " → "))` involves packages with build scripts, building them in an arbitrary order"
+    end
     sort!(builds, by = build -> order[first(build)])
     max_name = maximum(build -> textwidth(build[2]), builds; init = 0)
 
