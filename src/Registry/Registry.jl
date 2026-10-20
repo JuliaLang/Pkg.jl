@@ -737,8 +737,8 @@ Pkg.Registry.status()
 ```
 """
 function status(io::IO = stderr_f())
-    regs = reachable_registries()
-    regs = unique(r -> r.uuid, regs; seen = Set{Union{UUID, Nothing}}())
+    all_regs = reachable_registries(; all_copies = true)
+    regs = unique(r -> r.uuid, all_regs; seen = Set{Union{UUID, Nothing}}())
     printpkgstyle(io, Symbol("Registry Status"), "")
     return if isempty(regs)
         println(io, "  (no registries found)")
@@ -753,19 +753,7 @@ function status(io::IO = stderr_f())
             println(io)
 
             registry_type = get_registry_type(reg)
-            if registry_type == :git
-                print(io, "    git registry")
-            elseif registry_type == :unpacked
-                print(io, "    unpacked registry with hash $(reg.tree_info)")
-            elseif registry_type == :packed
-                print(io, "    packed registry with hash $(reg.tree_info)")
-            elseif registry_type == :bare
-                # We could try to detect a symlink but this is too
-                # rarely used to be worth the complexity.
-                print(io, "    bare registry")
-            else
-                print(io, "    unknown registry format")
-            end
+            print(io, "    ", registry_description(reg))
             update_time = get(registry_update_log, string(reg.uuid), nothing)
             if !isnothing(update_time)
                 time_string = Dates.format(update_time, dateformat"yyyy-mm-dd HH:MM:SS")
@@ -786,7 +774,33 @@ function status(io::IO = stderr_f())
                     println(io)
                 end
             end
+
+            # Only the first copy of a registry is used, point out the ignored ones (#3463)
+            copies = filter(r -> r.uuid == reg.uuid, all_regs)
+            if length(copies) > 1
+                printstyled(io, "    $(length(copies)) copies of this registry are installed, only the first one is used:\n"; color = Base.warn_color())
+                for r in copies
+                    println(io, "      ", pathrepr(r.path), ": ", registry_description(r), r === reg ? "" : " (ignored)")
+                end
+            end
         end
+    end
+end
+
+function registry_description(reg)
+    registry_type = get_registry_type(reg)
+    return if registry_type == :git
+        "git registry"
+    elseif registry_type == :unpacked
+        "unpacked registry with hash $(reg.tree_info)"
+    elseif registry_type == :packed
+        "packed registry with hash $(reg.tree_info)"
+    elseif registry_type == :bare
+        # We could try to detect a symlink but this is too
+        # rarely used to be worth the complexity.
+        "bare registry"
+    else
+        "unknown registry format"
     end
 end
 
