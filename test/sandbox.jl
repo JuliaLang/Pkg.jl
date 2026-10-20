@@ -191,6 +191,31 @@ end
     end
 end
 
+@testset "Preferences of indirect dependencies are sandboxed (#3389)" begin
+    temp_pkg_dir() do project_path
+        mktempdir() do tmp
+            uuids = Dict(name => uuid4() for name in ("A", "B", "C"))
+            for (name, dep) in (("A", "B"), ("B", "C"), ("C", nothing))
+                dir = joinpath(tmp, name)
+                mkpath(joinpath(dir, "src"))
+                mkpath(joinpath(dir, "test"))
+                deps = dep === nothing ? "" : "\n[deps]\n$dep = \"$(uuids[dep])\"\n"
+                write(joinpath(dir, "Project.toml"), "name = \"$name\"\nuuid = \"$(uuids[name])\"\nversion = \"0.1.0\"\n$deps")
+                write(joinpath(dir, "src", "$name.jl"), "module $name end")
+                touch(joinpath(dir, "test", "runtests.jl"))
+            end
+            env = joinpath(tmp, "env")
+            Pkg.activate(env)
+            Pkg.develop([Pkg.PackageSpec(path = joinpath(tmp, name)) for name in ("C", "B", "A")])
+            write(joinpath(env, "LocalPreferences.toml"), "[C]\nfoo = \"bar\"\n")
+            # C is only in the manifest of the sandbox of A
+            test_test("A") do
+                @test Preferences.load_preference(uuids["C"], "foo") == "bar"
+            end
+        end
+    end
+end
+
 @testset "Basic `build` sandbox" begin
     temp_pkg_dir() do project_path
         mktempdir() do tmp

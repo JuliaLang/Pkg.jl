@@ -3736,9 +3736,22 @@ function drop_external_path_sources!(project::Project, pkg_root::String)
     return project
 end
 
+# Base maps the names in a preferences file to UUIDs only through the project, so list the
+# packages that are only in the manifest as extras for their preferences to apply (#3389)
+function add_preference_extras!(env::EnvCache, preferences::Dict{String, Any})
+    project = env.project
+    for name in keys(preferences)
+        (haskey(project.deps, name) || haskey(project.weakdeps, name) || haskey(project.extras, name)) && continue
+        uuids = [uuid for (uuid, entry) in env.manifest if entry.name == name]
+        length(uuids) == 1 && (project.extras[name] = only(uuids))
+    end
+    return
+end
+
 function sandbox_with_temp_env(
         fn::Function, ctx::Context, target::PackageSpec, tmp::String,
         has_sandbox_project::Bool, sandbox_env::EnvCache;
+        preferences::Union{Nothing, Dict{String, Any}},
         installed_root::Union{Nothing, String},
         force_latest_compatible_version::Bool,
         allow_earlier_backwards_compatible_versions::Bool,
@@ -3784,6 +3797,7 @@ function sandbox_with_temp_env(
         end
 
         reset_all_compat!(temp_ctx.env.project)
+        preferences === nothing || add_preference_extras!(temp_ctx.env, preferences)
         write_env(temp_ctx.env, update_undo = false)
 
         # Run sandboxed code
@@ -3873,6 +3887,7 @@ function sandbox(
         # sandbox
         sandbox_with_temp_env(
             fn, ctx, target, tmp, has_sandbox_project, sandbox_env;
+            preferences,
             installed_root,
             force_latest_compatible_version,
             allow_earlier_backwards_compatible_versions,
