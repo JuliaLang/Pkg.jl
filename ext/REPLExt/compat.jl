@@ -17,8 +17,9 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
         push!(opt_pkgs, dep)
     end
     menu = TerminalMenus.RadioMenu(opt_strs; pagesize = length(opt_strs), charset = :ascii)
+    term = TerminalMenus.default_terminal(in = input_io, out = io)
     choice = try
-        TerminalMenus.request(TerminalMenus.default_terminal(in = input_io, out = io), "  Select an entry to edit:", menu)
+        TerminalMenus.request(term, "  Select an entry to edit:", menu)
     catch err
         if err isa InterruptException # if ^C is entered
             println(io)
@@ -38,7 +39,7 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
         move_start = "\e[$(start_pos)G"
         clear_to_end = "\e[0J"
         if input_io isa Base.TTY
-            ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), input_io.handle, true)
+            REPL.Terminals.raw!(term, true)
         end
         while true
             print(io, move_start, clear_to_end, buffer, "\e[$(start_pos + cursor)G")
@@ -92,7 +93,7 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
         buffer
     finally
         if input_io isa Base.TTY
-            ccall(:jl_tty_set_mode, Int32, (Ptr{Cvoid}, Int32), input_io.handle, false)
+            REPL.Terminals.raw!(term, false)
         end
     end
     new_entry = strip(resp)
