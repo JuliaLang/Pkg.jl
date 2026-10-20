@@ -783,6 +783,9 @@ function status(io::IO = stderr_f())
                     println(io, "      ", pathrepr(r.path), ": ", registry_description(r), r === reg ? "" : " (ignored)")
                 end
             end
+            if dirname(reg.path) != joinpath(depots1(), "registries")
+                println(io, "    in ", pathrepr(dirname(dirname(reg.path))), ", not updated by `registry up` (only the first depot is updated)")
+            end
         end
     end
 end
