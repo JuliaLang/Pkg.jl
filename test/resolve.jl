@@ -945,4 +945,10 @@ end
     end
 end
 
+@testset "ResolverError only shows colors when the io has color (#4006)" begin
+    err = ResolverError("\e[38;5;4mExample [7876af07]\e[39m log:")
+    @test sprint(showerror, err) == "Example [7876af07] log:"
+    @test sprint(showerror, err; context = :color => true) == err.msg
+end
+
 end # module
