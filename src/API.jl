@@ -450,24 +450,51 @@ function add(
     # repo + unpinned -> name, uuid, repo.rev, repo.source, tree_hash
     # repo + pinned -> name, uuid, tree_hash
 
-    Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
+    try
+        Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
 
-    project_deps_resolve!(ctx.env, pkgs)
-    registry_resolve!(ctx.registries, pkgs)
-    stdlib_resolve!(pkgs)
-    ensure_resolved(ctx, ctx.env.manifest, pkgs, registry = true)
+        project_deps_resolve!(ctx.env, pkgs)
+        registry_resolve!(ctx.registries, pkgs)
+        stdlib_resolve!(pkgs)
+        ensure_resolved(ctx, ctx.env.manifest, pkgs, registry = true)
 
-    for pkg in pkgs
-        if Types.collides_with_project(ctx.env, pkg)
-            pkgerror("package $(err_rep(pkg)) has same name or UUID as the active project")
+        for pkg in pkgs
+            if Types.collides_with_project(ctx.env, pkg)
+                pkgerror("package $(err_rep(pkg)) has same name or UUID as the active project")
+            end
+            if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
+                pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
+            end
+            update_source_if_set(ctx.env, pkg)
         end
-        if length(findall(x -> x.uuid == pkg.uuid, pkgs)) > 1
-            pkgerror("it is invalid to specify multiple packages with the same UUID: $(err_rep(pkg))")
-        end
-        update_source_if_set(ctx.env, pkg)
+
+        Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target, prefer_loaded_versions, lazy)
+    catch
+        remove_unused_checkouts(ctx, repo_pkgs, new_git)
+        rethrow()
     end
+    return
+end
 
-    Operations.add(ctx, pkgs, new_git; allow_autoprecomp, preserve, platform, target, prefer_loaded_versions, lazy)
+# Remove the checkouts made by a failed `add` that the environment does not use: a later
+# `add` would find them installed and skip building them (#1236)
+function remove_unused_checkouts(ctx::Context, repo_pkgs::Vector{PackageSpec}, new_git::Set{UUID})
+    isempty(new_git) && return
+    try
+        manifest = isfile(ctx.env.manifest_file) ? Types.read_manifest(ctx.env.manifest_file) : nothing
+        for pkg in repo_pkgs
+            pkg.uuid in new_git || continue
+            entry = manifest === nothing ? nothing : manifest_info(manifest, pkg.uuid)
+            entry !== nothing && entry.tree_hash == pkg.tree_hash && continue
+            path = Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
+            path === nothing && continue
+            Base.Filesystem.prepare_for_deletion(path)
+            Base.rm(path; recursive = true, force = true)
+        end
+    catch err
+        # don't hide the error of the failed `add`
+        @debug "Failed to remove new checkouts" exception = err
+    end
     return
 end
 

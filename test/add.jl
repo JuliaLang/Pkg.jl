@@ -685,6 +685,38 @@ end
             end
         end
     end
+    # A failed add does not leave the checkout behind, so the next add still builds it (#1236)
+    isolate(loaded_depot = true) do
+        mktempdir() do tempdir
+            marker = joinpath(tempdir, "built")
+            pkg_path = joinpath(tempdir, "BuildPkg")
+            mkpath(joinpath(pkg_path, "src"))
+            mkpath(joinpath(pkg_path, "deps"))
+            write(
+                joinpath(pkg_path, "Project.toml"), """
+                name = "BuildPkg"
+                uuid = "$(uuid4())"
+                version = "0.1.0"
+
+                [deps]
+                Example = "$exuuid"
+
+                [compat]
+                Example = "=0.5.3"
+                """
+            )
+            write(joinpath(pkg_path, "src", "BuildPkg.jl"), "module BuildPkg end")
+            write(joinpath(pkg_path, "deps", "build.jl"), "touch($(repr(marker)))")
+            git_init_and_commit(pkg_path)
+            Pkg.activate(joinpath(tempdir, "env"))
+            Pkg.add(name = "Example", version = "0.3.3")
+            Pkg.pin("Example")
+            @test_throws ResolverError Pkg.add(path = pkg_path)
+            Pkg.free("Example")
+            Pkg.add(path = pkg_path)
+            @test isfile(marker)
+        end
+    end
     # A uuid given together with a url is checked against the package's project file (#3411)
     isolate(loaded_depot = true) do
         mktempdir() do tempdir
