@@ -3090,9 +3090,23 @@ function _resolve(
                 printpkgstyle(io, :Warning, """The following package versions were yanked from their registry and \
                 are not resolvable:\n$yanked_str""", color = Base.warn_color())
             end
+            if !isempty(env.project.deps) && is_default_env(env.project_file)
+                printpkgstyle(
+                    io, :Tip, """The active environment is the default environment, shared by all your work. \
+                    Conflicts are less likely in a separate environment per project, holding only the packages \
+                    that project needs: see https://pkgdocs.julialang.org/v1/environments/""", color = Base.info_color()
+                )
+            end
         end
         rethrow()
     end
+end
+
+# whether `project_file` is the default `@v#.#` environment of a depot
+function is_default_env(project_file::String)
+    env_dir = dirname(project_file)
+    name = "v$(VERSION.major).$(VERSION.minor)"
+    return any(depot -> env_dir == abspath(depot, "environments", name), DEPOT_PATH)
 end
 
 function can_skip_resolve_for_add(pkg::PackageSpec, entry::Union{PackageEntry, Nothing})

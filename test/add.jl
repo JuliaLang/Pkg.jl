@@ -945,6 +945,20 @@ end
         project_file = Pkg.Types.Context().env.project_file
         @test occursin(r"\* " * project_file * r":\d+: Example = \"=0.5.3\"", err.msg)
     end
+    # in the default environment, a resolver error suggests project environments (#3367)
+    isolate(loaded_depot = true) do
+        Pkg.activate(joinpath(DEPOT_PATH[1], "environments", "v$(VERSION.major).$(VERSION.minor)"))
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.compat("Example", "=0.5.3")
+        io = IOBuffer()
+        @test_throws ResolverError Pkg.add(name = "Example", version = "0.5.4"; io)
+        @test occursin("default environment", String(take!(io)))
+        Pkg.activate(temp = true)
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.compat("Example", "=0.5.3")
+        @test_throws ResolverError Pkg.add(name = "Example", version = "0.5.4"; io)
+        @test !occursin("default environment", String(take!(io)))
+    end
 end
 
 @testset "API details" begin
