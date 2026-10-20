@@ -804,11 +804,23 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
     source_files = filter(isfile, source_files)
     isempty(source_files) && return
 
-    # Ensure that log dir exists
-    !ispath(logdir()) && mkpath(logdir())
-
     usage_file = joinpath(logdir(), usage_filepath)
     timestamp = now()
+
+    # Usage logging is best effort (it only informs `Pkg.gc`), so IO errors, e.g. from
+    # the pidfile lock on a network filesystem, must not fail the calling operation.
+    try
+        _write_env_usage(source_files, usage_file, timestamp)
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Failed to record usage in `$usage_file`, ignoring." exception = err maxlog = 1
+    end
+    return
+end
+
+function _write_env_usage(source_files, usage_file::String, timestamp::DateTime)
+    # Ensure that log dir exists
+    !ispath(dirname(usage_file)) && mkpath(dirname(usage_file))
 
     ## Atomically write usage file using process id locking
     FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
@@ -835,7 +847,7 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
                     Dates.DateTime(d["time"])
                 else
                     # if there's no time entry because of a write failure be conservative and mark it as being used now
-                    @debug "Usage file `$usage_filepath` has a missing `time` entry for `$k`. Marking as used `now()`"
+                    @debug "Usage file `$usage_file` has a missing `time` entry for `$k`. Marking as used `now()`"
                     Dates.now()
                 end
             end
