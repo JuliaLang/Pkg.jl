@@ -31,6 +31,10 @@ exuuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a") # UUID for `Example.jl`
     pkg"?    add"
     pkg"help add"
     @test_throws PkgError pkg"helpadd"
+    # aliases of sub commands include the super command (#3471)
+    help_text = string(Pkg.REPLMode.gen_help())
+    @test occursin("`update`, `up`", help_text)
+    @test occursin("`registry update`, `registry up`", help_text)
 end
 
 @testset "accidental" begin
@@ -484,7 +488,15 @@ end
             ) Pkg.pkg"add some/really/random/Dir"
             # warn if not explicit about adding directory
             mkdir("Example")
+            touch(joinpath("Example", "Project.toml"))
             @test_logs (:info, r"Use `./Example` to add or develop the local directory at `.*`.") match_mode = :any Pkg.pkg"add Example"
+            # but not for directories that aren't packages or only match case-insensitively (#4527)
+            Pkg.REPLMode.TEST_MODE[] = true
+            mkdir("Random")
+            @test_logs Pkg.pkg"add Random"
+            mkdir("test")
+            touch(joinpath("test", "Project.toml"))
+            @test_logs Pkg.pkg"add Test"
         end
     end
     # quoted local paths
@@ -672,6 +684,9 @@ end
             @test args == [Pkg.PackageSpec(; name = "Example"), Pkg.PackageSpec(; name = "Random")]
             @test isempty(opts)
         end
+        # identifier characters that `\w` does not match (#2168)
+        api, args, opts = first(Pkg.pkg"rm ∂Foo ∂Bar.jl")
+        @test args == [Pkg.PackageSpec(; name = "∂Foo"), Pkg.PackageSpec(; name = "∂Bar")]
     end
 end
 
@@ -1200,6 +1215,12 @@ end
             @test "--manifest" in c
             c, r = test_complete("rem")
             @test "remove" in c
+            # `package` is an optional prefix, not a command (#4108)
+            c, r = test_complete("")
+            @test "registry" in c
+            @test !("package" in c)
+            c, r = test_complete("package ")
+            @test "add" in c
             @test apply_completion("rm E") == "rm Example"
             @test apply_completion("add Exampl") == "add Example"
             c, r = test_complete("free Exa")
@@ -1281,6 +1302,7 @@ end
             @test apply_completion("add ./tes") == (Sys.iswindows() ? "add ./testdir\\" : "add ./testdir/")
             c, r = test_complete("dev ./")
             @test (Sys.iswindows() ? ("testdir\\" in c) : ("testdir/" in c))
+            @test apply_completion("registry add ./tes") == (Sys.iswindows() ? "registry add ./testdir\\" : "registry add ./testdir/")
 
             # complete subdirs
             c, r = test_complete("add testdir/f")
@@ -1306,12 +1328,14 @@ end
                 try
                     mkdir(expanduser(tildepath))
                     c, r = test_complete("dev ~/JuliaPkgTest744a75")
-                    @test joinpath(homedir(), dirname, "") in c
+                    # completions keep the `~` so they extend the input (#3914)
+                    @test "~/$dirname/" in c
+                    @test apply_completion("dev ~/JuliaPkgTest744a75") == "dev ~/$dirname/"
                 finally
                     rm(expanduser(tildepath); force = true)
                 end
                 c, r = test_complete("dev ~")
-                @test joinpath(homedir(), "") in c
+                @test "~/" in c
 
                 # nested directories
                 nested_dirs = "foo/bar/baz"
@@ -1319,7 +1343,7 @@ end
                 try
                     mkpath(expanduser(tildepath))
                     c, r = test_complete("dev ~/foo/bar/b")
-                    @test joinpath(homedir(), nested_dirs, "") in c
+                    @test "~/$nested_dirs/" in c
                 finally
                     rm(expanduser(tildepath); force = true)
                 end
@@ -1651,6 +1675,14 @@ end
 
             # Should not throw BoundsError
             Pkg.API._compat(test_ctx; input_io)
+
+            # completing a compat entry with several specifiers quotes it (#3562)
+            Pkg.compat("Example", "0.4, 0.5"; io = devnull)
+            @test apply_completion("compat Exa") == "compat Example \"0.4, 0.5\""
+            Pkg.REPLMode.TEST_MODE[] = true
+            api, pkg, compat_str, opts = first(Pkg.REPLMode.pkgstr(apply_completion("compat Exa")))
+            @test (pkg, compat_str) == ("Example", "0.4, 0.5")
+            Pkg.REPLMode.TEST_MODE[] = false
         end
     end
 end

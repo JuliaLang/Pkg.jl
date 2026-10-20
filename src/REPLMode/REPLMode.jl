@@ -526,7 +526,9 @@ function gen_help()
     **Commands**
     """
     for (command, spec) in canonical_names()
-        short_name = spec.short_name === nothing ? "" : ", `" * spec.short_name::String * '`'
+        # include the super command in the alias, e.g. `registry up` (#3471)
+        super = chopsuffix(command, spec.canonical_name)
+        short_name = spec.short_name === nothing ? "" : ", `" * super * spec.short_name::String * '`'
         push!(help.content, Markdown.parse("`$command`$short_name: $(spec.description)"))
     end
     return help

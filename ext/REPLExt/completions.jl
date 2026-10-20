@@ -22,6 +22,9 @@ function complete_activate(options, partial, i1, i2; hint::Bool, arguments = [])
     end
 end
 
+complete_registry_add(options, partial, i1, i2; hint::Bool, arguments = []) =
+    complete_local_dir(partial, i1, i2)
+
 function complete_local_dir(s, i1, i2)
     expanded_user = false
     oldi2 = i2
@@ -48,6 +51,9 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
         else
             completions = [joinpath(dirname(s), x) for x in completions]
         end
+        # keep the typed `~` so that completions extend the input, e.g. for hints (#3914)
+        home = joinpath(homedir(), "")
+        completions = [startswith(x, home) ? "~" * x[lastindex(home):end] : x for x in completions]
         return completions, i1:oldi2, true
     end
     prefix = splitdir(s)[2]
@@ -184,7 +190,10 @@ function complete_installed_packages_and_compat(options, partial; hint::Bool, ar
     end
     return map(vcat(collect(keys(env.project.deps)), "julia")) do d
         compat_str = Operations.get_compat_str(env.project, d)
-        isnothing(compat_str) ? d : string(d, " ", compat_str)
+        isnothing(compat_str) && return d
+        # quote entries like `0.4, 0.5` so that they parse as a single argument (#3562)
+        occursin(r"[\s,]", compat_str) && (compat_str = string('"', compat_str, '"'))
+        return string(d, " ", compat_str)
     end
 end
 
@@ -251,7 +260,8 @@ end
 # COMPLETION INTERFACE #
 ########################
 function default_commands()
-    names = collect(keys(SPECS))
+    # `package` is only an optional prefix of the default commands (#4108)
+    names = filter(!=("package"), collect(keys(SPECS)))
     append!(names, map(x -> getproperty(x, :canonical_name), values(SPECS["package"])))
     return sort(unique(names))
 end

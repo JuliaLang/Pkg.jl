@@ -454,6 +454,14 @@ end
     end
 end
 
+@testset "version strings with build metadata (#3335, #4063)" begin
+    pkg = Pkg.PackageSpec(name = "Foo_jll", version = "2024.2.0+0")
+    Pkg.API.handle_package_input!(pkg)
+    @test pkg.version === v"2024.2.0+0"
+    pkg = Pkg.PackageSpec(name = "Foo_jll", version = "2024.x+0")
+    @test_throws PkgError Pkg.API.handle_package_input!(pkg)
+end
+
 @testset "set number of concurrent requests" begin
     @test Pkg.Types.num_concurrent_downloads() == 8
     withenv("JULIA_PKG_CONCURRENT_DOWNLOADS" => "5") do
