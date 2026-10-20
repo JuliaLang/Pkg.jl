@@ -599,6 +599,22 @@ end
     end
 end
 
+@testset "status shows a manifest julia version from another minor version (#4059)" begin
+    isolate(loaded_depot = true) do
+        Pkg.activate(temp = true)
+        Pkg.add("Example"; io = devnull)
+        io = IOBuffer()
+        Pkg.status(; io)
+        @test !occursin("The manifest was resolved with julia", String(take!(io)))
+        manifest_file = joinpath(dirname(Pkg.project().path), "Manifest.toml")
+        manifest = Pkg.Types.read_manifest(manifest_file)
+        manifest.julia_version = v"1.6.7"
+        Pkg.Types.write_manifest(manifest, manifest_file)
+        Pkg.status(; io)
+        @test occursin("The manifest was resolved with julia v1.6.7", String(take!(io)))
+    end
+end
+
 @testset "status showing incompatible loaded deps" begin
     isolate(loaded_depot = true) do
         cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
