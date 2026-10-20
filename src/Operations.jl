@@ -4286,7 +4286,14 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
             printstyled(io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_magenta)
         end
     else
-        printstyled(io, "~ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_yellow)
+        old_str, new_str = stat_rep(old), stat_rep(new; name = false)
+        # e.g. a tracked branch that moved: show the tree hashes so the change is visible
+        if stat_rep(old; name = false) == new_str && old.tree_hash !== nothing &&
+                new.tree_hash !== nothing && old.tree_hash != new.tree_hash
+            old_str *= " (tree $(string(old.tree_hash)[1:7]))"
+            new_str *= " (tree $(string(new.tree_hash)[1:7]))"
+        end
+        printstyled(io, "~ $old_str ⇒ $new_str"; color = :light_yellow)
     end
 end
 
