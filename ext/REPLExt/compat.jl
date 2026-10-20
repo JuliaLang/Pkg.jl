@@ -5,6 +5,13 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
         can_fancyprint(io) || pkgerror("Pkg.compat cannot be run interactively in this terminal")
     end
     printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
+    # keep editing entries until the menu is quit (#3197)
+    while edit_compat_entry(ctx, io, input_io)
+    end
+    return
+end
+
+function edit_compat_entry(ctx::Context, io::IO, input_io::IO)
     longest_dep_len = max(5, length.(collect(keys(ctx.env.project.deps)))...)
     opt_strs = String[]
     opt_pkgs = String[]
@@ -19,9 +26,9 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
     menu = TerminalMenus.RadioMenu(opt_strs; pagesize = length(opt_strs), charset = :ascii)
     term = TerminalMenus.default_terminal(in = input_io, out = io)
     choice = try
-        TerminalMenus.request(term, "  Select an entry to edit:", menu)
+        TerminalMenus.request(term, "  Select an entry to edit (q to quit):", menu)
     catch err
-        if err isa InterruptException # if ^C is entered
+        if err isa InterruptException || err isa EOFError # if ^C is entered or the input ends
             println(io)
             return false
         end
@@ -49,7 +56,7 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
                 break
             elseif inp == '\x03' # cltr-C
                 println(io)
-                return
+                return false
             elseif inp == TerminalMenus.ARROW_RIGHT
                 cursor = min(length(buffer), cursor + 1)
             elseif inp == TerminalMenus.ARROW_LEFT
@@ -98,5 +105,5 @@ function _compat(ctx::Context; io = nothing, input_io = stdin)
     end
     new_entry = strip(resp)
     API._compat(ctx, dep, string(new_entry))
-    return
+    return true
 end

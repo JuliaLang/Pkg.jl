@@ -1701,6 +1701,20 @@ end
             api, pkg, compat_str, opts = first(Pkg.REPLMode.pkgstr(apply_completion("compat Exa")))
             @test (pkg, compat_str) == ("Example", "0.4, 0.5")
             Pkg.REPLMode.TEST_MODE[] = false
+
+            # several entries can be edited before quitting the menu (#3197)
+            test_ctx = Pkg.Types.Context()
+            test_ctx.io = IOBuffer()
+            input_io = Base.BufferStream()
+            write(input_io, "\e[B\e[B\r") # select JSON
+            write(input_io, "0.21\r")
+            write(input_io, "\r") # back in the menu, select julia
+            write(input_io, "1\r")
+            write(input_io, "q") # quit the menu
+            Pkg.API._compat(test_ctx; input_io)
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "JSON") == "0.21"
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "julia") == "1"
+            close(input_io)
         end
     end
 end
