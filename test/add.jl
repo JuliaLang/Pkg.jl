@@ -927,7 +927,7 @@ end
         write(
             joinpath(newreg, "Registry.toml"), """
             name = "NewReg"
-            uuid = "23338594-aafe-5451-b93e-139f81909106"
+            uuid = "320f72be-406f-4b9c-8809-89f2889d2a3e"
             repo = "whydoineedthis?"
 
             [packages]
@@ -974,7 +974,7 @@ end
         write(
             joinpath(newreg, "Registry.toml"), """
             name = "NewReg"
-            uuid = "23338594-aafe-5451-b93e-139f81909106"
+            uuid = "320f72be-406f-4b9c-8809-89f2889d2a3e"
             repo = "whydoineedthis?"
 
             [packages]

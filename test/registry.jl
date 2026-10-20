@@ -630,6 +630,38 @@ end
     end
 end
 
+@testset "only the first copy of a registry is used (#3463)" begin
+    mktempdir() do dir
+        depots = [joinpath(dir, "depot1"), joinpath(dir, "depot2")]
+        for depot in depots
+            regpath = joinpath(depot, "registries", "Foo")
+            mkpath(regpath)
+            write(joinpath(regpath, "Registry.toml"), "name = \"Foo\"\nuuid = \"e9fceed0-5623-4384-aff0-6db4c442647a\"\n\n[packages]\n")
+        end
+        old_depot_path = copy(DEPOT_PATH)
+        offline = Pkg.OFFLINE_MODE[]
+        try
+            append!(empty!(DEPOT_PATH), depots)
+            Pkg.offline(true)
+            io = IOBuffer()
+            Pkg.Registry.status(io)
+            str = String(take!(io))
+            @test count("[e9fceed0] Foo", str) == 1
+            @test occursin("2 copies of this registry are installed, only the first one is used", str)
+            @test occursin(Pkg.pathrepr(joinpath(depots[1], "registries", "Foo")) * ": bare registry\n", str)
+            @test occursin(Pkg.pathrepr(joinpath(depots[2], "registries", "Foo")) * ": bare registry (ignored)", str)
+            # only the first copy is used, e.g. for resolving
+            regs = Pkg.Registry.reachable_registries()
+            @test length(regs) == 1
+            @test only(regs).path == joinpath(depots[1], "registries", "Foo")
+            @test length(Pkg.Registry.reachable_registries(; all_copies = true)) == 2
+        finally
+            append!(empty!(DEPOT_PATH), old_depot_path)
+            Pkg.offline(offline)
+        end
+    end
+end
+
 @testset "gc runs git gc on registries" begin
     # Only run this test if git is available
     if Sys.which("git") !== nothing
