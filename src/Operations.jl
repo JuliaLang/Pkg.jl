@@ -1021,14 +1021,15 @@ end
 # compat of the project(s): say which files declare compat for the package,
 # since the intersection alone does not tell which entry to change.
 function compat_conflict_message(env::EnvCache, pkg::PackageSpec, compat::VersionSpec)
+    origin = version_origin(env, pkg)
     if isempty(env.workspace)
-        msg = "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+        msg = "empty intersection between $(pkg.name)@$(pkg.version)$(origin) and project compatibility $(compat)"
         str = get_compat_str(env.project, pkg.name)
         str === nothing && return msg
         source = entry_source(env.project_file, toml_entry_lines(env.project_file), ("compat",), pkg.name)
         return msg * "\nThe project has a compat entry for $(pkg.name):\n * $source: $(pkg.name) = $(repr(str))"
     end
-    msg = "empty intersection between $(pkg.name)@$(pkg.version) and workspace compatibility $(compat)\n"
+    msg = "empty intersection between $(pkg.name)@$(pkg.version)$(origin) and workspace compatibility $(compat)\n"
     msg *= "The following workspace projects have compat entries for $(pkg.name):"
     for (file, project) in workspace_project_files(env)
         str = get_compat_str(project, pkg.name)
@@ -1036,6 +1037,22 @@ function compat_conflict_message(env::EnvCache, pkg::PackageSpec, compat::Versio
         msg *= "\n * $file: $(pkg.name) = $(repr(str))"
     end
     return msg
+end
+
+# Where the version of `pkg` that is checked against compat comes from
+function version_origin(env::EnvCache, pkg::PackageSpec)
+    is_tracking_path(pkg) && return " (version of the developed package at $(pathrepr(pkg.path)))"
+    is_tracking_repo(pkg) && return " (version of the package from $(pkg.repo.source))"
+    entry = manifest_info(env.manifest, pkg.uuid)
+    recorded = entry === nothing ? nothing : entry.version
+    pkg.version == VersionSpec() && return ""
+    if pkg.version isa VersionNumber
+        recorded == pkg.version || return ""
+        return entry.pinned ? " (pinned in the manifest)" : " (recorded in the manifest)"
+    elseif recorded !== nothing && pkg.version == Types.semver_spec("$(recorded.major).$(recorded.minor).$(recorded.patch)")
+        return " (compatible with v$(recorded) recorded in the manifest)"
+    end
+    return " (requested)"
 end
 
 # Which resolver backend to use: the SAT-based resolver from Resolver.jl
