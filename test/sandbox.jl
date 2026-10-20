@@ -45,6 +45,38 @@ test_test(fn; kwargs...) = Pkg.test(; test_fn = fn, kwargs...)
             end
         end
     end
+    # the tested package is the one in the active environment, not one in a stale test manifest (#3991)
+    temp_pkg_dir() do project_path
+        mktempdir() do tmp
+            uuid = uuid4()
+            function write_pkg(dir, version)
+                mkpath(joinpath(dir, "src"))
+                mkpath(joinpath(dir, "test"))
+                write(joinpath(dir, "Project.toml"), "name = \"DevPkg\"\nuuid = \"$uuid\"\nversion = \"$version\"\n")
+                write(joinpath(dir, "src", "DevPkg.jl"), "module DevPkg end")
+                touch(joinpath(dir, "test", "runtests.jl"))
+                return dir
+            end
+            dev = write_pkg(joinpath(tmp, "DevPkg"), "0.2.0")
+            write_pkg(joinpath(tmp, "OldDevPkg"), "0.1.0")
+            write(joinpath(dev, "test", "Project.toml"), "[deps]\nDevPkg = \"$uuid\"\n")
+            write(
+                joinpath(dev, "test", "Manifest.toml"), """
+                manifest_format = "2.0"
+
+                [[deps.DevPkg]]
+                path = "../../OldDevPkg"
+                uuid = "$uuid"
+                version = "0.1.0"
+                """
+            )
+            Pkg.activate(joinpath(tmp, "env"))
+            Pkg.develop(path = dev)
+            test_test("DevPkg") do
+                @test Pkg.Types.Context().env.manifest[uuid].version == v"0.2.0"
+            end
+        end
+    end
 end
 
 @testset "Preferences sandboxing without test/Project.toml" begin
