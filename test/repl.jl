@@ -1600,9 +1600,14 @@ end
         # don't offer to install the dummy "julia" entry that's in General
         @test REPLExt.try_prompt_pkg_add(Symbol[:julia]) == false
 
+        # the prompt names the registry the package would come from (#2792)
+        io = IOContext(IOBuffer(), :displaysize => (24, 1000))
         withreply("n") do
-            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+            Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+                @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+            end
         end
+        @test occursin("named Example is available from the General registry.", String(take!(io.io)))
         withreply("y") do
             @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
         end

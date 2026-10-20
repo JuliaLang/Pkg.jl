@@ -268,7 +268,9 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         plural4 = length(available_pkgs) == 1 ? "" : "s"
         missing_pkg_list = length(pkgs) == 1 ? String(pkgs[1]) : "[$(join(pkgs, ", "))]"
         available_pkg_list = length(available_pkgs) == 1 ? String(available_pkgs[1]) : "[$(join(available_pkgs, ", "))]"
-        msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from a registry."
+        reg_names = unique(reg.name for reg in ctx.registries for uuids in available_uuids for uuid in uuids if haskey(reg, uuid))
+        reg_str = length(reg_names) == 1 ? "the $(only(reg_names)) registry" : "the registries $(join(reg_names, ", ", " and "))"
+        msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from $(reg_str)."
         for line in linewrap(msg1, io = ctx.io, padding = length(" │ "))
             printstyled(ctx.io, " │ "; color = :green)
             println(ctx.io, line)
