@@ -688,6 +688,17 @@ end
         @test err isa ResolverError
         @test occursin("no available version matches the requirement `99`", err.msg)
         @test occursin("available versions are:", err.msg)
+        # a requirement newer than every version suggests updating the registries (#3713)
+        @test occursin("registry up", err.msg)
+        err = try
+            Pkg.add(PackageSpec(name = TEST_PKG.name, version = "0.4.99"))
+            nothing
+        catch e
+            e
+        end
+        @test err isa ResolverError
+        @test occursin("no available version matches the requirement `0.4.99`", err.msg)
+        @test !occursin("registry up", err.msg)
         # conflicting requirements get a diagnosis with verified fixes
         err = try
             Pkg.add(
