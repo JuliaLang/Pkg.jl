@@ -561,6 +561,64 @@ if :version in fieldnames(Base.PkgOrigin)
             Pkg.respect_sysimage_versions(true)
         end
     end
+
+    @testset "sysimage: versions registered with the same tree are allowed (#4131)" begin
+        jll_uuid = UUID("0c0b7dd1-d40b-584c-a123-a41640f87eec")
+        jll_pkgid = Base.PkgId(jll_uuid, "FakeJLL_jll")
+        old_sysimage_modules = copy(Base._sysimage_modules)
+        old_pkgorigins = copy(Base.pkgorigins)
+        try
+            # The sysimage has v1.0.0+1, which was re-registered with the same tree as v1.0.0+3
+            push!(Base._sysimage_modules, jll_pkgid)
+            Base.pkgorigins[jll_pkgid] = Base.PkgOrigin(nothing, nothing, v"1.0.0+1")
+            mktempdir() do reg
+                mkpath(joinpath(reg, "F", "FakeJLL_jll"))
+                write(
+                    joinpath(reg, "Registry.toml"), """
+                    name = "FakeReg"
+                    uuid = "$(uuid4())"
+                    repo = "https://example.com/FakeReg.git"
+
+                    [packages]
+                    $jll_uuid = { name = "FakeJLL_jll", path = "F/FakeJLL_jll" }
+                    """
+                )
+                write(
+                    joinpath(reg, "F", "FakeJLL_jll", "Package.toml"), """
+                    name = "FakeJLL_jll"
+                    uuid = "$jll_uuid"
+                    repo = "https://example.com/FakeJLL_jll.jl.git"
+                    """
+                )
+                write(
+                    joinpath(reg, "F", "FakeJLL_jll", "Versions.toml"), """
+                    ["1.0.0+1"]
+                    git-tree-sha1 = "$("1"^40)"
+
+                    ["1.0.0+2"]
+                    git-tree-sha1 = "$("2"^40)"
+
+                    ["1.0.0+3"]
+                    git-tree-sha1 = "$("1"^40)"
+                    """
+                )
+                registries = [Pkg.Registry.RegistryInstance(reg)]
+                isolate() do
+                    env = Pkg.Types.EnvCache()
+                    reqs = Pkg.Resolve.Requires(jll_uuid => Pkg.Types.VersionSpec())
+                    graph = Pkg.Operations.deps_graph(
+                        env, registries, Dict(jll_uuid => "FakeJLL_jll"), reqs,
+                        Dict{UUID, Pkg.Resolve.Fixed}(), VERSION, false
+                    )
+                    pkg_versions_map = graph[5]
+                    @test sort(pkg_versions_map[jll_uuid]) == [v"1.0.0+1", v"1.0.0+3"]
+                end
+            end
+        finally
+            copy!(Base._sysimage_modules, old_sysimage_modules)
+            copy!(Base.pkgorigins, old_pkgorigins)
+        end
+    end
 end
 
 @testset "status diff non-root" begin

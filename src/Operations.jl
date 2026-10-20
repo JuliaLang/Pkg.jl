@@ -1473,6 +1473,21 @@ function deps_graph(
                     # Installed versions of this package, looked up once per package rather than
                     # probing the depots for every version
                     installed_slugs = installed_only ? installed_version_slugs(pkg.name) : nothing
+                    # A package in the sysimage only allows its loaded version, or versions
+                    # registered with the same tree as it (e.g. a re-registered JLL, #4131)
+                    sysimage_version, sysimage_tree = nothing, nothing
+                    if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
+                        pkgid = Base.PkgId(uuid, pkg.name)
+                        if Base.in_sysimage(pkgid)
+                            pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                            if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                sysimage_version = pkgorigin.version
+                                if haskey(info.version_info, sysimage_version)
+                                    sysimage_tree = Registry.treehash(info, sysimage_version)
+                                end
+                            end
+                        end
+                    end
                     for v in keys(info.version_info)
                         # Filter yanked and if we are in offline mode also downloaded packages
                         Registry.isyanked(info, v) && continue
@@ -1487,16 +1502,9 @@ function deps_graph(
                         end
 
                         # Skip package version that are not the same as external packages in sysimage
-                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
-                            pkgid = Base.PkgId(uuid, pkg.name)
-                            if Base.in_sysimage(pkgid)
-                                pkgorigin = get(Base.pkgorigins, pkgid, nothing)
-                                if pkgorigin !== nothing && pkgorigin.version !== nothing
-                                    if v != pkgorigin.version
-                                        continue
-                                    end
-                                end
-                            end
+                        if sysimage_version !== nothing && v != sysimage_version &&
+                                (sysimage_tree === nothing || Registry.treehash(info, v) != sysimage_tree)
+                            continue
                         end
 
                         push!(reg_valid_versions, v)
