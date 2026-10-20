@@ -4413,6 +4413,18 @@ function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manife
     # merge old and new into single array
     old_index = index_by_uuid(old)
     new_index = index_by_uuid(new)
+    if manifest && !workspace
+        # In a workspace, an entry can enter or leave the set reachable from the active
+        # project while staying in the shared manifest; compare against that entry so it
+        # is not shown as added/removed.
+        for (index, other, env) in ((old_index, new_index, old_env), (new_index, old_index, new_env))
+            missing_uuids = setdiff(keys(other), keys(index))
+            isempty(missing_uuids) && continue
+            for pkg in load_all_deps(env)
+                pkg.uuid in missing_uuids && get!(index, pkg.uuid, pkg)
+            end
+        end
+    end
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
     return Tuple{T, S, S}[(uuid, get(old_index, uuid, nothing), get(new_index, uuid, nothing))::Tuple{T, S, S} for uuid in all_uuids]
 end
