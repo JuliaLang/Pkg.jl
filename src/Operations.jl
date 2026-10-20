@@ -2900,7 +2900,21 @@ end
 update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
 function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
-        if pkg.version == VersionSpec()
+        requested = if (pkg.repo.source !== nothing && pkg.repo.source != entry.repo.source) ||
+                (pkg.repo.rev !== nothing && pkg.repo.rev != entry.repo.rev)
+            "`$(something(pkg.repo.source, ""))$(pkg.repo.rev === nothing ? "" : "#$(pkg.repo.rev)")`"
+        elseif pkg.version != VersionSpec() && !(
+                entry.version isa VersionNumber &&
+                    (pkg.version isa VersionNumber ? entry.version == pkg.version : entry.version in pkg.version)
+            )
+            "version `$(pkg.version)`"
+        end
+        if requested !== nothing
+            printpkgstyle(
+                ctx.io, :Warning, "`$(pkg.name)` is pinned at `v$(entry.version)`: ignoring the requested $requested. \
+                Unpin it with `free $(pkg.name)` first.", color = Base.warn_color()
+            )
+        elseif pkg.version == VersionSpec()
             println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
         end
         return PackageSpec(;

@@ -378,7 +378,7 @@ end
         Pkg.add("Test")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
     end
-    # Add by version should not override pinned version.
+    # Add by version should not override pinned version, but say so (#4654).
     isolate(loaded_depot = true) do
         Pkg.add(name = "Example", version = "0.3.0")
         Pkg.pin("Example")
@@ -387,7 +387,11 @@ end
             @test ex.is_tracking_registry
             @test ex.is_pinned
         end
-        Pkg.add(name = "Example", version = "0.5.0")
+        io = IOBuffer()
+        Pkg.add(name = "Example", version = "0.5.0"; io)
+        @test occursin("`Example` is pinned at `v0.3.0`: ignoring the requested version `0.5.0`", String(take!(io)))
+        Pkg.add(name = "Example", version = "0.3"; io)
+        @test !occursin("ignoring", String(take!(io)))
         # We check that the package state is left unchanged.
         Pkg.dependencies(exuuid) do ex
             @test ex.version == v"0.3.0"
