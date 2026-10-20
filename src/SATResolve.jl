@@ -302,6 +302,7 @@ function resolve_versions(
     # a requirement whose version spec or pin matches no available version can
     # never resolve; report it directly, with the versions that do exist
     impossible = String[]
+    any_newer = false
     for u in rlist
         (u == JULIA_UUID || haskey(fixed, u)) && continue
         haskey(data, u) || continue
@@ -311,21 +312,31 @@ function resolve_versions(
             push!(impossible, " * $id: no versions are available (they may all be yanked, or filtered by offline mode)")
         elseif haskey(pin, u) && pin[u] ∉ avail
             vers = range_compressed_versionspec(copy(avail))
-            push!(impossible, " * $id: pinned at $(pin[u]), which is not available, available versions are: $vers")
+            newer = newer_than_available(VersionSpec(pin[u]), avail)
+            any_newer |= newer
+            push!(impossible, " * $id: pinned at $(pin[u]), which is not available, available versions are: $vers$(newer_note(newer))")
         elseif haskey(compat, u) && !any(in(compat[u]), avail)
             vers = range_compressed_versionspec(copy(avail))
-            push!(impossible, " * $id: no available version matches the requirement `$(compat[u])`, available versions are: $vers")
+            newer = newer_than_available(compat[u], avail)
+            any_newer |= newer
+            push!(impossible, " * $id: no available version matches the requirement `$(compat[u])`, available versions are: $vers$(newer_note(newer))")
         else
             for kind in sort!(collect(keys(sourced)))
                 c = sourced[kind]
                 haskey(c, u) && !any(in(c[u]), avail) || continue
                 vers = range_compressed_versionspec(copy(avail))
-                push!(impossible, " * $id: no available version matches the compat `$(c[u])` in $(Resolver.kind_source(kind)), available versions are: $vers")
+                newer = newer_than_available(c[u], avail)
+                any_newer |= newer
+                push!(impossible, " * $id: no available version matches the compat `$(c[u])` in $(Resolver.kind_source(kind)), available versions are: $vers$(newer_note(newer))")
             end
         end
     end
     if !isempty(impossible)
-        throw(ResolverError(string("Unsatisfiable requirements detected:\n", join(impossible, "\n"))))
+        msg = string("Unsatisfiable requirements detected:\n", join(impossible, "\n"))
+        if any_newer
+            msg *= "\nThe installed registries may be out of date; updating them with `pkg> registry up` might help."
+        end
+        throw(ResolverError(msg))
     end
     name = display_names(uuid_to_name)
     named_data = Dict{String, NamedPkgData}(name(u) => named(d, name) for (u, d) in data)
@@ -368,6 +379,12 @@ function resolve_versions(
     end
     return sol
 end
+
+# whether every version in `spec` is newer than all available versions, as when
+# the requirement comes from a registry newer than the installed one
+newer_than_available(spec::VersionSpec, avail) =
+    !isempty(spec) && isempty(intersect(spec, VersionSpec(VersionRange(v"0", maximum(avail)))))
+newer_note(newer::Bool) = newer ? " (all older than the requirement)" : ""
 
 named(d::PkgData, name) = Resolver.PkgData(
     d.versions,
