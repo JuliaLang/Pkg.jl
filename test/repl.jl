@@ -1136,7 +1136,7 @@ end
     end
 end
 
-test_complete(s) = REPLExt.completions(s, lastindex(s))
+test_complete(s; hint = false) = REPLExt.completions(s, lastindex(s); hint)
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     str[1:prevind(str, first(r))] * first(c)
@@ -1308,6 +1308,19 @@ end
             c, r = test_complete("add testdir/f")
             @test Sys.iswindows() ? ("foo\\" in c) : ("foo/" in c)
             @test apply_completion("add testdir/f") == (Sys.iswindows() ? "add testdir/foo\\" : "add testdir/foo/")
+            # paths with spaces get a quote, and completion continues inside a quote (#2013)
+            mkpath(joinpath("spaced", "dir with spaces", "foo"))
+            mkpath(joinpath("spaced", "other"))
+            sep = Sys.iswindows() ? "\\" : "/"
+            c, r = test_complete("dev spaced/")
+            @test issetequal(c, ["\"spaced/dir with spaces$sep", "spaced/other$sep"])
+            @test apply_completion("dev spaced/d") == "dev \"spaced/dir with spaces$sep"
+            @test apply_completion("dev \"spaced/dir w") == "dev \"spaced/dir with spaces$sep"
+            @test apply_completion("dev \"spaced/dir with spaces/f") == "dev \"spaced/dir with spaces/foo$sep"
+            @test isempty(first(test_complete("dev spaced/d"; hint = true)))
+            @test first(test_complete("dev \"spaced/dir w"; hint = true)) == ["spaced/dir with spaces$sep"]
+            statement = only(Pkg.REPLMode.parse(apply_completion("dev spaced/d") * "\""))
+            @test only(statement.arguments).raw == "spaced/dir with spaces$sep"
             # dont complete files
             touch("README.md")
             c, r = test_complete("add RE")
@@ -1587,11 +1600,61 @@ end
         # don't offer to install the dummy "julia" entry that's in General
         @test REPLExt.try_prompt_pkg_add(Symbol[:julia]) == false
 
-        withreply("n") do
-            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+        # a name that is not registered gets suggestions (#3337)
+        io = IOContext(IOBuffer(), :displaysize => (24, 1000))
+        Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+            @test REPLExt.try_prompt_pkg_add(Symbol[:EXample]) == false
         end
+        out = String(take!(io.io))
+        @test occursin("Package EXample not found in any registry.", out)
+        @test occursin(r"Suggestions:.* Example\b", out)
+
+        # the prompt names the registry the package would come from (#2792)
+        io = IOContext(IOBuffer(), :displaysize => (24, 1000))
+        withreply("n") do
+            Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+                @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+            end
+        end
+        @test occursin("named Example is available from the General registry.", String(take!(io.io)))
         withreply("y") do
             @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
+        end
+
+        # only the available packages are offered, and `false` is returned
+        # since not all could be installed
+        io = IOContext(IOBuffer(), :displaysize => (24, 1000))
+        withreply("n") do
+            Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+                @test REPLExt.try_prompt_pkg_add(Symbol[:notapackage, :julia, :Example]) == false
+            end
+        end
+        out = String(take!(io.io))
+        @test occursin("Packages [notapackage, julia, Example] not found, but a package named Example is available", out)
+        @test occursin(r"pkg> add Example\s*\n", out)
+
+        # `o` installs into an environment chosen from the load path
+        env = mktempdir()
+        touch(joinpath(env, "Project.toml"))
+        empty!(LOAD_PATH)
+        push!(LOAD_PATH, joinpath(env, "Project.toml"), "@stdlib")
+        withreply("o\n1") do
+            redirect_stdout(devnull) do # the menu prints to stdout
+                @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
+            end
+        end
+        @test haskey(Pkg.Types.read_project(joinpath(env, "Project.toml")).deps, "Example")
+    end
+
+    # without registries there is a hint (once) and nothing to install
+    isolate(linked_reg = false) do
+        REPLExt.REG_WARNED[] = false
+        io = IOBuffer()
+        Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test occursin("no registries are installed", String(take!(io)))
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test isempty(take!(io))
         end
     end
 end
@@ -1683,6 +1746,20 @@ end
             api, pkg, compat_str, opts = first(Pkg.REPLMode.pkgstr(apply_completion("compat Exa")))
             @test (pkg, compat_str) == ("Example", "0.4, 0.5")
             Pkg.REPLMode.TEST_MODE[] = false
+
+            # several entries can be edited before quitting the menu (#3197)
+            test_ctx = Pkg.Types.Context()
+            test_ctx.io = IOBuffer()
+            input_io = Base.BufferStream()
+            write(input_io, "\e[B\e[B\r") # select JSON
+            write(input_io, "0.21\r")
+            write(input_io, "\r") # back in the menu, select julia
+            write(input_io, "1\r")
+            write(input_io, "q") # quit the menu
+            Pkg.API._compat(test_ctx; input_io)
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "JSON") == "0.21"
+            @test Pkg.Operations.get_compat_str(test_ctx.env.project, "julia") == "1"
+            close(input_io)
         end
     end
 end
