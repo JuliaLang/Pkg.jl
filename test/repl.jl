@@ -1611,6 +1611,42 @@ end
         withreply("y") do
             @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
         end
+
+        # only the available packages are offered, and `false` is returned
+        # since not all could be installed
+        io = IOContext(IOBuffer(), :displaysize => (24, 1000))
+        withreply("n") do
+            Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+                @test REPLExt.try_prompt_pkg_add(Symbol[:notapackage, :julia, :Example]) == false
+            end
+        end
+        out = String(take!(io.io))
+        @test occursin("Packages [notapackage, julia, Example] not found, but a package named Example is available", out)
+        @test occursin(r"pkg> add Example\s*\n", out)
+
+        # `o` installs into an environment chosen from the load path
+        env = mktempdir()
+        touch(joinpath(env, "Project.toml"))
+        empty!(LOAD_PATH)
+        push!(LOAD_PATH, joinpath(env, "Project.toml"), "@stdlib")
+        withreply("o\n1") do
+            redirect_stdout(devnull) do # the menu prints to stdout
+                @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == true
+            end
+        end
+        @test haskey(Pkg.Types.read_project(joinpath(env, "Project.toml")).deps, "Example")
+    end
+
+    # without registries there is a hint (once) and nothing to install
+    isolate(linked_reg = false) do
+        REPLExt.REG_WARNED[] = false
+        io = IOBuffer()
+        Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test occursin("no registries are installed", String(take!(io)))
+            @test REPLExt.try_prompt_pkg_add(Symbol[:Example]) == false
+            @test isempty(take!(io))
+        end
     end
 end
 
