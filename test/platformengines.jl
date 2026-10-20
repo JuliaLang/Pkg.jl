@@ -76,6 +76,28 @@ end
 
 end
 
+@testset "Uncompressed tarballs" begin
+    mktempdir() do dir
+        src = mkpath(joinpath(dir, "src"))
+        write(joinpath(src, "hello.txt"), "hi\n")
+        tarball_path = joinpath(dir, "hello.tar")
+        PlatformEngines.Tar.create(src, tarball_path)
+        @test detect_archive_format(tarball_path) == "tar"
+
+        dest = joinpath(dir, "dest")
+        unpack(tarball_path, dest)
+        @test read(joinpath(dest, "hello.txt"), String) == "hi\n"
+
+        tree_hash = Base.SHA1(Pkg.GitTools.tree_hash(src))
+        @test PlatformEngines.verify_archive_tree_hash(tarball_path, tree_hash)
+
+        tarball_hash = bytes2hex(open(sha256, tarball_path))
+        dest2 = joinpath(dir, "dest2")
+        @test download_verify_unpack("file://" * tarball_path, tarball_hash, dest2)
+        @test read(joinpath(dest2, "hello.txt"), String) == "hi\n"
+    end
+end
+
 
 @testset "Verification" begin
     mktempdir() do prefix
