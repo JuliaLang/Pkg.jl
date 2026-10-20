@@ -693,6 +693,15 @@ function free(ctx::Context, pkgs::Vector{PackageSpec}; all_pkgs::Bool = false, w
     manifest_resolve!(ctx.env.manifest, pkgs)
     ensure_resolved(ctx, ctx.env.manifest, pkgs)
 
+    # Freeing a package that tracks a path or repo moves it to a registered version, which
+    # may only be in a newer registry, so update it like `add` and `develop` do (#3546)
+    if any(pkgs) do pkg
+            entry = manifest_info(ctx.env.manifest, pkg.uuid)
+            entry !== nothing && !entry.pinned && (entry.path !== nothing || entry.repo.source !== nothing)
+        end
+        Operations.update_registries(ctx; force = false, update_cooldown = Day(1))
+    end
+
     Operations.free(ctx, pkgs; err_if_free = !all_pkgs)
     return
 end
