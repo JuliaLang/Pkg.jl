@@ -1600,6 +1600,15 @@ end
         # don't offer to install the dummy "julia" entry that's in General
         @test REPLExt.try_prompt_pkg_add(Symbol[:julia]) == false
 
+        # a name that is not registered gets suggestions (#3337)
+        io = IOContext(IOBuffer(), :displaysize => (24, 1000))
+        Base.ScopedValues.@with Pkg.DEFAULT_IO => io begin
+            @test REPLExt.try_prompt_pkg_add(Symbol[:EXample]) == false
+        end
+        out = String(take!(io.io))
+        @test occursin("Package EXample not found in any registry.", out)
+        @test occursin(r"Suggestions:.* Example\b", out)
+
         # the prompt names the registry the package would come from (#2792)
         io = IOContext(IOBuffer(), :displaysize => (24, 1000))
         withreply("n") do

@@ -238,6 +238,24 @@ end
 
 const REG_WARNED = Ref{Bool}(false)
 
+# Suggest similar names for packages that are not in any registry (#3337)
+function print_pkg_suggestions(ctx::Context, pkgs::Vector{Symbol})
+    all_names = Types.available_names(ctx)
+    for pkg in pkgs
+        name = String(pkg)
+        ranked, any_good = Types.FuzzySorting.fuzzysort(name, filter(!=(name), all_names))
+        any_good || continue
+        printstyled(ctx.io, " │ "; color = :green)
+        println(ctx.io, "Package $name not found in any registry.")
+        printstyled(ctx.io, " └ "; color = :green)
+        prefix = "Suggestions:"
+        printstyled(ctx.io, prefix; color = Base.info_color())
+        Types.FuzzySorting.printmatches(ctx.io, name, ranked; cols = displaysize(ctx.io)[2] - length(" └ ") - length(prefix))
+        println(ctx.io, "\n")
+    end
+    return
+end
+
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = try
         Context()
@@ -259,7 +277,10 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
     available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
     foreach(u -> delete!(u, Operations.JULIA_UUID), available_uuids) # "julia" is in General but not installable
     available_pkgs = pkgs[isempty.(available_uuids) .== false]
-    isempty(available_pkgs) && return false
+    if isempty(available_pkgs)
+        print_pkg_suggestions(ctx, filter(!=(:julia), pkgs))
+        return false
+    end
     resp = try
         plural1 = length(pkgs) == 1 ? "" : "s"
         plural2 = length(available_pkgs) == 1 ? "a package" : "packages"
