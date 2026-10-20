@@ -2106,6 +2106,15 @@ function handle_package_input!(pkg::PackageSpec)
     if pkg.repo.source !== nothing || pkg.repo.rev !== nothing || pkg.repo.subdir !== nothing
         pkgerror("`repo` is a private field of PackageSpec and should not be set directly")
     end
+    # `url#rev` is only understood by the Pkg REPL; git ignores or rejects URL fragments
+    source = something(pkg.url, pkg.path, Some(nothing))
+    if source !== nothing && isurl(source) && occursin('#', source)
+        url, rev = split(source, '#'; limit = 2)
+        pkgerror(
+            "`$source` is not a valid repository URL. To track a branch, tag or commit, ",
+            "give it as `rev`: `url = \"$url\", rev = \"$rev\"`."
+        )
+    end
     pkg.repo = Types.GitRepo(
         rev = pkg.rev, source = pkg.url !== nothing ? pkg.url : pkg.path,
         subdir = pkg.subdir

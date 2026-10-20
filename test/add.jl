@@ -181,6 +181,13 @@ end
         @test_throws PkgError(
             "version specification invalid when tracking a repository: `0.5.0` specified for package `Example`"
         ) Pkg.add(name = "Example", rev = "master", version = "0.5.0")
+        # `url#rev` is only REPL syntax (#3138)
+        for kw in (:url, :path)
+            @test_throws PkgError(
+                "`https://github.com/JuliaLang/Example.jl#master` is not a valid repository URL. To track a branch, tag or commit, " *
+                    "give it as `rev`: `url = \"https://github.com/JuliaLang/Example.jl\", rev = \"master\"`."
+            ) Pkg.add(; kw => "https://github.com/JuliaLang/Example.jl#master")
+        end
         # Adding with a slight typo gives suggestions
         try
             io = IOBuffer()
