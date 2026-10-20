@@ -269,6 +269,29 @@ end
             end
         end
     end
+    # A relative path through a symlink inside the project is kept as given (#4636)
+    isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
+            path = copy_test_package(tempdir, "SimplePackage")
+            project_path = joinpath(tempdir, "project")
+            mkpath(joinpath(project_path, "packages"))
+            link = joinpath(project_path, "packages", "SimplePackage")
+            try
+                symlink(path, link; dir_target = true)
+            catch err
+                @info "Skipping symlinked path test, could not create a symlink" err
+                return
+            end
+            Pkg.activate(project_path)
+            cd(project_path) do
+                Pkg.develop(path = joinpath("packages", "SimplePackage"))
+            end
+            ctx = Pkg.Types.Context()
+            expected = joinpath("packages", "SimplePackage")
+            @test normpath(ctx.env.project.sources["SimplePackage"]["path"]) == expected
+            @test normpath(ctx.env.manifest[simple_package_uuid].path) == expected
+        end
+    end
 end
 
 @testset "develop: package state changes" begin
