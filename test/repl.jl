@@ -1136,7 +1136,7 @@ end
     end
 end
 
-test_complete(s) = REPLExt.completions(s, lastindex(s))
+test_complete(s; hint = false) = REPLExt.completions(s, lastindex(s); hint)
 apply_completion(str) = begin
     c, r, s = test_complete(str)
     str[1:prevind(str, first(r))] * first(c)
@@ -1308,6 +1308,19 @@ end
             c, r = test_complete("add testdir/f")
             @test Sys.iswindows() ? ("foo\\" in c) : ("foo/" in c)
             @test apply_completion("add testdir/f") == (Sys.iswindows() ? "add testdir/foo\\" : "add testdir/foo/")
+            # paths with spaces get a quote, and completion continues inside a quote (#2013)
+            mkpath(joinpath("spaced", "dir with spaces", "foo"))
+            mkpath(joinpath("spaced", "other"))
+            sep = Sys.iswindows() ? "\\" : "/"
+            c, r = test_complete("dev spaced/")
+            @test issetequal(c, ["\"spaced/dir with spaces$sep", "spaced/other$sep"])
+            @test apply_completion("dev spaced/d") == "dev \"spaced/dir with spaces$sep"
+            @test apply_completion("dev \"spaced/dir w") == "dev \"spaced/dir with spaces$sep"
+            @test apply_completion("dev \"spaced/dir with spaces/f") == "dev \"spaced/dir with spaces/foo$sep"
+            @test isempty(first(test_complete("dev spaced/d"; hint = true)))
+            @test first(test_complete("dev \"spaced/dir w"; hint = true)) == ["spaced/dir with spaces$sep"]
+            statement = only(Pkg.REPLMode.parse(apply_completion("dev spaced/d") * "\""))
+            @test only(statement.arguments).raw == "spaced/dir with spaces$sep"
             # dont complete files
             touch("README.md")
             c, r = test_complete("add RE")

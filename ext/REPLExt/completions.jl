@@ -54,12 +54,21 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
         # keep the typed `~` so that completions extend the input, e.g. for hints (#3914)
         home = joinpath(homedir(), "")
         completions = [startswith(x, home) ? "~" * x[lastindex(home):end] : x for x in completions]
-        return completions, i1:oldi2, true
+        return quote_paths(completions), i1:oldi2, true
     end
     prefix = splitdir(s)[2]
+    if any(contains(r"\s"), completions)
+        # replace the whole argument so that the quote goes in front of it
+        dir = first(s, length(s) - length(prefix))
+        return quote_paths(dir .* completions), i1:i2, true
+    end
     startpos = i2 - lastindex(prefix) + 1
     return completions, startpos:i2, !isempty(completions)
 end
+
+# Paths containing whitespace would be split into several arguments, so open a
+# quote in front of them (#2013). The quote is left open so completion can continue.
+quote_paths(paths) = [contains(p, r"\s") ? string('"', p) : p for p in paths]
 
 
 const JULIA_UUID = UUID("1222c4b2-2114-5bfd-aeef-88e4692bbb3e")
@@ -381,8 +390,19 @@ function completions(full, index; hint::Bool = false)::Tuple{Vector{String}, Uni
         pre = string(pre[1], " ", pre[2:end])
         offset_adjust = -1
     end
+    if isodd(count(==('"'), pre))
+        # complete the text after an unterminated double quote, e.g. `dev "dir with sp` (#2013)
+        start = nextind(pre, findlast(==('"'), pre))
+        partial = pre[start:end]
+        x, range, should_complete = _completions(pre * '"', isempty(partial), start + offset_adjust, index; hint)
+        # already inside a quote, so don't open another one
+        return map(c -> startswith(c, '"') ? c[2:end] : c, x), range, should_complete
+    end
     last = split(pre, ' ', keepempty = true)[end]
     offset = isempty(last) ? index + 1 + offset_adjust : last.offset + 1 + offset_adjust
     final = isempty(last) # is the cursor still attached to the final token?
-    return _completions(pre, final, offset, index; hint)
+    x, range, should_complete = _completions(pre, final, offset, index; hint)
+    # a hint has to extend the input, which a completion opening a quote doesn't
+    hint && any(startswith('"'), x) && return String[], 0:-1, false
+    return x, range, should_complete
 end
