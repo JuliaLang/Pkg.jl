@@ -146,6 +146,8 @@ end
             end
         end
         @test any(istaskfailed, tasks) == false
+        # usage logging failures are only warnings
+        @test !any(iob -> occursin("Failed to record usage", String(take!(iob))), iobs)
     end
 end
 

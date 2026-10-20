@@ -58,6 +58,19 @@ end
             Pkg.add("Random")
         end
     end
+
+    @testset "failing to write the usage file only warns (#3453)" begin
+        temp_pkg_dir() do project_path
+            Pkg.activate(project_path)
+            Pkg.add("Random")
+            manifest = joinpath(project_path, "Manifest.toml")
+            # A file in place of the log directory makes taking the usage file lock fail
+            rm(Pkg.logdir(); recursive = true)
+            touch(Pkg.logdir())
+            @test_logs (:warn, r"Failed to record usage") Pkg.Types.write_env_usage(manifest, "manifest_usage.toml")
+            rm(Pkg.logdir())
+        end
+    end
 end
 
 #issue #975
