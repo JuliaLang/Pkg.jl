@@ -119,10 +119,11 @@ end
                     touch(raw\"$flag_end_file\")
                 end
                 i = 0
+                manifest = Pkg.Types.EnvCache().manifest_file
                 while !isfile(raw\"$flag_end_file\")
                     global i += 1
                     try
-                        Pkg.Types.EnvCache()
+                        Pkg.Types.write_env_usage(manifest, \"manifest_usage.toml\")
                     catch
                         touch(raw\"$flag_end_file\")
                         println(stderr, \"Errored after $i iterations\")

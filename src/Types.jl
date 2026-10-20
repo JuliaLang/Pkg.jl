@@ -461,7 +461,7 @@ function EnvCache(env::Union{Nothing, String} = nothing)
     manifest_file = manifest_file !== nothing ?
         (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
         manifestfile_path(dir)::String
-    write_env_usage(manifest_file, "manifest_usage.toml")
+    record_manifest_usage(manifest_file)
     manifest = read_manifest(manifest_file)
 
     env′ = EnvCache(
@@ -795,6 +795,20 @@ function project_resolve_hash(env::EnvCache, julia_version::Union{Nothing, Versi
     return bytes2hex(sha1(take!(iob)))
 end
 
+
+# Manifests (keyed with the log directory and their mtime) whose usage was recorded in
+# this session, so that constructing an `EnvCache` again, e.g. in `Pkg.dependencies()`,
+# does not rewrite the usage log every time
+const RECORDED_MANIFEST_USAGE = Set{Tuple{String, String, Float64}}()
+const RECORDED_MANIFEST_USAGE_LOCK = ReentrantLock()
+
+function record_manifest_usage(manifest_file::String)
+    key = (logdir(), manifest_file, mtime(manifest_file))
+    @lock RECORDED_MANIFEST_USAGE_LOCK (key in RECORDED_MANIFEST_USAGE) && return
+    write_env_usage(manifest_file, "manifest_usage.toml")
+    isfile(manifest_file) && @lock RECORDED_MANIFEST_USAGE_LOCK push!(RECORDED_MANIFEST_USAGE, key)
+    return
+end
 
 write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
     write_env_usage([source_file], usage_filepath)
