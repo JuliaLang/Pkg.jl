@@ -497,7 +497,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all
 
     mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
     mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx, ctx.env.manifest, pkgs)
+    manifest_only_hint = "\nTo remove a package that is only in the manifest, and the packages that require it, \
+        use `pkg> rm --manifest <name>` or `Pkg.rm(<name>; mode = PKGMODE_MANIFEST)`."
+    ensure_resolved(ctx, ctx.env.manifest, pkgs; manifest_only_hint)
 
     Operations.rm(ctx, pkgs; mode)
 

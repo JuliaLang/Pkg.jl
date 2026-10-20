@@ -1419,7 +1419,7 @@ end
 function ensure_resolved(
         ctx::Context, manifest::Manifest,
         pkgs::AbstractVector{PackageSpec};
-        registry::Bool = false,
+        registry::Bool = false, manifest_only_hint::String = "",
     )::Nothing
     unresolved_uuids = Dict{String, Vector{UUID}}()
     for pkg in pkgs
@@ -1473,6 +1473,9 @@ function ensure_resolved(
         end
         if registry && not_found
             print(io, general_registry_hint(ctx.registries))
+        end
+        if any(!isempty ∘ last, unresolved_uuids)
+            print(io, manifest_only_hint)
         end
     end
     pkgerror(msg)

@@ -846,6 +846,8 @@ function collect_fixed!(
                     error_msg *= "\nIt is required by:\n$(join(["  - $dep" for dep in dependents], "\n"))"
                 end
             end
+            error_msg *= "\n\nRestore the package at that path or, if it is registered, track a registered version \
+                with `pkg> free $(pkg.name)`. To remove it and the packages that require it, use `pkg> rm --manifest $(pkg.name)`."
             pkgerror(error_msg)
         end
         deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded = get(loaded_projects, pkg.uuid, nothing))

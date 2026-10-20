@@ -478,6 +478,23 @@ end
             end
         end
     end
+    # The errors hint at how to recover from a missing package that is only in the manifest (#2794)
+    temp_pkg_dir() do project_path
+        cd_tempdir() do tmpdir
+            Pkg.generate("A"; io = devnull)
+            Pkg.generate("B"; io = devnull)
+            Pkg.activate("A")
+            Pkg.develop(Pkg.PackageSpec(path = "B"); io = devnull)
+            Pkg.activate("env")
+            Pkg.develop([Pkg.PackageSpec(path = "A"), Pkg.PackageSpec(path = "B")]; io = devnull)
+            Pkg.rm("B"; io = devnull)
+            rm("B", recursive = true)
+            @test_throws r"in manifest but not in project.*`pkg> rm --manifest <name>`"s Pkg.rm("B")
+            @test_throws r"`pkg> free B`.*`pkg> rm --manifest B`"s Pkg.resolve()
+            Pkg.rm("B"; mode = Pkg.PKGMODE_MANIFEST, io = devnull)
+            @test isempty(Pkg.dependencies())
+        end
+    end
 end
 
 @testset "issue #1066: package with colliding name/uuid exists in project" begin
