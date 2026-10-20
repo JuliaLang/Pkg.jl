@@ -2183,8 +2183,12 @@ function download_artifacts(
         init = CollectedArtifact[]
     )
     levels = selector_levels(env, pkg_info)
-    # Check what registries the current pkg server tracks, but don't ask when there is nothing that could be served
-    server_registry_info = if isempty(static_artifacts) && isempty(levels)
+    # Check what registries the current pkg server tracks, but don't ask when there is nothing that could be served,
+    # e.g. in offline mode with all artifacts installed (#4580)
+    all_installed = all(static_artifacts) do (_, artifacts, _)
+        all(meta -> artifact_exists(SHA1(meta["git-tree-sha1"]::String)), values(artifacts))
+    end
+    server_registry_info = if all_installed && isempty(levels)
         nothing
     else
         Registry.pkg_server_registry_info()

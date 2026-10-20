@@ -1268,6 +1268,28 @@ end
     end
 end
 
+@testset "no pkg server request when all artifacts are installed (#4580)" begin
+    requests = String[]
+    srv = http_server() do sock, target
+        push!(requests, target)
+        write(sock, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+    end
+    try
+        temp_pkg_dir() do tmpdir
+            artifacts_toml = joinpath(tmpdir, "Artifacts.toml")
+            hash = create_artifact(dir -> write(joinpath(dir, "file"), "content"))
+            bind_artifact!(artifacts_toml, "local", hash)
+            Pkg.activate(tmpdir)
+            withenv("JULIA_PKG_SERVER" => srv.url) do
+                Pkg.instantiate()
+            end
+            @test isempty(requests)
+        end
+    finally
+        srv.close()
+    end
+end
+
 # Pkg only draws progress bars on a terminal. This stands in for one, capturing the output
 # in a buffer that can be inspected; the lock is there because the progress bar is drawn
 # from its own task.
