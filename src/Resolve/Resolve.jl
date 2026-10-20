@@ -7,11 +7,10 @@ using ..Registry
 using ..Types
 import ..stdout_f, ..stderr_f
 
-using Printf
 using Random
 using UUIDs
 
-export resolve, sanity_check, Graph, pkgID
+export resolve, Graph, pkgID
 
 ####################
 # Requires / Fixed #
@@ -157,126 +156,6 @@ function _resolve(graph::Graph, lower_bound::Union{Vector{Int}, Nothing}, previo
             return sol
         end
     end
-end
-
-struct SanitySortKey{G, P}
-    gadj::G
-    pdict::P
-end
-
-(key::SanitySortKey)(pv) = -length(key.gadj[key.pdict[pv[1]]])
-
-"""
-Scan the graph for (explicit or implicit) contradictions. Returns a list of problematic
-(package,version) combinations.
-"""
-function sanity_check(graph::Graph, sources::Set{UUID} = Set{UUID}(), verbose::Bool = true)
-    req_inds = graph.req_inds
-    fix_inds = graph.fix_inds
-
-    id(p) = pkgID(p, graph)
-
-    isempty(req_inds) || @warn("sanity check called on a graph with non-empty requirements")
-    if !any(is_julia(graph, fp0) for fp0 in fix_inds)
-        @warn("sanity check called on a graph without julia requirement, adding it")
-        add_fixed!(graph, Dict(uuid_julia => Fixed(VERSION)))
-    end
-    if length(fix_inds) ≠ 1
-        @warn("sanity check called on a graph with extra fixed requirements (besides julia)")
-    end
-
-    isources = isempty(sources) ?
-        Set{Int}(1:graph.np) :
-        Set{Int}(graph.data.pdict[p] for p in sources)
-
-    propagate_constraints!(graph)
-    disable_unreachable!(graph, isources)
-    prune_graph!(graph)
-    compute_eq_classes!(graph)
-
-    np = graph.np
-    spp = graph.spp
-    gadj = graph.gadj
-    data = graph.data
-    pkgs = data.pkgs
-    pdict = data.pdict
-    pvers = data.pvers
-    eq_classes = data.eq_classes
-
-    problematic = Tuple{String, VersionNumber}[]
-
-    np == 0 && return problematic
-
-    vers = [(pkgs[p0], pvers[p0][v0]) for p0 in 1:np for v0 in 1:(spp[p0] - 1)]
-    sort!(vers, by = SanitySortKey(gadj, pdict))
-
-    nv = length(vers)
-
-    svdict = Dict{Tuple{UUID, VersionNumber}, Int}(vers[i] => i for i in 1:nv)
-
-    checked = falses(nv)
-
-    last_str_len = 0
-
-    for (i, (p, vn)) in enumerate(vers)
-        if verbose
-            frac_compl = i / nv
-            print("\r", " "^last_str_len, "\r")
-            progr_msg = @sprintf("%.3i/%.3i (%i%%) — problematic so far: %i", i, nv, round(Int, 100 * frac_compl), length(problematic))
-            print(progr_msg)
-            last_str_len = length(progr_msg)
-        end
-
-        length(gadj[pdict[p]]) == 0 && break
-        checked[i] && continue
-
-        push_snapshot!(graph)
-
-        # enforce package version
-        # TODO: use add_reqs! instead...
-        p0 = graph.data.pdict[p]
-        v0 = graph.data.vdict[p0][vn]
-        fill!(graph.gconstr[p0], false)
-        graph.gconstr[p0][v0] = true
-        push!(graph.req_inds, p0)
-
-        ok = false
-        try
-            simplify_graph_soft!(graph, Set{Int}([p0]), log_events = false)
-        catch err
-            isa(err, ResolverError) || rethrow()
-            @goto done
-        end
-
-        ok, sol = greedysolver(graph)
-        ok && @goto done
-        maxsum_result, sol = maxsum(graph)
-        ok = maxsum_result == :ok
-
-        @label done
-
-        if !ok
-            for vneq in eq_classes[p][vn]
-                push!(problematic, (id(p), vneq))
-            end
-        else
-            @assert verify_solution(sol, graph)
-            sol_dict = compute_output_dict(sol, graph)
-            for (sp, svn) in sol_dict
-                j = svdict[sp, svn]
-                checked[j] = true
-            end
-        end
-
-        # state reset
-        empty!(graph.req_inds)
-        pop_snapshot!(graph)
-    end
-    if verbose
-        print("\r", " "^last_str_len, "\r")
-        println("found $(length(problematic)) problematic versions")
-    end
-    return sort!(problematic)
 end
 
 """
