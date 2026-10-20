@@ -1311,4 +1311,90 @@ end
     end
 end
 
+function setup_test_registries(dir)
+    # Set up two registries that each register a package with the same name, but different UUIDs
+    pkg_uuids = ["c5f1542f-b8aa-45da-ab42-05303d706c66", "d7897d3a-8e65-4b65-bdc8-28ce4e859565"]
+    reg_uuids = ["e9fceed0-5623-4384-aff0-6db4c442647a", "a8e078ad-b4bd-4e09-a52f-c464826eef9d"]
+    for i in 1:2
+        regpath = joinpath(dir, "RegistryFoo$(i)")
+        mkpath(joinpath(regpath, "Example"))
+        write(
+            joinpath(regpath, "Registry.toml"), """
+            name = "RegistryFoo$(i)"
+            uuid = "$(reg_uuids[i])"
+            repo = "https://github.com"
+            [packages]
+            $(pkg_uuids[i]) = { name = "Example", path = "Example" }
+            """
+        )
+        write(
+            joinpath(regpath, "Example", "Package.toml"), """
+            name = "Example"
+            uuid = "$(pkg_uuids[i])"
+            repo = "https://github.com/JuliaLang/Example.jl.git"
+            """
+        )
+        write(
+            joinpath(regpath, "Example", "Versions.toml"), """
+            ["0.5.1"]
+            git-tree-sha1 = "8eb7b4d4ca487caade9ba3e85932e28ce6d6e1f8"
+            """
+        )
+        write(
+            joinpath(regpath, "Example", "Deps.toml"), """
+            """
+        )
+        write(
+            joinpath(regpath, "Example", "Compat.toml"), """
+            ["0.5"]
+            julia = "0.6-1.0"
+            """
+        )
+        git_init_and_commit(regpath)
+    end
+    return
+end
+
+@testset "ambiguous package name" begin
+    @testset "errors when hook is nothing" begin
+        temp_pkg_dir() do depot
+            previous_hook = Pkg.Types.name_disambiguation_hook[]
+            try
+                Pkg.Types.name_disambiguation_hook[] = nothing
+                regdir = mktempdir()
+                setup_test_registries(regdir)
+                Pkg.Registry.add(path = joinpath(regdir, "RegistryFoo1"))
+                Pkg.Registry.add(path = joinpath(regdir, "RegistryFoo2"))
+                @test_throws PkgError Pkg.add("Example")
+            finally
+                Pkg.Types.name_disambiguation_hook[] = previous_hook
+            end
+        end
+    end
+    @testset "calls hook if not nothing" begin
+        temp_pkg_dir() do depot
+            previous_hook = Pkg.Types.name_disambiguation_hook[]
+            try
+                hook_data = Ref{Any}(nothing)
+                Pkg.Types.name_disambiguation_hook[] = function (name, repo_infos)
+                    hook_data[] = (; name, repo_infos)
+                    return nothing
+                end
+                regdir = mktempdir()
+                setup_test_registries(regdir)
+                Pkg.Registry.add(path = joinpath(regdir, "RegistryFoo1"))
+                Pkg.Registry.add(path = joinpath(regdir, "RegistryFoo2"))
+                # This still errors, because my hook doesn't actually pick a
+                # package. If it did, then Pkg would go on to try to install the
+                # package, but the package doesn't actually exist.
+                @test_throws PkgError Pkg.add("Example")
+                @test !isnothing(hook_data[])
+                @test hook_data[].name == "Example"
+            finally
+                Pkg.Types.name_disambiguation_hook[] = previous_hook
+            end
+        end
+    end
+end
+
 end # module
