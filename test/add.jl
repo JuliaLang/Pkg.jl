@@ -1405,4 +1405,36 @@ end
     end
 end
 
+@testset "compat conflict says where the version comes from (#4097)" begin
+    isolate(loaded_depot = true) do
+        cd_tempdir() do dir
+            function conflict(f)
+                err = try
+                    f()
+                    nothing
+                catch e
+                    e
+                end
+                @test err isa ResolverError
+                return sprint(showerror, err)
+            end
+            Pkg.activate(".")
+            Pkg.generate("Foo"; io = devnull)
+            Pkg.develop(path = "Foo"; io = devnull)
+            Pkg.compat("Foo", "0.2"; io = devnull)
+            msg = conflict(() -> Pkg.resolve(; io = devnull))
+            @test occursin("Foo@0.1.0 (version of the developed package at ", msg)
+            Pkg.rm("Foo"; io = devnull)
+
+            Pkg.add(name = "Example", version = "0.5.3"; io = devnull)
+            Pkg.compat("Example", "0.4"; io = devnull)
+            msg = conflict(() -> Pkg.add("Test"; preserve = Pkg.PRESERVE_ALL, io = devnull))
+            @test occursin("Example@0.5.3 (recorded in the manifest) and project compatibility", msg)
+            rm("Manifest.toml")
+            msg = conflict(() -> Pkg.add(name = "Example", version = "0.5.3"; io = devnull))
+            @test occursin("Example@0.5.3 (requested) and project compatibility", msg)
+        end
+    end
+end
+
 end # module
