@@ -4864,6 +4864,13 @@ function status(
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, hidden_upgrades_info, show_usagetips)
     end
+    manifest_julia = env.manifest.julia_version
+    if !diff && !isempty(env.manifest.deps) && manifest_julia !== nothing && Base.thisminor(manifest_julia) != Base.thisminor(VERSION)
+        printpkgstyle(
+            io, :Warning, "The manifest was resolved with julia v$(manifest_julia), which differs from the running julia v$(VERSION).",
+            ignore_indent; color = Base.warn_color()
+        )
+    end
     return if is_manifest_current(env) === false
         tip = if show_usagetips
             if Pkg.in_repl_mode()
