@@ -3924,6 +3924,10 @@ function sandbox(
             entry_working = get(working_manifest, uuid, nothing)
             if entry_working === nothing
                 working_manifest[uuid] = entry
+            elseif uuid == target.uuid
+                # Always test the package as it is in the parent environment, e.g. a dev'd
+                # package rather than the version recorded in a stale test manifest (#3991)
+                continue
             else # Check for collision between the sandbox manifest and the "parent" manifest
                 if entry_working != entry && (ctx.env.pkg !== nothing && ctx.env.pkg.uuid != uuid)
                     @warn "Entry in manifest at \"$sandbox_path\" for package \"$(entry_working.name)\" differs from that in \"$(ctx.env.manifest_file)\""
