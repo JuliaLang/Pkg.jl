@@ -1018,11 +1018,16 @@ function workspace_sources(env::EnvCache)
 end
 
 # The error for a requirement that no version satisfies together with the
-# compat of the project(s): in a workspace, say which files declare compat
-# for the package, since the intersection alone does not tell whose entry to change.
+# compat of the project(s): say which files declare compat for the package,
+# since the intersection alone does not tell which entry to change.
 function compat_conflict_message(env::EnvCache, pkg::PackageSpec, compat::VersionSpec)
-    isempty(env.workspace) &&
-        return "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+    if isempty(env.workspace)
+        msg = "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+        str = get_compat_str(env.project, pkg.name)
+        str === nothing && return msg
+        source = entry_source(env.project_file, toml_entry_lines(env.project_file), ("compat",), pkg.name)
+        return msg * "\nThe project has a compat entry for $(pkg.name):\n * $source: $(pkg.name) = $(repr(str))"
+    end
     msg = "empty intersection between $(pkg.name)@$(pkg.version) and workspace compatibility $(compat)\n"
     msg *= "The following workspace projects have compat entries for $(pkg.name):"
     for (file, project) in workspace_project_files(env)
@@ -1518,7 +1523,7 @@ function deps_graph(
                     push!(unavailable_weak_uuids, uuid)
                     continue
                 end
-                pkgerror("cannot find name corresponding to UUID $(uuid) in a registry")
+                pkgerror("cannot find name corresponding to UUID $(uuid) in a registry", Types.general_registry_hint(registries))
             end
             uuid_to_name[uuid] = name
             entry = manifest_info(env.manifest, uuid)
@@ -1912,9 +1917,11 @@ function install_collected_artifacts!(
                     # TODO: Implement as a new MiniMultiProgressBar
                     main_bar = MiniProgressBar(; indent = 2, header = "Installing artifacts", color = :green, mode = :int, always_reprint = true)
                     main_bar.max = length(download_states)
+                    # `sprint` draws into a buffer, which does not know the width of the terminal
+                    context = IOContext(io, :displaysize => displaysize(io))
                     while !is_done[]
                         main_bar.current = count(x -> x.state == :done, values(download_states))
-                        local str = sprint(context = io) do iostr
+                        local str = sprint(; context) do iostr
                             first[] || print(iostr, ansi_cleartoend)
                             n_printed = 1
                             show_progress(iostr, main_bar; carriagereturn = false)
@@ -2397,6 +2404,8 @@ function download_source(
         )
         bar.max = length(pkgs_to_install)
         fancyprint = can_fancyprint(ctx.io)
+        # `sprint` draws into a buffer, which does not know the width of the terminal
+        context = IOContext(ctx.io, :displaysize => displaysize(ctx.io))
         try
             for i in 1:length(pkgs_to_install)
                 pkg::DownloadPkg, exc_or_success_or_nothing, bt_or_pathurls = take!(results)
@@ -2411,7 +2420,7 @@ function download_source(
                 (urls, path) = bt_or_pathurls::Tuple{Set{String}, String}
                 success || push!(missed_packages, (; pkg, urls, path))
                 bar.current = i
-                str = sprint(; context = ctx.io) do io
+                str = sprint(; context) do io
                     if success
                         fancyprint && print_progress_bottom(io)
                         vstr = if pkg.version !== nothing
@@ -3483,6 +3492,8 @@ function up(
                 if cinfo !== nothing
                     packages_holding_back, max_version, max_version_compat = cinfo
                     if current_version < max_version
+                        # version specifiers have no build numbers
+                        max_version = VersionNumber(max_version.major, max_version.minor, max_version.patch)
                         printpkgstyle(
                             ctx.io, :Info, "$(pkg.name) can be updated but at the cost of upgrading/downgrading other packages. " *
                                 "To force upgrade to the latest version, try `add $(pkg.name)@$(max_version)`", color = Base.info_color()

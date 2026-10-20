@@ -452,6 +452,11 @@ function ensure_artifact_installed(
     )
     meta = artifact_meta(name, artifacts_toml; pkg_uuid = pkg_uuid, platform = platform)
     if meta === nothing
+        entries = get(load_artifacts_toml(artifacts_toml; pkg_uuid), name, nothing)
+        if entries isa Vector
+            platforms = [triplet(p) for p in (unpack_platform(x, name, artifacts_toml) for x in entries) if p !== nothing]
+            error("Artifact '$(name)' in '$(artifacts_toml)' has no mapping for platform $(triplet(platform)); available platforms: $(join(platforms, ", "))")
+        end
         error("Cannot locate artifact '$(name)' in '$(artifacts_toml)'")
     end
 

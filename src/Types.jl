@@ -1203,8 +1203,8 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             @assert pkg.path === nothing
             pkg.tree_hash = SHA1(string(LibGit2.GitHash(tree_hash_object)))
 
-            # If we already resolved a uuid, we can bail early if this package is already installed at the current tree_hash
-            if has_uuid(pkg)
+            # If we already resolved a uuid and name, we can bail early if this package is already installed at the current tree_hash
+            if has_uuid(pkg) && has_name(pkg)
                 error_if_in_sysimage(pkg)
                 version_path = Pkg.Operations.source_path(ctx.env.project_file, pkg, ctx.julia_version)
                 isdir(version_path) && return false
@@ -1394,6 +1394,13 @@ end
 
 include("fuzzysorting.jl")
 
+# A package that cannot be found may well be in General, so suggest adding it
+# when it is not installed
+function general_registry_hint(registries)
+    any(reg -> reg.uuid == UUID("23338594-aafe-5451-b93e-139f81909106"), registries) && return ""
+    return "\nThe General registry is not installed; add it with `pkg> registry add General`."
+end
+
 # Ensure that all packages are fully resolved
 function ensure_resolved(
         ctx::Context, manifest::Manifest,
@@ -1414,12 +1421,17 @@ function ensure_resolved(
         push!(unresolved_names, pkg.uuid)
     end
     isempty(unresolved_uuids) && isempty(unresolved_names) && return
+    # standard libraries that are not in a registry can only be given by path or URL
+    stdlib_names = registry ? Set(info.name for info in values(stdlib_infos())) : Set{String}()
+    not_found = any(((name, uuids),) -> isempty(uuids) && !(name in stdlib_names), unresolved_uuids)
     msg = sprint(context = ctx.io) do io
         if !isempty(unresolved_uuids)
             print(io, "The following package names could not be resolved:")
             for (name, uuids) in sort!(collect(unresolved_uuids), by = lowercase ∘ first)
                 print(io, "\n * $name (")
-                if length(uuids) == 0
+                if length(uuids) == 0 && name in stdlib_names
+                    print(io, "a standard library that is not in a registry, so it has to be given by path or URL)")
+                elseif length(uuids) == 0
                     what = ["project", "manifest"]
                     registry && push!(what, "registry")
                     print(io, "not found in ")
@@ -1444,6 +1456,9 @@ function ensure_resolved(
             for uuid in unresolved_names
                 println(io, " * $uuid")
             end
+        end
+        if registry && not_found
+            print(io, general_registry_hint(ctx.registries))
         end
     end
     pkgerror(msg)

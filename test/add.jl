@@ -685,6 +685,16 @@ end
             end
         end
     end
+    # A uuid given together with a url is checked against the package's project file (#3411)
+    isolate(loaded_depot = true) do
+        mktempdir() do tempdir
+            empty_package = UUID("26187899-7657-4a90-a2f6-e79e0214bedc")
+            path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "EmptyPackage"))
+            @test_throws r"does not match given UUID" Pkg.add(Pkg.PackageSpec(url = path, uuid = exuuid))
+            Pkg.add(Pkg.PackageSpec(url = path, uuid = empty_package))
+            @test Pkg.dependencies()[empty_package].name == "EmptyPackage"
+        end
+    end
     # Now we test packages added by URL.
     isolate(loaded_depot = true) do
         # Details: `master` is past `0.1.0`
@@ -844,6 +854,20 @@ end
         catch e
             @test occursin(TEST_PKG.name, sprint(showerror, e))
         end
+    end
+    # the project's [compat] entry is named in the error (#2738)
+    isolate(loaded_depot = true) do
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.compat("Example", "=0.5.3")
+        err = try
+            Pkg.add(name = "Example", version = "0.5.4")
+        catch e
+            e
+        end
+        @test err isa ResolverError
+        @test occursin("project compatibility 0.5.3", err.msg)
+        project_file = Pkg.Types.Context().env.project_file
+        @test occursin(r"\* " * project_file * r":\d+: Example = \"=0.5.3\"", err.msg)
     end
 end
 

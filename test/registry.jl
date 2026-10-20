@@ -130,6 +130,8 @@ end
             ## Registry API
             for reg in (
                     "General",
+                    SubString("General"), # #3420
+                    [SubString("General")],
                     RegistrySpec("General"),
                     RegistrySpec(name = "General"),
                     RegistrySpec(name = "General", path = general_path),
@@ -340,6 +342,15 @@ end
             DEPOT_PATH[1:2] .= DEPOT_PATH[2:-1:1]
             Pkg.add("Example") # should not trigger a clone of default registries
             @test length(Pkg.Registry.reachable_registries()) == 1
+        end
+    end
+
+    @testset "hint to add General when a package cannot be found (#2978)" begin
+        temp_pkg_dir(; linked_reg = false) do depot # starts without registries
+            regdir = mktempdir()
+            setup_test_registries(regdir)
+            Pkg.Registry.add(url = joinpath(regdir, "RegistryFoo1"))
+            @test_throws r"General registry is not installed; add it with `pkg> registry add General`" Pkg.add("Example")
         end
     end
 

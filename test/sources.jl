@@ -53,6 +53,24 @@ temp_pkg_dir() do project_path
         end
     end
 
+    @testset "free --all with [sources] (#4212)" begin
+        mktempdir() do dir
+            path = copy_test_package(dir, "WithSources")
+            cd(path) do
+                # as a package, the project itself is in the manifest
+                write("Project.toml", "name = \"WithSources\"\nuuid = \"$(uuid4())\"\n" * read("Project.toml", String))
+                with_current_env() do
+                    Pkg.resolve()
+                    @test_throws r"unable to free unregistered package `LocalPkg" Pkg.free(all_pkgs = true)
+                    Pkg.rm("LocalPkg")
+                    Pkg.free(all_pkgs = true)
+                    @test !haskey(Pkg.project().sources, "Example")
+                    @test Pkg.dependencies()[UUID("7876af07-990d-54b4-ab0e-23690620f79a")].is_tracking_registry
+                end
+            end
+        end
+    end
+
     @testset "path normalization in Project.toml [sources]" begin
         mktempdir() do tmp
             cd(tmp) do

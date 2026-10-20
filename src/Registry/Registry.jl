@@ -79,8 +79,8 @@ Pkg.Registry.add(uuid = "23338594-aafe-5451-b93e-139f81909106")
 Pkg.Registry.add(url = "https://github.com/JuliaRegistries/General.git")
 ```
 """
-add(reg::Union{String, RegistrySpec}; kwargs...) = add([reg]; kwargs...)
-add(regs::Vector{String}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
+add(reg::Union{AbstractString, RegistrySpec}; kwargs...) = add([reg]; kwargs...)
+add(regs::Vector{<:AbstractString}; kwargs...) = add(RegistrySpec[RegistrySpec(name = name) for name in regs]; kwargs...)
 function add(; name = nothing, uuid = nothing, url = nothing, path = nothing, linked = nothing, kwargs...)
     return if all(isnothing, (name, uuid, url, path, linked))
         add(RegistrySpec[]; kwargs...)
@@ -409,8 +409,8 @@ Pkg.Registry.rm("General")
 Pkg.Registry.rm(uuid = "23338594-aafe-5451-b93e-139f81909106")
 ```
 """
-rm(reg::Union{String, RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
-rm(regs::Vector{String}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
+rm(reg::Union{AbstractString, RegistrySpec}; kwargs...) = rm([reg]; kwargs...)
+rm(regs::Vector{<:AbstractString}; kwargs...) = rm([RegistrySpec(name = name) for name in regs]; kwargs...)
 function rm(; name = nothing, uuid = nothing, url = nothing, path = nothing, linked = nothing, kwargs...)
     return rm([RegistrySpec(; name, uuid, url, path, linked)]; kwargs...)
 end
@@ -506,8 +506,8 @@ Pkg.Registry.update("General")
 Pkg.Registry.update(uuid = "23338594-aafe-5451-b93e-139f81909106")
 ```
 """
-update(reg::Union{String, RegistrySpec}; kwargs...) = update([reg]; kwargs...)
-update(regs::Vector{String}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
+update(reg::Union{AbstractString, RegistrySpec}; kwargs...) = update([reg]; kwargs...)
+update(regs::Vector{<:AbstractString}; kwargs...) = update([RegistrySpec(name = name) for name in regs]; kwargs...)
 function update(; name = nothing, uuid = nothing, url = nothing, path = nothing, linked = nothing, kwargs...)
     return if all(isnothing, (name, uuid, url, path, linked))
         update(RegistrySpec[]; kwargs...)
