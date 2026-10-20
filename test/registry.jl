@@ -606,6 +606,30 @@ end
     end
 end
 
+@testset "corrupt registry tarball (#2743)" begin
+    mktempdir() do dir
+        reg_uuid = "e9fceed0-5623-4384-aff0-6db4c442647a"
+        src = joinpath(dir, "src")
+        mkpath(src)
+        write(joinpath(src, "Registry.toml"), "name = \"Foo\"\nuuid = \"$reg_uuid\"\n\n[packages]\n")
+        write(joinpath(src, "filler.txt"), rand(UInt8, 100_000))
+        tarball = joinpath(dir, "Foo.tar.gz")
+        Pkg.PlatformEngines.package(src, tarball)
+        data = read(tarball)
+        write(tarball, data[1:div(end, 2)])
+        reg_toml = joinpath(dir, "Foo.toml")
+        write(reg_toml, "git-tree-sha1 = \"$("0"^40)\"\nuuid = \"$reg_uuid\"\npath = \"Foo.tar.gz\"\n")
+        reg = Pkg.Registry.RegistryInstance(reg_toml)
+        err = try
+            reg.name
+        catch e
+            e
+        end
+        @test err isa PkgError
+        @test occursin("may be corrupt", err.msg)
+    end
+end
+
 @testset "gc runs git gc on registries" begin
     # Only run this test if git is available
     if Sys.which("git") !== nothing

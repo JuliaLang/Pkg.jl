@@ -960,15 +960,7 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
     repo_path = tempname()
     cloned = false
     package_path = pkg.repo.subdir === nothing ? repo_path : joinpath(repo_path, pkg.repo.subdir)
-    if !has_name(pkg)
-        # Resolve manifest-relative path to absolute before passing to git
-        repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
-            Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
-            pkg.repo.source
-        LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, repo_source_resolved))
-        cloned = true
-        resolve_projectfile!(pkg, package_path)
-    end
+    # With a subdir, the develop path only depends on the repo name
     if pkg.repo.subdir !== nothing
         repo_name = split(pkg.repo.source, '/', keepempty = false)[end]
         # Make the develop path prettier.
@@ -979,7 +971,22 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
             repo_name = chop(repo_name, tail = 3)
         end
         dev_path = devpath(ctx.env, repo_name, shared)
-    else
+    end
+    if !has_name(pkg)
+        if pkg.repo.subdir !== nothing && isdir(dev_path)
+            # The repo is already checked out, no need to clone it to find the package name
+            resolve_projectfile!(pkg, joinpath(dev_path, pkg.repo.subdir))
+        else
+            # Resolve manifest-relative path to absolute before passing to git
+            repo_source_resolved = !isurl(pkg.repo.source) && !isabspath(pkg.repo.source) ?
+                Pkg.manifest_rel_path(ctx.env, pkg.repo.source) :
+                pkg.repo.source
+            LibGit2.close(GitTools.ensure_clone(ctx.io, repo_path, repo_source_resolved))
+            cloned = true
+            resolve_projectfile!(pkg, package_path)
+        end
+    end
+    if pkg.repo.subdir === nothing
         dev_path = devpath(ctx.env, pkg.name, shared)
     end
     if isdir(dev_path)
@@ -1090,7 +1097,14 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 # Regular git repo: .git is a directory
                 git_info_path = git_path
             end
-            if !isdir(git_info_path)
+            # A bare repository has no `.git` and no working tree to check for changes
+            is_bare = !isdir(git_info_path) && try
+                LibGit2.with(LibGit2.isbare, LibGit2.GitRepo(repo_source))
+            catch err
+                err isa LibGit2.GitError || rethrow()
+                false
+            end
+            if !isdir(git_info_path) && !is_bare
                 local msg = "Did not find a git repository at `$(repo_source)`"
                 if isfile(joinpath(repo_source, "Project.toml")) || isfile(joinpath(repo_source, "JuliaProject.toml"))
                     msg *= ", perhaps you meant `Pkg.develop`?"
@@ -1098,7 +1112,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
                 pkgerror(msg)
             end
             LibGit2.with(GitTools.check_valid_HEAD, LibGit2.GitRepo(repo_source)) # check for valid git HEAD
-            let repo_source = repo_source
+            is_bare || let repo_source = repo_source
                 LibGit2.with(LibGit2.GitRepo(repo_source)) do repo
                     if LibGit2.isdirty(repo)
                         @warn "The repository at `$(repo_source)` has uncommitted changes. Consider using `Pkg.develop` instead of `Pkg.add` if you want to work with the current state of the repository."

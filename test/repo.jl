@@ -155,6 +155,19 @@ tree_hash(root::AbstractString; kwargs...) = bytes2hex(@inferred Pkg.GitTools.tr
             @test tree_hash(dir) == "5e50a4254773a7c689bebca79e2954630cab9c04"
         end
     end
+
+    # Special files (here FIFOs) are skipped, like git does (#3365)
+    if !Sys.iswindows()
+        mktempdir() do dir
+            write(joinpath(dir, "foo"), "foo")
+            chmod(joinpath(dir, "foo"), 0o644)
+            expected = tree_hash(dir)
+            run(`mkfifo $(joinpath(dir, "fifo"))`)
+            mkdir(joinpath(dir, "sub"))
+            run(`mkfifo $(joinpath(dir, "sub", "fifo"))`)
+            @test tree_hash(dir) == expected
+        end
+    end
 end
 
 @testset "relative depot path" begin
