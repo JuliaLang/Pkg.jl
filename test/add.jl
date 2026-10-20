@@ -727,6 +727,17 @@ end
             @test isfile(joinpath(Pkg.dependencies()[empty_package].source, "test", "runtests.jl"))
         end
     end
+    # A repo containing a git submodule gives a clear error (#708)
+    Sys.which("git") !== nothing && isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
+            path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "EmptyPackage"))
+            git = `git -C $path -c user.name=TEST -c user.email=TEST@TEST.COM`
+            head = readchomp(`$git rev-parse HEAD`)
+            run(`$git update-index --add --cacheinfo 160000,$head,deps/sub`)
+            run(`$git commit -q -m submodule`)
+            @test_throws r"git submodules.*`Pkg.develop`"s Pkg.add(url = path)
+        end
+    end
     # Now we test packages added by URL.
     isolate(loaded_depot = true) do
         # Details: `master` is past `0.1.0`

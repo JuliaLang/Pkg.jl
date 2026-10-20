@@ -136,7 +136,16 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
                 target_directory = Base.unsafe_convert(Cstring, path),
                 baseline = baseline.ptr
             )
-            LibGit2.checkout_tree(repo, tree, options = opts)
+            try
+                LibGit2.checkout_tree(repo, tree, options = opts)
+            catch err
+                err isa LibGit2.GitError && err.class == LibGit2.Error.Submodule || rethrow()
+                Pkg.Types.pkgerror(
+                    "cannot check out a git tree that contains git submodules ($(err.msg)). ",
+                    "Packages with submodules cannot be added, only developed with `Pkg.develop`. ",
+                    "To make the package addable, replace the submodules with their content (e.g. with `git subtree`) or use artifacts."
+                )
+            end
         end
     end
 end
