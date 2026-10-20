@@ -586,4 +586,28 @@ end
     end
 end
 
+@testset "manifest diff of a workspace member uses the shared manifest (#3891)" begin
+    isolate(loaded_depot = true) do
+        mktempdir() do ws
+            write(joinpath(ws, "Project.toml"), "[workspace]\nprojects = [\"test\"]\n")
+            mkpath(joinpath(ws, "test"))
+            write(joinpath(ws, "test", "Project.toml"), "")
+            Pkg.activate(ws)
+            Pkg.add(name = "Example", version = "0.5.3"; io = devnull)
+            Pkg.activate(joinpath(ws, "test"))
+            # Example is already in the shared manifest, so adding or removing it
+            # in the member does not change the manifest
+            io = IOBuffer()
+            Pkg.add("Example"; io)
+            str = String(take!(io))
+            @test occursin(r"\+ Example v0\.5\.3", str) # project diff
+            @test occursin(r"No packages added to or removed from `.+Manifest\.toml`", str)
+            Pkg.rm("Example"; io)
+            str = String(take!(io))
+            @test occursin(r"- Example v0\.5\.3", str) # project diff
+            @test occursin(r"No packages added to or removed from `.+Manifest\.toml`", str)
+        end
+    end
+end
+
 end # module
