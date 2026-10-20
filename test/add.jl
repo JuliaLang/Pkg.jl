@@ -738,6 +738,32 @@ end
             @test_throws r"git submodules.*`Pkg.develop`"s Pkg.add(url = path)
         end
     end
+    # A clone denied by the server hints at credentials (#2701). libgit2 blocks this
+    # thread while cloning, so the server runs in its own process.
+    isolate(loaded_depot = true) do
+        code = """
+        using Sockets
+        server = listen(Sockets.localhost, 0)
+        println(Int(last(getsockname(server))))
+        flush(stdout)
+        while true
+            sock = accept(server)
+            @async begin
+                while !isempty(rstrip(readline(sock))) end
+                write(sock, "HTTP/1.1 403 Forbidden\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
+                close(sock)
+            end
+        end
+        """
+        server = open(`$(Base.julia_cmd()) --startup-file=no -e $code`, "r")
+        try
+            port = parse(Int, readline(server))
+            url = "http://127.0.0.1:$port/Private.jl"
+            @test_throws r"403.*personal access token"s Pkg.add(url = url)
+        finally
+            kill(server, Base.SIGKILL)
+        end
+    end
     # Now we test packages added by URL.
     isolate(loaded_depot = true) do
         # Details: `master` is past `0.1.0`

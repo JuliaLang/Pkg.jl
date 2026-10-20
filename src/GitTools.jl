@@ -150,6 +150,16 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
     end
 end
 
+# libgit2 does not show the message the server sends with an authentication failure (#2701)
+function auth_hint(err::LibGit2.GitError)
+    auth_failed = err.code == LibGit2.Error.EAUTH ||
+        (err.class == LibGit2.Error.HTTP && occursin(r"\b40[13]\b", err.msg))
+    auth_failed || return ""
+    return "\nAuthentication failed or access was denied. Note that GitHub and other hosts do not accept \
+        account passwords for git over HTTPS: use a personal access token as the password, use an SSH URL, \
+        or set `JULIA_PKG_USE_CLI_GIT=true` to use the `git` command line client and its credential helpers."
+end
+
 function clone(io::IO, url, source_path; @nospecialize(header::Union{Nothing, AbstractString} = nothing), credentials = nothing, isbare = false, depth::Integer = 0, kwargs...)
     url = String(url)::String
     source_path = String(source_path)::String
@@ -216,7 +226,7 @@ function clone(io::IO, url, source_path; @nospecialize(header::Union{Nothing, Ab
                 (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
             Pkg.Types.pkgerror("git repository not found at `$(url)`: ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to clone from $(url): ($(err.msg))")
+            Pkg.Types.pkgerror("failed to clone from $(url): ($(err.msg))", auth_hint(err))
         end
     finally
         Base.shred!(credentials)
@@ -291,7 +301,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, @nospecialize(remoteurl::Union{Not
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
             Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)': ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($(err.msg))")
+            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($(err.msg))", auth_hint(err))
         end
     finally
         Base.shred!(credentials)
