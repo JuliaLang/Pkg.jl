@@ -189,6 +189,37 @@ end
 merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
     merge_pkg_source!(target, source.path, source.repo)
 
+# The projects of a workspace share one manifest, so they should agree on the `[sources]` of a
+# dependency they have in common. Warn when they do not: only the first source is used (#4590).
+function check_workspace_sources(env::EnvCache)
+    isempty(env.workspace) && return
+    seen = Dict{UUID, Tuple{String, Project, Union{Nothing, String}, GitRepo}}()
+    for (project_file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
+        for (name, uuid) in project.deps
+            haskey(project.sources, name) || continue
+            path, repo = get_path_repo(project, project_file, env.manifest_file, name)
+            path === nothing || (path = normpath(path))
+            prev = get(seen, uuid, nothing)
+            if prev === nothing
+                seen[uuid] = (project_file, project, path, repo)
+                continue
+            end
+            prev_file, prev_project, prev_path, prev_repo = prev
+            differ(a, b) = a !== nothing && b !== nothing && a != b
+            if differ(prev_path, path) || differ(prev_repo.source, repo.source) ||
+                    differ(prev_repo.rev, repo.rev) || differ(prev_repo.subdir, repo.subdir) ||
+                    (prev_path !== nothing && repo.source !== nothing) || (path !== nothing && prev_repo.source !== nothing)
+                fmt(p) = join(("$k = $(repr(v))" for (k, v) in sort!(collect(p.sources[name]))), ", ")
+                @warn """Projects of the workspace have conflicting `[sources]` for package `$name`:
+                  $prev_file: {$(fmt(prev_project))}
+                  $project_file: {$(fmt(project))}
+                Using the one in $prev_file."""
+            end
+        end
+    end
+    return
+end
+
 function load_direct_deps(
         env::EnvCache, pkgs::Vector{PackageSpec} = PackageSpec[];
         preserve::PreserveLevel = PRESERVE_DIRECT
@@ -208,8 +239,7 @@ function load_direct_deps(
             push!(deduped, pkg)
             first_idx[pkg.uuid] = length(deduped)
         else
-            # TODO: Assert that projects do not have conflicting sources
-            merge_pkg_source!(deduped[idx], pkg)
+            merge_pkg_source!(deduped[idx], pkg) # conflicts are warned about in `check_workspace_sources`
         end
     end
 
@@ -3086,6 +3116,7 @@ function _resolve(
     )
     usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
     printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
+    check_workspace_sources(env)
     return try
         if preserve == PRESERVE_TIERED_INSTALLED
             tiered_resolve(env, registries, pkgs, julia_version, true; preferred_versions)
@@ -3500,6 +3531,7 @@ function up(
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         up_load_manifest_info!(pkg, entry)
     end
+    check_workspace_sources(ctx.env)
     if preserve !== nothing
         pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     else
