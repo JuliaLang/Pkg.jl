@@ -1576,9 +1576,10 @@ function update_project_sources!(env::EnvCache)
             declared_elsewhere && continue
         end
         if entry.path !== nothing
-            # Convert path from manifest-relative to project-relative before writing
+            # Convert path from manifest-relative to project-relative before writing, in the form
+            # `write_project` writes (forward slashes on Windows) so an unchanged path compares equal
             project_relative_path = manifest_path_to_project_path(env.project_file, env.manifest_file, entry.path)
-            env.project.sources[pkg] = Dict("path" => project_relative_path)
+            env.project.sources[pkg] = Dict("path" => normalize_path_for_toml(project_relative_path))
         elseif entry.repo != GitRepo()
             d = Dict{String, String}()
             entry.repo.source !== nothing && (d["url"] = entry.repo.source)
