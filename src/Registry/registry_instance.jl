@@ -573,38 +573,42 @@ function write_registry_cache(io::IO, files::Dict{String, String}, tree_hash::SH
     d = Base.TOML.parse(Base.TOML.Parser{Dates}(files["Registry.toml"]; filepath = "Registry.toml"))
     pkgs = d["packages"]::Dict{String, Any}
     npkgs = length(pkgs)
-    blob = IOBuffer()
+    # The blob holds (almost) all files, so reserve their total size up front.
+    blob = IOBuffer(; sizehint = sum(sizeof, values(files); init = 0))
     blob_start = CACHE_HEADER_SIZE + RECORD_SIZE * npkgs
-    # returns the (offset, length) pair to be written for `str`
+    # Everything after the first 36 bytes of the header is a sequence of UInt32s
+    words = UInt32[]
+    sizehint!(words, (blob_start - 36) ÷ 4)
+    # appends the (offset, length) pair for `str` to `words`
     function put!(str::Union{String, Nothing})
-        str === nothing && return (UInt32(0), CACHE_MISSING)
-        off = blob_start + position(blob)
-        write(blob, str)
-        return (UInt32(off), UInt32(sizeof(str)))
+        if str === nothing
+            push!(words, UInt32(0), CACHE_MISSING)
+        else
+            push!(words, UInt32(blob_start + position(blob)), UInt32(sizeof(str)))
+            write(blob, str)
+        end
+        return
     end
-    header = IOBuffer()
-    write(header, CACHE_MAGIC, CACHE_VERSION, UInt32(npkgs), Ref(tree_hash.bytes))
     for key in ("name", "uuid", "repo", "description")
-        off, len = put!(get(d, key, nothing)::Union{String, Nothing})
-        write(header, off, len)
+        put!(get(d, key, nothing)::Union{String, Nothing})
     end
-    @assert position(header) == CACHE_HEADER_SIZE
     for (uuid, info) in pkgs
         info::Dict{String, Any}
         name = info["name"]::String
         path = info["path"]::String
-        write(header, UUID(uuid::String).value)
-        for str in (name, path)
-            off, len = put!(str)
-            write(header, off, len)
+        uuid_value = UUID(uuid::String).value
+        for i in 0:3
+            push!(words, (uuid_value >> (32 * i)) % UInt32)
         end
+        put!(name)
+        put!(path)
         for file in PKG_FILES
-            off, len = put!(get(files, path * "/" * file, nothing))
-            write(header, off, len)
+            put!(get(files, path * "/" * file, nothing))
         end
     end
-    @assert position(header) == blob_start
-    write(io, take!(header))
+    @assert 36 + 4 * length(words) == blob_start
+    write(io, CACHE_MAGIC, CACHE_VERSION, UInt32(npkgs), Ref(tree_hash.bytes))
+    write(io, words)
     write(io, take!(blob))
     return
 end
