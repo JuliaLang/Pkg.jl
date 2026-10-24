@@ -1184,6 +1184,42 @@ end
     end
 end
 
+@testset "update fetches a monorepo tracked by several packages only once" begin
+    temp_pkg_dir() do project_path
+        with_temp_env() do
+            mktempdir() do tmp
+                repodir = joinpath(tmp, "MonoRepo")
+                for (name, uuid) in (("PkgA", "8a1b1d5e-4c35-4b1f-9d4e-3a7f0c2b6d01"), ("PkgB", "8a1b1d5e-4c35-4b1f-9d4e-3a7f0c2b6d02"))
+                    mkpath(joinpath(repodir, name, "src"))
+                    write(joinpath(repodir, name, "Project.toml"), "name = \"$name\"\nuuid = \"$uuid\"\nversion = \"0.1.0\"\n")
+                    write(joinpath(repodir, name, "src", "$name.jl"), "module $name end\n")
+                end
+                git_init_and_commit(repodir)
+                Pkg.add([Pkg.PackageSpec(url = repodir, subdir = "PkgA"), Pkg.PackageSpec(url = repodir, subdir = "PkgB")])
+
+                # Make a new commit on the tracked branch that changes both packages
+                for name in ("PkgA", "PkgB")
+                    write(joinpath(repodir, name, "src", "$name.jl"), "module $name\nf() = 1\nend\n")
+                end
+                LibGit2.with(LibGit2.GitRepo(repodir)) do repo
+                    LibGit2.add!(repo, "*")
+                    LibGit2.commit(repo, "update"; author = TEST_SIG, committer = TEST_SIG)
+                end
+                old_hashes = Dict(name => info.tree_hash for (_, info) in Pkg.dependencies() for name in (info.name,) if name in ("PkgA", "PkgB"))
+
+                io = IOBuffer()
+                Pkg.update(; io)
+                output = String(take!(io))
+                @test count("Updating git-repo", output) == 1
+                for (_, info) in Pkg.dependencies()
+                    info.name in ("PkgA", "PkgB") || continue
+                    @test info.tree_hash != old_hashes[info.name]
+                end
+            end
+        end
+    end
+end
+
 @testset "Issue #3147" begin
     isolate() do
 
