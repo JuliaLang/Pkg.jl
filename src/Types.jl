@@ -1062,7 +1062,10 @@ function set_repo_source_from_registry!(ctx, pkg)
 end
 
 
-function handle_repo_add!(ctx::Context, pkg::PackageSpec)
+# `fetched_branches` holds the (repo cache path, branch) pairs already fetched during the current
+# operation, so that several packages tracking the same branch of the same repo (e.g. a monorepo)
+# only fetch it once.
+function handle_repo_add!(ctx::Context, pkg::PackageSpec; fetched_branches::Set{Tuple{String, String}} = Set{Tuple{String, String}}())
     # The first goal is to populate pkg.repo.source if that wasn't given explicitly
     if pkg.repo.source === nothing
         @assert pkg.repo.rev !== nothing
@@ -1129,9 +1132,11 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         end
     end
 
+    repo_cache_path = add_repo_cache_path(repo_source::String)
+    freshly_cloned = !ispath(repo_cache_path)
     return let repo_source = repo_source
         # The type-assertions below are necessary presumably due to julia#36454
-        LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::String), repo_source::String; isbare = true, depth = 1)) do repo
+        LibGit2.with(GitTools.ensure_clone(ctx.io, repo_cache_path, repo_source::String; isbare = true, depth = 1)) do repo
             repo_source_typed = repo_source::Union{Nothing, String}
             GitTools.check_valid_HEAD(repo)
             create_cachedir_tag(dirname(add_repo_cache_path(repo_source)))
@@ -1193,11 +1198,16 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             # If we are tracking a branch and are not pinned we want to update the repo if we haven't done that yet
             innerentry = manifest_info(ctx.env.manifest, pkg.uuid)
             ispinned = innerentry !== nothing && innerentry.pinned
-            if isbranch && !fetched && !ispinned
+            # A fresh clone or an earlier fetch with this context already has the latest state of the branch.
+            branch_key = (repo_cache_path, string(rev_or_hash))
+            if isbranch && !fetched && !freshly_cloned && !ispinned && !(branch_key in fetched_branches)
                 # Fetch only the specific branch being tracked
                 specific_refspec = ["+refs/heads/$(rev_or_hash):refs/cache/heads/$(rev_or_hash)"]
                 GitTools.fetch(ctx.io, repo, repo_source_typed; refspecs = specific_refspec, depth = 1)
                 gitobject, isbranch = get_object_or_branch(repo, rev_or_hash)
+            end
+            if isbranch && (fetched || freshly_cloned || !ispinned)
+                push!(fetched_branches, branch_key)
             end
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
@@ -1246,8 +1256,9 @@ end
 
 function handle_repos_add!(ctx::Context, pkgs::AbstractVector{PackageSpec})
     new_uuids = Set{UUID}()
+    fetched_branches = Set{Tuple{String, String}}()
     for pkg in pkgs
-        handle_repo_add!(ctx, pkg) && push!(new_uuids, pkg.uuid)
+        handle_repo_add!(ctx, pkg; fetched_branches) && push!(new_uuids, pkg.uuid)
         @assert pkg.name !== nothing && pkg.uuid !== nothing && pkg.tree_hash !== nothing
     end
     return new_uuids
