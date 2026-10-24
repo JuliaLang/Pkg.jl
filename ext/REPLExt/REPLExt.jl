@@ -355,6 +355,15 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
 end
 
 
+# A named function, unlike a closure in `__init__`, can have a precompile directive in precompile.jl
+function repl_init_hook(repl)
+    if isinteractive() && repl isa REPL.LineEditREPL
+        isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
+        repl_init(repl)
+    end
+    return
+end
+
 function __init__()
     # Clear any cached prompt baked in during precompilation.
     invalidate_prompt!()
@@ -367,12 +376,7 @@ function __init__()
             # init_repl accesses.
         end
     else
-        atreplinit() do repl
-            if isinteractive() && repl isa REPL.LineEditREPL
-                isdefined(repl, :interface) || (repl.interface = REPL.setup_interface(repl))
-                repl_init(repl)
-            end
-        end
+        atreplinit(repl_init_hook)
     end
     return if !in(try_prompt_pkg_add, REPL.install_packages_hooks)
         push!(REPL.install_packages_hooks, try_prompt_pkg_add)
