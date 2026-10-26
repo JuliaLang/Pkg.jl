@@ -238,6 +238,24 @@ end
 
 const REG_WARNED = Ref{Bool}(false)
 
+# Suggest similar names for packages that are not in any registry (#3337)
+function print_pkg_suggestions(ctx::Context, pkgs::Vector{Symbol})
+    all_names = Types.available_names(ctx)
+    for pkg in pkgs
+        name = String(pkg)
+        ranked, any_good = Types.FuzzySorting.fuzzysort(name, filter(!=(name), all_names))
+        any_good || continue
+        printstyled(ctx.io, " │ "; color = :green)
+        println(ctx.io, "Package $name not found in any registry.")
+        printstyled(ctx.io, " └ "; color = :green)
+        prefix = "Suggestions:"
+        printstyled(ctx.io, prefix; color = Base.info_color())
+        Types.FuzzySorting.printmatches(ctx.io, name, ranked; cols = displaysize(ctx.io)[2] - length(" └ ") - length(prefix))
+        println(ctx.io, "\n")
+    end
+    return
+end
+
 function try_prompt_pkg_add(pkgs::Vector{Symbol})
     ctx = try
         Context()
@@ -257,10 +275,12 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         return false
     end
     available_uuids = [Types.registered_uuids(ctx.registries, String(pkg)) for pkg in pkgs] # vector of vectors
-    filter!(u -> all(!isequal(Operations.JULIA_UUID), u), available_uuids) # "julia" is in General but not installable
-    isempty(available_uuids) && return false
+    foreach(u -> delete!(u, Operations.JULIA_UUID), available_uuids) # "julia" is in General but not installable
     available_pkgs = pkgs[isempty.(available_uuids) .== false]
-    isempty(available_pkgs) && return false
+    if isempty(available_pkgs)
+        print_pkg_suggestions(ctx, filter(!=(:julia), pkgs))
+        return false
+    end
     resp = try
         plural1 = length(pkgs) == 1 ? "" : "s"
         plural2 = length(available_pkgs) == 1 ? "a package" : "packages"
@@ -268,7 +288,9 @@ function try_prompt_pkg_add(pkgs::Vector{Symbol})
         plural4 = length(available_pkgs) == 1 ? "" : "s"
         missing_pkg_list = length(pkgs) == 1 ? String(pkgs[1]) : "[$(join(pkgs, ", "))]"
         available_pkg_list = length(available_pkgs) == 1 ? String(available_pkgs[1]) : "[$(join(available_pkgs, ", "))]"
-        msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from a registry."
+        reg_names = unique(reg.name for reg in ctx.registries for uuids in available_uuids for uuid in uuids if haskey(reg, uuid))
+        reg_str = length(reg_names) == 1 ? "the $(only(reg_names)) registry" : "the registries $(join(reg_names, ", ", " and "))"
+        msg1 = "Package$(plural1) $(missing_pkg_list) not found, but $(plural2) named $(available_pkg_list) $(plural3) available from $(reg_str)."
         for line in linewrap(msg1, io = ctx.io, padding = length(" │ "))
             printstyled(ctx.io, " │ "; color = :green)
             println(ctx.io, line)
