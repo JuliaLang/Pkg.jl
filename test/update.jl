@@ -542,7 +542,7 @@ end
                 end
                 reg_path = joinpath(tmp, "NewReg")
                 mkpath(reg_path)
-                registry_toml = "name = \"NewReg\"\nuuid = \"$(uuid4())\"\nrepo = \"$(reg_path)\"\n\n[packages]\n"
+                registry_toml = "name = \"NewReg\"\nuuid = \"$(uuid4())\"\nrepo = $(repr(reg_path))\n\n[packages]\n"
                 write(joinpath(reg_path, "Registry.toml"), registry_toml)
                 git_init_and_commit(reg_path)
                 LibGit2.close(LibGit2.clone(reg_path, joinpath(DEPOT_PATH[1], "registries", "NewReg")))
@@ -553,7 +553,7 @@ end
                 # NewPkg gets registered
                 write(joinpath(reg_path, "Registry.toml"), registry_toml * "$pkg_uuid = { name = \"NewPkg\", path = \"NewPkg\" }\n")
                 mkpath(joinpath(reg_path, "NewPkg"))
-                write(joinpath(reg_path, "NewPkg", "Package.toml"), "name = \"NewPkg\"\nuuid = \"$pkg_uuid\"\nrepo = \"$(pkg_path)\"\n")
+                write(joinpath(reg_path, "NewPkg", "Package.toml"), "name = \"NewPkg\"\nuuid = \"$pkg_uuid\"\nrepo = $(repr(pkg_path))\n")
                 write(joinpath(reg_path, "NewPkg", "Versions.toml"), "[\"0.1.0\"]\ngit-tree-sha1 = \"$tree\"\n")
                 git_init_and_commit(reg_path; msg = "register NewPkg")
 

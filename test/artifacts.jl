@@ -1283,7 +1283,8 @@ end
             withenv("JULIA_PKG_SERVER" => srv.url) do
                 Pkg.instantiate()
             end
-            @test isempty(requests)
+            # registry requests are fine, only artifact queries are unwanted
+            @test !any(startswith("/artifact"), requests)
         end
     finally
         srv.close()
