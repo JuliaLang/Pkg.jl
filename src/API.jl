@@ -497,7 +497,9 @@ function rm(ctx::Context, pkgs::Vector{PackageSpec}; mode = PKGMODE_PROJECT, all
 
     mode == PKGMODE_PROJECT && project_deps_resolve!(ctx.env, pkgs)
     mode == PKGMODE_MANIFEST && manifest_resolve!(ctx.env.manifest, pkgs)
-    ensure_resolved(ctx, ctx.env.manifest, pkgs)
+    manifest_only_hint = "\nTo remove a package that is only in the manifest, and the packages that require it, \
+        use `pkg> rm --manifest <name>` or `Pkg.rm(<name>; mode = PKGMODE_MANIFEST)`."
+    ensure_resolved(ctx, ctx.env.manifest, pkgs; manifest_only_hint)
 
     Operations.rm(ctx, pkgs; mode)
 
@@ -2103,6 +2105,15 @@ function handle_package_input!(pkg::PackageSpec)
     end
     if pkg.repo.source !== nothing || pkg.repo.rev !== nothing || pkg.repo.subdir !== nothing
         pkgerror("`repo` is a private field of PackageSpec and should not be set directly")
+    end
+    # `url#rev` is only understood by the Pkg REPL; git ignores or rejects URL fragments
+    source = something(pkg.url, pkg.path, Some(nothing))
+    if source !== nothing && isurl(source) && occursin('#', source)
+        url, rev = split(source, '#'; limit = 2)
+        pkgerror(
+            "`$source` is not a valid repository URL. To track a branch, tag or commit, ",
+            "give it as `rev`: `url = \"$url\", rev = \"$rev\"`."
+        )
     end
     pkg.repo = Types.GitRepo(
         rev = pkg.rev, source = pkg.url !== nothing ? pkg.url : pkg.path,

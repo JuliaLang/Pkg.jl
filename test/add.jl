@@ -181,6 +181,13 @@ end
         @test_throws PkgError(
             "version specification invalid when tracking a repository: `0.5.0` specified for package `Example`"
         ) Pkg.add(name = "Example", rev = "master", version = "0.5.0")
+        # `url#rev` is only REPL syntax (#3138)
+        for kw in (:url, :path)
+            @test_throws PkgError(
+                "`https://github.com/JuliaLang/Example.jl#master` is not a valid repository URL. To track a branch, tag or commit, " *
+                    "give it as `rev`: `url = \"https://github.com/JuliaLang/Example.jl\", rev = \"master\"`."
+            ) Pkg.add(; kw => "https://github.com/JuliaLang/Example.jl#master")
+        end
         # Adding with a slight typo gives suggestions
         try
             io = IOBuffer()
@@ -371,7 +378,7 @@ end
         Pkg.add("Test")
         @test Pkg.dependencies()[exuuid].version == v"0.3.0"
     end
-    # Add by version should not override pinned version.
+    # Add by version should not override pinned version, but say so (#4654).
     isolate(loaded_depot = true) do
         Pkg.add(name = "Example", version = "0.3.0")
         Pkg.pin("Example")
@@ -380,7 +387,11 @@ end
             @test ex.is_tracking_registry
             @test ex.is_pinned
         end
-        Pkg.add(name = "Example", version = "0.5.0")
+        io = IOBuffer()
+        Pkg.add(name = "Example", version = "0.5.0"; io)
+        @test occursin("`Example` is pinned at `v0.3.0`: ignoring the requested version `0.5.0`", String(take!(io)))
+        Pkg.add(name = "Example", version = "0.3"; io)
+        @test !occursin("ignoring", String(take!(io)))
         # We check that the package state is left unchanged.
         Pkg.dependencies(exuuid) do ex
             @test ex.version == v"0.3.0"
@@ -727,6 +738,43 @@ end
             @test isfile(joinpath(Pkg.dependencies()[empty_package].source, "test", "runtests.jl"))
         end
     end
+    # A repo containing a git submodule gives a clear error (#708)
+    Sys.which("git") !== nothing && isolate(loaded_depot = true) do;
+        mktempdir() do tempdir
+            path = git_init_package(tempdir, joinpath(@__DIR__, "test_packages", "EmptyPackage"))
+            git = `git -C $path -c user.name=TEST -c user.email=TEST@TEST.COM`
+            head = readchomp(`$git rev-parse HEAD`)
+            run(`$git update-index --add --cacheinfo 160000,$head,deps/sub`)
+            run(`$git commit -q -m submodule`)
+            @test_throws r"git submodules.*`Pkg.develop`"s Pkg.add(url = path)
+        end
+    end
+    # A clone denied by the server hints at credentials (#2701). libgit2 blocks this
+    # thread while cloning, so the server runs in its own process.
+    isolate(loaded_depot = true) do
+        code = """
+        using Sockets
+        server = listen(Sockets.localhost, 0)
+        println(Int(last(getsockname(server))))
+        flush(stdout)
+        while true
+            sock = accept(server)
+            @async begin
+                while !isempty(rstrip(readline(sock))) end
+                write(sock, "HTTP/1.1 403 Forbidden\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n")
+                close(sock)
+            end
+        end
+        """
+        server = open(`$(Base.julia_cmd()) --startup-file=no -e $code`, "r")
+        try
+            port = parse(Int, readline(server))
+            url = "http://127.0.0.1:$port/Private.jl"
+            @test_throws r"403.*personal access token"s Pkg.add(url = url)
+        finally
+            kill(server, Base.SIGKILL)
+        end
+    end
     # Now we test packages added by URL.
     isolate(loaded_depot = true) do
         # Details: `master` is past `0.1.0`
@@ -900,6 +948,20 @@ end
         @test occursin("project compatibility 0.5.3", err.msg)
         project_file = Pkg.Types.Context().env.project_file
         @test occursin(r"\* " * project_file * r":\d+: Example = \"=0.5.3\"", err.msg)
+    end
+    # in the default environment, a resolver error suggests project environments (#3367)
+    isolate(loaded_depot = true) do
+        Pkg.activate(joinpath(DEPOT_PATH[1], "environments", "v$(VERSION.major).$(VERSION.minor)"))
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.compat("Example", "=0.5.3")
+        io = IOBuffer()
+        @test_throws ResolverError Pkg.add(name = "Example", version = "0.5.4"; io)
+        @test occursin("default environment", String(take!(io)))
+        Pkg.activate(temp = true)
+        Pkg.add(name = "Example", version = "0.5.3")
+        Pkg.compat("Example", "=0.5.3")
+        @test_throws ResolverError Pkg.add(name = "Example", version = "0.5.4"; io)
+        @test !occursin("default environment", String(take!(io)))
     end
 end
 

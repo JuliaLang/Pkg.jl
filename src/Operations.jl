@@ -189,6 +189,37 @@ end
 merge_pkg_source!(target::PackageSpec, source::PackageSpec) =
     merge_pkg_source!(target, source.path, source.repo)
 
+# The projects of a workspace share one manifest, so they should agree on the `[sources]` of a
+# dependency they have in common. Warn when they do not: only the first source is used (#4590).
+function check_workspace_sources(env::EnvCache)
+    isempty(env.workspace) && return
+    seen = Dict{UUID, Tuple{String, Project, Union{Nothing, String}, GitRepo}}()
+    for (project_file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
+        for (name, uuid) in project.deps
+            haskey(project.sources, name) || continue
+            path, repo = get_path_repo(project, project_file, env.manifest_file, name)
+            path === nothing || (path = normpath(path))
+            prev = get(seen, uuid, nothing)
+            if prev === nothing
+                seen[uuid] = (project_file, project, path, repo)
+                continue
+            end
+            prev_file, prev_project, prev_path, prev_repo = prev
+            differ(a, b) = a !== nothing && b !== nothing && a != b
+            if differ(prev_path, path) || differ(prev_repo.source, repo.source) ||
+                    differ(prev_repo.rev, repo.rev) || differ(prev_repo.subdir, repo.subdir) ||
+                    (prev_path !== nothing && repo.source !== nothing) || (path !== nothing && prev_repo.source !== nothing)
+                fmt(p) = join(("$k = $(repr(v))" for (k, v) in sort!(collect(p.sources[name]))), ", ")
+                @warn """Projects of the workspace have conflicting `[sources]` for package `$name`:
+                  $prev_file: {$(fmt(prev_project))}
+                  $project_file: {$(fmt(project))}
+                Using the one in $prev_file."""
+            end
+        end
+    end
+    return
+end
+
 function load_direct_deps(
         env::EnvCache, pkgs::Vector{PackageSpec} = PackageSpec[];
         preserve::PreserveLevel = PRESERVE_DIRECT
@@ -208,8 +239,7 @@ function load_direct_deps(
             push!(deduped, pkg)
             first_idx[pkg.uuid] = length(deduped)
         else
-            # TODO: Assert that projects do not have conflicting sources
-            merge_pkg_source!(deduped[idx], pkg)
+            merge_pkg_source!(deduped[idx], pkg) # conflicts are warned about in `check_workspace_sources`
         end
     end
 
@@ -846,6 +876,8 @@ function collect_fixed!(
                     error_msg *= "\nIt is required by:\n$(join(["  - $dep" for dep in dependents], "\n"))"
                 end
             end
+            error_msg *= "\n\nRestore the package at that path or, if it is registered, track a registered version \
+                with `pkg> free $(pkg.name)`. To remove it and the packages that require it, use `pkg> rm --manifest $(pkg.name)`."
             pkgerror(error_msg)
         end
         deps, weakdeps = collect_project(pkg, path, env.manifest_file, julia_version; loaded = get(loaded_projects, pkg.uuid, nothing))
@@ -2561,9 +2593,12 @@ end
 
 function dependency_order_visit!(
         order::Dict{UUID, Int}, seen::Vector{UUID}, counter::Base.RefValue{Int},
-        env::EnvCache, uuid::UUID
+        env::EnvCache, uuid::UUID, cycles::Vector{Vector{UUID}}
     )
-    uuid in seen && return @warn("Dependency graph not a DAG, linearizing anyway")
+    if uuid in seen
+        push!(cycles, push!(seen[findfirst(==(uuid), seen):end], uuid))
+        return
+    end
     haskey(order, uuid) && return
     push!(seen, uuid)
     deps = if Types.is_project_uuid(env, uuid)
@@ -2573,7 +2608,7 @@ function dependency_order_visit!(
         values(entry.deps)
     end
     for dep in deps
-        dependency_order_visit!(order, seen, counter, env, dep)
+        dependency_order_visit!(order, seen, counter, env, dep, cycles)
     end
     pop!(seen)
     counter[] += 1
@@ -2581,12 +2616,13 @@ function dependency_order_visit!(
     return
 end
 
-function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID})::Dict{UUID, Int}
+# The dependency cycles found are pushed to `cycles`, each as a path that starts and ends with the same package.
+function dependency_order_uuids(env::EnvCache, uuids::Vector{UUID}; cycles::Vector{Vector{UUID}} = Vector{UUID}[])::Dict{UUID, Int}
     order = Dict{UUID, Int}()
     seen = UUID[]
     counter = Ref(0)
     for uuid in uuids
-        dependency_order_visit!(order, seen, counter, env, uuid)
+        dependency_order_visit!(order, seen, counter, env, uuid, cycles)
     end
     return order
 end
@@ -2695,7 +2731,16 @@ function build_versions(ctx::Context, uuids::Set{UUID}; verbose = false, allow_r
         ispath(buildfile(path)) && push!(builds, (uuid, name, path, version))
     end
     # toposort builds by dependencies
-    order = dependency_order_uuids(ctx.env, UUID[first(build) for build in builds])
+    build_uuids = UUID[first(build) for build in builds]
+    cycles = Vector{UUID}[]
+    order = dependency_order_uuids(ctx.env, build_uuids; cycles)
+    for cycle in cycles
+        any(in(build_uuids), cycle) || continue
+        names = map(cycle) do uuid
+            Types.is_project_uuid(ctx.env, uuid) ? ctx.env.pkg.name : manifest_info(ctx.env.manifest, uuid).name
+        end
+        @warn "Dependency cycle `$(join(names, " → "))` involves packages with build scripts, building them in an arbitrary order"
+    end
     sort!(builds, by = build -> order[first(build)])
     max_name = maximum(build -> textwidth(build[2]), builds; init = 0)
 
@@ -2885,7 +2930,21 @@ end
 update_package_add(ctx::Context, pkg::PackageSpec, ::Nothing, is_dep::Bool) = pkg
 function update_package_add(ctx::Context, pkg::PackageSpec, entry::PackageEntry, is_dep::Bool)
     if entry.pinned
-        if pkg.version == VersionSpec()
+        requested = if (pkg.repo.source !== nothing && pkg.repo.source != entry.repo.source) ||
+                (pkg.repo.rev !== nothing && pkg.repo.rev != entry.repo.rev)
+            "`$(something(pkg.repo.source, ""))$(pkg.repo.rev === nothing ? "" : "#$(pkg.repo.rev)")`"
+        elseif pkg.version != VersionSpec() && !(
+                entry.version isa VersionNumber &&
+                    (pkg.version isa VersionNumber ? entry.version == pkg.version : entry.version in pkg.version)
+            )
+            "version `$(pkg.version)`"
+        end
+        if requested !== nothing
+            printpkgstyle(
+                ctx.io, :Warning, "`$(pkg.name)` is pinned at `v$(entry.version)`: ignoring the requested $requested. \
+                Unpin it with `free $(pkg.name)` first.", color = Base.warn_color()
+            )
+        elseif pkg.version == VersionSpec()
             println(ctx.io, "`$(pkg.name)` is pinned at `v$(entry.version)`: maintaining pinned version")
         end
         return PackageSpec(;
@@ -3057,6 +3116,7 @@ function _resolve(
     )
     usingstrategy = preserve != PRESERVE_TIERED ? " using $preserve" : ""
     printpkgstyle(io, :Resolving, "package versions$(usingstrategy)...")
+    check_workspace_sources(env)
     return try
         if preserve == PRESERVE_TIERED_INSTALLED
             tiered_resolve(env, registries, pkgs, julia_version, true; preferred_versions)
@@ -3075,9 +3135,23 @@ function _resolve(
                 printpkgstyle(io, :Warning, """The following package versions were yanked from their registry and \
                 are not resolvable:\n$yanked_str""", color = Base.warn_color())
             end
+            if !isempty(env.project.deps) && is_default_env(env.project_file)
+                printpkgstyle(
+                    io, :Tip, """The active environment is the default environment, shared by all your work. \
+                    Conflicts are less likely in a separate environment per project, holding only the packages \
+                    that project needs: see https://pkgdocs.julialang.org/v1/environments/""", color = Base.info_color()
+                )
+            end
         end
         rethrow()
     end
+end
+
+# whether `project_file` is the default `@v#.#` environment of a depot
+function is_default_env(project_file::String)
+    env_dir = dirname(project_file)
+    name = "v$(VERSION.major).$(VERSION.minor)"
+    return any(depot -> env_dir == abspath(depot, "environments", name), DEPOT_PATH)
 end
 
 function can_skip_resolve_for_add(pkg::PackageSpec, entry::Union{PackageEntry, Nothing})
@@ -3457,6 +3531,7 @@ function up(
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
         up_load_manifest_info!(pkg, entry)
     end
+    check_workspace_sources(ctx.env)
     if preserve !== nothing
         pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
     else

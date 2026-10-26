@@ -586,4 +586,24 @@ end
     end
 end
 
+@testset "workspace projects with conflicting [sources] warn (#4590)" begin
+    isolate() do
+        mktempdir() do dir
+            uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+            for (version, name) in (("1.0.0", "FooA"), ("2.0.0", "FooB"))
+                mkpath(joinpath(dir, name, "src"))
+                write(joinpath(dir, name, "Project.toml"), "name = \"Foo\"\nuuid = \"$uuid\"\nversion = \"$version\"\n")
+                write(joinpath(dir, name, "src", "Foo.jl"), "module Foo end\n")
+            end
+            ws = joinpath(dir, "root")
+            mkpath(joinpath(ws, "child"))
+            write(joinpath(ws, "Project.toml"), "[deps]\nFoo = \"$uuid\"\n\n[sources]\nFoo = {path = \"../FooA\"}\n\n[workspace]\nprojects = [\"child\"]\n")
+            write(joinpath(ws, "child", "Project.toml"), "[deps]\nFoo = \"$uuid\"\n\n[sources]\nFoo = {path = \"../../FooB\"}\n")
+            with_pkg_env(ws) do
+                @test_logs (:warn, r"conflicting `\[sources\]` for package `Foo`.*FooA.*FooB"s) Pkg.resolve(; io = devnull)
+            end
+        end
+    end
+end
+
 end # module

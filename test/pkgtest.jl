@@ -330,6 +330,24 @@ end
             @test occursin("oops", read(log_file_add, String))
         end
     end
+
+    # A dependency cycle among packages with build scripts is named in the warning (#2697)
+    isolate(loaded_depot = true) do;
+        mktempdir() do tmp
+            ua, ub = UUID("e22999b2-0d4b-4f4e-9c4a-6c1a3d7f0a01"), UUID("6c9a4949-7a0e-4a52-8c43-2f3b8d9e0b02")
+            for (name, uuid, dep, dep_uuid) in (("A", ua, "B", ub), ("B", ub, "A", ua))
+                path = joinpath(tmp, name)
+                mkpath(joinpath(path, "src"))
+                mkpath(joinpath(path, "deps"))
+                write(joinpath(path, "Project.toml"), "name = \"$name\"\nuuid = \"$uuid\"\nversion = \"0.1.0\"\n\n[deps]\n$dep = \"$dep_uuid\"\n")
+                write(joinpath(path, "src", "$name.jl"), "module $name end\n")
+                write(joinpath(path, "deps", "build.jl"), "")
+            end
+            Pkg.activate(joinpath(tmp, "env"))
+            Pkg.develop([Pkg.PackageSpec(path = joinpath(tmp, "A")), Pkg.PackageSpec(path = joinpath(tmp, "B"))]; io = devnull)
+            @test_logs (:warn, r"Dependency cycle `(A → B → A|B → A → B)`") Pkg.build(; io = devnull)
+        end
+    end
 end
 
 @testset "test: coverage" begin

@@ -136,9 +136,28 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
                 target_directory = Base.unsafe_convert(Cstring, path),
                 baseline = baseline.ptr
             )
-            LibGit2.checkout_tree(repo, tree, options = opts)
+            try
+                LibGit2.checkout_tree(repo, tree, options = opts)
+            catch err
+                err isa LibGit2.GitError && err.class == LibGit2.Error.Submodule || rethrow()
+                Pkg.Types.pkgerror(
+                    "cannot check out a git tree that contains git submodules ($(err.msg)). ",
+                    "Packages with submodules cannot be added, only developed with `Pkg.develop`. ",
+                    "To make the package addable, replace the submodules with their content (e.g. with `git subtree`) or use artifacts."
+                )
+            end
         end
     end
+end
+
+# libgit2 does not show the message the server sends with an authentication failure (#2701)
+function auth_hint(err::LibGit2.GitError)
+    auth_failed = err.code == LibGit2.Error.EAUTH ||
+        (err.class == LibGit2.Error.HTTP && occursin(r"\b40[13]\b", err.msg))
+    auth_failed || return ""
+    return "\nAuthentication failed or access was denied. Note that GitHub and other hosts do not accept \
+        account passwords for git over HTTPS: use a personal access token as the password, use an SSH URL, \
+        or set `JULIA_PKG_USE_CLI_GIT=true` to use the `git` command line client and its credential helpers."
 end
 
 function clone(io::IO, url, source_path; @nospecialize(header::Union{Nothing, AbstractString} = nothing), credentials = nothing, isbare = false, depth::Integer = 0, kwargs...)
@@ -207,7 +226,7 @@ function clone(io::IO, url, source_path; @nospecialize(header::Union{Nothing, Ab
                 (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ENOTFOUND)
             Pkg.Types.pkgerror("git repository not found at `$(url)`: ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to clone from $(url): ($(err.msg))")
+            Pkg.Types.pkgerror("failed to clone from $(url): ($(err.msg))", auth_hint(err))
         end
     finally
         Base.shred!(credentials)
@@ -282,7 +301,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, @nospecialize(remoteurl::Union{Not
         if (err.class == LibGit2.Error.Repository && err.code == LibGit2.Error.ERROR)
             Pkg.Types.pkgerror("Git repository not found at '$(remoteurl)': ($(err.msg))")
         else
-            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($(err.msg))")
+            Pkg.Types.pkgerror("failed to fetch from $(remoteurl): ($(err.msg))", auth_hint(err))
         end
     finally
         Base.shred!(credentials)
