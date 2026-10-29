@@ -11,6 +11,42 @@ using UUIDs
     @inferred f2()
 end
 
+@testset "parse_toml returns a copy of the cached file" begin
+    mktempdir() do dir
+        file = joinpath(dir, "test.toml")
+        write(
+            file, """
+            names = ["a", "b"]
+            ints = [1, 2]
+            bools = [true, false]
+            uints = [0x1, 0x2]
+            mixed = [1, "a", [2, 3]]
+            [table]
+            floats = [1.0]
+            [[tables]]
+            x = 1
+            """
+        )
+        d1 = Pkg.Types.parse_toml(file)
+        push!(d1["names"], "c")
+        push!(d1["ints"], 3)
+        push!(d1["bools"], true)
+        push!(d1["uints"], 0x03)
+        push!(d1["mixed"][3], 4)
+        push!(d1["table"]["floats"], 2.0)
+        d1["tables"][1]["x"] = 2
+        d2 = Pkg.Types.parse_toml(file)
+        @test d2["names"] == ["a", "b"]
+        @test d2["ints"] == [1, 2]
+        @test d2["bools"] == [true, false]
+        @test d2["uints"] == [0x01, 0x02]
+        @test d2["mixed"] == [1, "a", [2, 3]]
+        @test d2["table"]["floats"] == [1.0]
+        @test d2["tables"][1]["x"] == 1
+        @test d2 == Pkg.TOML.parsefile(file)
+    end
+end
+
 @testset "hashing" begin
     @test hash(Pkg.Types.Project()) == hash(Pkg.Types.Project())
     @test hash(Pkg.Types.VersionBound()) == hash(Pkg.Types.VersionBound())
