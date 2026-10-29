@@ -3372,7 +3372,7 @@ end
 
 # load version constraint
 # if version isa VersionNumber -> set tree_hash too
-up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel) = false
+up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel; fetched_branches) = false
 # Whether the `[sources]` repo of a package still describes what its manifest entry recorded.
 # A `rev` (or `subdir`) that is left out of the source is filled in by `handle_repo_add!`, so
 # only compare those when the source specifies them.
@@ -3383,7 +3383,7 @@ function source_repo_matches_entry(source_repo::GitRepo, entry::PackageEntry)
     return true
 end
 
-function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel)
+function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel; fetched_branches::Set{Tuple{String, String}})
     # With [sources], `pkg` can have a path or repo here
     entry.version !== nothing || return false # no version to set
     # `[sources]` are keyed by name, so the entry only applies to `pkg` if the project lists
@@ -3394,7 +3394,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
         # in the manifest is stale and the repo has to be re-resolved regardless of `level`, see #4157.
         pkg.repo = source_repo
         pkg.tree_hash = nothing
-        new = Types.handle_repo_add!(ctx, pkg)
+        new = Types.handle_repo_add!(ctx, pkg; fetched_branches)
         pkg.version = entry.version
         return new
     end
@@ -3411,7 +3411,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
         end
         if level == UPLEVEL_MAJOR
             # Updating a repo package is equivalent to adding it
-            new = Types.handle_repo_add!(ctx, pkg)
+            new = Types.handle_repo_add!(ctx, pkg; fetched_branches)
             pkg.version = entry.version
             if pkg.tree_hash != entry.tree_hash
                 # TODO parse find_installed and set new version
@@ -3518,12 +3518,14 @@ function up(
     requested_pkgs = pkgs
 
     new_git = Set{UUID}()
+    # Shared between the packages so that a repo branch tracked by several of them is only fetched once
+    fetched_branches = Set{Tuple{String, String}}()
     # TODO check all pkg.version == VersionSpec()
     # set version constraints according to `level`
     for pkg in pkgs
         source_path, source_repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, pkg.name)
         entry = manifest_info(ctx.env.manifest, pkg.uuid)
-        new = up_load_versions!(ctx, pkg, entry, source_path, source_repo, level)
+        new = up_load_versions!(ctx, pkg, entry, source_path, source_repo, level; fetched_branches)
         new && push!(new_git, pkg.uuid) #TODO put download + push! in utility function
     end
     # load rest of manifest data (except for version info)
