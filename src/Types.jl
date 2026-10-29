@@ -688,8 +688,11 @@ function load_workspace_sources(env::EnvCache)
     for (project_file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
         for name in keys(project.sources)
             path, repo = get_path_repo(project, project_file, env.manifest_file, name)
-            fields = (; path, url = repo.source, rev = repo.rev, subdir = repo.subdir)
-            str = join((string(k, "=", v) for (k, v) in pairs(fields) if v !== nothing), ",")
+            parts = String[]
+            for (k, v) in (("path", path), ("url", repo.source), ("rev", repo.rev), ("subdir", repo.subdir))
+                v === nothing || push!(parts, string(k, "=", v))
+            end
+            str = join(parts, ",")
             push!(get!(Set{String}, sources, name), str)
         end
     end
