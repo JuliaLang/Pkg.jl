@@ -2132,10 +2132,10 @@ end
 # dependency must be able to initialize before its consumer's hook runs.
 function selector_levels(env::EnvCache, pkg_info::Vector{ArtifactPackageInfo})
     levels = Vector{ArtifactPackageInfo}[]
-    selector_pkg_info = Dict(info.uuid => info for info in pkg_info if info.has_selector)
+    selector_pkg_info = Dict{Union{UUID, Nothing}, ArtifactPackageInfo}(info.uuid => info for info in pkg_info if info.has_selector)
     isempty(selector_pkg_info) && return levels
 
-    selector_uuids = Set(uuid for uuid in keys(selector_pkg_info) if uuid !== nothing)
+    selector_uuids = Set{UUID}(uuid for uuid in keys(selector_pkg_info) if uuid !== nothing)
     selector_dependencies = Dict{Union{UUID, Nothing}, Set{UUID}}()
     for uuid in keys(selector_pkg_info)
         roots = if uuid === nothing || Types.is_project_uuid(env, uuid)
@@ -4866,7 +4866,7 @@ function is_manifest_current(env::EnvCache)
     if haskey(env.manifest.other, "project_hash")
         recorded_hash = env.manifest.other["project_hash"]
         current_hash = Types.workspace_resolve_hash(env)
-        return recorded_hash == current_hash
+        return recorded_hash isa String && recorded_hash == current_hash
     else
         # Manifest doesn't have a hash of the source Project recorded
         return nothing
