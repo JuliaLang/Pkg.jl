@@ -244,6 +244,42 @@ end
     err = Pkg.Types.PkgError("foobar")
     @test occursin("Pkg.Types.PkgError(\"foobar\")", sprint(show, err))
     @test sprint(showerror, err) == "foobar"
+    @test_throws Pkg.Types.PkgError("foobarbaz") Pkg.Types.pkgerror("foo", "bar", "baz")
+end
+
+@testset "PackageSpec printing" begin
+    p = Pkg.Types.PackageSpec(
+        name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-23690620f79a"), version = v"0.5.3",
+        tree_hash = Base.SHA1("46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"), pinned = true
+    )
+    @test sprint(show, p) == """
+        PackageSpec(
+          name = Example
+          uuid = 7876af07-990d-54b4-ab0e-23690620f79a
+          tree_hash = 46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc
+          pinned = true
+          version = v"0.5.3"
+        )"""
+    @test sprint(show, Pkg.Types.PackageSpec(name = "A", version = "1.2")) == """
+        PackageSpec(
+          name = A
+          version = "1.2"
+        )"""
+    @test sprint(show, Pkg.Types.PackageSpec(name = "A", url = "https://x/A.jl", rev = "main")) == """
+        PackageSpec(
+          name = A
+          url = https://x/A.jl
+          rev = main
+          version = *
+        )"""
+    T = Pkg.Types
+    @test sprint(show, T.PackageSpec(name = "A", version = nothing)) == "PackageSpec(\n  name = A\n  version = nothing\n)"
+    @test sprint(show, T.PackageSpec(name = "A", version = T.UPLEVEL_MINOR)) ==
+        "PackageSpec(\n  name = A\n  version = $(repr(T.UPLEVEL_MINOR))\n)"
+    @test sprint(show, T.PackageSpec(name = "A", version = T.VersionSpec("1.2-1.5"))) ==
+        "PackageSpec(\n  name = A\n  version = VersionSpec(\"1.2 - 1.5\")\n)"
+    @test sprint(show, T.PackageSpec(name = "A", repo = T.GitRepo(source = "https://x/A.jl", rev = "v1", subdir = "sub"))) ==
+        "PackageSpec(\n  name = A\n  version = *\n  repo/source = \"https://x/A.jl\"\n  repo/rev = v1\n  repo/subdir = sub\n)"
 end
 
 @testset "range_compressed_versionspec" begin

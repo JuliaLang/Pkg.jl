@@ -65,7 +65,14 @@ parse_toml(toml_file::AbstractString) =
 struct PkgError <: Exception
     msg::String
 end
-pkgerror(msg::String...) = throw(PkgError(join(msg)))
+# Not `join(msg)`: with a `Vararg` signature, `join` of the tuple is a dynamic call
+function pkgerror(msg::String...)
+    io = IOBuffer()
+    for m in msg
+        print(io, m)
+    end
+    throw(PkgError(String(take!(io))))
+end
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 
 ###############
@@ -144,17 +151,19 @@ has_uuid(pkg::PackageSpec) = pkg.uuid !== nothing
 isresolved(pkg::PackageSpec) = pkg.uuid !== nothing && pkg.name !== nothing
 
 function Base.show(io::IO, pkg::PackageSpec)
-    vstr = repr(pkg.version)
-    f = Pair{String, Any}[]
+    # A `String` version apart, so that the `repr` of each type in the field's `Union` is static
+    version = pkg.version
+    vstr = version isa String ? repr(version) : repr(version)
+    f = Pair{String, String}[]
 
     pkg.name !== nothing && push!(f, "name" => pkg.name)
-    pkg.uuid !== nothing && push!(f, "uuid" => pkg.uuid)
-    pkg.tree_hash !== nothing && push!(f, "tree_hash" => pkg.tree_hash)
+    pkg.uuid !== nothing && push!(f, "uuid" => string(pkg.uuid))
+    pkg.tree_hash !== nothing && push!(f, "tree_hash" => string(pkg.tree_hash))
     pkg.path !== nothing && push!(f, "path" => pkg.path)
     pkg.url !== nothing && push!(f, "url" => pkg.url)
     pkg.rev !== nothing && push!(f, "rev" => pkg.rev)
     pkg.subdir !== nothing && push!(f, "subdir" => pkg.subdir)
-    pkg.pinned && push!(f, "pinned" => pkg.pinned)
+    pkg.pinned && push!(f, "pinned" => string(pkg.pinned))
     push!(f, "version" => (vstr == "VersionSpec(\"*\")" ? "*" : vstr))
     if pkg.repo.source !== nothing
         push!(f, "repo/source" => string("\"", pkg.repo.source::String, "\""))
@@ -167,7 +176,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
-        print(io, "  ", field, " = ", string(value)::String, "\n")
+        print(io, "  ", field, " = ", value, "\n")
     end
     return print(io, ")")
 end
