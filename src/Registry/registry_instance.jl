@@ -3,6 +3,7 @@ using TOML
 using Dates
 using Tar
 import Mmap
+import SHA
 using ..Versions: VersionSpec, VersionRange
 
 # The content of a registry is assumed to be constant during the
@@ -375,6 +376,54 @@ function uncompress_registry(compressed_tar::AbstractString)
     return data
 end
 
+function git_blob_hash(content::String)
+    ctx = SHA.SHA1_CTX()
+    SHA.update!(ctx, codeunits("blob $(sizeof(content))\0"))
+    SHA.update!(ctx, codeunits(content))
+    return SHA.digest!(ctx)
+end
+
+# Like `uncompress_registry`, but also computes the git tree hash of the tarball as
+# `Tar.tree_hash` does, in the same pass. Returns the files and the hash, or `nothing`
+# instead of the hash if the tarball has entries other than files and directories.
+function uncompress_registry_tree_hash(compressed_tar::AbstractString)
+    data = Dict{String, String}()
+    buf = Vector{UInt8}(undef, Tar.DEFAULT_BUFFER_SIZE)
+    io = IOBuffer()
+    tree = Tar.GitTree()
+    supported = Ref(true)
+    open(get_extract_cmd(compressed_tar)) do tar
+        read_tarball_simple(x -> true, tar; buf = buf) do hdr
+            Tar.read_data(tar, io; size = hdr.size, buf = buf)
+            content = data[hdr.path] = String(take!(io))
+            # mirrors `Tar.git_tree_hash`
+            parts = filter!(part -> !isempty(part) && part != ".", split(hdr.path, '/'))
+            isempty(parts) && return
+            name = pop!(parts)
+            node = tree
+            for part in parts
+                child = get(node.children, part, nothing)
+                if !(child isa Tar.GitTree)
+                    child = node.children[part] = Tar.GitTree()
+                end
+                node = child
+            end
+            if hdr.type == :directory
+                if !(get(node.children, name, nothing) isa Tar.GitTree)
+                    node.children[name] = Tar.GitTree()
+                end
+            elseif hdr.type == :file
+                mode = iszero(hdr.mode & 0o100) ? "100644" : "100755"
+                node.children[name] = Tar.GitLeaf(mode, git_blob_hash(content))
+            else
+                supported[] = false
+            end
+        end
+    end
+    supported[] || return data, nothing
+    return data, SHA1(Tar.hash_git_tree(tree, SHA.SHA1_CTX)[end])
+end
+
 
 ###
 ### On-disk cache of a compressed (tarball) registry
@@ -524,38 +573,42 @@ function write_registry_cache(io::IO, files::Dict{String, String}, tree_hash::SH
     d = Base.TOML.parse(Base.TOML.Parser{Dates}(files["Registry.toml"]; filepath = "Registry.toml"))
     pkgs = d["packages"]::Dict{String, Any}
     npkgs = length(pkgs)
-    blob = IOBuffer()
+    # The blob holds (almost) all files, so reserve their total size up front.
+    blob = IOBuffer(; sizehint = sum(sizeof, values(files); init = 0))
     blob_start = CACHE_HEADER_SIZE + RECORD_SIZE * npkgs
-    # returns the (offset, length) pair to be written for `str`
+    # Everything after the first 36 bytes of the header is a sequence of UInt32s
+    words = UInt32[]
+    sizehint!(words, (blob_start - 36) ÷ 4)
+    # appends the (offset, length) pair for `str` to `words`
     function put!(str::Union{String, Nothing})
-        str === nothing && return (UInt32(0), CACHE_MISSING)
-        off = blob_start + position(blob)
-        write(blob, str)
-        return (UInt32(off), UInt32(sizeof(str)))
+        if str === nothing
+            push!(words, UInt32(0), CACHE_MISSING)
+        else
+            push!(words, UInt32(blob_start + position(blob)), UInt32(sizeof(str)))
+            write(blob, str)
+        end
+        return
     end
-    header = IOBuffer()
-    write(header, CACHE_MAGIC, CACHE_VERSION, UInt32(npkgs), Ref(tree_hash.bytes))
     for key in ("name", "uuid", "repo", "description")
-        off, len = put!(get(d, key, nothing)::Union{String, Nothing})
-        write(header, off, len)
+        put!(get(d, key, nothing)::Union{String, Nothing})
     end
-    @assert position(header) == CACHE_HEADER_SIZE
     for (uuid, info) in pkgs
         info::Dict{String, Any}
         name = info["name"]::String
         path = info["path"]::String
-        write(header, UUID(uuid::String).value)
-        for str in (name, path)
-            off, len = put!(str)
-            write(header, off, len)
+        uuid_value = UUID(uuid::String).value
+        for i in 0:3
+            push!(words, (uuid_value >> (32 * i)) % UInt32)
         end
+        put!(name)
+        put!(path)
         for file in PKG_FILES
-            off, len = put!(get(files, path * "/" * file, nothing))
-            write(header, off, len)
+            put!(get(files, path * "/" * file, nothing))
         end
     end
-    @assert position(header) == blob_start
-    write(io, take!(header))
+    @assert 36 + 4 * length(words) == blob_start
+    write(io, CACHE_MAGIC, CACHE_VERSION, UInt32(npkgs), Ref(tree_hash.bytes))
+    write(io, words)
     write(io, take!(blob))
     return
 end
@@ -571,8 +624,10 @@ function fsync_registry_cache(io::IOStream)
     return
 end
 
-function build_registry_cache(compressed_tar::AbstractString, tree_hash::SHA1, cache_path::AbstractString)
-    files = uncompress_registry(compressed_tar)
+function build_registry_cache(
+        compressed_tar::AbstractString, tree_hash::SHA1, cache_path::AbstractString;
+        files::Dict{String, String} = uncompress_registry(compressed_tar)
+    )
     cache_dir = dirname(cache_path)
     mkpath(cache_dir)
     tmp = cache_path * ".tmp-$(getpid())-$(time_ns())"
@@ -621,8 +676,12 @@ function remove_registry_cache(compressed_tar::AbstractString)
 end
 
 # Returns a `RegistryCache` for the tarball, building it if necessary, or
-# `nothing` if the cache cannot be created (e.g. read-only depot).
-function load_or_build_registry_cache(compressed_tar::AbstractString, tree_hash::SHA1)
+# `nothing` if the cache cannot be created (e.g. read-only depot). `files` are
+# the contents of the tarball, if the caller has already read them.
+function load_or_build_registry_cache(
+        compressed_tar::AbstractString, tree_hash::SHA1;
+        files::Union{Dict{String, String}, Nothing} = nothing
+    )
     registry_cache_enabled() || return nothing
     cache_path = registry_cache_path(compressed_tar, tree_hash)
     cache = load_registry_cache(cache_path, tree_hash)
@@ -638,7 +697,11 @@ function load_or_build_registry_cache(compressed_tar::AbstractString, tree_hash:
             # Invalid caches must be removed because the name is content-addressed and
             # would otherwise remain broken across Julia sessions.
             Base.rm(cache_path; force = true)
-            build_registry_cache(compressed_tar, tree_hash, cache_path)
+            if files === nothing
+                build_registry_cache(compressed_tar, tree_hash, cache_path)
+            else
+                build_registry_cache(compressed_tar, tree_hash, cache_path; files)
+            end
             return load_registry_cache(cache_path, tree_hash)
         end
     catch err
