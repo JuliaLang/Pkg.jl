@@ -123,6 +123,7 @@ function read_apps(apps::Dict)
             app["julia_command"]::String,
             submodule,
             julia_flags,
+            get(app, "build", nothing)::Union{String, Nothing},
             app
         )
         appinfos[appinfo.name] = appinfo
@@ -474,6 +475,9 @@ function destructure(manifest::Manifest)::Dict
                 end
                 if !isempty(appinfo.julia_flags)
                     app_dict["julia_flags"] = appinfo.julia_flags
+                end
+                if appinfo.build !== nothing
+                    app_dict["build"] = appinfo.build
                 end
                 new_entry["apps"][appname] = app_dict
             end

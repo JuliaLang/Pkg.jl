@@ -349,7 +349,7 @@ using Test
                 mkpath(mock_dir)
                 mock_julia = joinpath(mock_dir, "julia.bat")
                 write(mock_julia, "@echo off\r\necho MOCK_JULIA_EXECUTED %*\r\n")
-                app = Pkg.Types.AppInfo("spacequote", nothing, nothing, String[], Dict{String, Any}())
+                app = Pkg.Types.AppInfo("spacequote", nothing, nothing, String[], nothing, Dict{String, Any}())
                 Pkg.Apps.generate_shim("SpaceQuote", app, tmpdir, mock_julia)
                 shim = joinpath(first(DEPOT_PATH), "bin", "spacequote.bat")
                 @test isfile(shim)
@@ -397,6 +397,60 @@ using Test
         @test entry.tree_hash !== nothing
         @test entry.version > v"1.5.1"
         @test haskey(entry.apps, "runic")
+    end
+
+    @testset "trimmed apps" begin
+        mktempdir() do tmpdir
+            for build in ("true", "\"/abs\"", "\"../up\"")
+                write(joinpath(tmpdir, "Project.toml"), "name = \"Bad\"\n[apps]\nbad = { build = $build }\n")
+                @test_throws Pkg.Types.PkgError Pkg.Types.read_project(joinpath(tmpdir, "Project.toml"))
+            end
+        end
+
+        # Without a build the shim runs the app with julia; with one it runs the executable
+        isolate(loaded_depot = true) do
+            mktempdir() do tmpdir
+                sep = Sys.iswindows() ? ';' : ':'
+                path = git_init_package(tmpdir, joinpath(@__DIR__, "test_packages", "TrimApp.jl"))
+                withenv("JULIA_PKG_APP_TRIM" => "false") do
+                    Pkg.Apps.add(path = path)
+                end
+                exe = Pkg.Apps.app_exe_path("TrimApp", "trimapp")
+                @test !isfile(exe)
+                manifest = Pkg.Types.read_manifest(Pkg.Apps.app_manifest_file())
+                @test only(values(manifest.deps)).apps["trimapp"].build == "build"
+                exename = Sys.iswindows() ? "trimapp.bat" : "trimapp"
+                withenv("PATH" => string(joinpath(first(DEPOT_PATH), "bin"), sep, ENV["PATH"])) do
+                    @test read(`$exename x`, String) == "trimapp x\n"
+                    if !Sys.iswindows()
+                        mkpath(dirname(exe))
+                        write(exe, "#!/bin/sh\necho MOCK_TRIMMED \"\$@\"\n")
+                        chmod(exe, 0o755)
+                        @test read(`$exename a b`, String) == "MOCK_TRIMMED a b\n"
+                        io = IOBuffer()
+                        Pkg.Apps.status(; io)
+                        @test contains(String(take!(io)), "(trimmed)")
+                    end
+                    Pkg.Apps.rm("trimapp")
+                    @test Sys.which(exename) === nothing
+                    @test !isfile(exe)
+                end
+            end
+        end
+
+        # A real build needs JuliaC from the registry and a C compiler, so it is opt-in
+        if get(ENV, "JULIA_PKG_TEST_APP_TRIM", "false") == "true"
+            isolate(loaded_depot = false) do
+                mktempdir() do tmpdir
+                    path = git_init_package(tmpdir, joinpath(@__DIR__, "test_packages", "TrimApp.jl"))
+                    Pkg.Apps.add(path = path)
+                    exe = Pkg.Apps.app_exe_path("TrimApp", "trimapp")
+                    @test isfile(exe)
+                    @test read(`$exe y`, String) == "trimapp y\n"
+                    @test read(`$(Pkg.Apps.shim_path("trimapp")) y`, String) == "trimapp y\n"
+                end
+            end
+        end
     end
 end
 
