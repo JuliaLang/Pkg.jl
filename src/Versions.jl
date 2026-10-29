@@ -460,11 +460,11 @@ function hyphen_interval(m::RegexMatch)
 end
 
 const version = "v?([0-9]+?)(?:\\.([0-9]+?))?(?:\\.([0-9]+?))?"
-const ver_regs =
-    Pair{Regex, Any}[
+# A tuple, so that the call to each interval function in `semver_spec` is inferred.
+const ver_regs = (
     Regex("^([~^]?)?$version\$") => semver_interval, # 0.5 ^0.4 ~0.3.2
     Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$") => inequality_interval, # < 0.2 >= 0.5,2
     Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
-]
+)
 
 end
