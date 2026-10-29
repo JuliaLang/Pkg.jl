@@ -1053,14 +1053,15 @@ end
 # compat of the project(s): say which files declare compat for the package,
 # since the intersection alone does not tell which entry to change.
 function compat_conflict_message(env::EnvCache, pkg::PackageSpec, compat::VersionSpec)
+    origin = version_origin(env, pkg)
     if isempty(env.workspace)
-        msg = "empty intersection between $(pkg.name)@$(pkg.version) and project compatibility $(compat)"
+        msg = "empty intersection between $(pkg.name)@$(pkg.version)$(origin) and project compatibility $(compat)"
         str = get_compat_str(env.project, pkg.name)
         str === nothing && return msg
         source = entry_source(env.project_file, toml_entry_lines(env.project_file), ("compat",), pkg.name)
         return msg * "\nThe project has a compat entry for $(pkg.name):\n * $source: $(pkg.name) = $(repr(str))"
     end
-    msg = "empty intersection between $(pkg.name)@$(pkg.version) and workspace compatibility $(compat)\n"
+    msg = "empty intersection between $(pkg.name)@$(pkg.version)$(origin) and workspace compatibility $(compat)\n"
     msg *= "The following workspace projects have compat entries for $(pkg.name):"
     for (file, project) in workspace_project_files(env)
         str = get_compat_str(project, pkg.name)
@@ -1068,6 +1069,22 @@ function compat_conflict_message(env::EnvCache, pkg::PackageSpec, compat::Versio
         msg *= "\n * $file: $(pkg.name) = $(repr(str))"
     end
     return msg
+end
+
+# Where the version of `pkg` that is checked against compat comes from
+function version_origin(env::EnvCache, pkg::PackageSpec)
+    is_tracking_path(pkg) && return " (version of the developed package at $(pathrepr(pkg.path)))"
+    is_tracking_repo(pkg) && return " (version of the package from $(pkg.repo.source))"
+    entry = manifest_info(env.manifest, pkg.uuid)
+    recorded = entry === nothing ? nothing : entry.version
+    pkg.version == VersionSpec() && return ""
+    if pkg.version isa VersionNumber
+        recorded == pkg.version || return ""
+        return entry.pinned ? " (pinned in the manifest)" : " (recorded in the manifest)"
+    elseif recorded !== nothing && pkg.version == Types.semver_spec("$(recorded.major).$(recorded.minor).$(recorded.patch)")
+        return " (compatible with v$(recorded) recorded in the manifest)"
+    end
+    return " (requested)"
 end
 
 # Which resolver backend to use: the SAT-based resolver from Resolver.jl
@@ -4286,7 +4303,14 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
             printstyled(io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_magenta)
         end
     else
-        printstyled(io, "~ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_yellow)
+        old_str, new_str = stat_rep(old), stat_rep(new; name = false)
+        # e.g. a tracked branch that moved: show the tree hashes so the change is visible
+        if stat_rep(old; name = false) == new_str && old.tree_hash !== nothing &&
+                new.tree_hash !== nothing && old.tree_hash != new.tree_hash
+            old_str *= " (tree $(string(old.tree_hash)[1:7]))"
+            new_str *= " (tree $(string(new.tree_hash)[1:7]))"
+        end
+        printstyled(io, "~ $old_str ⇒ $new_str"; color = :light_yellow)
     end
 end
 
@@ -4406,6 +4430,18 @@ function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manife
     # merge old and new into single array
     old_index = index_by_uuid(old)
     new_index = index_by_uuid(new)
+    if manifest && !workspace
+        # In a workspace, an entry can enter or leave the set reachable from the active
+        # project while staying in the shared manifest; compare against that entry so it
+        # is not shown as added/removed.
+        for (index, other, env) in ((old_index, new_index, old_env), (new_index, old_index, new_env))
+            missing_uuids = setdiff(keys(other), keys(index))
+            isempty(missing_uuids) && continue
+            for pkg in load_all_deps(env)
+                pkg.uuid in missing_uuids && get!(index, pkg.uuid, pkg)
+            end
+        end
+    end
     all_uuids = union(T[pkg.uuid for pkg in old], T[pkg.uuid for pkg in new])
     return Tuple{T, S, S}[(uuid, get(old_index, uuid, nothing), get(new_index, uuid, nothing))::Tuple{T, S, S} for uuid in all_uuids]
 end
@@ -4844,6 +4880,13 @@ function status(
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
         print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, hidden_upgrades_info, show_usagetips)
+    end
+    manifest_julia = env.manifest.julia_version
+    if !diff && !isempty(env.manifest.deps) && manifest_julia !== nothing && Base.thisminor(manifest_julia) != Base.thisminor(VERSION)
+        printpkgstyle(
+            io, :Warning, "The manifest was resolved with julia v$(manifest_julia), which differs from the running julia v$(VERSION).",
+            ignore_indent; color = Base.warn_color()
+        )
     end
     return if is_manifest_current(env) === false
         tip = if show_usagetips

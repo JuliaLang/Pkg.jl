@@ -48,7 +48,10 @@ end
 ResolverTimeoutError(msg::AbstractString) = ResolverTimeoutError(msg, nothing)
 
 function Base.showerror(io::IO, pkgerr::ResolverError)
-    print(io, pkgerr.msg)
+    # the maxsum log is colored when built if `stderr` has color; don't leak the
+    # escape codes into an `io` without color
+    msg = get(io, :color, false) ? pkgerr.msg : replace(pkgerr.msg, r"\e\[[0-9;]*m" => "")
+    print(io, msg)
     return if pkgerr.ex !== nothing
         pkgex = pkgerr.ex
         if isa(pkgex, CompositeException)

@@ -950,7 +950,10 @@ function verify_compressed_registry_toml(path::String)
     return true
 end
 
-function reachable_registries(; depots::Union{String, Vector{String}} = Base.DEPOT_PATH)
+# Only the first copy of a registry (in `DEPOT_PATH` order) is used; other copies with
+# the same UUID are usually stale and would otherwise leak old compat and yanked
+# versions into resolution (#3463). `all_copies = true` also returns those.
+function reachable_registries(; depots::Union{String, Vector{String}} = Base.DEPOT_PATH, all_copies::Bool = false)
     # collect registries
     if depots isa String
         depots = [depots]
@@ -984,6 +987,7 @@ function reachable_registries(; depots::Union{String, Vector{String}} = Base.DEP
             end
         end
     end
+    all_copies || unique!(r -> r.uuid, registries)
     return registries
 end
 

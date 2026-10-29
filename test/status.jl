@@ -578,6 +578,43 @@ end
     end
 end
 
+@testset "diff shows tree hash when a tracked branch moves (#274)" begin
+    isolate(loaded_depot = true) do
+        cd_tempdir() do dir
+            Pkg.generate("Foo"; io = devnull)
+            git_init_and_commit("Foo")
+            Pkg.activate(temp = true)
+            Pkg.add(url = joinpath(dir, "Foo"); io = devnull)
+            old_hash = string(Pkg.dependencies()[Pkg.project().dependencies["Foo"]].tree_hash)
+            write(joinpath("Foo", "src", "Foo.jl"), "module Foo\nx = 1\nend\n")
+            git_init_and_commit("Foo"; msg = "second")
+            io = IOBuffer()
+            Pkg.update(; io)
+            new_hash = string(Pkg.dependencies()[Pkg.project().dependencies["Foo"]].tree_hash)
+            @test old_hash != new_hash
+            str = String(take!(io))
+            @test occursin("(tree $(old_hash[1:7])) ⇒ ", str)
+            @test occursin("(tree $(new_hash[1:7]))", str)
+        end
+    end
+end
+
+@testset "status shows a manifest julia version from another minor version (#4059)" begin
+    isolate(loaded_depot = true) do
+        Pkg.activate(temp = true)
+        Pkg.add("Example"; io = devnull)
+        io = IOBuffer()
+        Pkg.status(; io)
+        @test !occursin("The manifest was resolved with julia", String(take!(io)))
+        manifest_file = joinpath(dirname(Pkg.project().path), "Manifest.toml")
+        manifest = Pkg.Types.read_manifest(manifest_file)
+        manifest.julia_version = v"1.6.7"
+        Pkg.Types.write_manifest(manifest, manifest_file)
+        Pkg.status(; io)
+        @test occursin("The manifest was resolved with julia v1.6.7", String(take!(io)))
+    end
+end
+
 @testset "status showing incompatible loaded deps" begin
     isolate(loaded_depot = true) do
         cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
