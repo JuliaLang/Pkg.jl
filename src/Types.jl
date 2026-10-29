@@ -36,10 +36,10 @@ export UUID, SHA1, VersionRange, VersionSpec,
 include("HistoricalStdlibs.jl")
 
 deepcopy_toml(x) = x
-function deepcopy_toml(@nospecialize(x::Vector))
+function deepcopy_toml(x::Vector{Any})
     d = similar(x)
     for (i, v) in enumerate(x)
-        d[i] = deepcopy_toml(v)
+        d[i] = deepcopy_toml_value(v)
     end
     return d
 end
@@ -47,9 +47,22 @@ function deepcopy_toml(x::Dict{String, Any})
     d = Dict{String, Any}()
     sizehint!(d, length(x))
     for (k, v) in x
-        d[k] = deepcopy_toml(v)
+        d[k] = deepcopy_toml_value(v)
     end
     return d
+end
+# Copy a value of a parsed table or array. The TOML parser makes tables as `Dict{String, Any}`
+# and arrays as `Vector{Any}`, or as a typed vector when all elements are strings, booleans or
+# numbers; checking for these types makes the calls static.
+function deepcopy_toml_value(@nospecialize(v))
+    v isa Dict{String, Any} && return deepcopy_toml(v)
+    v isa Vector{Any} && return deepcopy_toml(v)
+    v isa Vector{String} && return copy(v)
+    v isa Vector{Bool} && return copy(v)
+    v isa Vector{Int64} && return copy(v)
+    v isa Vector{UInt64} && return copy(v)
+    v isa Vector{Float64} && return copy(v)
+    return v
 end
 
 # See loading.jl
@@ -553,8 +566,8 @@ function load_stdlib()
             push!(UPGRADABLE_STDLIBS_UUIDS, UUID(uuid))
             continue
         end
-        deps = UUID.(values(get(project, "deps", Dict{String, Any}())))
-        weakdeps = UUID.(values(get(project, "weakdeps", Dict{String, Any}())))
+        deps = UUID[UUID(dep::String) for dep in values(get(project, "deps", Dict{String, Any}())::Dict{String, Any})]
+        weakdeps = UUID[UUID(dep::String) for dep in values(get(project, "weakdeps", Dict{String, Any}())::Dict{String, Any})]
         stdlib[UUID(uuid)] = StdlibInfo(name, Base.UUID(uuid), version, deps, weakdeps)
     end
     return stdlib
