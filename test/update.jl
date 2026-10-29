@@ -527,6 +527,45 @@ end
         Pkg.develop(url = "https://github.com/00vareladavid/Unregistered.jl")
         @test_throws PkgError("unable to free unregistered package `Unregistered [dcb67f36]`") Pkg.free("Unregistered")
     end
+    # free updates the registry, the package may have been registered since the last update (#3546)
+    temp_pkg_dir(linked_reg = false) do project_path
+        withenv("JULIA_PKG_SERVER" => "") do
+            mktempdir() do tmp
+                pkg_uuid = uuid4()
+                pkg_path = joinpath(tmp, "NewPkg")
+                mkpath(joinpath(pkg_path, "src"))
+                write(joinpath(pkg_path, "Project.toml"), "name = \"NewPkg\"\nuuid = \"$pkg_uuid\"\nversion = \"0.1.0\"\n")
+                write(joinpath(pkg_path, "src", "NewPkg.jl"), "module NewPkg end")
+                git_init_and_commit(pkg_path)
+                tree = LibGit2.with(LibGit2.GitRepo(pkg_path)) do repo
+                    string(LibGit2.GitHash(LibGit2.peel(LibGit2.GitTree, LibGit2.head(repo))))
+                end
+                reg_path = joinpath(tmp, "NewReg")
+                mkpath(reg_path)
+                registry_toml = "name = \"NewReg\"\nuuid = \"$(uuid4())\"\nrepo = $(repr(reg_path))\n\n[packages]\n"
+                write(joinpath(reg_path, "Registry.toml"), registry_toml)
+                git_init_and_commit(reg_path)
+                LibGit2.close(LibGit2.clone(reg_path, joinpath(DEPOT_PATH[1], "registries", "NewReg")))
+
+                Pkg.activate(project_path)
+                Pkg.develop(path = pkg_path)
+
+                # NewPkg gets registered
+                write(joinpath(reg_path, "Registry.toml"), registry_toml * "$pkg_uuid = { name = \"NewPkg\", path = \"NewPkg\" }\n")
+                mkpath(joinpath(reg_path, "NewPkg"))
+                write(joinpath(reg_path, "NewPkg", "Package.toml"), "name = \"NewPkg\"\nuuid = \"$pkg_uuid\"\nrepo = $(repr(pkg_path))\n")
+                write(joinpath(reg_path, "NewPkg", "Versions.toml"), "[\"0.1.0\"]\ngit-tree-sha1 = \"$tree\"\n")
+                git_init_and_commit(reg_path; msg = "register NewPkg")
+
+                Pkg.UPDATED_REGISTRY_THIS_SESSION[] = false # as in a new session
+                Pkg.free("NewPkg")
+                Pkg.dependencies(pkg_uuid) do pkg
+                    @test pkg.is_tracking_registry
+                    @test pkg.version == v"0.1.0"
+                end
+            end
+        end
+    end
 end
 
 @testset "resolve" begin

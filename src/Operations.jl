@@ -1490,6 +1490,21 @@ function deps_graph(
                     # Installed versions of this package, looked up once per package rather than
                     # probing the depots for every version
                     installed_slugs = installed_only ? installed_version_slugs(pkg.name) : nothing
+                    # A package in the sysimage only allows its loaded version, or versions
+                    # registered with the same tree as it (e.g. a re-registered JLL, #4131)
+                    sysimage_version, sysimage_tree = nothing, nothing
+                    if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
+                        pkgid = Base.PkgId(uuid, pkg.name)
+                        if Base.in_sysimage(pkgid)
+                            pkgorigin = get(Base.pkgorigins, pkgid, nothing)
+                            if pkgorigin !== nothing && pkgorigin.version !== nothing
+                                sysimage_version = pkgorigin.version
+                                if haskey(info.version_info, sysimage_version)
+                                    sysimage_tree = Registry.treehash(info, sysimage_version)
+                                end
+                            end
+                        end
+                    end
                     for v in keys(info.version_info)
                         # Filter yanked and if we are in offline mode also downloaded packages
                         Registry.isyanked(info, v) && continue
@@ -1504,16 +1519,9 @@ function deps_graph(
                         end
 
                         # Skip package version that are not the same as external packages in sysimage
-                        if PKGORIGIN_HAVE_VERSION && RESPECT_SYSIMAGE_VERSIONS[] && julia_version == VERSION
-                            pkgid = Base.PkgId(uuid, pkg.name)
-                            if Base.in_sysimage(pkgid)
-                                pkgorigin = get(Base.pkgorigins, pkgid, nothing)
-                                if pkgorigin !== nothing && pkgorigin.version !== nothing
-                                    if v != pkgorigin.version
-                                        continue
-                                    end
-                                end
-                            end
+                        if sysimage_version !== nothing && v != sysimage_version &&
+                                (sysimage_tree === nothing || Registry.treehash(info, v) != sysimage_tree)
+                            continue
                         end
 
                         push!(reg_valid_versions, v)
@@ -2224,8 +2232,12 @@ function download_artifacts(
         init = CollectedArtifact[]
     )
     levels = selector_levels(env, pkg_info)
-    # Check what registries the current pkg server tracks, but don't ask when there is nothing that could be served
-    server_registry_info = if isempty(static_artifacts) && isempty(levels)
+    # Check what registries the current pkg server tracks, but don't ask when there is nothing that could be served,
+    # e.g. in offline mode with all artifacts installed (#4580)
+    all_installed = all(static_artifacts) do (_, artifacts, _)
+        all(meta -> artifact_exists(SHA1(meta["git-tree-sha1"]::String)), values(artifacts))
+    end
+    server_registry_info = if all_installed && isempty(levels)
         nothing
     else
         Registry.pkg_server_registry_info()
@@ -3828,9 +3840,22 @@ function drop_external_path_sources!(project::Project, pkg_root::String)
     return project
 end
 
+# Base maps the names in a preferences file to UUIDs only through the project, so list the
+# packages that are only in the manifest as extras for their preferences to apply (#3389)
+function add_preference_extras!(env::EnvCache, preferences::Dict{String, Any})
+    project = env.project
+    for name in keys(preferences)
+        (haskey(project.deps, name) || haskey(project.weakdeps, name) || haskey(project.extras, name)) && continue
+        uuids = [uuid for (uuid, entry) in env.manifest if entry.name == name]
+        length(uuids) == 1 && (project.extras[name] = only(uuids))
+    end
+    return
+end
+
 function sandbox_with_temp_env(
         fn::Function, ctx::Context, target::PackageSpec, tmp::String,
         has_sandbox_project::Bool, sandbox_env::EnvCache;
+        preferences::Union{Nothing, Dict{String, Any}},
         installed_root::Union{Nothing, String},
         force_latest_compatible_version::Bool,
         allow_earlier_backwards_compatible_versions::Bool,
@@ -3876,6 +3901,7 @@ function sandbox_with_temp_env(
         end
 
         reset_all_compat!(temp_ctx.env.project)
+        preferences === nothing || add_preference_extras!(temp_ctx.env, preferences)
         write_env(temp_ctx.env, update_undo = false)
 
         # Run sandboxed code
@@ -3941,6 +3967,10 @@ function sandbox(
             entry_working = get(working_manifest, uuid, nothing)
             if entry_working === nothing
                 working_manifest[uuid] = entry
+            elseif uuid == target.uuid
+                # Always test the package as it is in the parent environment, e.g. a dev'd
+                # package rather than the version recorded in a stale test manifest (#3991)
+                continue
             else # Check for collision between the sandbox manifest and the "parent" manifest
                 if entry_working != entry && (ctx.env.pkg !== nothing && ctx.env.pkg.uuid != uuid)
                     @warn "Entry in manifest at \"$sandbox_path\" for package \"$(entry_working.name)\" differs from that in \"$(ctx.env.manifest_file)\""
@@ -3961,6 +3991,7 @@ function sandbox(
         # sandbox
         sandbox_with_temp_env(
             fn, ctx, target, tmp, has_sandbox_project, sandbox_env;
+            preferences,
             installed_root,
             force_latest_compatible_version,
             allow_earlier_backwards_compatible_versions,

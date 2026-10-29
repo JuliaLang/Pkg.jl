@@ -45,6 +45,38 @@ test_test(fn; kwargs...) = Pkg.test(; test_fn = fn, kwargs...)
             end
         end
     end
+    # the tested package is the one in the active environment, not one in a stale test manifest (#3991)
+    temp_pkg_dir() do project_path
+        mktempdir() do tmp
+            uuid = uuid4()
+            function write_pkg(dir, version)
+                mkpath(joinpath(dir, "src"))
+                mkpath(joinpath(dir, "test"))
+                write(joinpath(dir, "Project.toml"), "name = \"DevPkg\"\nuuid = \"$uuid\"\nversion = \"$version\"\n")
+                write(joinpath(dir, "src", "DevPkg.jl"), "module DevPkg end")
+                touch(joinpath(dir, "test", "runtests.jl"))
+                return dir
+            end
+            dev = write_pkg(joinpath(tmp, "DevPkg"), "0.2.0")
+            write_pkg(joinpath(tmp, "OldDevPkg"), "0.1.0")
+            write(joinpath(dev, "test", "Project.toml"), "[deps]\nDevPkg = \"$uuid\"\n")
+            write(
+                joinpath(dev, "test", "Manifest.toml"), """
+                manifest_format = "2.0"
+
+                [[deps.DevPkg]]
+                path = "../../OldDevPkg"
+                uuid = "$uuid"
+                version = "0.1.0"
+                """
+            )
+            Pkg.activate(joinpath(tmp, "env"))
+            Pkg.develop(path = dev)
+            test_test("DevPkg") do
+                @test Pkg.Types.Context().env.manifest[uuid].version == v"0.2.0"
+            end
+        end
+    end
 end
 
 @testset "Preferences sandboxing without test/Project.toml" begin
@@ -154,6 +186,31 @@ end
                 @test Preferences.load_preference(uuid, "toy") == "car"
                 @test Preferences.load_preference(uuid, "tree") == "birch"
                 @test Preferences.load_preference(uuid, "default") === nothing
+            end
+        end
+    end
+end
+
+@testset "Preferences of indirect dependencies are sandboxed (#3389)" begin
+    temp_pkg_dir() do project_path
+        mktempdir() do tmp
+            uuids = Dict(name => uuid4() for name in ("A", "B", "C"))
+            for (name, dep) in (("A", "B"), ("B", "C"), ("C", nothing))
+                dir = joinpath(tmp, name)
+                mkpath(joinpath(dir, "src"))
+                mkpath(joinpath(dir, "test"))
+                deps = dep === nothing ? "" : "\n[deps]\n$dep = \"$(uuids[dep])\"\n"
+                write(joinpath(dir, "Project.toml"), "name = \"$name\"\nuuid = \"$(uuids[name])\"\nversion = \"0.1.0\"\n$deps")
+                write(joinpath(dir, "src", "$name.jl"), "module $name end")
+                touch(joinpath(dir, "test", "runtests.jl"))
+            end
+            env = joinpath(tmp, "env")
+            Pkg.activate(env)
+            Pkg.develop([Pkg.PackageSpec(path = joinpath(tmp, name)) for name in ("C", "B", "A")])
+            write(joinpath(env, "LocalPreferences.toml"), "[C]\nfoo = \"bar\"\n")
+            # C is only in the manifest of the sandbox of A
+            test_test("A") do
+                @test Preferences.load_preference(uuids["C"], "foo") == "bar"
             end
         end
     end

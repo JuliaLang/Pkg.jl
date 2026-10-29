@@ -461,7 +461,7 @@ function EnvCache(env::Union{Nothing, String} = nothing)
     manifest_file = manifest_file !== nothing ?
         (isabspath(manifest_file) ? manifest_file : abspath(dir, manifest_file)) :
         manifestfile_path(dir)::String
-    write_env_usage(manifest_file, "manifest_usage.toml")
+    record_manifest_usage(manifest_file)
     manifest = read_manifest(manifest_file)
 
     env′ = EnvCache(
@@ -483,16 +483,14 @@ end
 # If path is absolute, returns it as-is
 function project_path_to_manifest_path(project_file::String, manifest_file::String, path::String)
     isabspath(path) && return path
-    abs_path = Pkg.safe_realpath(joinpath(dirname(project_file), path))
-    return relpath(abs_path, Pkg.safe_realpath(dirname(manifest_file)))
+    return relative_project_path(manifest_file, joinpath(dirname(project_file), path))
 end
 
 # Convert a path from manifest-relative to project-relative
 # If path is absolute, returns it as-is
 function manifest_path_to_project_path(project_file::String, manifest_file::String, path::String)
     isabspath(path) && return path
-    abs_path = Pkg.safe_realpath(joinpath(dirname(manifest_file), path))
-    return relpath(abs_path, Pkg.safe_realpath(dirname(project_file)))
+    return relative_project_path(project_file, joinpath(dirname(manifest_file), path))
 end
 
 include("project.jl")
@@ -796,6 +794,20 @@ function project_resolve_hash(env::EnvCache, julia_version::Union{Nothing, Versi
 end
 
 
+# Manifests (keyed with the log directory and their mtime) whose usage was recorded in
+# this session, so that constructing an `EnvCache` again, e.g. in `Pkg.dependencies()`,
+# does not rewrite the usage log every time
+const RECORDED_MANIFEST_USAGE = Set{Tuple{String, String, Float64}}()
+const RECORDED_MANIFEST_USAGE_LOCK = ReentrantLock()
+
+function record_manifest_usage(manifest_file::String)
+    key = (logdir(), manifest_file, mtime(manifest_file))
+    @lock RECORDED_MANIFEST_USAGE_LOCK (key in RECORDED_MANIFEST_USAGE) && return
+    write_env_usage(manifest_file, "manifest_usage.toml")
+    isfile(manifest_file) && @lock RECORDED_MANIFEST_USAGE_LOCK push!(RECORDED_MANIFEST_USAGE, key)
+    return
+end
+
 write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =
     write_env_usage([source_file], usage_filepath)
 
@@ -804,11 +816,23 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
     source_files = filter(isfile, source_files)
     isempty(source_files) && return
 
-    # Ensure that log dir exists
-    !ispath(logdir()) && mkpath(logdir())
-
     usage_file = joinpath(logdir(), usage_filepath)
     timestamp = now()
+
+    # Usage logging is best effort (it only informs `Pkg.gc`), so IO errors, e.g. from
+    # the pidfile lock on a network filesystem, must not fail the calling operation.
+    try
+        _write_env_usage(source_files, usage_file, timestamp)
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Failed to record usage in `$usage_file`, ignoring." exception = err maxlog = 1
+    end
+    return
+end
+
+function _write_env_usage(source_files, usage_file::String, timestamp::DateTime)
+    # Ensure that log dir exists
+    !ispath(dirname(usage_file)) && mkpath(dirname(usage_file))
 
     ## Atomically write usage file using process id locking
     FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
@@ -835,7 +859,7 @@ function write_env_usage(source_files, usage_filepath::AbstractString)
                     Dates.DateTime(d["time"])
                 else
                     # if there's no time entry because of a write failure be conservative and mark it as being used now
-                    @debug "Usage file `$usage_filepath` has a missing `time` entry for `$k`. Marking as used `now()`"
+                    @debug "Usage file `$usage_file` has a missing `time` entry for `$k`. Marking as used `now()`"
                     Dates.now()
                 end
             end
@@ -878,11 +902,15 @@ end
 
 function relative_project_path(project_file::String, path::String)
     # compute path relative the project
-    # realpath needed to expand symlinks before taking the relative path
-    return relpath(
-        Pkg.safe_realpath(abspath(path)),
-        Pkg.safe_realpath(dirname(project_file))
-    )
+    # keep a path inside the project as given, so that symlinks in it are preserved (#4636)
+    path = abspath(path)
+    project_dir = abspath(dirname(project_file))
+    for dir in (project_dir, Pkg.safe_realpath(project_dir))
+        rel = relpath(path, dir)
+        (isabspath(rel) || first(splitpath(rel)) == "..") || return rel
+    end
+    # otherwise, realpath needed to expand symlinks before taking the relative path
+    return relpath(Pkg.safe_realpath(path), Pkg.safe_realpath(project_dir))
 end
 
 function devpath(env::EnvCache, name::AbstractString, shared::Bool)
@@ -1121,8 +1149,9 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             end
             # Store the path: use the original path format (absolute vs relative) as the user provided
             # Canonicalize repo_source for consistent hashing in cache paths
+            given_source = repo_source
             repo_source = safe_realpath(repo_source)
-            pkg.repo.source = isabspath(pkg.repo.source) ? repo_source : relative_project_path(ctx.env.manifest_file, repo_source)
+            pkg.repo.source = isabspath(pkg.repo.source) ? repo_source : relative_project_path(ctx.env.manifest_file, given_source)
         else
             # For error messages, show the absolute path which is more informative than manifest-relative
             pkgerror("Path `$(repo_source)` does not exist.")
