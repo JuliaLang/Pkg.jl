@@ -3051,6 +3051,37 @@ function check_registered(registries::Vector{Registry.RegistryInstance}, pkgs::V
     return nothing
 end
 
+# Packages of `pkgs` that have to come from a registry but have no tree hash. A manifest records
+# a stdlib without one, so these were stdlibs when the manifest was written and no longer are.
+# A stdlib only loads what it depends on in this Julia, whatever the manifest recorded for it, so
+# a package that only the recorded deps of a stdlib lead to is left out, as nothing will load it.
+function former_stdlibs_in_use(ctx::Context, pkgs::Vector{PackageSpec})
+    former = filter(pkg -> pkg.tree_hash === nothing && tracking_registered_version(pkg, ctx.julia_version), pkgs)
+    isempty(former) && return former
+    stdlibs = Types.get_last_stdlibs(ctx.julia_version)
+    seen = Set{UUID}()
+    frontier = UUID[pkg.uuid for pkg in load_direct_deps(ctx.env)]
+    while !isempty(frontier)
+        uuid = pop!(frontier)
+        uuid in seen && continue
+        push!(seen, uuid)
+        if haskey(stdlibs, uuid)
+            append!(frontier, stdlibs[uuid].deps)
+        else
+            entry = manifest_info(ctx.env.manifest, uuid)
+            entry === nothing || append!(frontier, values(entry.deps))
+        end
+    end
+    return filter(pkg -> pkg.uuid in seen, former)
+end
+
+# Whether the version recorded for `pkg` is registered. Old manifests record no version for
+# stdlibs, in which case there is no version to preserve and any registered one will do.
+function former_stdlib_version_registered(ctx::Context, pkg::PackageSpec)
+    pkg.version isa VersionNumber || return true
+    return load_tree_hash!(ctx.registries, pkg, ctx.julia_version).tree_hash !== nothing
+end
+
 # Check if the package can be added without colliding/overwriting things
 function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs

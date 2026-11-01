@@ -394,6 +394,89 @@ end
         end
     end
 
+    @testset "instantiate: manifest recording a package as a stdlib that no longer is one" begin
+        jllwrappers = UUID("692b3bcd-3c85-4b1f-b108-f13ce0eb3210")
+        preferences = UUID("21216c6a-2e73-6563-6e65-726566657250")
+        # Makes the manifest record JLLWrappers the way a stdlib is recorded: no tree hash or
+        # registries, and with other deps than the registered package has, as with `OpenLibm_jll`.
+        function record_as_stdlib!(manifest_file; version = nothing)
+            raw = TOML.parsefile(manifest_file)
+            entry = only(raw["deps"]["JLLWrappers"])
+            delete!(entry, "git-tree-sha1")
+            delete!(entry, "registries")
+            entry["deps"] = ["Artifacts"]
+            version === nothing || (entry["version"] = version)
+            delete!(raw["deps"], "Preferences")
+            open(io -> TOML.print(io, raw; sorted = true), manifest_file, "w")
+            return
+        end
+        @testset "is re-resolved at the recorded version and can be loaded" begin
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
+                Pkg.add(name = "JLLWrappers", version = "1.7.0")
+                hash = Pkg.Types.Context().env.manifest[jllwrappers].tree_hash
+                manifest_file = Pkg.Types.Context().env.manifest_file
+                record_as_stdlib!(manifest_file)
+                @test Pkg.Types.Context().env.manifest[jllwrappers].tree_hash === nothing
+
+                empty!(Pkg.API.undo_entries) # as if this were the first operation in the session
+                iob = IOBuffer()
+                Pkg.instantiate(; io = iob)
+                @test occursin("JLLWrappers", String(take!(iob)))
+                manifest = Pkg.Types.Context().env.manifest
+                @test manifest[jllwrappers].version == v"1.7.0"
+                @test manifest[jllwrappers].tree_hash == hash
+                @test preferences in values(manifest[jllwrappers].deps)
+                @test haskey(manifest, preferences)
+                jllwrappers_id = Base.PkgId(jllwrappers, "JLLWrappers")
+                @test Base.locate_package(jllwrappers_id) !== nothing
+                @test Base.identify_package(jllwrappers_id, "Preferences") == Base.PkgId(preferences, "Preferences")
+
+                # Once fixed, it is an ordinary manifest
+                contents = read(manifest_file, String)
+                Pkg.instantiate(; io = iob)
+                @test read(manifest_file, String) == contents
+
+                # Undo goes back to the manifest as it was
+                Pkg.undo()
+                @test Pkg.Types.Context().env.manifest[jllwrappers].tree_hash === nothing
+            end
+        end
+        @testset "errors if the recorded version is not registered" begin
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
+                Pkg.add(name = "JLLWrappers", version = "1.7.0")
+                manifest_file = Pkg.Types.Context().env.manifest_file
+                record_as_stdlib!(manifest_file; version = "1.7.999")
+                contents = read(manifest_file, String)
+                @test_throws r"v1\.7\.999, is not registered.*Pkg\.update\(\)" Pkg.instantiate(; update_registry = false)
+                @test read(manifest_file, String) == contents
+                Pkg.update(; update_registry = false)
+                @test Pkg.Types.Context().env.manifest[jllwrappers].tree_hash !== nothing
+            end
+        end
+        @testset "is left alone if only the recorded deps of a stdlib lead to it" begin
+            # e.g. `MbedTLS_jll`, recorded as a dep of `LibCURL_jll` by Julia versions before 1.12
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
+                Pkg.add("Dates")
+                Pkg.add(name = "JLLWrappers", version = "1.7.0")
+                env = Pkg.Types.Context().env
+                manifest_file, project_file = env.manifest_file, env.project_file
+                record_as_stdlib!(manifest_file; version = "1.7.999")
+                raw = TOML.parsefile(manifest_file)
+                push!(only(raw["deps"]["Dates"])["deps"], "JLLWrappers")
+                open(io -> TOML.print(io, raw; sorted = true), manifest_file, "w")
+                project = TOML.parsefile(project_file)
+                delete!(project["deps"], "JLLWrappers")
+                open(io -> TOML.print(io, project; sorted = true), project_file, "w")
+                contents = read(manifest_file, String)
+                @test_logs (:warn, r"The project dependencies or compat requirements") Pkg.instantiate(; update_registry = false)
+                @test read(manifest_file, String) == contents
+            end
+        end
+    end
+
     @testset "update_on_mismatch" begin
         @testset "manifest from a different julia minor version" begin
             if VERSION >= v"1.8"

@@ -1465,6 +1465,42 @@ function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
     return nothing
 end
 
+# A manifest recording `former_stdlibs` as stdlibs can't be used as written: code loading needs
+# their tree hashes in it, and a registered package can have other deps than the stdlib had, which
+# may not be in the manifest at all. So resolve it, keeping the versions it records.
+function reresolve_former_stdlibs!(ctx::Context, former_stdlibs::Vector{PackageSpec}; update_registry::Bool)
+    check_readonly(ctx)
+    update_cmd = Pkg.in_repl_mode() ? "pkg> update" : "Pkg.update()"
+    if update_registry && !all(pkg -> Operations.former_stdlib_version_registered(ctx, pkg), former_stdlibs)
+        Operations.update_registries(ctx; force = false)
+    end
+    for pkg in former_stdlibs
+        Operations.former_stdlib_version_registered(ctx, pkg) || pkgerror(
+            "$(err_rep(pkg)) is not a standard library in this version of Julia, and the version recorded in the",
+            " manifest, v$(pkg.version), is not registered. Run `$update_cmd` to update the manifest, then try again."
+        )
+    end
+    add_snapshot_to_undo() # read from disk, as `Operations.up` mutates `ctx.env.manifest` in place
+    names = join(sort!([pkg.name for pkg in former_stdlibs]), ", ")
+    printpkgstyle(ctx.io, :Update, "manifest records packages as standard libraries that this version of Julia does not have ($names), resolving it to install them from a registry", color = Base.info_color())
+    # Not `up(ctx; ...)` as that does nothing for a fully pinned manifest
+    fixed = PackageSpec[]
+    append_all_pkgs!(fixed, ctx, PKGMODE_MANIFEST)
+    foreach(pkg -> update_source_if_set(ctx.env, pkg), fixed)
+    resolver_error = try
+        Operations.up(ctx, fixed, UPLEVEL_FIXED)
+        nothing
+    catch err
+        err isa ResolverError || rethrow()
+        err
+    end
+    resolver_error === nothing || pkgerror(
+        "$names can't be installed from a registry at the versions recorded in the manifest. ",
+        "Run `$update_cmd` to update the manifest, then try again.\n", resolver_error.msg
+    )
+    return
+end
+
 instantiate(; kwargs...) = instantiate(Context(); kwargs...)
 function instantiate(
         ctx::Context; manifest::Union{Bool, Nothing} = nothing,
@@ -1565,6 +1601,11 @@ function instantiate(
         end
         Operations.update_registries(ctx; force = false)
         Operations.check_registered(ctx.registries, pkgs)
+    end
+    former_stdlibs = Operations.former_stdlibs_in_use(ctx, pkgs)
+    if !isempty(former_stdlibs)
+        reresolve_former_stdlibs!(ctx, former_stdlibs; update_registry)
+        pkgs = workspace ? Operations.load_all_deps(ctx.env) : Operations.load_all_deps_loadable(ctx.env)
     end
     new_git = UUID[]
     # Handling packages tracking repos

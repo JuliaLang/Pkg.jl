@@ -1,6 +1,8 @@
 Pkg v1.14 Release Notes
 =======================
 
+- `Pkg.instantiate` now installs packages that the manifest records as standard libraries but the running Julia
+  no longer ships, from a registry. Such a manifest is resolved and rewritten, keeping the versions it records.
 - Pkg now resolves package versions with the exact SAT-based resolver from
   [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
   resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each

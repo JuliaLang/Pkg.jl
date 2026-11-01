@@ -712,6 +712,9 @@ If no `Project.toml` exist in the current active project, create one with all th
 dependencies in the manifest and instantiate the resulting project.
 `julia_version_strict=true` will turn manifest version check failures into errors instead of logging warnings.
 
+A manifest can record a package as a standard library that the running Julia no longer has. Such a manifest
+is resolved and rewritten, keeping the versions it records, so that the package can be installed from a registry.
+
 `update_on_mismatch=true` falls back to [`Pkg.update`](@ref) when the existing manifest cannot
 be used as-is — for example, when the project's dependencies or compat bounds have changed
 since the manifest was last resolved, or when the manifest was resolved with a different Julia
