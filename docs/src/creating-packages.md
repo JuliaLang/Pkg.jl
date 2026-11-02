@@ -582,17 +582,13 @@ On the other hand, accessing extension symbols from a third-party package (i.e. 
 
 When an extension is precompiled, the only other extensions loaded alongside it are those whose triggers
 (their parent package plus the packages listed for them under `[extensions]`) are a strict subset of its own triggers.
-This prevents cycles between extensions.
-Other extensions are not loaded, even ones whose triggers are all present, so code that runs during precompilation
-cannot rely on them.
+This prevents cycles between extensions, but it means code that runs during precompilation cannot rely on any other
+extension, even one whose triggers are all present.
 
 For example, suppose `Plotting` depends on `Geometry`, and `Geometry` has an extension `ContourExt` that adds
 `Contour.contour(::Geometry.Shape)`. If `Plotting`'s own `ContourExt` calls that method at top level, for instance
-to define a constant, precompilation fails with a `MethodError`. `Geometry`'s extension has the triggers `{Geometry, Contour}`
-and `Plotting`'s has `{Plotting, Contour}`, so neither is a subset of the other.
-
-To make one extension depend on another, list the other extension's parent among the triggers, even if it is
-already a regular dependency:
+to define a constant, precompilation fails with a `MethodError`, because its triggers `{Plotting, Contour}` are not a
+superset of `{Geometry, Contour}`. The fix is to list `Geometry` as a trigger too, even though it is already a regular dependency:
 
 ```toml
 [deps]
@@ -605,8 +601,7 @@ Contour = "d38c429a-6771-53c6-b99e-75d170b6e991"
 ContourExt = ["Contour", "Geometry"]
 ```
 
-`Plotting`'s extension now has the triggers `{Plotting, Contour, Geometry}`, a strict superset of `{Geometry, Contour}`,
-so `Geometry`'s extension is loaded first and its methods are available while `Plotting`'s extension precompiles.
+`Plotting`'s extension now has the triggers `{Plotting, Contour, Geometry}`, so `Geometry`'s extension is loaded first.
 The same applies within one package: an extension `StatisticsContourExt = ["Contour", "Statistics"]` can rely on `ContourExt = "Contour"`.
 
 ### Backwards compatibility
