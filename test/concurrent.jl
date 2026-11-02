@@ -90,16 +90,17 @@ end
     end
 end
 
-@testset "test atomicity of write_env_usage with $(Sys.CPU_THREADS) parallel processes" begin
-    Sys.CPU_THREADS == 1 && error("Cannot test for atomic usage log file interaction effectively with only Sys.CPU_THREADS=1")
+# Use at least 2 processes: even on a single CPU the OS interleaves processes, so races are still possible
+nprocs = max(Sys.CPU_THREADS, 2)
+@testset "test atomicity of write_env_usage with $nprocs parallel processes" begin
     isolate(loaded_depot = true) do
         tasks = Task[]
         iobs = IOBuffer[]
         # Precompile Pkg given we're in a different depot
         # and make sure the General registry is installed
-        flag_start_dir = mktempdir() # once n=Sys.CPU_THREADS files are in here, the processes can proceed to the concurrent test
+        flag_start_dir = mktempdir() # once nprocs files are in here, the processes can proceed to the concurrent test
         flag_end_file = tempname() # use creating this file as a way to stop the processes early if an error happens
-        for i in 1:Sys.CPU_THREADS
+        for i in 1:nprocs
             iob = IOBuffer()
             t = @async run(
                 pipeline(
@@ -110,7 +111,7 @@ end
                 Pkg.activate(temp = true);
                 Pkg.add(\"Random\", io = devnull);
                 touch(tempname(raw\"$flag_start_dir\")*raw\"$i\") # file marker that first part has finished
-                while length(readdir(raw\"$flag_start_dir\")) < $(Sys.CPU_THREADS)
+                while length(readdir(raw\"$flag_start_dir\")) < $nprocs
                     # sync all processes to start at the same time
                     sleep(0.1)
                 end
