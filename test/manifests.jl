@@ -455,6 +455,47 @@ end
                 @test Pkg.Types.Context().env.manifest[jllwrappers].tree_hash !== nothing
             end
         end
+        statistics = UUID("10745b16-79ce-11e8-11f9-7d13ad32a3b2")
+        # Records Statistics the way a Julia version that shipped an unregistered version of it did
+        function record_statistics_as_stdlib!(manifest_file)
+            raw = TOML.parsefile(manifest_file)
+            entry = only(raw["deps"]["Statistics"])
+            delete!(entry, "git-tree-sha1")
+            delete!(entry, "registries")
+            entry["version"] = "1.10.0"
+            open(io -> TOML.print(io, raw; sorted = true), manifest_file, "w")
+            return
+        end
+        @testset "an upgradable stdlib that still ships with Julia is left alone" begin
+            isolate() do
+                Pkg.activate(; temp = true)
+                Pkg.add(["Statistics", "Example"])
+                manifest_file = Pkg.Types.Context().env.manifest_file
+                record_statistics_as_stdlib!(manifest_file)
+                contents = read(manifest_file, String)
+                # Otherwise `instantiate` has nothing to do and returns early
+                rm(joinpath(DEPOT_PATH[1], "packages"); recursive = true)
+                Pkg.instantiate(; update_registry = false)
+                @test read(manifest_file, String) == contents
+                @test Base.locate_package(Base.PkgId(UUID("7876af07-990d-54b4-ab0e-23690620f79a"), "Example")) !== nothing
+            end
+        end
+        @testset "an upgradable stdlib doesn't hold back re-resolving a former stdlib" begin
+            isolate(loaded_depot = true) do
+                Pkg.activate(; temp = true)
+                Pkg.add("Statistics")
+                Pkg.add(name = "JLLWrappers", version = "1.7.0")
+                manifest_file = Pkg.Types.Context().env.manifest_file
+                record_as_stdlib!(manifest_file)
+                record_statistics_as_stdlib!(manifest_file)
+                Pkg.instantiate(; update_registry = false)
+                manifest = Pkg.Types.Context().env.manifest
+                @test manifest[jllwrappers].version == v"1.7.0"
+                @test manifest[jllwrappers].tree_hash !== nothing
+                @test manifest[statistics].version != v"1.10.0"
+                @test manifest[statistics].tree_hash !== nothing
+            end
+        end
         @testset "is left alone if only the recorded deps of a stdlib lead to it" begin
             # e.g. `MbedTLS_jll`, recorded as a dep of `LibCURL_jll` by Julia versions before 1.12
             isolate(loaded_depot = true) do

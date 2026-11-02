@@ -3056,7 +3056,11 @@ end
 # A stdlib only loads what it depends on in this Julia, whatever the manifest recorded for it, so
 # a package that only the recorded deps of a stdlib lead to is left out, as nothing will load it.
 function former_stdlibs_in_use(ctx::Context, pkgs::Vector{PackageSpec})
-    former = filter(pkg -> pkg.tree_hash === nothing && tracking_registered_version(pkg, ctx.julia_version), pkgs)
+    # Upgradable stdlibs such as Statistics aren't `is_stdlib`, but they still ship with Julia
+    former = filter(pkgs) do pkg
+        pkg.tree_hash === nothing && tracking_registered_version(pkg, ctx.julia_version) &&
+            !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS)
+    end
     isempty(former) && return former
     stdlibs = Types.get_last_stdlibs(ctx.julia_version)
     seen = Set{UUID}()

@@ -1486,6 +1486,11 @@ function reresolve_former_stdlibs!(ctx::Context, former_stdlibs::Vector{PackageS
     # Not `up(ctx; ...)` as that does nothing for a fully pinned manifest
     fixed = PackageSpec[]
     append_all_pkgs!(fixed, ctx, PKGMODE_MANIFEST)
+    # An upgradable stdlib records the version from the Julia that wrote the manifest, which may
+    # not be registered, so don't hold it to that version
+    filter!(fixed) do pkg
+        !(pkg.uuid in Types.UPGRADABLE_STDLIBS_UUIDS && manifest_info(ctx.env.manifest, pkg.uuid).tree_hash === nothing)
+    end
     foreach(pkg -> update_source_if_set(ctx.env, pkg), fixed)
     resolver_error = try
         Operations.up(ctx, fixed, UPLEVEL_FIXED)
