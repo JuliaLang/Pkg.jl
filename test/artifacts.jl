@@ -1245,7 +1245,8 @@ end
         )
         test_invalid_override(
             Dict("0"^40 => ["not", "a", "string", "or", "dict"]),
-            r"failed to parse entry",
+            # Newer Julia versions report a target that is not a string like any other invalid one
+            r"failed to parse entry|must map to an absolute path or SHA1 hash!",
         )
 
         # reset DEPOT_PATH and force Pkg to reload what it knows about artifact overrides
