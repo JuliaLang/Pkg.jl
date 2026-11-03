@@ -106,7 +106,7 @@ function read_cache_header(io::IO, path::String)
     else
         format >= 15 && read_cstring(io) # GC ABI
         flags = read(io, UInt32)
-        check(flags & 0x1 != 0) # a system image, not a package image
+        check(flags & 0x01 != 0) # a system image, not a package image
         read_cstring(io) # git branch
         read_cstring(io) # git commit
         checksum = UInt64(read(io, UInt32))
