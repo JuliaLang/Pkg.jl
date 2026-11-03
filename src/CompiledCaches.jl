@@ -159,7 +159,7 @@ function read_cache_header(io::IO, path::String)
     return CacheHeader(path, julia_version, modules, required, entry)
 end
 
-function skip_preferences_at(io::IO, pos::Int, totbytes::Int64, blob::Bool)
+function skip_preferences_at(io::IO, pos::Integer, totbytes::Int64, blob::Bool)
     seek(io, pos)
     return try
         skip_preferences(io, totbytes, blob)
