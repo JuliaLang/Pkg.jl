@@ -119,6 +119,7 @@ include("BinaryPlatformsCompat.jl")
 include("Artifacts.jl")
 const Artifacts = PkgArtifacts
 include("Operations.jl")
+include("CompiledCaches.jl")
 include("API.jl")
 include("Apps/Apps.jl")
 include("REPLMode/REPLMode.jl")

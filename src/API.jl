@@ -777,6 +777,12 @@ Garbage-collect package and artifact installations by sweeping over all known
 finding artifacts and packages that are thereafter not used by any other projects.
 Unused packages, artifacts, repos, and scratch spaces are immediately deleted.
 
+Precompilation cache files (in `compiled/`, for any Julia version) that can never be
+loaded again are deleted too: those whose package source is gone, as for the package
+versions deleted by `gc`, and those compiled against a dependency whose cache file is
+gone. Like for packages, this goes by the depots on the depot path when `gc` runs: a cache
+file only found in a depot that is not on it counts as gone.
+
 Garbage collection is only applied to the "user depot", e.g. the first entry in the
 depot path. If you want to run `gc` on all depots set `force=true` (this might require
 admin privileges depending on the setup).
@@ -1239,6 +1245,28 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         end
     end
 
+    # Delete the precompilation cache files that can never be loaded again: those whose
+    # source is gone (as for the package versions just deleted) and, in turn, those
+    # compiled against them. This is done after deleting packages so that it sees them gone.
+    caches_to_delete = Pkg.CompiledCaches.dead_cachefiles(depots(), gc_depots)
+    cache_space_freed = 0
+    for cachefile in caches_to_delete
+        for path in Pkg.CompiledCaches.companion_files(cachefile)
+            cache_space_freed += delete_path(path)
+        end
+    end
+    # Prune the per-package directories of cache files that are now empty
+    for depot in gc_depots
+        compiled_dir = abspath(depot, "compiled")
+        isdir(compiled_dir) || continue
+        for version_dir in readdir(compiled_dir; join = true)
+            isdir(version_dir) || continue
+            for name_dir in readdir(version_dir; join = true)
+                isdir(name_dir) && isempty(readdir(name_dir)) && Base.rm(name_dir)
+            end
+        end
+    end
+
     # Prune scratch space UUID folders that are now empty
     for depot in gc_depots
         scratch_dir = abspath(depot, "scratchspaces")
@@ -1301,8 +1329,10 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     print_deleted(ndel_repo, repo_space_freed, "repo")
     print_deleted(ndel_art, artifact_space_freed, "artifact installation")
     print_deleted(ndel_space, scratch_space_freed, "scratchspace")
+    ndel_cache = length(caches_to_delete)
+    print_deleted(ndel_cache, cache_space_freed, "precompilation cache file")
 
-    if ndel_pkg == 0 && ndel_art == 0 && ndel_repo == 0 && ndel_space == 0
+    if ndel_pkg == 0 && ndel_art == 0 && ndel_repo == 0 && ndel_space == 0 && ndel_cache == 0
         printpkgstyle(ctx.io, :Deleted, "no artifacts, repos, packages or scratchspaces")
     end
 
