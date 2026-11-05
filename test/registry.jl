@@ -534,6 +534,8 @@ if Pkg.Registry.registry_use_pkg_server()
                         reg_info = Pkg.TOML.parsefile(joinpath(DEPOT_PATH[1], "registries", "General.toml"))
                         tree_hash = Base.SHA1(reg_info["git-tree-sha1"])
                         cache_path = Pkg.Registry.registry_cache_path(only(tarballs), tree_hash)
+                        # Adding the registry builds the cache from the verified download
+                        @test isfile(cache_path)
                         @test Pkg.Registry.load_or_build_registry_cache(only(tarballs), tree_hash) !== nothing
                         open(cache_path, "r+") do io
                             seek(io, 36) # registry name offset
@@ -603,6 +605,36 @@ end
         @test !isfile(foo_temp)
         @test isfile(foo_other_version)
         @test isfile(foo_bar_cache)
+    end
+end
+
+@testset "registry tree hash" begin
+    mktempdir() do dir
+        src = joinpath(dir, "src")
+        mkpath(joinpath(src, "E", "Example"))
+        mkpath(joinpath(src, "empty"))
+        write(joinpath(src, "Registry.toml"), "name = \"Foo\"\n")
+        write(joinpath(src, "E", "Example", "Package.toml"), "name = \"Example\"\n")
+        write(joinpath(src, "E", "Example", "big.bin"), rand(UInt8, 100_000))
+        write(joinpath(src, "script"), "#!/bin/sh\n")
+        chmod(joinpath(src, "script"), 0o755)
+        tarball = joinpath(dir, "Foo.tar.gz")
+        Pkg.PlatformEngines.package(src, tarball)
+        expected = Base.SHA1(open(Pkg.PlatformEngines.Tar.tree_hash, Pkg.PlatformEngines.get_extract_cmd(tarball)))
+        files, tree_hash = Pkg.Registry.uncompress_registry_tree_hash(tarball)
+        @test files == Pkg.Registry.uncompress_registry(tarball)
+        @test tree_hash == expected
+        @test Pkg.Registry.read_verified_registry(tarball, expected) == files
+        @test_logs (:warn, r"does not match") @test Pkg.Registry.read_verified_registry(tarball, Base.SHA1("0"^40)) === nothing
+
+        # Entries other than files and directories are left to `Tar.tree_hash`
+        if !Sys.iswindows()
+            symlink("Registry.toml", joinpath(src, "link"))
+            Pkg.PlatformEngines.package(src, tarball)
+            expected = Base.SHA1(open(Pkg.PlatformEngines.Tar.tree_hash, Pkg.PlatformEngines.get_extract_cmd(tarball)))
+            @test Pkg.Registry.uncompress_registry_tree_hash(tarball)[2] === nothing
+            @test Pkg.Registry.read_verified_registry(tarball, expected) !== nothing
+        end
     end
 end
 
