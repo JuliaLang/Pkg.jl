@@ -59,8 +59,8 @@ function complete_expanded_local_dir(s, i1, i2, expanded_user, oldi2)
     prefix = splitdir(s)[2]
     if any(contains(r"\s"), completions)
         # replace the whole argument so that the quote goes in front of it
-        dir = first(s, length(s) - length(prefix))
-        return quote_paths(dir .* completions), i1:i2, true
+        typed_dir = first(s, length(s) - length(prefix))
+        return quote_paths(typed_dir .* completions), i1:i2, true
     end
     startpos = i2 - lastindex(prefix) + 1
     return completions, startpos:i2, !isempty(completions)
@@ -339,27 +339,25 @@ function complete_argument(
 end
 
 function _completions(input, final, offset, index; hint::Bool)
-    statement, word_count, partial = nothing, nothing, nothing
-    try
+    parsed = try
         words = tokenize(input; rm_leading_bracket = false)[end]
-        word_count = length(words)
-        statement, partial = core_parse(words)
-        if final
-            partial = "" # last token is finalized -> no partial
-        end
-        partial = something(partial, "")
+        nwords = length(words) # before `core_parse` consumes `words`
+        stmt, part = core_parse(words)
+        # last token is finalized -> no partial
+        (stmt, nwords, final ? "" : something(part, ""))
     catch
         return String[], 0:-1, false
     end
+    statement, word_count, partial = parsed
     # number of tokens which specify the command
     command_size = count([statement.super !== nothing, true])
-    command_is_focused() = !((word_count == command_size && final) || word_count > command_size)
+    command_is_focused = !((word_count == command_size && final) || word_count > command_size)
 
     if statement.spec === nothing # spec not determined -> complete command
-        !command_is_focused() && return String[], 0:-1, false
+        !command_is_focused && return String[], 0:-1, false
         x = complete_command(statement, final, word_count == 2)
     else
-        command_is_focused() && return String[], 0:-1, false
+        command_is_focused && return String[], 0:-1, false
 
         if final # complete arg by default
             x = complete_argument(statement.spec, statement.options, statement.arguments, partial, offset, index; hint)
