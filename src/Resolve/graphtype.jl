@@ -21,8 +21,9 @@ mutable struct ResolveLogEntry
     journal::ResolveJournal # shared with all other entries
     pkg::UUID
     header::String
-    events::Vector{Tuple{Any, String}} # here Any should ideally be Union{ResolveLogEntry,Nothing}
-    ResolveLogEntry(journal::ResolveJournal, pkg::UUID, header::String = "") = new(journal, pkg, header, [])
+    events::Vector{Tuple{Union{ResolveLogEntry, Nothing}, String}}
+    ResolveLogEntry(journal::ResolveJournal, pkg::UUID, header::String = "") =
+        new(journal, pkg, header, Tuple{Union{ResolveLogEntry, Nothing}, String}[])
 end
 
 function Base.push!(entry::ResolveLogEntry, reason::Tuple{Union{ResolveLogEntry, Nothing}, String}, to_journal::Bool = true)
@@ -144,7 +145,9 @@ mutable struct GraphData
             d = Dict{InstState, Set{InstState}}()
             for v0 in 1:spp[p0]
                 let p0 = p0 # Due to https://github.com/JuliaLang/julia/issues/15276
-                    d[eq_vn(v0, p0)] = Set{InstState}((eq_vn(v0, p0),))
+                    s = Set{InstState}()
+                    push!(s, eq_vn(v0, p0))
+                    d[eq_vn(v0, p0)] = s
                 end
             end
             eq_classes[pkgs[p0]] = d
@@ -547,9 +550,17 @@ function check_consistency(graph::Graph)
 
     @assert np ≥ 0
     @assert data.spp ≡ spp
-    for x in Any[spp, gadj, gmsk, gconstr, adjdict, ignored, rlog.pool, pkgs, pdict, pvers, vdict]
-        @assert length(x)::Int == np
-    end
+    @assert length(spp) == np
+    @assert length(gadj) == np
+    @assert length(gmsk) == np
+    @assert length(gconstr) == np
+    @assert length(adjdict) == np
+    @assert length(ignored) == np
+    @assert length(rlog.pool) == np
+    @assert length(pkgs) == np
+    @assert length(pdict) == np
+    @assert length(pvers) == np
+    @assert length(vdict) == np
     for p0 in 1:np
         @assert pdict[pkgs[p0]] == p0
         spp0 = spp[p0]
@@ -654,9 +665,15 @@ logstr(pkgID) = logstr(pkgID, pkgID)
 function logstr(pkgID, args...)
     # workout the string with the color codes, check stderr to decide if color is enabled.
     # Use a fixed IO type to avoid recompiling this for every type of stderr.
-    io = IOContext(IOBuffer(), :color => get(stderr, :color, false)::Bool)
+    io = IOContext(IOBuffer(), :color => stderr_color())
     printstyled(io, args...; color = pkgID_color(pkgID))
     return String(take!(io.io))
+end
+# `get(stderr, :color, false)` with the stream's type told apart (`stderr` is an `IO` global)
+function stderr_color()
+    io = stderr
+    return io isa Base.TTY ? get(io, :color, false)::Bool :
+        io isa IOContext ? get(io, :color, false)::Bool : false
 end
 
 """
@@ -1575,7 +1592,15 @@ function build_eq_classes_soft1!(graph::Graph, p0::Int)
     gmsk0 = gmsk[p0]
     gconstr0 = gconstr[p0]
     eff_spp0 = count(gconstr0)
-    cvecs = BitVector[vcat(BitVector(), (gmsk0[j1][gconstr[gadj0[j1]], v0] for j1 in 1:length(gadj0) if !ignored[gadj0[j1]])...) for v0 in findall(gconstr0)]
+    cvecs = BitVector[]
+    for v0 in findall(gconstr0)
+        cv = BitVector()
+        for j1 in 1:length(gadj0)
+            ignored[gadj0[j1]] && continue
+            append!(cv, gmsk0[j1][gconstr[gadj0[j1]], v0])
+        end
+        push!(cvecs, cv)
+    end
 
     @assert length(cvecs) == eff_spp0
 
