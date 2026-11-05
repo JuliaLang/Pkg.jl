@@ -333,7 +333,7 @@ function download_artifact(
     mkpath(dirname(pidfile))
     t_wait_msg = Timer(2) do t
         if progress === nothing
-            @info "downloading $tarball_url ($hex) in another process"
+            @info "downloading $tarball_url ($(bytes2hex(tree_hash.bytes))) in another process"
         else
             progress(0, 0; status = "downloading in another process")
         end
