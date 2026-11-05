@@ -248,6 +248,7 @@ struct AppInfo
     julia_command::Union{String, Nothing}
     submodule::Union{String, Nothing}
     julia_flags::Vector{String}
+    build::Union{String, Nothing}
     other::Dict{String, Any}
 end
 Base.@kwdef mutable struct Project
