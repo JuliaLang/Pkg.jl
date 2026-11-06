@@ -2404,7 +2404,8 @@ function download_source(
     max_name = maximum(widths; init = 0)
 
     # Check what registries the current pkg server tracks
-    server_registry_info = Registry.pkg_server_registry_info()
+    # (wrapped in `Some` so that the closures below capture a concrete type)
+    server_registry_info_some = Some{Union{Nothing, Tuple{SubString{String}, Dict{UUID, SHA1}}}}(Registry.pkg_server_registry_info())
 
     # use eager throw version
     Base.Experimental.@sync begin
@@ -2433,6 +2434,7 @@ function download_source(
                         archive_urls = Pair{String, Bool}[]
                         # Check if the current package is available in one of the registries being tracked by the pkg server
                         # In that case, download from the package server
+                        local server_registry_info = something(server_registry_info_some)
                         if Registry.is_pkg_in_pkgserver_registry(pkg.uuid, server_registry_info, ctx.registries)
                             server, registry_info = server_registry_info
                             url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
@@ -3364,7 +3366,7 @@ function add(
         end
         build_versions(ctx, union(new_apply, new_git))
         if allow_autoprecomp
-            added = Set(pkg.uuid for pkg in pkgs)
+            added = Set{Union{Nothing, UUID}}(pkg.uuid for pkg in pkgs)
             affected = filter(pkg -> !(pkg.uuid in added), changed_packages_and_dependents(ctx.env))
             Pkg._auto_precompile(ctx, vcat(pkgs, affected))
         end
@@ -4990,7 +4992,7 @@ end
 function print_compat(ctx::Context, pkgs_in::Vector{PackageSpec} = PackageSpec[]; io = nothing)
     io = something(io, ctx.io)
     printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
-    names = [pkg.name for pkg in pkgs_in]
+    names = Union{Nothing, String}[pkg.name for pkg in pkgs_in]
     pkgs = isempty(pkgs_in) ? ctx.env.project.deps : filter(pkg -> in(first(pkg), names), ctx.env.project.deps)
     add_julia = isempty(pkgs_in) || any(p -> p.name == "julia", pkgs_in)
     longest_dep_len = isempty(pkgs) ? length("julia") : max(reduce(max, map(length, collect(keys(pkgs)))), length("julia"))
