@@ -669,11 +669,20 @@ function logstr(pkgID, args...)
     printstyled(io, args...; color = pkgID_color(pkgID))
     return String(take!(io.io))
 end
-# `get(stderr, :color, false)` with the stream's type told apart (`stderr` is an `IO` global)
+# `get(stderr, :color, false)` with the stream's type told apart (`stderr` is an `IO` global).
+# Each branch names a concrete type, so that `get` reads the fields of a known layout: a TTY, or
+# an `IOContext` around a stream that `stderr` holds at startup or after `redirect_stderr`.
+# Other streams have no `:color` (`get(::IO, key, default)` returns `default`).
 function stderr_color()
     io = stderr
-    return io isa Base.TTY ? get(io, :color, false)::Bool :
-        io isa IOContext ? get(io, :color, false)::Bool : false
+    io isa Base.TTY && return get(io, :color, false)::Bool
+    io isa IOContext{IO} && return get(io, :color, false)::Bool
+    io isa IOContext{Base.TTY} && return get(io, :color, false)::Bool
+    io isa IOContext{Base.PipeEndpoint} && return get(io, :color, false)::Bool
+    io isa IOContext{Base.Pipe} && return get(io, :color, false)::Bool
+    io isa IOContext{IOStream} && return get(io, :color, false)::Bool
+    io isa IOContext{Base.DevNull} && return get(io, :color, false)::Bool
+    return false
 end
 
 """
