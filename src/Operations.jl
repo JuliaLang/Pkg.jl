@@ -725,12 +725,13 @@ function collect_project(
     if !isnothing(julia_compat) && !isnothing(julia_version) && !(julia_version in julia_compat)
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
     end
+    project_path = something(project_file, path)
     # A `[compat-overrides]` entry replaces every other constraint on the package, including the
     # project's own `[compat]`. Only the projects loaded into the environment apply theirs.
     function constraint(name, uuid)
         override = loaded === nothing ? nothing : get_compat_override(project, name)
         override === nothing || return override
-        return get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
+        return get_compat_with_stdlib_check(project, project_path, name, uuid, julia_version)
     end
     for (name, uuid) in project.deps
         dep_path, repo = get_path_repo(project, project_file, manifest_file, name)
@@ -746,7 +747,7 @@ function collect_project(
         for (name, uuid) in project.extras
             (haskey(project.deps, name) || haskey(project.weakdeps, name)) && continue
             haskey(project.compat, name) || continue
-            vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
+            vspec = get_compat_with_stdlib_check(project, project_path, name, uuid, julia_version)
             push!(deps, PackageSpec(name, uuid, vspec))
             push!(weakdeps, uuid)
         end
@@ -2213,7 +2214,7 @@ function download_artifacts(
     )
     env = ctx.env
     io = ctx.io
-    pkg_uuids = Set(pkg.uuid for pkg in pkgs)
+    pkg_uuids = Set{Union{Nothing, UUID}}(pkg.uuid for pkg in pkgs)
     manifest_pkgs = [uuid => manifest_info(env.manifest, uuid) for uuid in keys(env.manifest) if uuid in pkg_uuids]
     pkg_info = artifact_package_info(env, manifest_pkgs; julia_version, include_project)
     used_artifact_tomls = Set{String}()
@@ -2246,7 +2247,11 @@ function download_artifacts(
 
     if !isempty(levels)
         env_key = selector_env_key(env)
+        # (wrapped in `Some` so that the closure below captures a concrete type)
+        server_registry_info_some = Some{Union{Nothing, Tuple{SubString{String}, Dict{UUID, SHA1}}}}(server_registry_info)
         with_resolved_artifact_env(env) do selector_project
+            local server_registry_info = something(server_registry_info_some)
+            local io = ctx.io
             # Run each level's selectors, then download their artifacts concurrently
             # before starting selectors that may load those packages.
             for level in levels
@@ -3921,7 +3926,7 @@ function sandbox(
         allow_earlier_backwards_compatible_versions::Bool = true,
         allow_reresolve::Bool = true
     )
-    sandbox_project = projectfile_path(sandbox_path)
+    sandbox_project = projectfile_path(sandbox_path)::String
 
     return mktempdir() do tmp
         sandbox_project_override_local = sandbox_project_override_in
