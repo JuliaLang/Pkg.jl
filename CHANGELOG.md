@@ -8,9 +8,9 @@ Pkg v1.14 Release Notes
   uninstalled). Julias installed with juliaup and those that installed apps run with are recorded by running them
   once. Caches of builds that were never recorded are deleted when they are evidently superseded: a prerelease
   that has compiled nothing for two weeks while a newer build of the same minor version has, or a release whose
-  newer patch release has. ([#4905])
+  newer patch release has. ([#4905], [#4912])
 - New `Pkg.du` (`pkg> du`) shows how much space each part of the depot uses, how much of it `Pkg.gc` would
-  free, and the precompilation caches broken down by Julia version and build.
+  free, and the precompilation caches broken down by Julia version and build. ([#4912])
 - Pkg now resolves package versions with the exact SAT-based resolver from
   [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
   resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each
@@ -301,3 +301,4 @@ Pkg v1.7 Release Notes
 [#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
 [#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851
 [#4905]: https://github.com/JuliaLang/Pkg.jl/pull/4905
+[#4912]: https://github.com/JuliaLang/Pkg.jl/pull/4912
