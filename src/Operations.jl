@@ -2471,7 +2471,9 @@ function download_source(
             mode = :int, always_reprint = true
         )
         bar.max = length(pkgs_to_install)
-        fancyprint = can_fancyprint(ctx.io)
+        # `::Bool`: the closure below captures it, and `can_fancyprint` may have methods for other
+        # `IO` types (`max_methods` is 1 in Pkg, so a call with an abstract `IO` then infers as `Any`)
+        fancyprint = can_fancyprint(ctx.io)::Bool
         # `sprint` draws into a buffer, which does not know the width of the terminal
         context = IOContext(ctx.io, :displaysize => displaysize(ctx.io))
         try
