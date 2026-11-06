@@ -275,6 +275,11 @@ function populate_loaded_depot!()
     return
 end
 
+# Point julia subprocesses at the isolated depots too. Leaving `JULIA_DEPOT_PATH`
+# unset would make them fall back to the default depots, starting with the
+# user's `~/.julia`, which they would then read from and write caches into.
+set_depot_path_env!() = (ENV["JULIA_DEPOT_PATH"] = join(DEPOT_PATH, Sys.iswindows() ? ";" : ":"))
+
 # The helpers taking a `do` block are called with hundreds of distinct closures
 # across the test suite; `@nospecialize` keeps them from being compiled once per
 # closure type (each specialization took 0.2-0.5 s).
@@ -313,6 +318,7 @@ function isolate(@nospecialize(fn::Function); loaded_depot = false, linked_reg =
             push!(DEPOT_PATH, target_depot)
             Base.append_bundled_depot_path!(DEPOT_PATH)
             loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
+            set_depot_path_env!()
             # (with the loaded depot the registry is reachable through that)
             registry_is_compressed() && linked_reg && !loaded_depot && link_shared_registry!(target_depot)
             depot_mtimes = Dict(d => mtime(d) for d in DEPOT_PATH if isdir(d))
@@ -429,6 +435,7 @@ function temp_pkg_dir(@nospecialize(fn::Function); rm = true, linked_reg = true)
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
                 Base.append_bundled_depot_path!(DEPOT_PATH)
+                set_depot_path_env!()
                 registry_is_compressed() && linked_reg && link_shared_registry!(depot_dir)
                 fn(env_dir)
             finally
