@@ -499,6 +499,12 @@ const TEST_PKG = (name = "Example", uuid = UUID("7876af07-990d-54b4-ab0e-2369062
 
 function git_init_and_commit(path; msg = "initial commit")
     return LibGit2.with(LibGit2.init(path)) do repo
+        # Commit everything but what the repo's own `.gitignore` excludes: a global
+        # ignore file of the user (e.g. one ignoring `Manifest*.toml`) would leave
+        # files the tests rely on out of the commit
+        LibGit2.with(LibGit2.GitConfig(repo)) do cfg
+            LibGit2.set!(cfg, "core.excludesfile", "")
+        end
         LibGit2.add!(repo, "*")
         LibGit2.commit(repo, msg; author = TEST_SIG, committer = TEST_SIG)
     end
