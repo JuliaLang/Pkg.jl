@@ -38,9 +38,18 @@ const GENERAL_UUID = UUID("23338594-aafe-5451-b93e-139f81909106")
 # for packages that depend on Pkg) can only load Pkg from the cache if it is in
 # a depot they can see; precompiling Pkg is disallowed during the tests.
 const COMPILED_SUBDIR = joinpath("compiled", "v$(VERSION.major).$(VERSION.minor)")
-const THIS_PKG_COMPILE_CACHE = joinpath(Base.DEPOT_PATH[1], COMPILED_SUBDIR)
+# Take the directory Pkg was actually loaded from: it need not be in the first
+# depot, e.g. with `--check-bounds=yes` the matching cache may sit in any of them.
+const THIS_PKG_COMPILE_CACHE = let origin = get(Base.pkgorigins, Base.PkgId(Pkg), nothing)
+    cachefile = origin === nothing ? nothing : origin.cachepath
+    cachefile === nothing ? joinpath(Base.DEPOT_PATH[1], COMPILED_SUBDIR) : dirname(dirname(cachefile))
+end
 
 function copy_this_pkg_cache(new_depot)
+    # `isolate()` and `temp_pkg_dir()` keep the bundled depots in `DEPOT_PATH`, so
+    # subprocesses of the tests see a cache there without a copy
+    depot_root = dirname(dirname(THIS_PKG_COMPILE_CACHE))
+    any(d -> isdir(d) && samefile(d, depot_root), Base.append_bundled_depot_path!(String[])) && return
     for p in ("Pkg", "REPLExt")
         source = joinpath(THIS_PKG_COMPILE_CACHE, p)
         isdir(source) || continue # doesn't exist if using shipped Pkg (e.g. Julia CI)
@@ -54,7 +63,7 @@ function copy_this_pkg_cache(new_depot)
     # compiled next to Pkg and the Pkg cache is only valid together with them. A
     # source checkout in the depot goes along, since the cache records it relative
     # to the depot and the subprocesses would otherwise fall back to the stdlib.
-    packages_dir = joinpath(dirname(dirname(THIS_PKG_COMPILE_CACHE)), "packages")
+    packages_dir = joinpath(depot_root, "packages")
     for (id, origin) in Base.pkgorigins
         cachefile = origin.cachepath
         cachefile === nothing && continue
@@ -74,8 +83,32 @@ function copy_this_pkg_cache(new_depot)
             isdir(dest_dir) && continue
             mkpath(dirname(dest_dir))
             cp(source_dir, dest_dir)
+        elseif source !== nothing
+            link_depot_source(new_depot, depot_root, source)
         end
     end
+    link_depot_source(new_depot, depot_root, pathof(Pkg))
+    return
+end
+
+# A cache records a source file that lies in a depot of the `DEPOT_PATH` it was
+# compiled with relative to that depot (`@depot/...`), and a process loading the
+# cache resolves it in the first of its own depots that has the file. Here the
+# sources can lie in the depot holding the cache: this Pkg checked out as
+# `~/.julia/dev/Pkg`, or the stdlibs of a julia installed in the depot, as
+# juliaup does. Subprocesses that don't see that depot resolve them in
+# `new_depot`, so link the directory of the package there.
+function link_depot_source(new_depot, depot_root, source)
+    startswith(source, depot_root * Base.Filesystem.path_separator) || return
+    root = dirname(source)
+    while !any(f -> isfile(joinpath(root, f)), Base.project_names)
+        root = dirname(root)
+        startswith(root, depot_root * Base.Filesystem.path_separator) || return
+    end
+    dest = joinpath(new_depot, relpath(root, depot_root))
+    ispath(dest) && return
+    mkpath(dirname(dest))
+    symlink(root, dest)
     return
 end
 
