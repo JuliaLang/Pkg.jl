@@ -32,6 +32,7 @@ function juliaup_home(julia::AbstractString)
         parent == dir && return nothing
         dir = parent
     end
+    return
 end
 
 # The juliaup channel that the shim of an app falls back to when `julia` was
@@ -870,26 +871,30 @@ function shell_fallback(channel)
     hint = "use \\`pkg> app relink\\` to make the app use another julia"
     lines = String[]
     if channel !== nothing
-        append!(lines, [
-            "juliaup_cmd=\$(command -v juliaup 2>/dev/null || true)",
-            "# the juliaup launcher with the channel of the same minor version, if that is installed",
-            "if [ -n \"\$juliaup_cmd\" ] && [ -x \"\$(dirname -- \"\$juliaup_cmd\")/julia\" ] &&",
-            "        grep -qF '\"$(channel.name)\"' $(Base.shell_escape(channel.config)) 2>/dev/null; then",
-            "    julia_cmd=\$(dirname -- \"\$juliaup_cmd\")/julia",
-            "    channel_arg=+$(channel.name)",
-            "elif command -v julia >/dev/null 2>&1; then",
-        ])
+        append!(
+            lines, [
+                "juliaup_cmd=\$(command -v juliaup 2>/dev/null || true)",
+                "# the juliaup launcher with the channel of the same minor version, if that is installed",
+                "if [ -n \"\$juliaup_cmd\" ] && [ -x \"\$(dirname -- \"\$juliaup_cmd\")/julia\" ] &&",
+                "        grep -qF '\"$(channel.name)\"' $(Base.shell_escape(channel.config)) 2>/dev/null; then",
+                "    julia_cmd=\$(dirname -- \"\$juliaup_cmd\")/julia",
+                "    channel_arg=+$(channel.name)",
+                "elif command -v julia >/dev/null 2>&1; then",
+            ]
+        )
     else
         push!(lines, "if command -v julia >/dev/null 2>&1; then")
     end
-    append!(lines, [
-        "    echo \"warning: \$julia_cmd does not exist, running the app with the julia in PATH; $hint\" >&2",
-        "    julia_cmd=julia",
-        "else",
-        "    echo \"error: \$julia_cmd does not exist and there is no julia in PATH; $hint\" >&2",
-        "    exit 127",
-        "fi",
-    ])
+    append!(
+        lines, [
+            "    echo \"warning: \$julia_cmd does not exist, running the app with the julia in PATH; $hint\" >&2",
+            "    julia_cmd=julia",
+            "else",
+            "    echo \"error: \$julia_cmd does not exist and there is no julia in PATH; $hint\" >&2",
+            "    exit 127",
+            "fi",
+        ]
+    )
     return "        " * join(lines, "\n        ")
 end
 
@@ -1010,15 +1015,15 @@ end
 function windows_fallback(channel)
     channel === nothing && return ""
     return """set "juliaup_dir="
-        for /f "delims=" %%J in ('where juliaup 2^>nul') do if not defined juliaup_dir set "juliaup_dir=%%~dpJ"
-        if not defined juliaup_dir goto __no_juliaup
-        if not exist "%juliaup_dir%julia.exe" goto __no_juliaup
-        findstr /l /c:"\\"$(channel.name)\\"" "$(escape_batch_set_value(channel.config))" >nul 2>nul || goto __no_juliaup
-        set "julia_cmd=%juliaup_dir%julia.exe"
-        set "channel_arg=+$(channel.name)"
-        goto __julia_found
-        :__no_juliaup
-        """
+    for /f "delims=" %%J in ('where juliaup 2^>nul') do if not defined juliaup_dir set "juliaup_dir=%%~dpJ"
+    if not defined juliaup_dir goto __no_juliaup
+    if not exist "%juliaup_dir%julia.exe" goto __no_juliaup
+    findstr /l /c:"\\"$(channel.name)\\"" "$(escape_batch_set_value(channel.config))" >nul 2>nul || goto __no_juliaup
+    set "julia_cmd=%juliaup_dir%julia.exe"
+    set "channel_arg=+$(channel.name)"
+    goto __julia_found
+    :__no_juliaup
+    """
 end
 
 end
