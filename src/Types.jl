@@ -804,7 +804,210 @@ function record_manifest_usage(manifest_file::String)
     key = (logdir(), manifest_file, mtime(manifest_file))
     @lock RECORDED_MANIFEST_USAGE_LOCK (key in RECORDED_MANIFEST_USAGE) && return
     write_env_usage(manifest_file, "manifest_usage.toml")
+    record_julia_usage()
     isfile(manifest_file) && @lock RECORDED_MANIFEST_USAGE_LOCK push!(RECORDED_MANIFEST_USAGE, key)
+    return
+end
+
+# Log directories in which the running Julia build was recorded in this session
+const RECORDED_JULIA_USAGE = Set{String}()
+
+"""
+    record_julia_usage()
+
+Record the running Julia build in `logs/julia_usage.toml`, keyed by the build id of `Base`
+that its precompilation cache files are compiled against, with the system image it was
+started with. `Pkg.gc` deletes the cache files of a recorded build once that system image is
+gone or has been replaced, as when Julia was uninstalled or updated.
+"""
+function record_julia_usage()
+    usage_file = joinpath(logdir(), "julia_usage.toml")
+    @lock RECORDED_MANIFEST_USAGE_LOCK (usage_file in RECORDED_JULIA_USAGE) && return
+    image = abspath(unsafe_string(Base.JLOptions().image_file))
+    write_julia_usage(usage_file, Base.module_build_id(Base), image, VERSION) &&
+        @lock RECORDED_MANIFEST_USAGE_LOCK push!(RECORDED_JULIA_USAGE, usage_file)
+    return
+end
+
+# A Julia build to record in the usage log
+struct JuliaBuild
+    build_id::UInt128
+    image::String
+    version::VersionNumber
+end
+
+# Add builds to the usage log `usage_file`; returns whether that succeeded
+write_julia_usage(usage_file::String, build_id::UInt128, image::String, version::VersionNumber) =
+    write_julia_usage(usage_file, [JuliaBuild(build_id, image, version)])
+
+function write_julia_usage(usage_file::String, builds::Vector{JuliaBuild})
+    isempty(builds) && return true
+    try
+        mkpath(dirname(usage_file))
+        FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+            usage = isfile(usage_file) ? TOML.parsefile(usage_file) : Dict{String, Any}()
+            for b in builds
+                st = stat(b.image)
+                isfile(st) || continue
+                entry = Dict{String, Any}(
+                    "version" => string(b.version),
+                    "image" => b.image,
+                    "image_mtime" => st.mtime,
+                    "image_size" => st.size,
+                    "time" => now(),
+                )
+                key = string(b.build_id; base = 16, pad = 32)
+                entries = filter(e -> e isa Dict && get(e, "image", nothing) != b.image, get(usage, key, Any[]))
+                push!(entries, entry)
+                usage[key] = entries
+            end
+            atomic_toml_write(usage_file, usage, sorted = true)
+        end
+        return true
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Failed to record usage in `$usage_file`, ignoring." exception = err maxlog = 1
+        return false
+    end
+end
+
+# The system image that a Julia binary loads by default
+function default_image(julia::String)
+    ext = Sys.iswindows() ? "dll" : Sys.isapple() ? "dylib" : "so"
+    return normpath(joinpath(dirname(julia), "..", "lib", "julia", "sys." * ext))
+end
+
+function parse_toml_nothrow(file::String)
+    return try
+        isfile(file) ? TOML.parsefile(file) : nothing
+    catch err
+        err isa InterruptException && rethrow()
+        nothing
+    end
+end
+
+# The Julia binaries that the apps installed in `depots` run with
+function app_julias(depots::Vector{String})
+    juliae = String[]
+    for depot in depots
+        manifest = parse_toml_nothrow(joinpath(depot, "environments", "apps", "AppManifest.toml"))
+        manifest isa Dict || continue
+        deps = get(manifest, "deps", nothing)
+        deps isa Dict || continue
+        for entries in values(deps)
+            entries isa Vector || continue
+            for entry in entries
+                apps = entry isa Dict ? get(entry, "apps", nothing) : nothing
+                apps isa Dict || continue
+                for app in values(apps)
+                    julia = app isa Dict ? get(app, "julia_command", nothing) : nothing
+                    julia isa String && push!(juliae, julia)
+                end
+            end
+        end
+    end
+    return juliae
+end
+
+# The directory where juliaup keeps its installations, as juliaup finds it
+juliaup_dir() = joinpath(get(() -> joinpath(homedir(), ".julia"), ENV, "JULIAUP_DEPOT_PATH"), "juliaup")
+
+# The Julia binaries installed with juliaup: every installed version, every channel that
+# downloads its own (as nightlies do) and every channel linked to a Julia elsewhere. Only
+# the string values of the `BinaryPath`, `Path` and `Command` keys of `juliaup.json` are
+# needed, so they are picked out of it rather than parsing the JSON. Older versions of
+# juliaup record only the `Path` of an installation, so `bin/julia` in it is tried too
+# (candidates that do not exist are skipped by the caller).
+function juliaup_julias(dir::String = juliaup_dir())
+    config = try
+        read(joinpath(dir, "juliaup.json"), String)
+    catch err
+        err isa InterruptException && rethrow()
+        return String[]
+    end
+    juliae = String[]
+    for m in eachmatch(r"\"(BinaryPath|Path|Command)\"\s*:\s*\"((?:[^\"\\]|\\.)*)\"", config)
+        path = try
+            unescape_string(replace(m.captures[2], "\\/" => "/"))
+        catch
+            continue
+        end
+        key = m.captures[1]
+        if key == "BinaryPath"
+            push!(juliae, normpath(joinpath(dir, path)))
+        elseif key == "Path"
+            push!(juliae, normpath(joinpath(dir, path, "bin", Base.julia_exename())))
+        elseif isabspath(path)
+            push!(juliae, path)
+        end
+    end
+    return unique!(juliae)
+end
+
+# The images (with modification time and size) already recorded in the logs of `depots`
+function recorded_images(depots::Vector{String})
+    recorded = Set{Tuple{String, Float64, Int}}()
+    for depot in depots
+        usage = parse_toml_nothrow(joinpath(depot, "logs", "julia_usage.toml"))
+        usage isa Dict || continue
+        for entries in values(usage)
+            entries isa Vector || continue
+            for e in entries
+                e isa Dict || continue
+                image, mtime, size = get(e, "image", nothing), get(e, "image_mtime", nothing), get(e, "image_size", nothing)
+                (image isa String && mtime isa Real && size isa Integer) || continue
+                push!(recorded, (image, Float64(mtime), Int(size)))
+            end
+        end
+    end
+    return recorded
+end
+
+# Run `julia` (just Julia, with no project or packages) to ask for its build
+function probe_julia(julia::String)
+    probe = "print(string(Base.module_build_id(Base); base = 16), ' ', VERSION, ' ', abspath(unsafe_string(Base.JLOptions().image_file)))"
+    out = try
+        cmd = `$julia --startup-file=no --history-file=no -e $probe`
+        env = copy(ENV)
+        for var in ("JULIA_PROJECT", "JULIA_LOAD_PATH")
+            delete!(env, var)
+        end
+        readchomp(pipeline(setenv(cmd, env); stderr = devnull))
+    catch err
+        err isa InterruptException && rethrow()
+        return nothing
+    end
+    parts = split(out, ' '; limit = 3)
+    length(parts) == 3 || return nothing
+    build_id = tryparse(UInt128, parts[1]; base = 16)
+    version = tryparse(VersionNumber, parts[2])
+    (build_id === nothing || version === nothing) && return nothing
+    return JuliaBuild(build_id, String(parts[3]), version)
+end
+
+"""
+    record_installed_julia_usage(depots)
+
+Record the Julia builds that are installed but may never load this Pkg: the ones the apps
+installed in `depots` run with (running an app does not load Pkg), and the ones installed
+with juliaup (older Julia versions ship a Pkg that does not record itself). Otherwise
+`Pkg.gc` could take them for superseded while they are still installed.
+
+A Julia whose system image is recorded unchanged already is not run again; otherwise that
+Julia (never an app) is run once with a one-line expression that prints its build id.
+"""
+function record_installed_julia_usage(depots::Vector{String})
+    recorded = recorded_images(depots)
+    to_probe = String[]
+    for julia in unique!(vcat(app_julias(depots), juliaup_julias()))
+        isfile(julia) || continue
+        st = stat(default_image(julia))
+        isfile(st) && (default_image(julia), st.mtime, Int(st.size)) in recorded && continue
+        push!(to_probe, julia)
+    end
+    isempty(to_probe) && return
+    builds = filter!(!isnothing, asyncmap(probe_julia, to_probe; ntasks = 8))
+    write_julia_usage(joinpath(logdir(), "julia_usage.toml"), Vector{JuliaBuild}(builds))
     return
 end
 

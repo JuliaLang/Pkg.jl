@@ -32,6 +32,8 @@ module PkgTestsInner
     # Disable auto-gc for the whole suite (test workers read this in `Pkg.__init__`)
     ENV["JULIA_PKG_GC_AUTO"] = "false"
     Pkg._auto_gc_enabled[] = false
+    # `gc` runs the Julias installed with juliaup to record them; keep the machine's out of it
+    ENV["JULIAUP_DEPOT_PATH"] = mktempdir()
 
     logdir = get(ENV, "JULIA_TEST_VERBOSE_LOGS_DIR", nothing)
     ### Send all Pkg output to log files

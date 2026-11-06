@@ -50,7 +50,7 @@ function generate()
     println(io, "## `registry` commands")
     foreach(command -> generate(io, command), ["registry add", "registry remove", "registry status", "registry update"])
     println(io, "## Other commands")
-    foreach(command -> generate(io, command), ["activate", "gc", "help", "instantiate", "precompile", "resolve", "status"])
+    foreach(command -> generate(io, command), ["activate", "du", "gc", "help", "instantiate", "precompile", "resolve", "status"])
     # write to file
     write(joinpath(@__DIR__, "src", "repl.md"), seekstart(io))
     return
