@@ -508,7 +508,8 @@ were installed with. The versions of the packages are kept, but the app
 environments are resolved again for the running julia when needed.
 
 Use this when the julia an app was installed with was removed (for example by
-juliaup) or to move apps to a newer julia.
+juliaup) or to move apps to a newer julia. Apps whose package does not support
+the running julia according to its `julia` compat are skipped with a warning.
 """
 relink(pkgs_or_apps::String) = relink([pkgs_or_apps])
 function relink(pkgs_or_apps::Vector)
@@ -527,8 +528,19 @@ function _relink(pkg::Union{PackageSpec, Nothing})
     ctx = app_context()
     manifest = ctx.env.manifest
     relinked = String[]
+    found = false
     for (uuid, info) in manifest.deps
         if pkg !== nothing && info.name != pkg.name && !(pkg.name in keys(info.apps))
+            continue
+        end
+        found = true
+        sourcepath = developed_source_path(ctx.env.manifest_file, info)
+        # Keep apps on their julia when the running one is outside their julia compat
+        project = get_project(something(sourcepath, source_path(ctx.env.manifest_file, info)))
+        if !(VERSION in Pkg.Operations.get_compat(project, "julia"))
+            version = info.version === nothing ? "" : " v$(info.version)"
+            julia_compat = Pkg.Operations.get_compat_str(project, "julia")
+            @warn "Not relinking $(info.name): $(info.name)$version does not support Julia $VERSION (compat `julia = \"$julia_compat\"`), use `app update $(info.name)` to get a version that does"
             continue
         end
         push!(relinked, info.name)
@@ -536,7 +548,6 @@ function _relink(pkg::Union{PackageSpec, Nothing})
             # an unset julia command is written as the running julia
             info.apps[appname] = AppInfo(app.name, nothing, app.submodule, app.julia_flags, app.other)
         end
-        sourcepath = developed_source_path(ctx.env.manifest_file, info)
         if sourcepath === nothing
             _resolve(manifest, info.name)
         else
@@ -548,7 +559,7 @@ function _relink(pkg::Union{PackageSpec, Nothing})
             generate_shims_for_apps(info.name, info.apps, sourcepath, julia_executable())
         end
     end
-    if pkg !== nothing && isempty(relinked)
+    if pkg !== nothing && !found
         pkgerror("no app or package named `$(pkg.name)` found in the app manifest")
     end
     write_manifest(manifest, app_manifest_file())

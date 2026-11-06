@@ -160,6 +160,8 @@ of the apps in `environments/apps/AppManifest.toml` of the depots in `JULIA_DEPO
 
 To make apps use the running Julia instead of the one they were installed with, without changing
 the versions of their packages, use `pkg> app relink [name]` (all apps if no name is given).
+Apps whose package does not support the running Julia according to its `julia` compat are skipped
+with a warning, use `pkg> app update name` to get a version of the package that does.
 `pkg> app status` marks apps whose Julia no longer exists.
 
 You can also override the Julia executable globally using the `JULIA_APPS_JULIA_CMD` environment variable:

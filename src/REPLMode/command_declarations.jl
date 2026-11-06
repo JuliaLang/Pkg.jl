@@ -828,6 +828,8 @@ compound_declarations = [
                 Make the apps of packages `pkg...` (all apps if no packages are specified) run with
                 the running julia instead of the julia they were installed with, keeping the versions
                 of the packages. Use this when the julia an app was installed with was removed.
+                Apps whose package does not support the running julia according to its `julia`
+                compat are skipped with a warning.
 
                 **Examples**
                 ```

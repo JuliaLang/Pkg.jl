@@ -364,7 +364,9 @@ using Test
         @testset "app whose julia was removed" begin
             isolate(loaded_depot = true) do
                 mktempdir() do tmp
-                    Pkg.Apps.develop(path = joinpath(@__DIR__, "test_packages", "Rot13.jl"))
+                    rot13 = joinpath(tmp, "Rot13.jl")
+                    cp(joinpath(@__DIR__, "test_packages", "Rot13.jl"), rot13)
+                    Pkg.Apps.develop(path = rot13)
                     exe = joinpath(first(DEPOT_PATH), "bin", "juliarot13")
                     # Pretend that the app was installed with a julia that juliaup has removed since
                     juliaup = mkpath(joinpath(tmp, "juliaup"))
@@ -389,6 +391,15 @@ using Test
                     io = IOBuffer()
                     Pkg.Apps.status(; io)
                     @test contains(String(take!(io)), "(missing)")
+
+                    # an app whose julia compat excludes the running julia is not relinked
+                    project_file = joinpath(rot13, "Project.toml")
+                    project = read(project_file, String)
+                    write(project_file, project * "\n[compat]\njulia = \"~1.0\"\n")
+                    @test_logs (:warn, r"Not relinking Rot13") match_mode = :any Pkg.Apps.relink()
+                    @test contains(read(exe, String), gone)
+                    write(project_file, project)
+
                     Pkg.Apps.relink()
                     Pkg.Apps.status(; io)
                     @test !contains(String(take!(io)), "(missing)")
