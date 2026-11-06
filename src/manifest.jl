@@ -111,12 +111,17 @@ read_apps(::Any) = pkgerror("Expected `apps` field to be a Dict")
 function read_apps(apps::Dict)
     appinfos = Dict{String, AppInfo}()
     for (appname, app) in apps
-        submodule = get(app, "submodule", nothing)
+        app isa Dict{String, Any} || pkgerror("Expected value for app `$appname` to be a dictionary.")
+        submodule = get(app, "submodule", nothing)::Union{String, Nothing}
         julia_flags_raw = get(app, "julia_flags", nothing)
         julia_flags = if julia_flags_raw === nothing
             String[]
-        else
+        elseif julia_flags_raw isa Vector{String}
+            copy(julia_flags_raw)
+        elseif julia_flags_raw isa Vector{Any}
             String[flag::String for flag in julia_flags_raw]
+        else
+            pkgerror("Expected `julia_flags` for app `$appname` to be an array of strings")
         end
         appinfo = AppInfo(
             appname::String,
