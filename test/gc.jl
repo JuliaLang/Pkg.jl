@@ -1,6 +1,6 @@
 module GCTests
 
-using Test, UUIDs
+using Test, UUIDs, Dates
 import ..Pkg
 using TOML
 using ..Utils
@@ -163,11 +163,141 @@ end
         # A's source is gone: A's cache and, in turn, B's are dead
         setup()
         rm(joinpath(pkgs_dir, "A"); recursive = true)
+        # `du` reports what `gc` would free without deleting anything
+        io = IOBuffer()
+        Pkg.du(; io)
+        out = String(take!(io))
+        @test occursin("compiled", out)
+        @test occursin("[this Julia]", out)
+        @test occursin("to free", out)
+        @test length(cachefiles("B")) == 1
         Pkg.gc()
         @test cachefiles("A") == [junk]
         @test isempty(cachefiles("B"))
         @test isempty(cachefiles("C"))
         @test !isdir(joinpath(compiled, "B")) # empty directories are pruned
+    end
+end
+
+@testset "Pkg.gc: caches of Julia builds that are gone" begin
+    temp_pkg_dir() do project_path
+        CC = Pkg.CompiledCaches
+        Pkg.activate(project_path)
+        Pkg.add("Example")
+        # using an environment records the running build with its system image
+        usage_file = joinpath(Pkg.depots1(), "logs", "julia_usage.toml")
+        @test isfile(usage_file)
+        running = Base.module_build_id(Base)
+        usage = TOML.parsefile(usage_file)
+        entry = only(usage[string(running; base = 16, pad = 32)])
+        @test entry["image"] == abspath(unsafe_string(Base.JLOptions().image_file))
+        @test entry["version"] == string(VERSION)
+
+        # an image that is still the recorded file is installed; one that is missing or was
+        # replaced is gone; the running build is never gone
+        image = tempname()
+        write(image, "image")
+        st = stat(image)
+        installed, replaced, missing_image = UInt128(1), UInt128(2), UInt128(3)
+        logentry(path, mtime, size) = [Dict{String, Any}("image" => path, "image_mtime" => mtime, "image_size" => size)]
+        usage[string(installed; base = 16, pad = 32)] = logentry(image, st.mtime, st.size)
+        usage[string(replaced; base = 16, pad = 32)] = logentry(image, st.mtime - 10, st.size)
+        usage[string(missing_image; base = 16, pad = 32)] = logentry(image * "-missing", st.mtime, st.size)
+        usage[string(running; base = 16, pad = 32)] = logentry(image * "-missing", 0.0, 0)
+        open(io -> TOML.print(io, usage), usage_file, "w")
+        builds = CC.julia_builds(Pkg.depots())
+        @test builds[installed] == CC.BUILD_INSTALLED
+        @test builds[replaced] == CC.BUILD_GONE
+        @test builds[missing_image] == CC.BUILD_GONE
+        @test builds[running] == CC.BUILD_RUNNING
+
+        # rule 0: the caches of a build that is gone are dead, even those of stdlibs, and
+        # those of builds that are installed or were never recorded are not judged by it
+        base = Base.PkgId(nothing, "Base")
+        header(build, entry) = CC.CacheHeader("x.ji", VERSION, "", Pair{Base.PkgId, UInt128}[], [base => build], entry)
+        stdlib_entry = joinpath(Sys.STDLIB, "Random", "src", "Random.jl")
+        headers = [header(replaced, stdlib_entry), header(missing_image, stdlib_entry), header(installed, stdlib_entry), header(UInt128(4), stdlib_entry)]
+        @test CC.dead_cachefiles(headers, fill(true, 4), Pkg.depots(), String[], builds) == [1, 2]
+        # but only in depots that are collected
+        @test CC.dead_cachefiles(headers, [false, true, true, true], Pkg.depots(), String[], builds) == [2]
+
+        # builds that were never recorded: a prerelease that compiled nothing for a while,
+        # while another build of the same minor version did, is superseded
+        now = time()
+        day = 24 * 60 * 60.0
+        vheader(build, v) = CC.CacheHeader("x.ji", v, "", Pair{Base.PkgId, UInt128}[], [base => build], stdlib_entry)
+        old_nightly, new_nightly, only_alpha, logged_nightly, old_patch, new_patch =
+            (UInt128(10 + i) for i in 1:6)
+        headers = [
+            vheader(old_nightly, v"1.20.0-DEV.100"),     # 1: old, superseded by new_nightly
+            vheader(new_nightly, v"1.20.0-DEV.200"),
+            vheader(only_alpha, v"1.21.0-alpha1"),       # 3: old, but the only 1.21 build
+            vheader(logged_nightly, v"1.20.0-DEV.50"),   # 4: old, but recorded as installed
+            vheader(old_patch, v"1.18.1"),               # 5: old, superseded by 1.18.2
+            vheader(new_patch, v"1.18.2"),
+        ]
+        mtimes = [now - 30day, now - 1day, now - 100day, now - 60day, now - 40day, now - 2day]
+        builds = Dict(logged_nightly => CC.BUILD_INSTALLED)
+        CC.superseded_builds!(builds, headers, mtimes; now)
+        @test builds == Dict(
+            old_nightly => CC.BUILD_SUPERSEDED, old_patch => CC.BUILD_SUPERSEDED,
+            logged_nightly => CC.BUILD_INSTALLED,
+        )
+        @test CC.dead_cachefiles(headers, fill(true, length(headers)), Pkg.depots(), String[], builds) == [1, 5]
+
+        # the Julia of an installed app is recorded without running the app
+        app_julia = joinpath(Sys.BINDIR, Base.julia_exename())
+        mkpath(joinpath(Pkg.depots1(), "environments", "apps"))
+        write(
+            joinpath(Pkg.depots1(), "environments", "apps", "AppManifest.toml"), """
+            [[deps.SomeApp]]
+            uuid = "$(UUID(UInt128(42)))"
+            [deps.SomeApp.apps.someapp]
+            julia_command = "$(escape_string(app_julia))"
+            submodule = ""
+            """
+        )
+        rm(usage_file)
+        Pkg.Types.record_installed_julia_usage(Pkg.depots())
+        @test haskey(TOML.parsefile(usage_file), string(running; base = 16, pad = 32))
+
+        # the Julias installed with juliaup: versions and download channels by their path
+        # relative to the juliaup directory, linked channels by their command
+        juliaup = mktempdir()
+        write(
+            joinpath(juliaup, "juliaup.json"), """
+            {"Default": "release",
+             "InstalledVersions": {"1.99.0+0": {"Path": "./julia-1.99.0", "BinaryPath": "./julia-1.99.0/bin/julia"}},
+             "InstalledChannels": {
+               "release": {"Version": "1.99.0+0"},
+               "nightly": {"Path": "./julia-nightly", "Version": "1.100.0-DEV", "BinaryPath": "./julia-nightly/bin/julia"},
+               "dev": {"Command": "/opt/julia/bin/julia", "Args": []}}}
+            """
+        )
+        julias = Pkg.Types.juliaup_julias(juliaup)
+        @test joinpath(juliaup, "julia-1.99.0", "bin", "julia") in julias
+        @test joinpath(juliaup, "julia-nightly", "bin", "julia") in julias
+        @test "/opt/julia/bin/julia" in julias
+        # older juliaup records only the `Path` of an installation
+        write(joinpath(juliaup, "juliaup.json"), """{"InstalledVersions": {"1.98.0+0": {"Path": "./julia-1.98.0"}}}""")
+        @test Pkg.Types.juliaup_julias(juliaup) == [joinpath(juliaup, "julia-1.98.0", "bin", Base.julia_exename())]
+    end
+end
+
+@testset "Pkg.gc: planning does not depend on condensing the usage logs" begin
+    temp_pkg_dir() do project_path
+        # a scratch space whose only parent project is gone
+        space = joinpath(Pkg.depots1(), "scratchspaces", string(UUID(UInt128(7))), "space")
+        mkpath(space)
+        usage_file = joinpath(Pkg.depots1(), "logs", "scratch_usage.toml")
+        mkpath(dirname(usage_file))
+        open(usage_file, "w") do io
+            TOML.print(io, Dict(space => [Dict("time" => Dates.now(), "parent_projects" => [joinpath(project_path, "gone", "Project.toml")])]))
+        end
+        dry = Pkg.API.gc_plan([Pkg.depots1()]; condense_usage = false)
+        @test dry.spaces == [space]
+        @test isfile(usage_file) && haskey(TOML.parsefile(usage_file), space)  # left alone
+        @test Pkg.API.gc_plan([Pkg.depots1()]; condense_usage = true).spaces == dry.spaces
     end
 end
 

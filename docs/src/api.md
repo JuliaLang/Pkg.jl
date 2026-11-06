@@ -36,6 +36,7 @@ Pkg.free
 Pkg.instantiate
 Pkg.resolve
 Pkg.gc
+Pkg.du
 Pkg.status
 Pkg.compat
 Pkg.precompile
