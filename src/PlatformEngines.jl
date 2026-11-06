@@ -385,16 +385,22 @@ function download(
     cancellation = DOWNLOAD_CANCELLATION[]
     interrupt = register_download!(cancellation)
     return try
-        # `Downloads.download` cannot be interrupted once the transfer has started, so do
-        # what it would do for us around `Downloads.request`, which takes an interrupt event.
-        arg_write(dest) do output
-            response = Downloads.request(url; output, headers, progress, interrupt)
-            Downloads.Curl.status_ok(response) && return output
-            throw(Downloads.RequestError(url, Downloads.Curl.CURLE_OK, "", response))
-        end
+        request_to(dest, url, headers, progress, interrupt)
     finally
         unregister_download!(cancellation, interrupt)
         do_fancy && end_progress(io, bar)
+    end
+end
+
+# `Downloads.download` cannot be interrupted once the transfer has started, so do
+# what it would do for us around `Downloads.request`, which takes an interrupt event.
+# A separate function so that the closure captures `progress` and `interrupt` with
+# concrete types, rather than the `Union`s they have in `download`.
+function request_to(dest, url::AbstractString, headers::Vector{Pair{String, String}}, progress, interrupt)
+    return arg_write(dest) do output
+        response = Downloads.request(url; output, headers, progress, interrupt)
+        Downloads.Curl.status_ok(response) && return output
+        throw(Downloads.RequestError(url, Downloads.Curl.CURLE_OK, "", response))
     end
 end
 

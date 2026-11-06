@@ -1495,9 +1495,9 @@ function build_eq_classes1!(graph::Graph, p0::Int, cmat_workspace::BitMatrix, cv
     # each set is represented by its highest-valued member,
     # unless it contains a preferred (already-loaded) version
     pref_version = get(graph.preferred_versions, pkgs[p0], nothing)
-    pref_idx = pref_version !== nothing ? get(vdict[p0], pref_version, nothing) : nothing
+    pref_idx = pref_version !== nothing ? get(vdict[p0], pref_version, 0) : 0 # 0 means none
     repr_vers = map(eq_sets) do eq_set
-        pref_idx !== nothing && pref_idx ∈ eq_set && return pref_idx
+        pref_idx != 0 && pref_idx ∈ eq_set && return pref_idx
         return maximum(eq_set)
     end
     # the last representative must always be the uninstalled state
