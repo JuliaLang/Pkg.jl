@@ -22,7 +22,7 @@ export UpgradeLevel, UPLEVEL_MAJOR, UPLEVEL_MINOR, UPLEVEL_PATCH
 export PreserveLevel, PRESERVE_TIERED_INSTALLED, PRESERVE_TIERED, PRESERVE_ALL_INSTALLED, PRESERVE_ALL, PRESERVE_DIRECT, PRESERVE_SEMVER, PRESERVE_NONE
 export Registry, RegistrySpec, Apps
 
-public activate, add, build, compat, develop, free, gc, generate, instantiate,
+public activate, add, build, compat, develop, du, free, gc, generate, instantiate,
     pin, precompile, readonly, redo, rm, resolve, status, test, undo, update, why
 
 depots() = Base.DEPOT_PATH
@@ -526,6 +526,21 @@ To disable automatic garbage collection, you can set the environment variable
 `JULIA_PKG_GC_AUTO` to `"false"` before starting Julia or call `API.auto_gc(false)`.
 """
 const gc = API.gc
+
+"""
+    Pkg.du(; verbose::Bool=false, force::Bool=false, io::IO=stderr)
+
+Show how much disk space each part of the user depot uses (packages, artifacts,
+precompilation caches split up by Julia version and build, registries, ...) and how much of
+it [`Pkg.gc`](@ref) would free. Nothing is deleted.
+
+With `force = true`, show every depot in the depot path, not only the user depot. With
+`verbose = true`, also list the largest packages.
+
+!!! compat "Julia 1.14"
+    This function requires at least Julia 1.14.
+"""
+const du = API.du
 
 
 """

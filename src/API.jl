@@ -769,36 +769,30 @@ const UsageByDepotDict = Dict{String, UsageDict}
     return paths
 end
 
+# What `gc` deletes: the paths that are unreachable from any manifest, `Artifacts.toml` or
+# scratch space parent that is still in use, and the cache files that can never load again.
+struct GCPlan
+    active_manifests::Set{String}
+    active_artifact_tomls::Set{String}
+    active_spaces::Set{String}
+    packages::Vector{String}
+    repos::Vector{String}
+    artifacts::Vector{String}
+    spaces::Vector{String}
+    caches::Vector{String}
+end
+
 """
-    gc(ctx::Context=Context(); verbose=false, force=false, kwargs...)
+    gc_plan(gc_depots; condense_usage, builds) -> GCPlan
 
-Garbage-collect package and artifact installations by sweeping over all known
-`Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
-finding artifacts and packages that are thereafter not used by any other projects.
-Unused packages, artifacts, repos, and scratch spaces are immediately deleted.
-
-Precompilation cache files (in `compiled/`, for any Julia version) that can never be
-loaded again are deleted too: those whose package source is gone, as for the package
-versions deleted by `gc`, and those compiled against a dependency whose cache file is
-gone. Like for packages, this goes by the depots on the depot path when `gc` runs: a cache
-file only found in a depot that is not on it counts as gone.
-
-Garbage collection is only applied to the "user depot", e.g. the first entry in the
-depot path. If you want to run `gc` on all depots set `force=true` (this might require
-admin privileges depending on the setup).
-
-Use verbose mode (`verbose=true`) for detailed output.
+Work out what `gc` would delete from the depots `gc_depots` without deleting anything.
+With `condense_usage`, the usage logs are rewritten with only their still existing entries.
+`builds` (see `CompiledCaches.julia_builds`) gets the builds found to be superseded added.
 """
-function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = nothing, verbose = false, force = false, kwargs...)
-    Context!(ctx; kwargs...)
-    if collect_delay !== nothing
-        @warn "The `collect_delay` parameter is no longer used. Packages are now deleted immediately when they become unreachable."
-    end
-    env = ctx.env
-
-    # Only look at user-depot unless force=true
-    gc_depots = force ? depots() : [depots1()]
-
+function gc_plan(
+        gc_depots::Vector{String}; condense_usage::Bool,
+        builds::Dict{UInt128, Pkg.CompiledCaches.BuildStatus} = Pkg.CompiledCaches.julia_builds(depots()),
+    )
     # First, we load in our `manifest_usage.toml` files which will tell us when our
     # "index files" (`Manifest.toml`, `Artifacts.toml`) were last used.  We will combine
     # this knowledge across depots, condensing it all down to a single entry per extant
@@ -888,96 +882,107 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     all_scratch_dirs = Set(filter(Pkg.isdir_nothrow, all_scratch_dirs))
     all_scratch_parents = Set(filter(Pkg.isfile_nothrow, all_scratch_parents))
 
-    # Immediately write these back as condensed toml files
-    function write_condensed_toml(f::Function, usage_by_depot, fname)
-        for (depot, usage) in usage_by_depot
-            # Run through user-provided filter/condenser
-            usage = f(depot, usage)
+    # Forget the parents of scratch spaces that no longer exist. This decides what is marked
+    # below, so it is done whether or not the usage logs are condensed.
+    let all_scratch_parents = all_scratch_parents
+        for parents in values(scratch_parents_by_depot), ps in values(parents)
+            filter!(p -> p in all_scratch_parents, ps)
+        end
+    end
 
-            # Write out the TOML file for this depot
-            usage_path = joinpath(logdir(depot), fname)
-            if !(isempty(usage)::Bool) || isfile(usage_path)
+    if condense_usage
+        # Immediately write these back as condensed toml files
+        function write_condensed_toml(f::Function, usage_by_depot, fname)
+            for (depot, usage) in usage_by_depot
+                # Run through user-provided filter/condenser
+                usage = f(depot, usage)
+
+                # Write out the TOML file for this depot
+                usage_path = joinpath(logdir(depot), fname)
+                if !(isempty(usage)::Bool) || isfile(usage_path)
+                    let usage = usage
+                        atomic_toml_write(usage_path, usage, sorted = true)
+                    end
+                end
+            end
+            return
+        end
+
+        # Write condensed Manifest usage
+        let all_manifest_tomls = all_manifest_tomls
+            write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
+                # Keep only manifest usage markers that are still existent
                 let usage = usage
-                    atomic_toml_write(usage_path, usage, sorted = true)
+                    filter!(((k, v),) -> k in all_manifest_tomls, usage)
+
+                    # Expand it back into a dict-of-dicts
+                    return Dict(k => [Dict("time" => v)] for (k, v) in usage)
                 end
             end
         end
-        return
-    end
 
-    # Write condensed Manifest usage
-    let all_manifest_tomls = all_manifest_tomls
-        write_condensed_toml(manifest_usage_by_depot, "manifest_usage.toml") do depot, usage
-            # Keep only manifest usage markers that are still existent
-            let usage = usage
-                filter!(((k, v),) -> k in all_manifest_tomls, usage)
+        # Write condensed Artifact usage
+        let all_artifact_tomls = all_artifact_tomls
+            write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
+                let usage = usage
+                    filter!(((k, v),) -> k in all_artifact_tomls, usage)
+                    return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+                end
+            end
+        end
+
+        # Write condensed scratch space usage
+        let all_scratch_parents = all_scratch_parents, all_scratch_dirs = all_scratch_dirs
+            write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
+                # Keep only scratch directories that still exist
+                filter!(((k, v),) -> k in all_scratch_dirs, usage)
 
                 # Expand it back into a dict-of-dicts
-                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
-            end
-        end
-    end
+                expanded_usage = Dict{String, Vector{Dict}}()
+                for (k, v) in usage
+                    # Drop scratch spaces whose parents are all non-existent
+                    parents = scratch_parents_by_depot[depot][k]
+                    if isempty(parents)
+                        continue
+                    end
 
-    # Write condensed Artifact usage
-    let all_artifact_tomls = all_artifact_tomls
-        write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
-            let usage = usage
-                filter!(((k, v),) -> k in all_artifact_tomls, usage)
-                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
-            end
-        end
-    end
-
-    # Write condensed scratch space usage
-    let all_scratch_parents = all_scratch_parents, all_scratch_dirs = all_scratch_dirs
-        write_condensed_toml(scratch_usage_by_depot, "scratch_usage.toml") do depot, usage
-            # Keep only scratch directories that still exist
-            filter!(((k, v),) -> k in all_scratch_dirs, usage)
-
-            # Expand it back into a dict-of-dicts
-            expanded_usage = Dict{String, Vector{Dict}}()
-            for (k, v) in usage
-                # Drop scratch spaces whose parents are all non-existent
-                parents = scratch_parents_by_depot[depot][k]
-                filter!(p -> p in all_scratch_parents, parents)
-                if isempty(parents)
-                    continue
+                    expanded_usage[k] = [
+                        Dict(
+                            "time" => v,
+                            "parent_projects" => collect(parents),
+                        ),
+                    ]
                 end
-
-                expanded_usage[k] = [
-                    Dict(
-                        "time" => v,
-                        "parent_projects" => collect(parents),
-                    ),
-                ]
+                return expanded_usage
             end
-            return expanded_usage
+        end
+    end
+
+    # Each manifest is read once, for both its packages and its repos
+    manifests = Dict{String, Union{Manifest, Nothing}}()
+    function load_manifest(path)
+        return get!(manifests, path) do
+            try
+                read_manifest(path)
+            catch e
+                @warn "Reading manifest file at $path failed with error" exception = e
+                nothing
+            end
         end
     end
 
     function process_manifest_pkgs(path)
-        # Read the manifest in
-        manifest = try
-            read_manifest(path)
-        catch e
-            @warn "Reading manifest file at $path failed with error" exception = e
-            return nothing
-        end
+        manifest = load_manifest(path)
+        manifest === nothing && return nothing
 
         # Collect the locations of every package referred to in this manifest
         pkg_dir(uuid, entry) = Operations.find_installed(entry.name, uuid, entry.tree_hash)
         return [pkg_dir(u, e) for (u, e) in manifest if e.tree_hash !== nothing]
     end
 
-    # TODO: Merge with function above to not read manifest twice?
     function process_manifest_repos(path)
-        # Read the manifest in
-        manifest = try
-            read_manifest(path)
-        catch e
-            # Do not warn here, assume that `process_manifest_pkgs` has already warned
-            return nothing
-        end
+        manifest = load_manifest(path)
+        manifest === nothing && return nothing
 
         # Collect the locations of every repo referred to in this manifest
         return [
@@ -1044,58 +1049,27 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         return [path]
     end
 
-    # Mark packages/artifacts as active or not by calling the appropriate user function
-    function mark(process_func::Function, index_files, ctx::Context; do_print = true, verbose = false, file_str = nothing)
-        marked_paths = String[]
+    # Mark packages/artifacts as active by calling the appropriate function on each index
+    # file; returns the index files that are still alive and the paths they mark.
+    function mark(process_func::Function, index_files)
+        marked_paths = Set{String}()
         active_index_files = Set{String}()
         for index_file in index_files
-            # Check to see if it's still alive
             paths = process_func(index_file)
             if paths !== nothing
-                # Mark found paths, and record the index_file for printing
                 push!(active_index_files, index_file)
-                append!(marked_paths, paths)
+                union!(marked_paths, paths)
             end
         end
-
-        if do_print
-            @assert file_str !== nothing
-            n = length(active_index_files)
-            printpkgstyle(ctx.io, :Active, "$(file_str): $(n) found")
-            if verbose
-                foreach(active_index_files) do f
-                    println(ctx.io, "        $(pathrepr(f))")
-                end
-            end
-        end
-        # Return the list of marked paths
-        return Set(marked_paths)
+        return active_index_files, marked_paths
     end
 
+    active_manifests, packages_to_keep = mark(process_manifest_pkgs, all_manifest_tomls)
+    active_artifact_tomls, artifacts_to_keep = mark(x -> process_artifacts_toml(x, String[]), all_artifact_tomls)
+    _, repos_to_keep = mark(process_manifest_repos, all_manifest_tomls)
+    active_spaces, spaces_to_keep = mark(x -> process_scratchspace(x, String[]), all_scratch_dirs)
 
-    # Scan manifests, parse them, read in all UUIDs listed and mark those as active
-    # printpkgstyle(ctx.io, :Active, "manifests:")
-    packages_to_keep = mark(
-        process_manifest_pkgs, all_manifest_tomls, ctx,
-        verbose = verbose, file_str = "manifest files"
-    )
-
-
-    # Next, do the same for artifacts.
-    # printpkgstyle(ctx.io, :Active, "artifacts:")
-    artifacts_to_keep = mark(
-        x -> process_artifacts_toml(x, String[]),
-        all_artifact_tomls, ctx; verbose = verbose, file_str = "artifact files"
-    )
-    repos_to_keep = mark(process_manifest_repos, all_manifest_tomls, ctx; do_print = false)
-    # printpkgstyle(ctx.io, :Active, "scratchspaces:")
-    spaces_to_keep = mark(
-        x -> process_scratchspace(x, String[]),
-        all_scratch_dirs, ctx; verbose = verbose, file_str = "scratchspaces"
-    )
-
-    # Collect all unreachable paths (packages, artifacts and repos that are not reachable)
-    # and immediately delete them.
+    # Collect all unreachable paths (packages, artifacts and repos that are not reachable).
     packages_to_delete = String[]
     artifacts_to_delete = String[]
     repos_to_delete = String[]
@@ -1166,6 +1140,65 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         end
 
     end
+
+    # The precompilation cache files that can never be loaded again: those whose source
+    # is in a package version deleted above (or already gone) and, in turn, those compiled
+    # against them.
+    caches_to_delete = Pkg.CompiledCaches.dead_cachefiles(depots(), gc_depots; removed = packages_to_delete, builds)
+
+    return GCPlan(
+        active_manifests, active_artifact_tomls, active_spaces,
+        packages_to_delete, repos_to_delete, artifacts_to_delete, spaces_to_delete, caches_to_delete,
+    )
+end
+
+"""
+    gc(ctx::Context=Context(); verbose=false, force=false, kwargs...)
+
+Garbage-collect package and artifact installations by sweeping over all known
+`Manifest.toml` and `Artifacts.toml` files, noting those that have been deleted, and then
+finding artifacts and packages that are thereafter not used by any other projects.
+Unused packages, artifacts, repos, and scratch spaces are immediately deleted.
+
+Precompilation cache files (in `compiled/`, for any Julia version) that can never be
+loaded again are deleted too: those whose package source is gone, as for the package
+versions deleted by `gc`, and those compiled against a dependency whose cache file is
+gone. Like for packages, this goes by the depots on the depot path when `gc` runs: a cache
+file only found in a depot that is not on it counts as gone.
+
+Garbage collection is only applied to the "user depot", e.g. the first entry in the
+depot path. If you want to run `gc` on all depots set `force=true` (this might require
+admin privileges depending on the setup).
+
+Use verbose mode (`verbose=true`) for detailed output.
+"""
+function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = nothing, verbose = false, force = false, kwargs...)
+    Context!(ctx; kwargs...)
+    if collect_delay !== nothing
+        @warn "The `collect_delay` parameter is no longer used. Packages are now deleted immediately when they become unreachable."
+    end
+    env = ctx.env
+
+    # Only look at user-depot unless force=true
+    gc_depots = force ? depots() : [depots1()]
+
+    Types.record_installed_julia_usage(depots())
+    plan = gc_plan(gc_depots; condense_usage = true)
+    for (files, file_str) in (
+            (plan.active_manifests, "manifest files"),
+            (plan.active_artifact_tomls, "artifact files"),
+            (plan.active_spaces, "scratchspaces"),
+        )
+        printpkgstyle(ctx.io, :Active, "$(file_str): $(length(files)) found")
+        if verbose
+            foreach(f -> println(ctx.io, "        $(pathrepr(f))"), files)
+        end
+    end
+    packages_to_delete = plan.packages
+    repos_to_delete = plan.repos
+    artifacts_to_delete = plan.artifacts
+    spaces_to_delete = plan.spaces
+    caches_to_delete = plan.caches
 
     function recursive_dir_size(path)
         size = 0
@@ -1245,10 +1278,6 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         end
     end
 
-    # Delete the precompilation cache files that can never be loaded again: those whose
-    # source is gone (as for the package versions just deleted) and, in turn, those
-    # compiled against them. This is done after deleting packages so that it sees them gone.
-    caches_to_delete = Pkg.CompiledCaches.dead_cachefiles(depots(), gc_depots)
     cache_space_freed = 0
     for cachefile in caches_to_delete
         for path in Pkg.CompiledCaches.companion_files(cachefile)
@@ -1264,6 +1293,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
             for name_dir in readdir(version_dir; join = true)
                 isdir(name_dir) && isempty(readdir(name_dir)) && Base.rm(name_dir)
             end
+            isempty(readdir(version_dir)) && Base.rm(version_dir)
         end
     end
 
@@ -1365,6 +1395,285 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     end
 
     return
+end
+
+# Apparent size in bytes of `path` and everything below it, without following symlinks.
+function disk_size(path::String)
+    st = try
+        lstat(path)
+    catch e
+        e isa Base.IOError || rethrow()
+        return 0
+    end
+    isdir(st) || return Int(st.size)
+    total = 0
+    for name in try
+            readdir(path)
+        catch e
+            e isa Base.IOError || rethrow(); String[]
+        end
+        total += disk_size(joinpath(path, name))
+    end
+    return total
+end
+
+struct DUEntry
+    name::String
+    size::Int
+    reclaimable::Int
+    children::Vector{DUEntry}
+end
+DUEntry(name, size, reclaimable) = DUEntry(name, size, reclaimable, DUEntry[])
+
+# How long ago `t` (a Unix time) was, roughly
+function time_ago(t::Float64)
+    days = (time() - t) / 86400
+    return days < 1 ? "today" : days < 2 ? "yesterday" : days < 60 ? "$(round(Int, days)) days ago" :
+        days < 730 ? "$(round(Int, days / 30)) months ago" : "$(round(Int, days / 365)) years ago"
+end
+
+# The cache files of `compiled/vX.Y` grouped by the Julia build (the `Base` build id) they
+# were compiled with: the running one first, then the others by size. Each file is stat'ed
+# once: a cache file `stem.ji` owns every file in its directory whose name starts with
+# `stem.` (its native code image and the debug info of that).
+function du_compiled_builds(version_dir::String, dead::Set{String}, builds, versions)
+    CC = Pkg.CompiledCaches
+    # stem path => (size, newest mtime) of all files of that cache file
+    stems = Dict{String, Tuple{Int, Float64}}()
+    function account!(dir::String, name::String)
+        path = joinpath(dir, name)
+        st = try
+            lstat(path)
+        catch e
+            e isa Base.IOError || rethrow()
+            return
+        end
+        stem = joinpath(dir, first(split(name, '.'; limit = 2)))
+        size = isdir(st) ? disk_size(path) : Int(st.size)
+        mt = endswith(name, ".ji") ? st.mtime : 0.0
+        (s0, m0) = get(stems, stem, (0, 0.0))
+        stems[stem] = (s0 + size, max(m0, mt))
+        return
+    end
+    for name in readdir_nothrow(version_dir)
+        path = joinpath(version_dir, name)
+        if isdir(path) && !endswith(name, ".dSYM")
+            for sub in readdir_nothrow(path)
+                account!(path, sub)
+            end
+        else
+            account!(version_dir, name)
+        end
+    end
+    groups = Dict{Any, Any}()  # build => (; version, size, reclaimable, n, newest)
+    orphaned = 0  # files that do not belong to a cache file
+    for (stem, (size, newest)) in stems
+        ji = stem * ".ji"
+        if !isfile(ji)
+            orphaned += size
+            continue
+        end
+        h = CC.read_cache_header(ji)
+        build = h === nothing ? nothing : CC.base_build_id(h)
+        g = get(groups, build, (; version = h === nothing ? nothing : h.julia_version, commit = h === nothing ? "" : h.git_commit, size = 0, reclaimable = 0, n = 0, newest = 0.0))
+        groups[build] = (;
+            g.version, g.commit, size = g.size + size, reclaimable = g.reclaimable + (ji in dead ? size : 0),
+            n = g.n + 1, newest = max(g.newest, newest),
+        )
+    end
+    status(build) = build === nothing ? nothing : something(get(builds, build, nothing), CC.BUILD_UNKNOWN)
+    order(p) = (status(p.first) != CC.BUILD_RUNNING, -p.second.size)
+    entries = DUEntry[]
+    for (build, g) in sort!(collect(groups); by = order)
+        st = status(build)
+        what = st === nothing ? "unreadable" :
+            st == CC.BUILD_RUNNING ? "this Julia" :
+            st == CC.BUILD_INSTALLED ? "installed" :
+            st == CC.BUILD_GONE ? "uninstalled" :
+            st == CC.BUILD_SUPERSEDED ? "superseded" : "not logged"
+        # the full version if the build is recorded, and the commit to tell prereleases apart
+        v = build === nothing ? g.version : get(versions, build, g.version)
+        version = v === nothing ? "" : string(v)
+        if v !== nothing && !isempty(v.prerelease) && length(g.commit) >= 7
+            version *= " ($(g.commit[1:7]))"
+        end
+        version = isempty(version) ? "" : version * " "
+        label = "$version[$what] $(g.n) file$(g.n == 1 ? "" : "s"), newest $(time_ago(g.newest))"
+        push!(entries, DUEntry(label, g.size, g.reclaimable))
+    end
+    orphaned > 0 && push!(entries, DUEntry("other files", orphaned, 0))
+    return entries
+end
+
+readdir_nothrow(dir::String) = try
+    readdir(dir)
+catch e
+    e isa Base.IOError || rethrow()
+    String[]
+end
+
+# The steps of `du`, shown while they run (when `io` can show progress) as one line each
+# that gets a check mark and its time once done (or disappears if it was quick), and
+# cleared before the result is printed
+mutable struct DUProgress
+    io::IO
+    enabled::Bool
+    lines::Int
+end
+DUProgress(io::IO) = DUProgress(io, can_fancyprint(io), 0)
+
+function du_step(f, p::DUProgress, what::AbstractString)
+    p.enabled || return f()
+    print(p.io, "  ", what, " ...")
+    t0 = time()
+    result = f()
+    elapsed = time() - t0
+    print(p.io, "\r\e[2K")
+    # a step that was over in no time leaves no line behind
+    elapsed < 0.1 && return result
+    print(p.io, "  ", what, " ")
+    printstyled(p.io, "✓"; color = :green)
+    printstyled(p.io, " ", round(elapsed; digits = 1), " s"; color = :light_black)
+    println(p.io)
+    p.lines += 1
+    return result
+end
+
+function du_clear!(p::DUProgress)
+    p.enabled && p.lines > 0 && print(p.io, "\e[$(p.lines)A\r\e[J")
+    p.lines = 0
+    return
+end
+
+function du_depot(depot::String, plan::GCPlan, builds, versions, progress::DUProgress; verbose::Bool)
+    reclaim = Dict{String, Vector{String}}(
+        "packages" => plan.packages, "clones" => plan.repos,
+        "artifacts" => plan.artifacts, "scratchspaces" => plan.spaces,
+    )
+    in_depot(paths) = filter(p -> startswith(p, joinpath(abspath(depot), "")), paths)
+    dead_caches = Set(in_depot(plan.caches))
+    entries = DUEntry[]
+    for name in readdir(depot)
+        path = joinpath(depot, name)
+        reclaimable = sum(disk_size, in_depot(get(reclaim, name, String[])); init = 0)
+        children = DUEntry[]
+        size = 0
+        if name == "compiled" && isdir(path)
+            for vdir in Pkg.CompiledCaches.readdir_nothrow(path)
+                if !isdir(vdir)
+                    size += disk_size(vdir)
+                    continue
+                end
+                vbuilds = du_step(progress, "Measuring compiled/$(basename(vdir))") do
+                    du_compiled_builds(vdir, dead_caches, builds, versions)
+                end
+                vsize = sum(e -> e.size, vbuilds; init = 0)
+                size += vsize
+                vreclaim = sum(e -> e.reclaimable, vbuilds; init = 0)
+                reclaimable += vreclaim
+                push!(children, DUEntry(basename(vdir), vsize, vreclaim, vbuilds))
+            end
+            sort!(children; by = e -> -e.size)
+        else
+            size = du_step(() -> disk_size(path), progress, "Measuring $name")
+        end
+        if verbose && name == "packages" && isdir(path)
+            dead = Set(in_depot(plan.packages))
+            for pkgdir in readdir(path; join = true)
+                isdir(pkgdir) || continue
+                pkg_versions = readdir(pkgdir; join = true)
+                psize = sum(disk_size, pkg_versions; init = 0)
+                preclaim = sum(disk_size, filter(in(dead), pkg_versions); init = 0)
+                n = length(pkg_versions)
+                push!(children, DUEntry("$(basename(pkgdir)) ($n version$(n == 1 ? "" : "s"))", psize, preclaim))
+            end
+            sort!(children; by = e -> -e.size)
+            length(children) > 10 && resize!(children, 10)
+        end
+        push!(entries, DUEntry(name, size, reclaimable, children))
+    end
+    return sort!(entries; by = e -> -e.size)
+end
+
+# A size in bytes, with one decimal
+function du_bytes(n::Integer)
+    n < 1024 && return "$n B"
+    units = ("KiB", "MiB", "GiB", "TiB", "PiB")
+    x = n / 1024
+    i = 1
+    while x >= 1024 && i < length(units)
+        x /= 1024
+        i += 1
+    end
+    return @sprintf("%.1f %s", x, units[i])
+end
+
+# The widest of `f(e)` over `entries` and everything below them
+du_widest(f, entries::Vector{DUEntry}) =
+    maximum(e -> max(f(e), du_widest(f, e.children)), entries; init = 0)
+
+# A row: the size (in a column `sw` wide), what `gc` would free of it (in a column `rw` wide,
+# if anything), then the name. The gap between the size and the name is filled with faint
+# dots to guide the eye along the row.
+function print_du_row(io::IO, size::Int, reclaimable::Int, name::AbstractString, sw::Int, rw::Int, depth::Int)
+    print(io, lpad(du_bytes(size), sw), " ")
+    # one unbroken run of dots up to the name (through its indentation), with what `gc`
+    # would free right-aligned in its column
+    if reclaimable > 0
+        freed = du_bytes(reclaimable)
+        printstyled(io, "·"^(rw - length(freed) - 1), " "; color = :light_black)
+        printstyled(io, freed; color = :yellow)
+        depth > 0 && printstyled(io, " ", "·"^(2depth - 1); color = :light_black)
+    else
+        printstyled(io, "·"^(rw + 2depth); color = :light_black)
+    end
+    println(io, " ", name)
+    return
+end
+
+function print_du(io::IO, entries::Vector{DUEntry}, depth::Int, sw::Int, rw::Int)
+    for e in entries
+        print_du_row(io, e.size, e.reclaimable, e.name, sw, rw, depth)
+        print_du(io, e.children, depth + 1, sw, rw)
+    end
+    return
+end
+
+function du(ctx::Context = Context(); verbose::Bool = false, force::Bool = false, kwargs...)
+    Context!(ctx; kwargs...)
+    io = ctx.io
+    du_depots = force ? filter(isdir, depots()) : [depots1()]
+    progress = DUProgress(io)
+    # Read-only: the usage logs are not condensed, nothing is deleted
+    du_step(() -> Types.record_installed_julia_usage(depots()), progress, "Checking installed Julia versions")
+    builds = Pkg.CompiledCaches.julia_builds(depots())
+    plan = du_step(progress, "Finding what `gc` would free") do
+        gc_plan(du_depots; condense_usage = false, builds)
+    end
+    versions = Pkg.CompiledCaches.logged_versions(depots())
+    results = map(depot -> du_depot(depot, plan, builds, versions, progress; verbose), du_depots)
+    du_clear!(progress)
+    hint = force ? "`Pkg.gc(force = true)`" : "`pkg> gc`"
+    for (i, (depot, entries)) in enumerate(zip(du_depots, results))
+        i > 1 && println(io)
+        total = sum(e -> e.size, entries; init = 0)
+        reclaimable = sum(e -> e.reclaimable, entries; init = 0)
+        sw = max(length("size"), length(du_bytes(total)), du_widest(e -> length(du_bytes(e.size)), entries))
+        rw = max(length("reclaimable"), length(du_bytes(reclaimable)) + 1)
+        printstyled(io, lpad("size", sw), " ", lpad("reclaimable", rw), " "; color = :light_black)
+        printstyled(io, Base.contractuser(depot), "\n"; bold = true)
+        print_du(io, entries, 0, sw, rw)
+        print(io, lpad(du_bytes(total), sw), " ")
+        if reclaimable > 0
+            printstyled(io, lpad(du_bytes(reclaimable), rw); color = :yellow)
+        else
+            print(io, " "^rw)
+        end
+        print(io, " total")
+        reclaimable > 0 && printstyled(io, " (run ", hint, " to free it)"; color = :light_black)
+        println(io)
+    end
+    return nothing
 end
 
 function build(ctx::Context, pkgs::Vector{PackageSpec}; verbose = false, allow_reresolve::Bool = true, kwargs...)

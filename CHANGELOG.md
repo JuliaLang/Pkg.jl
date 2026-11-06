@@ -5,6 +5,16 @@ Pkg v1.14 Release Notes
   channel of the same minor version, or else to the `julia` in `PATH` with a warning.
   The new `Pkg.Apps.relink` (`pkg> app relink`) makes apps use the running Julia while keeping their package
   versions, and `pkg> app status` marks apps whose Julia is missing. ([#4913])
+- `Pkg.gc` now also deletes precompilation cache files that can never be loaded again: those whose package
+  version is gone, those compiled against caches that are gone, and those of Julia builds that are gone. Julia
+  records each build it runs in `logs/julia_usage.toml`, together with the system image it started with, and the
+  caches of a build are deleted once that image has been removed or replaced (as when Julia was updated or
+  uninstalled). Julias installed with juliaup and those that installed apps run with are recorded by running them
+  once. Caches of builds that were never recorded are deleted when they are evidently superseded: a prerelease
+  that has compiled nothing for two weeks while a newer build of the same minor version has, or a release whose
+  newer patch release has. ([#4905])
+- New `Pkg.du` (`pkg> du`) shows how much space each part of the depot uses, how much of it `Pkg.gc` would
+  free, and the precompilation caches broken down by Julia version and build.
 - Pkg now resolves package versions with the exact SAT-based resolver from
   [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
   resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each
@@ -295,3 +305,4 @@ Pkg v1.7 Release Notes
 [#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
 [#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851
 [#4913]: https://github.com/JuliaLang/Pkg.jl/pull/4913
+[#4905]: https://github.com/JuliaLang/Pkg.jl/pull/4905
