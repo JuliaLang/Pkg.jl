@@ -1,6 +1,8 @@
 Pkg v1.14 Release Notes
 =======================
 
+- `Pkg.instantiate` now errors, pointing to `Pkg.resolve`, when the manifest records a package as a standard
+  library that the running Julia no longer ships, instead of failing later when the package is loaded.
 - Pkg now resolves package versions with the exact SAT-based resolver from
   [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
   resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each

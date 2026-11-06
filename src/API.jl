@@ -1586,6 +1586,7 @@ function instantiate(
     else
         pkgs = Operations.load_all_deps_loadable(ctx.env)
     end
+    Operations.check_former_stdlibs(ctx.env, pkgs, ctx.julia_version)
     try
         # First try without updating the registry
         Operations.check_registered(ctx.registries, pkgs)
