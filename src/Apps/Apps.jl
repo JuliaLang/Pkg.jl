@@ -12,7 +12,7 @@ using Dates
 import FileWatching
 import Pkg.Registry
 
-public add, rm, status, update, develop
+public add, rm, status, update, develop, relink
 
 app_env_folder() = joinpath(first(DEPOT_PATH), "environments", "apps")
 app_env_dir(pkgname) = joinpath(app_env_folder(), pkgname)
@@ -21,6 +21,33 @@ julia_bin_path() = joinpath(first(DEPOT_PATH), "bin")
 julia_executable() = joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
 shim_filename(name) = name * (Sys.iswindows() ? ".bat" : "")
 shim_path(name) = joinpath(julia_bin_path(), shim_filename(name))
+
+# The juliaup directory (the one holding `juliaup.json`) that `julia` is installed
+# in, or `nothing` if `julia` is not installed by juliaup
+function juliaup_home(julia::AbstractString)
+    dir = dirname(abspath(julia))
+    while true
+        isfile(joinpath(dir, "juliaup.json")) && return dir
+        parent = dirname(dir)
+        parent == dir && return nothing
+        dir = parent
+    end
+end
+
+# The juliaup channel that the shim of an app falls back to when `julia` was
+# removed: the `major.minor` channel of the running julia, so that a patch
+# release replacing it (which keeps the app manifest valid) is used, together
+# with the juliaup config file that tells whether that channel is installed.
+# Nightlies and other development builds have no such channel.
+function juliaup_channel(julia::AbstractString)
+    julia == julia_executable() || return nothing
+    home = juliaup_home(julia)
+    home === nothing && return nothing
+    !isempty(VERSION.prerelease) && first(VERSION.prerelease) == "DEV" && return nothing
+    return (; name = "$(VERSION.major).$(VERSION.minor)", config = joinpath(home, "juliaup.json"))
+end
+
+app_julia(app::AppInfo) = something(app.julia_command, julia_executable())
 
 app_context() = Context(env = EnvCache(joinpath(app_env_folder(), "Project.toml")))
 
@@ -275,7 +302,6 @@ function _resolve(manifest::Manifest, pkgname = nothing)
             Pkg.resolve(ctx)
         end
 
-        # TODO: Julia path
         generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), julia_executable())
     end
     return write_manifest(manifest, app_manifest_file())
@@ -473,6 +499,65 @@ function _update(pkg::Union{PackageSpec, Nothing})
 end
 
 """
+    Pkg.Apps.relink(name::Union{Nothing, String} = nothing)
+
+Make the app `name` (or the apps of the package named `name`), or all installed
+apps if no name is given, run with the running julia instead of the julia they
+were installed with. The versions of the packages are kept, but the app
+environments are resolved again for the running julia when needed.
+
+Use this when the julia an app was installed with was removed (for example by
+juliaup) or to move apps to a newer julia.
+"""
+relink(pkgs_or_apps::String) = relink([pkgs_or_apps])
+function relink(pkgs_or_apps::Vector)
+    if isempty(pkgs_or_apps)
+        relink(nothing)
+    else
+        for pkg_or_app in pkgs_or_apps
+            relink(pkg_or_app isa String ? PackageSpec(pkg_or_app) : pkg_or_app)
+        end
+    end
+    return
+end
+
+relink(pkg::Union{PackageSpec, Nothing} = nothing) = with_apps_lock(() -> _relink(pkg))
+function _relink(pkg::Union{PackageSpec, Nothing})
+    ctx = app_context()
+    manifest = ctx.env.manifest
+    relinked = String[]
+    for (uuid, info) in manifest.deps
+        if pkg !== nothing && info.name != pkg.name && !(pkg.name in keys(info.apps))
+            continue
+        end
+        push!(relinked, info.name)
+        for (appname, app) in info.apps
+            # an unset julia command is written as the running julia
+            info.apps[appname] = AppInfo(app.name, nothing, app.submodule, app.julia_flags, app.other)
+        end
+        sourcepath = developed_source_path(ctx.env.manifest_file, info)
+        if sourcepath === nothing
+            _resolve(manifest, info.name)
+        else
+            # resolve for the running julia, which can have other stdlib versions
+            Pkg.activate(sourcepath) do
+                Pkg.resolve()
+                Pkg.instantiate()
+            end
+            generate_shims_for_apps(info.name, info.apps, sourcepath, julia_executable())
+        end
+    end
+    if pkg !== nothing && isempty(relinked)
+        pkgerror("no app or package named `$(pkg.name)` found in the app manifest")
+    end
+    write_manifest(manifest, app_manifest_file())
+    if Pkg.should_autoprecompile()
+        foreach(precompile, relinked)
+    end
+    return
+end
+
+"""
     Pkg.Apps.status(name::Union{Nothing, String} = nothing)
 
 Show the installed apps, the version of their package, and the julia command
@@ -498,6 +583,7 @@ function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing; io::IO = stdo
     deps = Pkg.Operations.load_manifest_deps(manifest)
 
     is_pkg = pkg_or_app !== nothing && any(dep -> dep.name == pkg_or_app, values(manifest.deps))
+    missing_julia = false
 
     for dep in deps
         info = manifest.deps[dep.uuid]
@@ -517,10 +603,22 @@ function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing; io::IO = stdo
             if !is_pkg && pkg_or_app !== nothing && appname !== pkg_or_app
                 continue
             end
-            julia_cmd = contractuser(appinfo.julia_command)
+            julia_cmd = contractuser(app_julia(appinfo))
             printstyled(io, "  $(appname)", color = :green)
-            printstyled(io, " $(julia_cmd) \n", color = :gray)
+            printstyled(io, " $(julia_cmd)", color = :gray)
+            if !isfile(app_julia(appinfo))
+                missing_julia = true
+                printstyled(io, " (missing)"; color = :red)
+            end
+            println(io)
         end
+    end
+    if missing_julia
+        printstyled(io, "Info"; color = :cyan, bold = true)
+        println(
+            io, " Some apps were installed with a julia that no longer exists and run with a fallback julia,",
+            " use `app relink` to make them use the running julia"
+        )
     end
     return
 end
@@ -643,7 +741,7 @@ end
 #########
 
 const SHIM_COMMENT = Sys.iswindows() ? "REM " : "#"
-const SHIM_VERSION = 1.5
+const SHIM_VERSION = 1.6
 const SHIM_HEADER = """$SHIM_COMMENT This file is generated by the Julia package manager.
 $SHIM_COMMENT Shim version: $SHIM_VERSION"""
 
@@ -669,8 +767,9 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
     module_spec = app.submodule === nothing ? pkgname : "$(pkgname).$(app.submodule)"
 
     julia_bin_filename = shim_path(app.name)
-    content = Sys.iswindows() ? windows_shim(julia, module_spec, env, app.julia_flags) :
-        shell_shim(julia, module_spec, env, app.julia_flags)
+    channel = juliaup_channel(julia)
+    content = Sys.iswindows() ? windows_shim(julia, module_spec, env, app.julia_flags; channel) :
+        shell_shim(julia, module_spec, env, app.julia_flags; channel)
     overwrite_file_if_different(julia_bin_filename, content)
     return if Sys.isunix()
         chmod(julia_bin_filename, 0o755)
@@ -678,7 +777,7 @@ function generate_shim(pkgname, app::AppInfo, env, julia)
 end
 
 
-function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector{String})
+function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector{String}; channel::Union{@NamedTuple{name::String, config::String}, Nothing} = nothing)
     julia_escaped = Base.shell_escape(julia)
     module_spec_escaped = Base.shell_escape(module_spec)
     julia_flags_escaped = join(Base.shell_escape.(julia_flags), " ")
@@ -727,10 +826,15 @@ function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector
     export JULIA_LOAD_PATH=$load_path_part
 
     # Allow overriding Julia executable via environment variable
+    channel_arg=
     if [ -n "\${JULIA_APPS_JULIA_CMD:-}" ]; then
         julia_cmd="\$JULIA_APPS_JULIA_CMD"
     else
         julia_cmd=$julia_escaped
+        if ! command -v "\$julia_cmd" >/dev/null 2>&1; then
+            # The julia the app was installed with is gone (e.g. removed by juliaup)
+    $(shell_fallback(channel))
+        fi
     fi
 
     # If a `--` appears, args before it go to Julia, after it to the app.
@@ -755,18 +859,46 @@ function shell_shim(julia::String, module_spec::String, env, julia_flags::Vector
         set -- -m $module_spec_escaped "\$@"
     fi
 
-    exec "\$julia_cmd" --startup-file=no$julia_flags_part "\$@"
+    exec "\$julia_cmd" \${channel_arg:+"\$channel_arg"} --startup-file=no$julia_flags_part "\$@"
     """
 end
 
-# Escape a value for `set "var=..."` in a batch script: the quotes keep cmd
-# metacharacters literal so only `%` needs doubling
+# The part of the shell shim that picks another julia when the one the app was
+# installed with is gone: the juliaup channel of the same minor version, or else
+# the `julia` in `PATH`
+function shell_fallback(channel)
+    hint = "use \\`pkg> app relink\\` to make the app use another julia"
+    lines = String[]
+    if channel !== nothing
+        append!(lines, [
+            "juliaup_cmd=\$(command -v juliaup 2>/dev/null || true)",
+            "# the juliaup launcher with the channel of the same minor version, if that is installed",
+            "if [ -n \"\$juliaup_cmd\" ] && [ -x \"\$(dirname -- \"\$juliaup_cmd\")/julia\" ] &&",
+            "        grep -qF '\"$(channel.name)\"' $(Base.shell_escape(channel.config)) 2>/dev/null; then",
+            "    julia_cmd=\$(dirname -- \"\$juliaup_cmd\")/julia",
+            "    channel_arg=+$(channel.name)",
+            "elif command -v julia >/dev/null 2>&1; then",
+        ])
+    else
+        push!(lines, "if command -v julia >/dev/null 2>&1; then")
+    end
+    append!(lines, [
+        "    echo \"warning: \$julia_cmd does not exist, running the app with the julia in PATH; $hint\" >&2",
+        "    julia_cmd=julia",
+        "else",
+        "    echo \"error: \$julia_cmd does not exist and there is no julia in PATH; $hint\" >&2",
+        "    exit 127",
+        "fi",
+    ])
+    return "        " * join(lines, "\n        ")
+end
+
 function escape_batch_set_value(s::AbstractString)
     occursin(r"[\"\r\n\0]", s) && pkgerror("cannot use $(repr(s)) in a Windows batch script")
     return replace(s, "%" => "%%")
 end
 
-function windows_shim(julia::String, module_spec::String, env, julia_flags::Vector{String})
+function windows_shim(julia::String, module_spec::String, env, julia_flags::Vector{String}; channel::Union{@NamedTuple{name::String, config::String}, Nothing} = nothing)
     # Flags end up unquoted on the command line so escape cmd metacharacters
     flags_escaped = join((replace(Base.shell_escape_wincmd(f), "%" => "%%") for f in julia_flags), " ")
     flags_part = isempty(julia_flags) ? "" : " $flags_escaped"
@@ -808,6 +940,20 @@ function windows_shim(julia::String, module_spec::String, env, julia_flags::Vect
         set "julia_cmd=$(escape_batch_set_value(julia))"
     )
 
+    rem --- The julia the app was installed with is gone (e.g. removed by juliaup): ---
+    rem --- use the juliaup channel of the same minor version or the julia in PATH ---
+    set "channel_arg="
+    if defined JULIA_APPS_JULIA_CMD goto __julia_found
+    if exist "%julia_cmd%" goto __julia_found
+    $(windows_fallback(channel))where julia >nul 2>nul || goto __no_julia
+    echo warning: "%julia_cmd%" does not exist, running the app with the julia in PATH; use `pkg^> app relink` to make the app use another julia 1>&2
+    set "julia_cmd=julia"
+    goto __julia_found
+    :__no_julia
+    echo error: "%julia_cmd%" does not exist and there is no julia in PATH; use `pkg^> app relink` to make the app use another julia 1>&2
+    exit /b 127
+    :__julia_found
+
     rem --- Now enable delayed expansion for string building below ---
     setlocal EnableDelayedExpansion
 
@@ -848,17 +994,31 @@ function windows_shim(julia::String, module_spec::String, env, julia_flags::Vect
     :__done
     rem If no --, pass all original args to the app; otherwise use split vars
     if defined found_sep (
-        "%julia_cmd%" ^
+        "%julia_cmd%" %channel_arg% ^
             --startup-file=no$flags_part !julia_args! ^
             -m "$module_spec" ^
             !app_args!
     ) else (
-        "%julia_cmd%" ^
+        "%julia_cmd%" %channel_arg% ^
             --startup-file=no$flags_part ^
             -m "$module_spec" ^
             %*
     )
     """
+end
+
+function windows_fallback(channel)
+    channel === nothing && return ""
+    return """set "juliaup_dir="
+        for /f "delims=" %%J in ('where juliaup 2^>nul') do if not defined juliaup_dir set "juliaup_dir=%%~dpJ"
+        if not defined juliaup_dir goto __no_juliaup
+        if not exist "%juliaup_dir%julia.exe" goto __no_juliaup
+        findstr /l /c:"\\"$(channel.name)\\"" "$(escape_batch_set_value(channel.config))" >nul 2>nul || goto __no_juliaup
+        set "julia_cmd=%juliaup_dir%julia.exe"
+        set "channel_arg=+$(channel.name)"
+        goto __julia_found
+        :__no_juliaup
+        """
 end
 
 end

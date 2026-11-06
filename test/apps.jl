@@ -360,6 +360,48 @@ using Test
         end
     end
 
+    if !Sys.iswindows()
+        @testset "app whose julia was removed" begin
+            isolate(loaded_depot = true) do
+                mktempdir() do tmp
+                    Pkg.Apps.develop(path = joinpath(@__DIR__, "test_packages", "Rot13.jl"))
+                    exe = joinpath(first(DEPOT_PATH), "bin", "juliarot13")
+                    # Pretend that the app was installed with a julia that juliaup has removed since
+                    juliaup = mkpath(joinpath(tmp, "juliaup"))
+                    touch(joinpath(juliaup, "juliaup.json"))
+                    gone = joinpath(juliaup, "julia-1.0.0+0", "bin", "julia")
+                    manifest_file = Pkg.Apps.app_manifest_file()
+                    write(manifest_file, replace(read(manifest_file, String), Pkg.Apps.julia_executable() => gone))
+                    manifest = Pkg.Types.read_manifest(manifest_file)
+                    entry = only(values(manifest.deps))
+                    Pkg.Apps.generate_shims_for_apps(entry.name, entry.apps, Pkg.Apps.developed_source_path(manifest_file, entry), gone)
+
+                    # the app runs with the julia in PATH and warns
+                    bindir = mkpath(joinpath(tmp, "bin"))
+                    symlink(Pkg.Apps.julia_executable(), joinpath(bindir, "julia"))
+                    err = IOBuffer()
+                    withenv("PATH" => bindir * ":/usr/bin:/bin") do
+                        @test read(pipeline(`$exe test`; stderr = err), String) == "grfg\n"
+                    end
+                    @test contains(String(take!(err)), "$gone does not exist")
+
+                    # status marks it and relinking makes it use the running julia
+                    io = IOBuffer()
+                    Pkg.Apps.status(; io)
+                    @test contains(String(take!(io)), "(missing)")
+                    Pkg.Apps.relink()
+                    Pkg.Apps.status(; io)
+                    @test !contains(String(take!(io)), "(missing)")
+                    @test all(app -> app.julia_command == Pkg.Apps.julia_executable(), values(only(values(Pkg.Types.read_manifest(manifest_file).deps)).apps))
+                    withenv("PATH" => "/usr/bin:/bin") do
+                        @test read(pipeline(`$exe test`; stderr = err), String) == "grfg\n"
+                    end
+                    @test isempty(take!(err))
+                end
+            end
+        end
+    end
+
     isolate(loaded_depot = false) do
         # depot without registries (#4808)
         rm(joinpath(first(DEPOT_PATH), "registries"); force = true, recursive = true)

@@ -5,8 +5,6 @@
 
     Some inconveniences that can be encountered are:
     - You need to manually make `~/.julia/bin` available on the PATH environment.
-    - The path to the julia executable used is the same as the one used to install the app. If this
-      julia installation gets removed, you might need to reinstall the app.
 
 Apps are Julia packages that are intended to be run as "standalone programs" (by e.g. typing the name of the app in the terminal possibly together with some arguments or flags/options).
 This is in contrast to most Julia packages that are used as "libraries" and are loaded by other files or in the Julia REPL.
@@ -146,9 +144,25 @@ The final Julia command will combine:
 3. Runtime flags specified before `--`
 4. App arguments specified after `--`
 
-### Overriding the Julia Executable
+### The Julia Executable
 
-By default, apps run with the same Julia executable that was used to install them. You can override this globally using the `JULIA_APPS_JULIA_CMD` environment variable:
+By default, apps run with the same Julia executable that was used to install them.
+If that Julia installation is removed, the app runs with another Julia:
+
+- When the Julia was installed with [juliaup](https://github.com/JuliaLang/juliaup), the app runs
+  with the juliaup channel of the same minor version (for example `julia +1.12`), which picks up the
+  patch release that replaced it.
+- Otherwise the app runs with the `julia` in `PATH` and prints a warning.
+
+Versions of juliaup that support it also keep the Julia versions that apps use installed when a
+channel is updated or removed, until no app uses them anymore (juliaup reads the `julia_command`
+of the apps in `environments/apps/AppManifest.toml` of the depots in `JULIA_DEPOT_PATH`).
+
+To make apps use the running Julia instead of the one they were installed with, without changing
+the versions of their packages, use `pkg> app relink [name]` (all apps if no name is given).
+`pkg> app status` marks apps whose Julia no longer exists.
+
+You can also override the Julia executable globally using the `JULIA_APPS_JULIA_CMD` environment variable:
 
 ```bash
 # Use a different Julia version for all apps
@@ -188,4 +202,5 @@ Pkg.Apps.develop
 Pkg.Apps.update
 Pkg.Apps.status
 Pkg.Apps.rm
+Pkg.Apps.relink
 ```
