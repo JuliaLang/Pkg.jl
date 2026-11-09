@@ -1206,6 +1206,19 @@ end
     end
 end
 
+# Toggles the write bits of everything under `root`, leaving symlinks (such as a linked
+# registry) and what they point to alone; `chmod -R` implementations differ in how they treat those
+function set_writable!(root::AbstractString, writable::Bool)
+    for (dir, _, files) in walkdir(root)
+        for path in (joinpath.(dir, files)..., dir)
+            islink(path) && continue
+            mode = filemode(path)
+            chmod(path, writable ? mode | 0o200 : mode & 0o7555)
+        end
+    end
+    return
+end
+
 @testset "Issue #4345: pidfile in writable location when depot is readonly" begin
     isolate(loaded_depot = false) do
         mktempdir() do readonly_depot
@@ -1222,7 +1235,7 @@ end
                     Pkg.add(name = "Example", version = "0.5.3")
 
                     # Make the depot read-only
-                    run(`chmod -R -w $readonly_depot`)
+                    set_writable!(readonly_depot, false)
 
                     # Add writable depot to front of DEPOT_PATH
                     pushfirst!(DEPOT_PATH, writable_depot)
@@ -1237,7 +1250,7 @@ end
                     # Restore depot path and make readonly depot writable again for cleanup
                     empty!(DEPOT_PATH)
                     append!(DEPOT_PATH, old_depot_path)
-                    run(`chmod -R +w $readonly_depot`)
+                    set_writable!(readonly_depot, true)
                 end
             end
         end
