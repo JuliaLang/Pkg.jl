@@ -1661,10 +1661,18 @@ end
 
 @testset "JuliaLang/julia #55850" begin
     isolate(loaded_depot = true) do
-        # `promptf` is covered in-process; without `--code-coverage=none` the
-        # subprocess would have to compile Pkg from scratch when run with coverage
-        prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --code-coverage=none -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
-        @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+        # the default environment, in a depot reached through a symlink
+        depot = first(Base.DEPOT_PATH)
+        depot_link = joinpath(depot, "sym")
+        symlink(depot, depot_link; dir_target = true)
+        # the subprocess is not allowed to precompile Pkg
+        copy_this_pkg_cache(depot)
+        withenv("JULIA_DEPOT_PATH" => depot_link * (Sys.iswindows() ? ";" : ":")) do
+            # `promptf` is covered in-process; without `--code-coverage=none` the
+            # subprocess would have to compile Pkg from scratch when run with coverage
+            prompt = readchomp(`$(Base.julia_cmd()) --project=$(dirname(@__DIR__)) --startup-file=no --code-coverage=none -e "using Pkg, REPL; Pkg.activate(io=devnull); REPLExt = Base.get_extension(Pkg, :REPLExt); print(REPLExt.promptf())"`)
+            @test prompt == "(@v$(VERSION.major).$(VERSION.minor)) pkg> "
+        end
     end
 end
 
