@@ -91,7 +91,7 @@ end
 end
 
 # Use at least 2 processes: even on a single CPU the OS interleaves processes, so races are still possible
-nprocs = max(Sys.CPU_THREADS, 2)
+nprocs = max(Sys.EFFECTIVE_CPU_THREADS, 2)
 @testset "test atomicity of write_env_usage with $nprocs parallel processes" begin
     isolate(loaded_depot = true) do
         tasks = Task[]
