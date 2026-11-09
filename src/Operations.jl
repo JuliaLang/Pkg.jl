@@ -3051,6 +3051,30 @@ function check_registered(registries::Vector{Registry.RegistryInstance}, pkgs::V
     return nothing
 end
 
+# A manifest records a stdlib without a tree hash. Error if such an entry is no longer a stdlib
+# and something loads it through the manifest. A bundled stdlib only loads its current deps,
+# so stale deps recorded for one are ignored.
+function check_former_stdlibs(env::EnvCache, pkgs::Vector{PackageSpec}, julia_version)
+    from_manifest(entry) = entry.tree_hash !== nothing || entry.path !== nothing || entry.repo.source !== nothing
+    used = Set{UUID}(values(env.project.deps))
+    for pkg in pkgs
+        entry = manifest_info(env.manifest, pkg.uuid)
+        entry !== nothing && from_manifest(entry) && union!(used, values(entry.deps))
+    end
+    former = filter(pkgs) do pkg
+        pkg.uuid in used && !from_manifest(pkg) && !is_or_was_stdlib(pkg.uuid, julia_version)
+    end
+    isempty(former) && return
+    names = join(sort!([err_rep(pkg) for pkg in former]), ", ")
+    what = length(former) == 1 ? "a standard library" : "standard libraries"
+    written = env.manifest.julia_version === nothing ? "" : " (it was resolved with Julia v$(env.manifest.julia_version))"
+    resolve_cmd = Pkg.in_repl_mode() ? "pkg> resolve" : "Pkg.resolve()"
+    pkgerror(
+        "The manifest records $names as $what that this version of Julia no longer ships$written.",
+        " Run `$resolve_cmd` to install them from a registry, then try again."
+    )
+end
+
 # Check if the package can be added without colliding/overwriting things
 function assert_can_add(ctx::Context, pkgs::Vector{PackageSpec})
     for pkg in pkgs
