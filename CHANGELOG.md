@@ -9,10 +9,10 @@ Pkg v1.14 Release Notes
   version is gone, those compiled against caches that are gone, and those of Julia builds that are gone. Julia
   records each build it runs in `logs/julia_usage.toml`, together with the system image it started with, and the
   caches of a build are deleted once that image has been removed or replaced (as when Julia was updated or
-  uninstalled). Julias installed with juliaup and those that installed apps run with are recorded by running them
-  once. Caches of builds that were never recorded are deleted when they are evidently superseded: a prerelease
-  that has compiled nothing for two weeks while a newer build of the same minor version has, or a release whose
-  newer patch release has. ([#4905], [#4912])
+  uninstalled). Caches of builds that were never recorded are kept when a Julia of that release is installed with
+  juliaup or runs an installed app, and are otherwise deleted when they are evidently superseded: a prerelease that
+  has compiled nothing for two weeks while a newer build of the same minor version has, or a release whose newer
+  patch release has. ([#4905], [#4912])
 - New `Pkg.du` (`pkg> du`) shows how much space each part of the depot uses, how much of it `Pkg.gc` would
   free, and the precompilation caches broken down by Julia version and build. ([#4912])
 - Pkg now resolves package versions with the exact SAT-based resolver from

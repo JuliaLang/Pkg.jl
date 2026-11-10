@@ -238,28 +238,42 @@ end
         ]
         mtimes = [now - 30day, now - 1day, now - 100day, now - 60day, now - 40day, now - 2day]
         builds = Dict(logged_nightly => CC.BUILD_INSTALLED)
-        CC.superseded_builds!(builds, headers, mtimes; now)
+        CC.unrecorded_builds!(builds, headers, mtimes; now)
         @test builds == Dict(
             old_nightly => CC.BUILD_SUPERSEDED, old_patch => CC.BUILD_SUPERSEDED,
             logged_nightly => CC.BUILD_INSTALLED,
         )
         @test CC.dead_cachefiles(headers, fill(true, length(headers)), Pkg.depots(), String[], builds) == [1, 5]
+        # a release that is still installed is not superseded
+        builds = Dict(logged_nightly => CC.BUILD_INSTALLED)
+        CC.unrecorded_builds!(builds, headers, mtimes; installed = Set([v"1.18.1"]), now)
+        @test builds[old_patch] == CC.BUILD_INSTALLED
 
-        # the Julia of an installed app is recorded without running the app
-        app_julia = joinpath(Sys.BINDIR, Base.julia_exename())
+        # the release of the Julia an installed app runs with is read from its
+        # `julia_version.h`; a prerelease is left out
+        function fake_julia(version)
+            dir = mktempdir()
+            mkpath(joinpath(dir, "bin"))
+            mkpath(joinpath(dir, "include", "julia"))
+            write(joinpath(dir, "bin", "julia"), "")
+            write(joinpath(dir, "include", "julia", "julia_version.h"), "#define JULIA_VERSION_STRING \"$version\"\n")
+            return joinpath(dir, "bin", "julia")
+        end
         mkpath(joinpath(Pkg.depots1(), "environments", "apps"))
         write(
             joinpath(Pkg.depots1(), "environments", "apps", "AppManifest.toml"), """
             [[deps.SomeApp]]
             uuid = "$(UUID(UInt128(42)))"
             [deps.SomeApp.apps.someapp]
-            julia_command = "$(escape_string(app_julia))"
+            julia_command = "$(escape_string(fake_julia("1.18.1")))"
+            submodule = ""
+            [deps.SomeApp.apps.otherapp]
+            julia_command = "$(escape_string(fake_julia("1.20.0-DEV.200")))"
             submodule = ""
             """
         )
-        rm(usage_file)
-        Pkg.Types.record_installed_julia_usage(Pkg.depots())
-        @test haskey(TOML.parsefile(usage_file), string(running; base = 16, pad = 32))
+        @test Pkg.Types.installed_julia_releases(Pkg.depots()) == Set([v"1.18.1"])
+        rm(joinpath(Pkg.depots1(), "environments", "apps", "AppManifest.toml"))
 
         # the Julias installed with juliaup: versions and download channels by their path
         # relative to the juliaup directory, linked channels by their command
@@ -281,6 +295,32 @@ end
         # older juliaup records only the `Path` of an installation
         write(joinpath(juliaup, "juliaup.json"), """{"InstalledVersions": {"1.98.0+0": {"Path": "./julia-1.98.0"}}}""")
         @test Pkg.Types.juliaup_julias(juliaup) == [joinpath(juliaup, "julia-1.98.0", "bin", Base.julia_exename())]
+
+        # end to end: `gc` deletes a cache file compiled by a build whose image is gone, and
+        # then forgets that build. The cache file is Example's, made to look compiled by
+        # another build by replacing the build id of `Base` it requires.
+        Pkg.precompile()
+        compiled = joinpath(Pkg.depots1(), "compiled", "v$(VERSION.major).$(VERSION.minor)", "Example")
+        cachefile = only(filter(endswith(".ji"), readdir(compiled; join = true)))
+        gone = (UInt128(0xdead) << 64) | 0xbeef
+        idbytes(id) = collect(reinterpret(UInt8, [UInt64(id >> 64), id % UInt64]))
+        data = read(cachefile)
+        data[findfirst(idbytes(running), data)] = idbytes(gone)
+        other = joinpath(compiled, "Example_other.ji")
+        write(other, data)
+        @test CC.base_build_id(CC.read_cache_header(other)) == gone
+        usage = TOML.parsefile(usage_file)
+        usage[string(gone; base = 16, pad = 32)] = logentry(image * "-missing", st.mtime, st.size)
+        open(io -> TOML.print(io, usage), usage_file, "w")
+        io = IOBuffer()
+        Pkg.du(; io)
+        @test occursin("[removed]", String(take!(io)))
+        Pkg.gc()
+        @test !isfile(other)
+        @test isfile(cachefile)
+        usage = TOML.parsefile(usage_file)
+        @test !haskey(usage, string(gone; base = 16, pad = 32))
+        @test haskey(usage, string(running; base = 16, pad = 32))
     end
 end
 

@@ -822,10 +822,20 @@ gone or has been replaced, as when Julia was uninstalled or updated.
 """
 function record_julia_usage()
     usage_file = joinpath(logdir(), "julia_usage.toml")
-    @lock RECORDED_MANIFEST_USAGE_LOCK (usage_file in RECORDED_JULIA_USAGE) && return
-    image = abspath(unsafe_string(Base.JLOptions().image_file))
-    write_julia_usage(usage_file, Base.module_build_id(Base), image, VERSION) &&
-        @lock RECORDED_MANIFEST_USAGE_LOCK push!(RECORDED_JULIA_USAGE, usage_file)
+    @lock RECORDED_MANIFEST_USAGE_LOCK begin
+        usage_file in RECORDED_JULIA_USAGE && return
+        # tried once per session: a log that can not be written is not tried again
+        push!(RECORDED_JULIA_USAGE, usage_file)
+    end
+    try
+        # an absolute path: Julia resolves the `-J` option when it starts
+        image = unsafe_string(Base.JLOptions().image_file)
+        build = JuliaBuild(Base.module_build_id(Base), image, VERSION)
+        # the usual case: recorded unchanged in an earlier session, nothing to write
+        is_recorded(parse_toml_nothrow(usage_file), build) || write_julia_usage(usage_file, build)
+    catch err
+        err isa InterruptException && rethrow()
+    end
     return
 end
 
@@ -836,45 +846,71 @@ struct JuliaBuild
     version::VersionNumber
 end
 
-# Add builds to the usage log `usage_file`; returns whether that succeeded
-write_julia_usage(usage_file::String, build_id::UInt128, image::String, version::VersionNumber) =
-    write_julia_usage(usage_file, [JuliaBuild(build_id, image, version)])
+usage_key(build_id::UInt128) = string(build_id; base = 16, pad = 32)
 
-function write_julia_usage(usage_file::String, builds::Vector{JuliaBuild})
-    isempty(builds) && return true
-    try
-        mkpath(dirname(usage_file))
-        FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
-            usage = isfile(usage_file) ? TOML.parsefile(usage_file) : Dict{String, Any}()
-            for b in builds
-                st = stat(b.image)
-                isfile(st) || continue
-                entry = Dict{String, Any}(
-                    "version" => string(b.version),
-                    "image" => b.image,
-                    "image_mtime" => st.mtime,
-                    "image_size" => st.size,
-                    "time" => now(),
-                )
-                key = string(b.build_id; base = 16, pad = 32)
-                entries = filter(e -> e isa Dict && get(e, "image", nothing) != b.image, get(usage, key, Any[]))
-                push!(entries, entry)
-                usage[key] = entries
-            end
-            atomic_toml_write(usage_file, usage, sorted = true)
-        end
-        return true
-    catch err
-        err isa InterruptException && rethrow()
-        @warn "Failed to record usage in `$usage_file`, ignoring." exception = err maxlog = 1
-        return false
+# Whether the parsed usage log `usage` records `b` with its system image as it is now
+function is_recorded(usage, b::JuliaBuild)
+    usage isa Dict || return false
+    entries = get(usage, usage_key(b.build_id), nothing)
+    entries isa Vector || return false
+    st = stat(b.image)
+    isfile(st) || return true  # nothing to record
+    return any(entries) do e
+        e isa Dict && get(e, "image", nothing) == b.image && get(e, "image_mtime", nothing) == st.mtime &&
+            get(e, "image_size", nothing) == st.size && get(e, "version", nothing) == string(b.version)
     end
 end
 
-# The system image that a Julia binary loads by default
-function default_image(julia::String)
-    ext = Sys.iswindows() ? "dll" : Sys.isapple() ? "dylib" : "so"
-    return normpath(joinpath(dirname(julia), "..", "lib", "julia", "sys." * ext))
+# Add the build `b` to the usage log `usage_file`
+function write_julia_usage(usage_file::String, b::JuliaBuild)
+    try
+        st = stat(b.image)
+        isfile(st) || return
+        mkpath(dirname(usage_file))
+        FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+            usage = isfile(usage_file) ? TOML.parsefile(usage_file) : Dict{String, Any}()
+            entry = Dict{String, Any}(
+                "version" => string(b.version),
+                "image" => b.image,
+                "image_mtime" => st.mtime,
+                "image_size" => st.size,
+                "time" => now(),
+            )
+            key = usage_key(b.build_id)
+            entries = filter(e -> e isa Dict && get(e, "image", nothing) != b.image, get(usage, key, Any[]))
+            push!(entries, entry)
+            usage[key] = entries
+            atomic_toml_write(usage_file, usage, sorted = true)
+        end
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Failed to record usage in `$usage_file`, ignoring." exception = err maxlog = 1
+    end
+    return
+end
+
+"""
+    condense_julia_usage(keep, usage_file)
+
+Rewrite the usage log `usage_file` with only the builds `b` for which `keep(b)`.
+"""
+function condense_julia_usage(keep::Function, usage_file::String)
+    isfile(usage_file) || return
+    try
+        FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+            usage = TOML.parsefile(usage_file)
+            n = length(usage)
+            filter!(usage) do (key, _)
+                build = tryparse(UInt128, key; base = 16)
+                build === nothing || keep(build)
+            end
+            length(usage) == n || atomic_toml_write(usage_file, usage, sorted = true)
+        end
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Failed to condense `$usage_file`, ignoring." exception = err maxlog = 1
+    end
+    return
 end
 
 function parse_toml_nothrow(file::String)
@@ -944,71 +980,37 @@ function juliaup_julias(dir::String = juliaup_dir())
     return unique!(juliae)
 end
 
-# The images (with modification time and size) already recorded in the logs of `depots`
-function recorded_images(depots::Vector{String})
-    recorded = Set{Tuple{String, Float64, Int}}()
-    for depot in depots
-        usage = parse_toml_nothrow(joinpath(depot, "logs", "julia_usage.toml"))
-        usage isa Dict || continue
-        for entries in values(usage)
-            entries isa Vector || continue
-            for e in entries
-                e isa Dict || continue
-                image, mtime, size = get(e, "image", nothing), get(e, "image_mtime", nothing), get(e, "image_size", nothing)
-                (image isa String && mtime isa Real && size isa Integer) || continue
-                push!(recorded, (image, Float64(mtime), Int(size)))
-            end
-        end
-    end
-    return recorded
-end
-
-# Run `julia` (just Julia, with no project or packages) to ask for its build
-function probe_julia(julia::String)
-    probe = "print(string(Base.module_build_id(Base); base = 16), ' ', VERSION, ' ', abspath(unsafe_string(Base.JLOptions().image_file)))"
-    out = try
-        cmd = `$julia --startup-file=no --history-file=no -e $probe`
-        env = copy(ENV)
-        for var in ("JULIA_PROJECT", "JULIA_LOAD_PATH")
-            delete!(env, var)
-        end
-        readchomp(pipeline(setenv(cmd, env); stderr = devnull))
+# The version of the Julia binary `julia`, from the `julia_version.h` it ships with (in
+# binary distributions and source builds alike), without running it. The binary is resolved
+# first, as a `julia` symlink (say, the one at the top of a source build) is not next to it.
+function julia_binary_version(julia::String)
+    return try
+        header = joinpath(dirname(realpath(julia)), "..", "include", "julia", "julia_version.h")
+        m = match(r"#define\s+JULIA_VERSION_STRING\s+\"([^\"]+)\"", read(header, String))
+        m === nothing ? nothing : tryparse(VersionNumber, m.captures[1])
     catch err
         err isa InterruptException && rethrow()
-        return nothing
+        nothing
     end
-    parts = split(out, ' '; limit = 3)
-    length(parts) == 3 || return nothing
-    build_id = tryparse(UInt128, parts[1]; base = 16)
-    version = tryparse(VersionNumber, parts[2])
-    (build_id === nothing || version === nothing) && return nothing
-    return JuliaBuild(build_id, String(parts[3]), version)
 end
 
 """
-    record_installed_julia_usage(depots)
+    installed_julia_releases(depots) -> Set{VersionNumber}
 
-Record the Julia builds that are installed but may never load this Pkg: the ones the apps
-installed in `depots` run with (running an app does not load Pkg), and the ones installed
-with juliaup (older Julia versions ship a Pkg that does not record itself). Otherwise
-`Pkg.gc` could take them for superseded while they are still installed.
-
-A Julia whose system image is recorded unchanged already is not run again; otherwise that
-Julia (never an app) is run once with a one-line expression that prints its build id.
+The release versions of the Julias that are installed but may never load this Pkg, and so
+never record themselves in `julia_usage.toml`: the ones the apps installed in `depots` run
+with (running an app does not load Pkg), and the ones installed with juliaup (older Julia
+versions ship a Pkg that does not record itself). The caches of a build of one of these
+versions are kept. Prereleases are left out: their version does not tell their builds apart.
 """
-function record_installed_julia_usage(depots::Vector{String})
-    recorded = recorded_images(depots)
-    to_probe = String[]
+function installed_julia_releases(depots::Vector{String})
+    releases = Set{VersionNumber}()
     for julia in unique!(vcat(app_julias(depots), juliaup_julias()))
-        isfile(julia) || continue
-        st = stat(default_image(julia))
-        isfile(st) && (default_image(julia), st.mtime, Int(st.size)) in recorded && continue
-        push!(to_probe, julia)
+        v = julia_binary_version(julia)
+        (v === nothing || !isempty(v.prerelease)) && continue
+        push!(releases, VersionNumber(v.major, v.minor, v.patch))
     end
-    isempty(to_probe) && return
-    builds = filter!(!isnothing, asyncmap(probe_julia, to_probe; ntasks = 8))
-    write_julia_usage(joinpath(logdir(), "julia_usage.toml"), Vector{JuliaBuild}(builds))
-    return
+    return releases
 end
 
 write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =

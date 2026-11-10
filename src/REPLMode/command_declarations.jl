@@ -601,7 +601,10 @@ compound_declarations = [
                     gc [-v|--verbose]
 
                 Free disk space by garbage collecting packages, artifacts, repos and
-                scratchspaces that can not be reached from any existing project.
+                scratchspaces that can not be reached from any existing project, and
+                precompilation caches that can never be loaded again (those of deleted
+                package versions and of Julia builds that are gone).
+                Use `du` to see how much would be freed.
                 Use verbose mode for detailed output.
                 The `--all` option is accepted for backwards compatibility but has no effect.
                 """,

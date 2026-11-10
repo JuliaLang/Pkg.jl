@@ -780,6 +780,8 @@ struct GCPlan
     artifacts::Vector{String}
     spaces::Vector{String}
     caches::Vector{String}
+    # the Julia builds that the cache files that stay were compiled with
+    live_builds::Set{UInt128}
 end
 
 """
@@ -1144,11 +1146,13 @@ function gc_plan(
     # The precompilation cache files that can never be loaded again: those whose source
     # is in a package version deleted above (or already gone) and, in turn, those compiled
     # against them.
-    caches_to_delete = Pkg.CompiledCaches.dead_cachefiles(depots(), gc_depots; removed = packages_to_delete, builds)
+    live_builds = Set{UInt128}()
+    caches_to_delete = Pkg.CompiledCaches.dead_cachefiles(depots(), gc_depots; removed = packages_to_delete, builds, live_builds)
 
     return GCPlan(
         active_manifests, active_artifact_tomls, active_spaces,
         packages_to_delete, repos_to_delete, artifacts_to_delete, spaces_to_delete, caches_to_delete,
+        live_builds,
     )
 end
 
@@ -1166,6 +1170,15 @@ versions deleted by `gc`, and those compiled against a dependency whose cache fi
 gone. Like for packages, this goes by the depots on the depot path when `gc` runs: a cache
 file only found in a depot that is not on it counts as gone.
 
+So are the cache files of Julia builds that are gone. Julia records each build it uses in
+`logs/julia_usage.toml`, with the system image it started with, and once that image has
+been removed or replaced (as when Julia was uninstalled or updated) the caches of the build
+are deleted. The caches of a build that was never recorded are kept when a Julia of its
+release is installed with juliaup or runs an installed app, and are otherwise deleted
+when it is evidently superseded: it has compiled nothing for two weeks, while since then a
+newer build of the same minor version (for a prerelease), or of a newer patch release of it
+(for a release), has.
+
 Garbage collection is only applied to the "user depot", e.g. the first entry in the
 depot path. If you want to run `gc` on all depots set `force=true` (this might require
 admin privileges depending on the setup).
@@ -1182,8 +1195,8 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
     # Only look at user-depot unless force=true
     gc_depots = force ? depots() : [depots1()]
 
-    Types.record_installed_julia_usage(depots())
-    plan = gc_plan(gc_depots; condense_usage = true)
+    builds = Pkg.CompiledCaches.julia_builds(depots())
+    plan = gc_plan(gc_depots; condense_usage = true, builds)
     for (files, file_str) in (
             (plan.active_manifests, "manifest files"),
             (plan.active_artifact_tomls, "artifact files"),
@@ -1294,6 +1307,13 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
                 isdir(name_dir) && isempty(readdir(name_dir)) && Base.rm(name_dir)
             end
             isempty(readdir(version_dir)) && Base.rm(version_dir)
+        end
+    end
+    # Forget the builds that are gone once none of their cache files is left
+    for depot in gc_depots
+        Types.condense_julia_usage(joinpath(logdir(depot), "julia_usage.toml")) do build
+            !Pkg.CompiledCaches.is_gone(get(builds, build, Pkg.CompiledCaches.BUILD_UNKNOWN)) ||
+                build in plan.live_builds
         end
     end
 
@@ -1432,6 +1452,16 @@ function time_ago(t::Float64)
         days < 730 ? "$(round(Int, days / 30)) months ago" : "$(round(Int, days / 365)) years ago"
 end
 
+# The cache files of one Julia build in a `compiled/vX.Y` directory
+struct DUGroup
+    version::Union{VersionNumber, Nothing}
+    commit::String
+    size::Int
+    reclaimable::Int
+    n::Int
+    newest::Float64
+end
+
 # The cache files of `compiled/vX.Y` grouped by the Julia build (the `Base` build id) they
 # were compiled with: the running one first, then the others by size. Each file is stat'ed
 # once: a cache file `stem.ji` owns every file in its directory whose name starts with
@@ -1455,17 +1485,18 @@ function du_compiled_builds(version_dir::String, dead::Set{String}, builds, vers
         stems[stem] = (s0 + size, max(m0, mt))
         return
     end
-    for name in readdir_nothrow(version_dir)
+    for name in readdir_names_nothrow(version_dir)
         path = joinpath(version_dir, name)
         if isdir(path) && !endswith(name, ".dSYM")
-            for sub in readdir_nothrow(path)
+            for sub in readdir_names_nothrow(path)
                 account!(path, sub)
             end
         else
             account!(version_dir, name)
         end
     end
-    groups = Dict{Any, Any}()  # build => (; version, size, reclaimable, n, newest)
+    # build (`nothing` for unreadable headers) => what its cache files add up to
+    groups = Dict{Union{UInt128, Nothing}, DUGroup}()
     orphaned = 0  # files that do not belong to a cache file
     for (stem, (size, newest)) in stems
         ji = stem * ".ji"
@@ -1475,10 +1506,12 @@ function du_compiled_builds(version_dir::String, dead::Set{String}, builds, vers
         end
         h = CC.read_cache_header(ji)
         build = h === nothing ? nothing : CC.base_build_id(h)
-        g = get(groups, build, (; version = h === nothing ? nothing : h.julia_version, commit = h === nothing ? "" : h.git_commit, size = 0, reclaimable = 0, n = 0, newest = 0.0))
-        groups[build] = (;
-            g.version, g.commit, size = g.size + size, reclaimable = g.reclaimable + (ji in dead ? size : 0),
-            n = g.n + 1, newest = max(g.newest, newest),
+        g = get(groups, build) do
+            DUGroup(h === nothing ? nothing : h.julia_version, h === nothing ? "" : h.git_commit, 0, 0, 0, 0.0)
+        end
+        groups[build] = DUGroup(
+            g.version, g.commit, g.size + size, g.reclaimable + (ji in dead ? size : 0),
+            g.n + 1, max(g.newest, newest),
         )
     end
     status(build) = build === nothing ? nothing : something(get(builds, build, nothing), CC.BUILD_UNKNOWN)
@@ -1489,7 +1522,7 @@ function du_compiled_builds(version_dir::String, dead::Set{String}, builds, vers
         what = st === nothing ? "unreadable" :
             st == CC.BUILD_RUNNING ? "this Julia" :
             st == CC.BUILD_INSTALLED ? "installed" :
-            st == CC.BUILD_GONE ? "uninstalled" :
+            st == CC.BUILD_GONE ? "removed" :
             st == CC.BUILD_SUPERSEDED ? "superseded" : "not logged"
         # the full version if the build is recorded, and the commit to tell prereleases apart
         v = build === nothing ? g.version : get(versions, build, g.version)
@@ -1505,7 +1538,7 @@ function du_compiled_builds(version_dir::String, dead::Set{String}, builds, vers
     return entries
 end
 
-readdir_nothrow(dir::String) = try
+readdir_names_nothrow(dir::String) = try
     readdir(dir)
 catch e
     e isa Base.IOError || rethrow()
@@ -1642,10 +1675,9 @@ end
 function du(ctx::Context = Context(); verbose::Bool = false, force::Bool = false, kwargs...)
     Context!(ctx; kwargs...)
     io = ctx.io
-    du_depots = force ? filter(isdir, depots()) : [depots1()]
+    du_depots = filter(isdir, force ? depots() : [depots1()])
     progress = DUProgress(io)
-    # Read-only: the usage logs are not condensed, nothing is deleted
-    du_step(() -> Types.record_installed_julia_usage(depots()), progress, "Checking installed Julia versions")
+    # Nothing is deleted and the usage logs are not condensed
     builds = Pkg.CompiledCaches.julia_builds(depots())
     plan = du_step(progress, "Finding what `gc` would free") do
         gc_plan(du_depots; condense_usage = false, builds)

@@ -6,16 +6,17 @@ images) that can never be loaded again, so that `Pkg.gc` can delete them.
 
 A cache file is dead when
 
-1. the source file it was compiled from (its first include) no longer exists, as after
+1. it was compiled by a Julia build that is gone, so nothing can load it: one recorded in
+   `logs/julia_usage.toml` (see `Types.record_julia_usage`) whose system image no longer
+   exists or was replaced, as when Julia was uninstalled or updated, or one never recorded
+   that is evidently superseded by a later build (see `unrecorded_builds!`), or
+2. the source file it was compiled from (its first include) no longer exists, as after
    `Pkg.gc` deleted the package version it belonged to, or
-0. it was compiled by a Julia build that is gone: one recorded in `logs/julia_usage.toml`
-   (see `Types.record_julia_usage`) whose system image no longer exists or was replaced,
-   as when Julia was uninstalled or updated, or
-2. one of the modules it was compiled against is no longer provided by any cache file,
+3. one of the modules it was compiled against is no longer provided by any cache file,
    so it cannot be loaded either. Build ids are unique to one compilation, so a
    dependency recompiled after an update never satisfies it again.
 
-Rule 2 is applied until nothing changes, so deleting a package version also takes the
+Rule 3 is applied until nothing changes, so deleting a package version also takes the
 caches that were compiled against it.
 
 The headers are read here instead of with `Base.parse_cache_header`, which only reads
@@ -58,22 +59,27 @@ same file (same modification time and size); the running build never is.
 function julia_builds(depots::Vector{String})
     running = Base.module_build_id(Base)
     builds = Dict{UInt128, BuildStatus}(running => BUILD_RUNNING)
+    for (build, entries) in usage_entries(depots)
+        get(builds, build, BUILD_GONE) == BUILD_GONE || continue
+        builds[build] = any(image_unchanged, entries) ? BUILD_INSTALLED : BUILD_GONE
+    end
+    return builds
+end
+
+# The builds and their entries in the `julia_usage.toml` logs of `depots`, a build once per
+# depot whose log records it
+function usage_entries(depots::Vector{String})
+    result = Pair{UInt128, Vector}[]
     for depot in unique(depots)
-        usage_file = joinpath(depot, "logs", "julia_usage.toml")
-        usage = try
-            isfile(usage_file) ? Types.TOML.parsefile(usage_file) : continue
-        catch e
-            e isa InterruptException && rethrow()
-            continue
-        end
+        usage = Types.parse_toml_nothrow(joinpath(depot, "logs", "julia_usage.toml"))
+        usage isa Dict || continue
         for (key, entries) in usage
             build = tryparse(UInt128, key; base = 16)
             (build === nothing || !(entries isa Vector)) && continue
-            get(builds, build, BUILD_GONE) == BUILD_GONE || continue
-            builds[build] = any(image_unchanged, entries) ? BUILD_INSTALLED : BUILD_GONE
+            push!(result, build => entries)
         end
     end
-    return builds
+    return result
 end
 
 # Whether the system image of a `julia_usage.toml` entry is still the recorded file. Only a
@@ -92,11 +98,14 @@ function image_unchanged(entry)
 end
 
 """
-    superseded_builds!(builds, headers, mtimes; now = time())
+    unrecorded_builds!(builds, headers, mtimes; installed = Set{VersionNumber}(), now = time())
 
-Mark the builds that are not recorded in `builds` (they predate `julia_usage.toml`, or
-their Julia ships a Pkg that does not record them) as `BUILD_SUPERSEDED` when they are
-evidently replaced: they have not compiled anything for `SUPERSEDED_AGE`, while later
+Judge the builds that are not recorded in `builds` (they predate `julia_usage.toml`, or
+their Julia ships a Pkg that does not record them). A release whose version is in
+`installed` (see `Types.installed_julia_releases`) is marked `BUILD_INSTALLED`. Any other
+is marked `BUILD_SUPERSEDED` when it is evidently replaced: they have not compiled anything for `SUPERSEDED_AGE` (loading caches
+leaves no trace, so a build that is still used but compiles nothing new can be taken for
+superseded; its caches are then compiled again), while later
 
 - for a prerelease (a nightly, alpha, beta or release candidate), another build of the same
   minor version compiled something, or
@@ -105,9 +114,9 @@ evidently replaced: they have not compiled anything for `SUPERSEDED_AGE`, while 
 Two builds of the same release (say, one installed and one built from source) do not
 supersede each other. `mtimes[i]` is the modification time of `headers[i]`.
 """
-function superseded_builds!(
+function unrecorded_builds!(
         builds::Dict{UInt128, BuildStatus}, headers::Vector{CacheHeader}, mtimes::Vector{Float64};
-        now::Float64 = time(),
+        installed::Set{VersionNumber} = Set{VersionNumber}(), now::Float64 = time(),
     )
     newest = Dict{UInt128, Float64}()
     versions = Dict{UInt128, VersionNumber}()
@@ -116,6 +125,9 @@ function superseded_builds!(
         build === nothing && continue
         newest[build] = max(get(newest, build, 0.0), t)
         versions[build] = h.julia_version
+    end
+    for (build, v) in versions
+        isempty(v.prerelease) && v in installed && !haskey(builds, build) && (builds[build] = BUILD_INSTALLED)
     end
     for (build, t) in newest
         haskey(builds, build) && continue
@@ -140,25 +152,17 @@ of the Julia builds recorded in the `julia_usage.toml` logs of `depots`.
 """
 function logged_versions(depots::Vector{String})
     versions = Dict{UInt128, VersionNumber}(Base.module_build_id(Base) => VERSION)
-    for depot in unique(depots)
-        usage = Types.parse_toml_nothrow(joinpath(depot, "logs", "julia_usage.toml"))
-        usage isa Dict || continue
-        for (key, entries) in usage
-            build = tryparse(UInt128, key; base = 16)
-            (build === nothing || !(entries isa Vector)) && continue
-            for e in entries
-                v = e isa Dict ? get(e, "version", nothing) : nothing
-                v isa String || continue
-                v = tryparse(VersionNumber, v)
-                v === nothing || (versions[build] = v)
-            end
-        end
+    for (build, entries) in usage_entries(depots), e in entries
+        v = e isa Dict ? get(e, "version", nothing) : nothing
+        v isa String || continue
+        v = tryparse(VersionNumber, v)
+        v === nothing || (versions[build] = v)
     end
     return versions
 end
 
 build_status(builds::Dict{UInt128, BuildStatus}, h::CacheHeader) =
-    something(get(builds, something(base_build_id(h), UInt128(0)), nothing), BUILD_UNKNOWN)
+    get(builds, base_build_id(h), BUILD_UNKNOWN)
 
 struct BadHeader <: Exception end
 check(cond::Bool) = cond || throw(BadHeader())
@@ -410,12 +414,15 @@ end
 The `.ji` files in the depots `gc_depots` that can never be loaded again. `scan_depots`
 are all depots whose cache files may provide the dependencies of others (the whole depot
 path, including the depots bundled with Julia). Sources in the directories `removed`
-count as gone, so that this can be worked out before deleting them. The builds found to be
-superseded (see `superseded_builds!`) are added to `builds`.
+count as gone, so that this can be worked out before deleting them. The builds that were
+not recorded are judged and added to `builds` (see `unrecorded_builds!`), and the builds
+that some cache file that stays was compiled with are added to `live_builds`.
 """
 function dead_cachefiles(
         scan_depots::Vector{String}, gc_depots::Vector{String};
         removed::Vector{String} = String[], builds::Dict{UInt128, BuildStatus} = julia_builds(scan_depots),
+        live_builds::Set{UInt128} = Set{UInt128}(),
+        installed::Set{VersionNumber} = Types.installed_julia_releases(scan_depots),
     )
     headers = CacheHeader[]
     deletable = Bool[]
@@ -428,8 +435,15 @@ function dead_cachefiles(
             push!(deletable, can_delete)
         end
     end
-    superseded_builds!(builds, headers, Float64[mtime(h.path) for h in headers])
-    return String[h.path for h in headers[dead_cachefiles(headers, deletable, scan_depots, removed, builds)]]
+    unrecorded_builds!(builds, headers, Float64[mtime(h.path) for h in headers]; installed)
+    dead = dead_cachefiles(headers, deletable, scan_depots, removed, builds)
+    alive = trues(length(headers))
+    alive[dead] .= false
+    for h in headers[alive]
+        build = base_build_id(h)
+        build === nothing || push!(live_builds, build)
+    end
+    return String[h.path for h in headers[dead]]
 end
 
 function dead_cachefiles(
@@ -439,13 +453,13 @@ function dead_cachefiles(
     n = length(headers)
     dead = falses(n)
 
-    # Rule 0: the Julia build that compiled it is gone (or superseded), so nothing can load
+    # Rule 1: the Julia build that compiled it is gone (or superseded), so nothing can load
     # it. This includes the caches of stdlibs that build compiled into this depot.
     for (i, h) in enumerate(headers)
         deletable[i] && is_gone(build_status(builds, h)) && (dead[i] = true)
     end
 
-    # Rule 1: the source file is gone. The source of a stdlib is found through the
+    # Rule 2: the source file is gone. The source of a stdlib is found through the
     # `Sys.STDLIB` of the Julia that compiled it, which may not be this one, so those
     # are not judged.
     for (i, h) in enumerate(headers)
@@ -473,7 +487,7 @@ function dead_cachefiles(
         end
     end
 
-    # Rule 2: a dependency is no longer provided by any cache file. Only dependencies that
+    # Rule 3: a dependency is no longer provided by any cache file. Only dependencies that
     # are known to come from a cache file (and not from the system image, or from the
     # stdlib depot of another Julia, which is not scanned) are judged: for the running
     # system image that is known exactly, for others a package is known not to be in the
