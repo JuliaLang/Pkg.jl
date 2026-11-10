@@ -5,6 +5,9 @@ license = "MIT"
 desc = "The next-generation Julia package manager."
 version = "1.14.0"
 
+[syntax]
+julia_version = "1.14"
+
 [workspace]
 projects = ["test", "docs"]
 
