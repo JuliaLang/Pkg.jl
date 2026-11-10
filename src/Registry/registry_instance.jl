@@ -257,9 +257,8 @@ function is_weak_dep(
     return false
 end
 
-# Helper function to query compat across multiple registries
-# Each registry has its own compressed dictionaries and version set
-# Only queries a registry if the version actually exists in that registry
+# Query compat across multiple registries, only using the registries that have the version.
+# A dependency's compat is the intersection of what those registries say.
 function query_compat_for_version_multi_registry!(
         result::Dict{UUID, VersionSpec},
         reg_result::Dict{UUID, VersionSpec},
@@ -287,12 +286,10 @@ function query_compat_for_version_multi_registry!(
         # Use the mutating query function to avoid allocation
         query_compat_for_version!(reg_result, reg_deps, reg_compat, reg_weak_deps, reg_weak_compat, version)
 
-        # Merge results, preferring the first registry's compat if there's overlap
+        # Registries can disagree on compat for the same version (e.g. a retroactive
+        # compat fix that a mirror lacks), so every registry's bound applies
         for (uuid, vspec) in reg_result
-            if !haskey(result, uuid)
-                result[uuid] = vspec
-            end
-            # If uuid already exists, keep the first registry's vspec (first wins)
+            result[uuid] = haskey(result, uuid) ? result[uuid] ∩ vspec : vspec
         end
     end
 

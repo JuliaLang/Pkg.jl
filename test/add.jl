@@ -1111,6 +1111,55 @@ end
     end
 end
 
+@testset "multiple registries: compat from all registries with the version applies" begin
+    isolate(loaded_depot = true) do
+        # Two registries carry Example 0.5.3; the second one has a retroactively
+        # tightened compat that the first one lacks
+        function write_registry(name, uuid, julia_compat)
+            reg = joinpath(DEPOT_PATH[1], "registries", name)
+            example_path = joinpath(reg, "E", "Example")
+            mkpath(example_path)
+            write(
+                joinpath(reg, "Registry.toml"), """
+                name = "$name"
+                uuid = "$uuid"
+                repo = "whydoineedthis?"
+
+                [packages]
+                7876af07-990d-54b4-ab0e-23690620f79a = { name = "Example", path = "E/Example" }
+                """
+            )
+            write(
+                joinpath(example_path, "Package.toml"), """
+                name = "Example"
+                uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+                repo = "https://github.com/JuliaLang/Example.jl.git"
+                """
+            )
+            write(
+                joinpath(example_path, "Versions.toml"), """
+                ["0.5.3"]
+                git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+                """
+            )
+            write(
+                joinpath(example_path, "Compat.toml"), """
+                ["0"]
+                julia = "$julia_compat"
+                """
+            )
+        end
+        write_registry("AReg", "320f72be-406f-4b9c-8809-89f2889d2a3e", "1")
+        write_registry("ZReg", "8a7b2c1d-3e4f-4a5b-9c6d-7e8f9a0b1c2d", "0.0")
+        @test [r.name for r in Pkg.Registry.reachable_registries()][1:2] == ["AReg", "ZReg"]
+
+        @test_throws ResolverError Pkg.add(Pkg.PackageSpec(name = "Example", version = "0.5.3"))
+        # Versions only in General are unaffected
+        Pkg.add("Example")
+        @test Pkg.dependencies()[exuuid].version > v"0.5.3"
+    end
+end
+
 @testset "Offline mode" begin
     isolate(loaded_depot = false) do
         # cache this version
