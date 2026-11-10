@@ -1655,6 +1655,23 @@ end
 
 @deprecate status(mode::PackageMode) status(mode = mode)
 
+# The environment as `up` (`up --workspace`) would leave it: the update is resolved on a copy
+# of the environment, without fetching or installing anything. `nothing` if it does not resolve.
+function update_preview(ctx::Context; workspace::Bool = false)
+    preview = Context(; env = deepcopy(ctx.env), io = devnull, registries = ctx.registries, julia_version = ctx.julia_version)
+    pkgs = PackageSpec[]
+    append_all_pkgs!(pkgs, preview, PKGMODE_PROJECT; workspace)
+    try
+        Logging.with_logger(Logging.NullLogger()) do
+            Operations.up_resolve!(preview, pkgs, UPLEVEL_MAJOR; fetch_sources = false)
+        end
+    catch err
+        err isa InterruptException && rethrow()
+        return nothing
+    end
+    return preview.env
+end
+
 function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mode = PKGMODE_PROJECT, workspace::Bool = false, outdated::Bool = false, deprecated::Bool = false, compat::Bool = false, extensions::Bool = false, io::IO = stdout_f())
     if compat
         diff && pkgerror("Compat status has no `diff` mode")
@@ -1663,7 +1680,9 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mod
         extensions && pkgerror("Compat status has no `extensions` mode")
         Operations.print_compat(ctx, pkgs; io)
     else
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, deprecated, extensions, workspace)
+        # `outdated` says what an update would do, which takes resolving one
+        updated_env = outdated ? update_preview(ctx; workspace) : nothing
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, deprecated, extensions, workspace, updated_env)
     end
     return nothing
 end

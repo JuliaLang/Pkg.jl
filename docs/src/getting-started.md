@@ -85,7 +85,7 @@ an old version of the Example package and then upgrade it:
 (@v1.10) pkg> st
 Status `~/.julia/environments/v1.10/Project.toml`
 ⌃ [7876af07] Example v0.5.1
-Info Packages marked with ⌃ have new versions available and may be upgradable.
+Info Packages marked with ⌃ have new versions available. Use `status --outdated` to see which of them an update upgrades and what holds the others back.
 
 (@v1.10) pkg> up
     Updating `~/.julia/environments/v1.10/Project.toml`

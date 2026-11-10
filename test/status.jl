@@ -212,21 +212,21 @@ end
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
+        @test startswith(strip(readline(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
         Pkg.status(; io = io, mode = Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^   \[2a0f44e3\] Base64", readline(io))
         @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
+        @test startswith(strip(readline(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
         Pkg.instantiate(; io = devnull) # download Example
         Pkg.status(; io = io, mode = Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"^⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
         @test occursin(r"^  \[2a0f44e3\] Base64", readline(io))
         @test occursin(r"^  \[d6f4376e\] Markdown", readline(io))
-        @test "Info Packages marked with ⌃ have new versions available and may be upgradable." == strip(readline(io))
+        @test startswith(strip(readline(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
     end
     # Manifest Status API
     isolate(loaded_depot = true) do
@@ -289,7 +289,7 @@ end
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
         @test occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", readline(io))
         @test occursin(r"\[d6f4376e\] - Markdown", readline(io))
-        @test occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", readline(io))
+        @test occursin("Info Packages marked with ⌃ have new versions available. Use `status --outdated", readline(io))
         ## diff manifest
         Pkg.status(; io = io, mode = Pkg.PKGMODE_MANIFEST, diff = true)
         statuslines = readlines(io)
@@ -297,7 +297,7 @@ end
         @test any(l -> occursin(r"\[7876af07\] \+ Example\s*v0\.3\.0", l), statuslines)
         @test any(l -> occursin(r"\[2a0f44e3\] - Base64", l), statuslines)
         @test any(l -> occursin(r"\[d6f4376e\] - Markdown", l), statuslines)
-        @test any(l -> occursin("Info Packages marked with ⌃ have new versions available and may be upgradable.", l), statuslines)
+        @test any(l -> occursin("Info Packages marked with ⌃ have new versions available. Use `status --outdated", l), statuslines)
         ## diff project with filtering
         Pkg.status("Markdown"; io = io, diff = true)
         @test occursin(r"Diff `.+Project\.toml`", readline(io))
@@ -372,11 +372,11 @@ end
             )
             return reg
         end
-        # RegA has DepOnExample 1.0.0 and 1.1.0 with no compat on Example.
-        # RegB only has 1.0.0 but its Compat.toml range "1" also covers 1.1.0,
-        # which RegB does not contain.
-        write_dep_registry("RegA", "d3e3f5c0-3c5e-4f1a-9a3e-1c2b3d4e5f60", ["1.0.0", "1.1.0"], nothing)
-        regb = write_dep_registry("RegB", "f0e1d2c3-b4a5-4697-8879-6a5b4c3d2e1f", ["1.0.0"], "0.5.3")
+        # RegB has DepOnExample 1.0.0 and 1.1.0 with no compat on Example.
+        # RegA only has 1.0.0 but its Compat.toml range "1" also covers 1.1.0,
+        # which RegA does not contain.
+        rega = write_dep_registry("RegA", "d3e3f5c0-3c5e-4f1a-9a3e-1c2b3d4e5f60", ["1.0.0"], "0.5.3")
+        write_dep_registry("RegB", "f0e1d2c3-b4a5-4697-8879-6a5b4c3d2e1f", ["1.0.0", "1.1.0"], nothing)
 
         mktempdir() do tmp
             write(
@@ -410,17 +410,127 @@ end
                 lines = split(String(take!(io)), '\n')
                 only(filter(contains("[7876af07] Example"), lines))
             end
-            # DepOnExample 1.1.0 is not in RegB, so RegB's compat must not hold Example back
+            # DepOnExample 1.1.0 is not in RegA, so RegA's compat must not hold Example back
             line = example_status_line()
             @test occursin(r"Example\s*v0.5.3\s*\(<v[\d.]+\)", line)
             @test !occursin("DepOnExample", line)
 
-            # Once RegB also contains 1.1.0 its compat does apply
-            open(joinpath(regb, "D", "DepOnExample", "Versions.toml"), append = true) do io
+            # Once RegA also contains 1.1.0 its compat does apply (when several registries
+            # have a version, the resolver goes by the compat of the first one)
+            open(joinpath(rega, "D", "DepOnExample", "Versions.toml"), append = true) do io
                 write(io, "\n[\"1.1.0\"]\ngit-tree-sha1 = \"46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc\"\n")
             end
             line = example_status_line()
             @test occursin(r"Example\s*v0.5.3\s*\(<v[\d.]+\): DepOnExample", line)
+        end
+    end
+end
+
+@testset "status --outdated: upgradable means an update upgrades it" begin
+    isolate(loaded_depot = true) do
+        uuids = Dict(
+            "ODBlocked" => "0d000001-7c5e-4f1a-9a3e-1c2b3d4e5f60",
+            "ODBlocker" => "0d000002-7c5e-4f1a-9a3e-1c2b3d4e5f60",
+            "ODShared" => "0d000003-7c5e-4f1a-9a3e-1c2b3d4e5f60",
+            "ODParent" => "0d000004-7c5e-4f1a-9a3e-1c2b3d4e5f60",
+            "ODChild" => "0d000005-7c5e-4f1a-9a3e-1c2b3d4e5f60",
+        )
+        # The packages directly on a package do not tell whether it can be upgraded:
+        # - ODBlocked 2.0.0 needs ODShared 2, which ODBlocker (that only has a 1.0.0) rules out,
+        #   so nothing depends on ODBlocked and still only its 1.1.0 is reachable.
+        # - ODParent 1 needs ODChild 1 and ODParent 2 needs ODChild 2: they upgrade together.
+        registry = Dict(
+            "ODBlocked" => ["1.0.0" => ("ODShared" => "1"), "1.1.0" => ("ODShared" => "1"), "2.0.0" => ("ODShared" => "2")],
+            "ODBlocker" => ["1.0.0" => ("ODShared" => "1")],
+            "ODShared" => ["1.0.0" => nothing, "2.0.0" => nothing],
+            "ODParent" => ["1.0.0" => ("ODChild" => "1"), "2.0.0" => ("ODChild" => "2")],
+            "ODChild" => ["1.0.0" => nothing, "2.0.0" => nothing],
+        )
+        tree_hash = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+        reg = joinpath(DEPOT_PATH[1], "registries", "OutdatedReg")
+        mkpath(reg)
+        write(
+            joinpath(reg, "Registry.toml"), """
+            name = "OutdatedReg"
+            uuid = "0d0000ff-7c5e-4f1a-9a3e-1c2b3d4e5f60"
+            repo = "whydoineedthis?"
+
+            [packages]
+            $(join(("$uuid = { name = \"$name\", path = \"$name\" }" for (name, uuid) in uuids), "\n"))
+            """
+        )
+        for (name, versions) in registry
+            pkg_path = mkpath(joinpath(reg, name))
+            write(joinpath(pkg_path, "Package.toml"), "name = \"$name\"\nuuid = \"$(uuids[name])\"\nrepo = \"https://example.com/$name.jl.git\"\n")
+            write(joinpath(pkg_path, "Versions.toml"), join(("[\"$v\"]\ngit-tree-sha1 = \"$tree_hash\"\n" for (v, _) in versions), "\n"))
+            deps = [(v, dep) for (v, dep) in versions if dep !== nothing]
+            write(joinpath(pkg_path, "Deps.toml"), join(("[\"$v\"]\n$(dep.first) = \"$(uuids[dep.first])\"\n" for (v, dep) in deps), "\n"))
+            write(joinpath(pkg_path, "Compat.toml"), join(("[\"$v\"]\n$(dep.first) = \"$(dep.second)\"\n" for (v, dep) in deps), "\n"))
+        end
+
+        mktempdir() do tmp
+            project = """
+            [deps]
+            ODBlocked = "$(uuids["ODBlocked"])"
+            ODBlocker = "$(uuids["ODBlocker"])"
+            ODParent = "$(uuids["ODParent"])"
+            """
+            write(joinpath(tmp, "Project.toml"), project)
+            entry(name, version, deps...) = """
+            [[deps.$name]]
+            $(isempty(deps) ? "" : "deps = [$(join(repr.(deps), ", "))]")
+            git-tree-sha1 = "$tree_hash"
+            uuid = "$(uuids[name])"
+            version = "$version"
+            """
+            write_manifest(versions) = write(
+                joinpath(tmp, "Manifest.toml"), """
+                julia_version = "$VERSION"
+                manifest_format = "2.0"
+
+                $(entry("ODBlocked", versions["ODBlocked"], "ODShared"))
+                $(entry("ODBlocker", "1.0.0", "ODShared"))
+                $(entry("ODChild", versions["ODChild"]))
+                $(entry("ODParent", versions["ODParent"], "ODChild"))
+                $(entry("ODShared", "1.0.0"))
+                """
+            )
+            write_manifest(Dict("ODBlocked" => "1.0.0", "ODChild" => "1.0.0", "ODParent" => "1.0.0"))
+            Pkg.activate(tmp)
+            Pkg.Registry.add(Pkg.RegistrySpec[], io = devnull) # load reg before io capturing
+            outdated() = let io = IOBuffer()
+                Pkg.status(; outdated = true, mode = Pkg.PKGMODE_MANIFEST, io = io)
+                String(take!(io))
+            end
+            str = outdated()
+            # upgradable, but not to the latest version, which the version of ODShared rules out
+            @test occursin(r"⌃ \[0d000001\] ODBlocked v1.0.0 \[<v1.1.0\], \(<v2.0.0\): ODShared\n", str)
+            @test occursin(r"⌅ \[0d000003\] ODShared v1.0.0 \(<v2.0.0\): ODBlocked, ODBlocker\n", str)
+            # ODParent only holds ODChild back at the version it has now
+            @test occursin(r"⌃ \[0d000004\] ODParent v1.0.0 \(<v2.0.0\)\n", str)
+            @test occursin(r"⌃ \[0d000005\] ODChild v1.0.0 \(<v2.0.0\)\n", str)
+            @test occursin("An update upgrades the packages marked with ⌃", str)
+
+            # a plain status only says that there are new versions
+            io = IOBuffer()
+            Pkg.status(; mode = Pkg.PKGMODE_MANIFEST, io = io)
+            str = String(take!(io))
+            @test count("⌃ [0d0000", str) == 4 # all but ODBlocker, which is at its latest version
+            @test !occursin("⌅", str)
+            @test occursin("Packages marked with ⌃ have new versions available. Use `status --outdated -m`", str)
+
+            # the environment after that update
+            write_manifest(Dict("ODBlocked" => "1.1.0", "ODChild" => "2.0.0", "ODParent" => "2.0.0"))
+            str = outdated()
+            @test occursin(r"⌅ \[0d000001\] ODBlocked v1.1.0 \(<v2.0.0\): ODShared\n", str)
+            @test !occursin("ODParent", str)
+            @test !occursin("⌃", str)
+
+            # when no update resolves, the constraints directly on a package are all there is
+            write(joinpath(tmp, "Project.toml"), project * "\n[compat]\nODBlocker = \"2\"\n")
+            str = outdated()
+            @test occursin("An update of this environment does not resolve", str)
+            @test occursin(r"⌅ \[0d000001\] ODBlocked v1.1.0 \(<v2.0.0\): ODShared\n", str)
         end
     end
 end

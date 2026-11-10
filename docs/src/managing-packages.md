@@ -109,12 +109,12 @@ A specific version of a package can be installed by appending a version after a 
 ⌃ [682c06a0] + JSON v0.21.1
     Updating `~/.julia/environments/v1.10/Manifest.toml`
 ⌃ [682c06a0] + JSON v0.21.1
-⌅ [69de0a69] + Parsers v1.1.2
+⌃ [69de0a69] + Parsers v1.1.2
   [ade2ca70] + Dates
   [a63ad114] + Mmap
   [de0858da] + Printf
   [4ec0a83e] + Unicode
-        Info Packages marked with ⌃ and ⌅ have new versions available, but those with ⌅ are restricted by compatibility constraints from upgrading. To see why use `status --outdated -m`
+        Info Packages marked with ⌃ have new versions available. Use `status --outdated -m` to see which of them an update upgrades and what holds the others back.
 ```
 
 As seen above, Pkg gives some information when a package is not installed at its latest version.
@@ -326,14 +326,21 @@ And if you also want to allow dependencies of Example that are also in the proje
 ### Why is a package not at its latest version?
 
 A package can be held back, or even downgraded when you add another package, by the compatibility requirements
-of other packages in the environment. `status` marks such packages with `⌅`, and `status --outdated` shows the
-latest version and which of the package's dependents (or your own `[compat]`) don't allow it:
+of other packages in the environment. `status` marks every package that has a newer version with `⌃`, and
+`status --outdated` shows the latest version and which packages (or your own `[compat]`) don't allow it:
 
 ```julia-repl
 (@v1.14) pkg> status --outdated
 Status `~/.julia/environments/v1.14/Project.toml`
+⌃ [7876af07] C v1.0.0 [<v1.1.0], (<v2.0.0): D
 ⌅ [756980fe] D v0.1.0 (<v0.2.1): B
 ```
+
+A plain `status` only says that a newer version exists, since whether it can be installed depends on the whole
+environment. `status --outdated` resolves what `up` would do, without changing anything, so here `⌃` means that
+`up` upgrades the package (to the version in brackets when that is not the latest one) and `⌅` that it stays
+where it is. The packages listed after a package are those that, at the version an update gives them, are not
+compatible with its latest version: above, `B` does not allow `D` 0.2.1, and `C` 2.0.0 needs a newer `D`.
 
 Add `-m` to also include packages that are only in the manifest, and use `why D` to see which packages depend on `D`.
 To get the full explanation, ask for the version you expected, for example with `add D@0.2.1`.

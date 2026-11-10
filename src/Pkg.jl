@@ -752,25 +752,29 @@ const resolve = API.resolve
 
 Print out the status of the project/manifest.
 
-Packages marked with `⌃` have new versions that can be installed, e.g. via [`Pkg.update`](@ref).
-Those marked with `⌅` have new versions available, but cannot be installed due to compatibility conflicts with other packages. To see why, set the
+Packages marked with `⌃` have new versions available. Whether a new version can be installed, e.g. via [`Pkg.update`](@ref),
+depends on the other packages in the environment. To see that, and what holds a package back, set the
 keyword argument `outdated=true`.
 Packages marked with `[yanked]` are yanked versions that should be updated or replaced as they may contain bugs or security vulnerabilities.
 
 Setting `outdated=true` will only show packages that are not on the latest version,
 their maximum version and why they are not on the latest version (either due to other
 packages holding them back due to compatibility constraints, or due to compatibility in the project file).
+To tell, an update of the environment is resolved, without changing or downloading anything:
+here the packages marked with `⌃` are those that [`Pkg.update`](@ref) upgrades and those marked with `⌅` are
+the ones it leaves at their version. The packages listed as holding a package back are those that,
+at the version an update gives them, are not compatible with its latest version.
 As an example, a status output like:
 ```julia-repl
 julia> Pkg.status(; outdated=true)
 Status `Manifest.toml`
-⌃ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4)
+⌃ [a8cc5b0e] Crayons v2.0.0 [<v3.0.0], (<v4.0.4) [compat]
 ⌅ [b8a86587] NearestNeighbors v0.4.8 (<v0.4.9) [compat]
 ⌅ [2ab3a3ac] LogExpFunctions v0.2.5 (<v0.3.0): SpecialFunctions
 ```
 
-means that the latest version of Crayons is 4.0.4 but the latest version compatible
-with the `[compat]` section in the current project is 3.0.0.
+means that the latest version of Crayons is 4.0.4 but an update only upgrades it to 3.0.0,
+the latest version compatible with the `[compat]` section in the current project.
 The latest version of NearestNeighbors is 0.4.9 but due to compat constrains in the project
 it is held back to 0.4.8.
 The latest version of LogExpFunctions is 0.3.0 but SpecialFunctions
@@ -796,6 +800,10 @@ status as a Julia object instead of printing it.
 !!! compat "Julia 1.8"
     The `⌃` and `⌅` indicators were added in Julia 1.8.
     The `outdated` keyword argument requires at least Julia 1.8.
+
+!!! compat "Julia 1.14"
+    As of Julia 1.14 the `⌅` indicator is only shown with `outdated=true`, where the
+    indicators say what an update does.
 
 """
 const status = API.status

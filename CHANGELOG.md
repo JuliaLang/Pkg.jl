@@ -1,6 +1,9 @@
 Pkg v1.14 Release Notes
 =======================
 
+- `Pkg.status(outdated = true)` (`pkg> status --outdated`) now resolves what an update would do: `⌃` marks the
+  packages `Pkg.update()` upgrades and `⌅` those it leaves alone, with what holds them back. A plain `status`
+  no longer guesses: `⌃` there marks every package with a newer version and `⌅` is not shown. ([#4922])
 - Apps no longer break when the Julia they were installed with is removed: the shim falls back to the juliaup
   channel of the same minor version, or else to the `julia` in `PATH` with a warning.
   The new `Pkg.Apps.relink` (`pkg> app relink`) makes apps use the running Julia while keeping their package
@@ -295,3 +298,4 @@ Pkg v1.7 Release Notes
 [#4839]: https://github.com/JuliaLang/Pkg.jl/pull/4839
 [#4851]: https://github.com/JuliaLang/Pkg.jl/issues/4851
 [#4913]: https://github.com/JuliaLang/Pkg.jl/pull/4913
+[#4922]: https://github.com/JuliaLang/Pkg.jl/pull/4922
