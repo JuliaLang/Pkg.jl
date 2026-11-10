@@ -807,7 +807,9 @@ function collect_fixed!(
         env::EnvCache, pkgs::Vector{PackageSpec}, names::Dict{UUID, String}, @nospecialize(julia_version::Union{VersionNumber, Nothing});
         # A `[sources]` entry in a dependency's project file must not take over such a
         # package for which the environment already has a source for, see #4750.
-        env_uuids::Set{UUID} = Set{UUID}()
+        env_uuids::Set{UUID} = Set{UUID}(),
+        # Whether a git-tracked package whose source is not installed may be fetched.
+        fetch_sources::Bool = true
     )
     deps_map = Dict{UUID, Vector{PackageSpec}}()
     weak_map = Dict{UUID, Set{UUID}}()
@@ -853,6 +855,7 @@ function collect_fixed!(
         if (path === nothing || !isdir(path)) && (pkg.repo.rev !== nothing || pkg.repo.source !== nothing)
             # ensure revved package is installed
             # pkg.tree_hash is set in here
+            fetch_sources || pkgerror("the source of package $(err_rep(pkg)) is not installed")
             Types.handle_repo_add!(Types.Context(env = env), pkg)
             # Recompute path
             path = source_path(env.manifest_file, pkg)
@@ -1116,7 +1119,7 @@ end
 function resolve_versions!(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, @nospecialize(julia_version::Union{VersionNumber, Nothing}),
         installed_only::Bool, preferred_versions::Dict{UUID, VersionNumber} = Dict{UUID, VersionNumber}();
-        diagnose_unsat::Bool = true
+        diagnose_unsat::Bool = true, fetch_sources::Bool = true
     )
     installed_only = installed_only || OFFLINE_MODE[]
 
@@ -1155,7 +1158,7 @@ function resolve_versions!(
         pkg.uuid === nothing && continue
         push!(env_uuids, pkg.uuid)
     end
-    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version; env_uuids)
+    fixed, new_fixed_pkgs = collect_fixed!(env, pkgs_fixed, names, julia_version; env_uuids, fetch_sources)
     for new_pkg in new_fixed_pkgs
         new_pkg.uuid in pkg_uuids && continue
         push!(pkgs, new_pkg)
@@ -3401,7 +3404,7 @@ end
 
 # load version constraint
 # if version isa VersionNumber -> set tree_hash too
-up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel) = false
+up_load_versions!(ctx::Context, pkg::PackageSpec, ::Nothing, source_path, source_repo, level::UpgradeLevel; fetch_sources::Bool = true) = false
 # Whether the `[sources]` repo of a package still describes what its manifest entry recorded.
 # A `rev` (or `subdir`) that is left out of the source is filled in by `handle_repo_add!`, so
 # only compare those when the source specifies them.
@@ -3412,13 +3415,13 @@ function source_repo_matches_entry(source_repo::GitRepo, entry::PackageEntry)
     return true
 end
 
-function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel)
+function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, source_path, source_repo, level::UpgradeLevel; fetch_sources::Bool = true)
     # With [sources], `pkg` can have a path or repo here
     entry.version !== nothing || return false # no version to set
     # `[sources]` are keyed by name, so the entry only applies to `pkg` if the project lists
     # `pkg` under that name (a stale manifest may hold a different package with the same name)
     source_applies = get(ctx.env.project.deps, pkg.name, nothing) == pkg.uuid
-    if source_applies && source_path === nothing && pkg.path === nothing && source_repo.source !== nothing && !source_repo_matches_entry(source_repo, entry)
+    if fetch_sources && source_applies && source_path === nothing && pkg.path === nothing && source_repo.source !== nothing && !source_repo_matches_entry(source_repo, entry)
         # The `[sources]` entry was edited directly (e.g. a new `rev`) so the tree hash recorded
         # in the manifest is stale and the repo has to be re-resolved regardless of `level`, see #4157.
         pkg.repo = source_repo
@@ -3438,7 +3441,7 @@ function up_load_versions!(ctx::Context, pkg::PackageSpec, entry::PackageEntry, 
         else
             pkg.repo = entry.repo
         end
-        if level == UPLEVEL_MAJOR
+        if level == UPLEVEL_MAJOR && fetch_sources
             # Updating a repo package is equivalent to adding it
             new = Types.handle_repo_add!(ctx, pkg)
             pkg.version = entry.version
@@ -3531,11 +3534,45 @@ function load_manifest_deps_up(
     return pkgs
 end
 
-function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version)
+function targeted_resolve_up(env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec}, preserve::PreserveLevel, julia_version; fetch_sources::Bool = true)
     pkgs = load_manifest_deps_up(env, pkgs; preserve = preserve)
     check_registered(registries, pkgs)
-    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED)
+    deps_map = resolve_versions!(env, registries, pkgs, julia_version, preserve == PRESERVE_ALL_INSTALLED; fetch_sources)
     return pkgs, deps_map
+end
+
+# Resolve an update of `pkgs` at `level` and put the result in the manifest of `ctx.env`,
+# without installing or writing anything. Returns the git-tracked packages that got a new
+# revision. With `fetch_sources = false` nothing is fetched either: git-tracked packages
+# stay at the revision they have, and one whose source is not installed is an error.
+function up_resolve!(
+        ctx::Context, pkgs::Vector{PackageSpec}, level::UpgradeLevel;
+        preserve::Union{Nothing, PreserveLevel} = nothing, fetch_sources::Bool = true
+    )
+    new_git = Set{UUID}()
+    # TODO check all pkg.version == VersionSpec()
+    # set version constraints according to `level`
+    for pkg in pkgs
+        source_path, source_repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, pkg.name)
+        entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        new = up_load_versions!(ctx, pkg, entry, source_path, source_repo, level; fetch_sources)
+        new && push!(new_git, pkg.uuid) #TODO put download + push! in utility function
+    end
+    # load rest of manifest data (except for version info)
+    for pkg in pkgs
+        entry = manifest_info(ctx.env.manifest, pkg.uuid)
+        up_load_manifest_info!(pkg, entry)
+    end
+    check_workspace_sources(ctx.env)
+    if preserve !== nothing
+        all_pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version; fetch_sources)
+    else
+        all_pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
+        check_registered(ctx.registries, all_pkgs)
+        deps_map = resolve_versions!(ctx.env, ctx.registries, all_pkgs, ctx.julia_version, false; fetch_sources)
+    end
+    update_manifest!(ctx.env, all_pkgs, deps_map, ctx.julia_version, ctx.registries)
+    return new_git
 end
 
 function up(
@@ -3546,29 +3583,7 @@ function up(
 
     requested_pkgs = pkgs
 
-    new_git = Set{UUID}()
-    # TODO check all pkg.version == VersionSpec()
-    # set version constraints according to `level`
-    for pkg in pkgs
-        source_path, source_repo = get_path_repo(ctx.env.project, ctx.env.project_file, ctx.env.manifest_file, pkg.name)
-        entry = manifest_info(ctx.env.manifest, pkg.uuid)
-        new = up_load_versions!(ctx, pkg, entry, source_path, source_repo, level)
-        new && push!(new_git, pkg.uuid) #TODO put download + push! in utility function
-    end
-    # load rest of manifest data (except for version info)
-    for pkg in pkgs
-        entry = manifest_info(ctx.env.manifest, pkg.uuid)
-        up_load_manifest_info!(pkg, entry)
-    end
-    check_workspace_sources(ctx.env)
-    if preserve !== nothing
-        pkgs, deps_map = targeted_resolve_up(ctx.env, ctx.registries, pkgs, preserve, ctx.julia_version)
-    else
-        pkgs = load_direct_deps(ctx.env, pkgs; preserve = (level == UPLEVEL_FIXED ? PRESERVE_NONE : PRESERVE_DIRECT))
-        check_registered(ctx.registries, pkgs)
-        deps_map = resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
-    end
-    update_manifest!(ctx.env, pkgs, deps_map, ctx.julia_version, ctx.registries)
+    new_git = up_resolve!(ctx, pkgs, level; preserve)
     if lazy
         new_apply = Set{UUID}()
         lazy_fixups_from_projectfile!(ctx)
@@ -3578,7 +3593,7 @@ function up(
         download_artifacts(ctx, julia_version = ctx.julia_version)
     end
     write_env(ctx.env; skip_writing_project) # write env before building
-    show_update(ctx.env, ctx.registries; io = ctx.io, hidden_upgrades_info = true)
+    show_update(ctx.env, ctx.registries; io = ctx.io)
 
     if length(requested_pkgs) == 1
         pkg = only(requested_pkgs)
@@ -4345,16 +4360,41 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
     end
 end
 
-function manifest_dependents_map(manifest::Manifest)
+function manifest_dependents_map(manifest::Manifest; weakdeps::Bool = false)
     dependents = Dict{UUID, Vector{UUID}}()
     for (uuid, entry) in manifest
         for dep in values(entry.deps)
+            push!(get!(() -> UUID[], dependents, dep), uuid)
+        end
+        weakdeps || continue
+        for dep in values(entry.weakdeps)
             push!(get!(() -> UUID[], dependents, dep), uuid)
         end
     end
     return dependents
 end
 
+# The compat of a registered package version with its dependencies, merged across
+# registries the same way as in the resolver.
+function registered_compat(regs::Vector{Registry.RegistryInstance}, uuid::UUID, version::VersionNumber)
+    infos = Registry.PkgInfo[]
+    for reg in regs
+        reg_pkg = get(reg, uuid, nothing)
+        reg_pkg === nothing && continue
+        info = Registry.registry_info(reg, reg_pkg)
+        haskey(info.version_info, version) && push!(infos, info)
+    end
+    compat = Dict{UUID, VersionSpec}()
+    Registry.query_compat_for_version_multi_registry!(
+        compat, Dict{UUID, VersionSpec}(),
+        [i.deps for i in infos], [i.compat for i in infos],
+        [i.weak_deps for i in infos], [i.weak_compat for i in infos],
+        fill(Set([version]), length(infos)), version
+    )
+    return compat
+end
+
+# Only looks at the constraints directly on `pkg`; for what an update does, see `status_compat_info_updated`.
 function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Registry.RegistryInstance}; @nospecialize(dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing))
     pkg.version isa VersionNumber || return nothing # Can happen when there is no manifest
     manifest, project = env.manifest, env.project
@@ -4384,6 +4424,8 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
         end
     end
 
+    pkg.pinned && return ["pinned"], max_version, max_version_in_compat
+
     # Check compat of project
     if pkg.version == max_version_in_compat && max_version_in_compat != max_version
         return ["compat"], max_version, max_version_in_compat
@@ -4393,45 +4435,50 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
     manifest_info === nothing && return nothing
 
     # Check compatibility bounds imposed by dependents.
-    isnothing(dependents) && (dependents = manifest_dependents_map(manifest))
+    isnothing(dependents) && (dependents = manifest_dependents_map(manifest; weakdeps = true))
     for dep_uuid in get(dependents, pkg.uuid, ())
         is_stdlib(dep_uuid) && continue
         dep_pkg = get(manifest, dep_uuid, nothing)
         isnothing(dep_pkg) && continue
-        for reg in regs
-            reg_pkg = get(reg, dep_uuid, nothing)
-            reg_pkg === nothing && continue
-            info = Registry.registry_info(reg, reg_pkg)
-            # Only consult registries that actually contain the dependent's version,
-            # otherwise another registry's compat ranges get applied to a version it does not have
-            haskey(info.version_info, dep_pkg.version) || continue
-            compat_info_v_uuid = Registry.query_compat_for_version(info, dep_pkg.version, pkg.uuid)
-            compat_info_v_uuid === nothing && continue
-            if !(max_version in compat_info_v_uuid)
-                push!(packages_holding_back, dep_pkg.name)
-            end
+        if !is_tracking_registry(dep_pkg)
+            # a package tracking a path or a repo: its compat is in its project file
+            path = source_path(env.manifest_file, dep_pkg)
+            file = path === nothing ? nothing : projectfile_path(path; strict = true)
+            file === nothing && continue
+            max_version in get_compat(read_project(file), pkg.name) || push!(packages_holding_back, dep_pkg.name)
+            continue
         end
+        dep_pkg.version === nothing && continue
+        spec = get(registered_compat(regs, dep_uuid, dep_pkg.version), pkg.uuid, nothing)
+        spec === nothing || max_version in spec || push!(packages_holding_back, dep_pkg.name)
     end
 
-    # Check compat with Julia itself
-    julia_compatible_versions = Set{VersionNumber}()
-    for reg in regs
-        reg_pkg = get(reg, pkg.uuid, nothing)
-        reg_pkg === nothing && continue
-        info = Registry.registry_info(reg, reg_pkg)
-        # Check all versions for Julia compatibility (optimized: only fetch Julia compat)
-        for v in keys(info.version_info)
-            julia_vspec = Registry.query_compat_for_version(info, v, JULIA_UUID)
-            if julia_vspec !== nothing && VERSION in julia_vspec
-                push!(julia_compatible_versions, v)
-            end
+    # Check the compat of the latest version itself, with julia and with the versions its
+    # dependencies have in the manifest
+    for (dep_uuid, spec) in registered_compat(regs, pkg.uuid, max_version)
+        if dep_uuid == JULIA_UUID
+            VERSION in spec || push!(packages_holding_back, "julia")
+        else
+            dep_pkg = get(manifest, dep_uuid, nothing)
+            dep_pkg === nothing || dep_pkg.version === nothing || dep_pkg.version in spec || push!(packages_holding_back, dep_pkg.name)
         end
-    end
-    if !(max_version in julia_compatible_versions)
-        push!(packages_holding_back, "julia")
     end
 
     return sort!(unique!(packages_holding_back)), max_version, max_version_in_compat
+end
+
+# `status_compat_info` evaluated in `updated`, the environment after an update.
+function status_compat_info_updated(
+        pkg::PackageSpec, cinfo, updated::EnvCache, regs::Vector{Registry.RegistryInstance};
+        @nospecialize(dependents::Union{Nothing, Dict{UUID, Vector{UUID}}} = nothing)
+    )
+    _, max_version, _ = cinfo
+    entry = manifest_info(updated.manifest, pkg.uuid)
+    entry === nothing && return ["removed"], max_version, pkg.version
+    entry.version === nothing && return cinfo
+    after = PackageSpec(; name = pkg.name, uuid = pkg.uuid, version = entry.version, pinned = entry.pinned)
+    info = status_compat_info(after, updated, regs; dependents)
+    return info === nothing ? String[] : info[1], max_version, max(entry.version, pkg.version)
 end
 
 function diff_array(old_env::Union{EnvCache, Nothing}, new_env::EnvCache; manifest = true, workspace = false)
@@ -4544,13 +4591,13 @@ end
 function print_status(
         env::EnvCache, old_env::Union{Nothing, EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
         uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, deprecated::Bool, extensions::Bool, io::IO,
-        mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool = true
+        mode::PackageMode, show_usagetips::Bool = true, updated_env::Union{Nothing, EnvCache} = nothing
     )
     xs = diff_array(old_env, env; manifest, workspace)
     return print_status_entries(
         env, xs, registries, header, uuids, names;
         manifest, diff, ignore_indent, workspace, outdated, deprecated, extensions, io,
-        mode, hidden_upgrades_info, show_usagetips
+        mode, show_usagetips, updated_env
     )
 end
 
@@ -4558,7 +4605,7 @@ end
 @noinline function print_status_entries(
         env::EnvCache, xs, registries::Vector{Registry.RegistryInstance}, header::Symbol,
         uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, deprecated::Bool, extensions::Bool, io::IO,
-        mode::PackageMode, hidden_upgrades_info::Bool, show_usagetips::Bool = true
+        mode::PackageMode, show_usagetips::Bool = true, updated_env::Union{Nothing, EnvCache} = nothing
     )
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.error_color()), "→", context = io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color = :green), "⌃", context = io)
@@ -4623,12 +4670,11 @@ end
 
     all_packages_downloaded = true
     no_packages_upgradable = true
-    no_visible_packages_heldback = true
-    no_packages_heldback = true
     lpadding = 2
 
     package_statuses = PackageStatusData[]
-    manifest_dependents = manifest_dependents_map(env.manifest)
+    manifest_dependents = manifest_dependents_map(env.manifest; weakdeps = true)
+    updated_dependents = updated_env === nothing ? nothing : manifest_dependents_map(updated_env.manifest; weakdeps = true)
     for (uuid, old, new) in xs
         if Types.is_project_uuid(env, uuid)
             continue
@@ -4645,6 +4691,9 @@ end
             cinfo = status_compat_info(new, env, registries; dependents = manifest_dependents)
             if cinfo !== nothing
                 latest_version = false
+                if updated_env !== nothing
+                    cinfo = status_compat_info_updated(new, cinfo, updated_env, registries; dependents = updated_dependents)
+                end
             end
         end
         # if we are running with outdated, only show packages that are upper bounded
@@ -4682,8 +4731,19 @@ end
             is_package_downloaded(env.manifest_file, new; run_selectors = false)
 
         new_ver_avail = !latest_version && !Operations.is_tracking_repo(new) && !Operations.is_tracking_path(new)
-        pkg_upgradable = new_ver_avail && cinfo !== nothing && isempty(cinfo[1])
-        pkg_heldback = new_ver_avail && cinfo !== nothing && !isempty(cinfo[1])
+        if !outdated
+            # Whether a new version can be installed takes resolving an update, which is left
+            # to `--outdated`: here the marker only says that there is a new version.
+            pkg_upgradable = new_ver_avail
+            pkg_heldback = false
+        elseif updated_env === nothing
+            pkg_upgradable = new_ver_avail && cinfo !== nothing && isempty(cinfo[1])
+            pkg_heldback = new_ver_avail && cinfo !== nothing && !isempty(cinfo[1])
+        else
+            # an update was resolved: a package is upgradable when that upgrades it
+            pkg_upgradable = new_ver_avail && cinfo !== nothing && cinfo[3] > new.version
+            pkg_heldback = new_ver_avail && cinfo !== nothing && !pkg_upgradable && cinfo[1] != ["removed"]
+        end
 
         if !pkg_downloaded && (pkg_upgradable || pkg_heldback)
             # allow space in the gutter for two icons on a single line
@@ -4691,8 +4751,6 @@ end
         end
         all_packages_downloaded &= (!changed || pkg_downloaded)
         no_packages_upgradable &= (!changed || !pkg_upgradable)
-        no_visible_packages_heldback &= (!changed || !pkg_heldback)
-        no_packages_heldback &= !pkg_heldback
 
         push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, ext_info, deprecation_info))
     end
@@ -4755,6 +4813,10 @@ end
                 printstyled(io, " [compat]"; color = :light_magenta)
             elseif packages_holding_back == ["sysimage"]
                 printstyled(io, " [sysimage]"; color = :light_magenta)
+            elseif packages_holding_back == ["pinned"]
+                printstyled(io, " [pinned]"; color = :light_magenta)
+            elseif packages_holding_back == ["removed"]
+                printstyled(io, " [removed by update]"; color = :light_magenta)
             else
                 pkg_str = isempty(packages_holding_back) ? "" : string(": ", join(packages_holding_back, ", "))
                 printstyled(io, pkg_str; color = Base.warn_color())
@@ -4806,22 +4868,18 @@ end
     if !no_changes && !all_packages_downloaded
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color = Base.info_color(), ignore_indent)
     end
-    if !outdated && (mode != PKGMODE_COMBINED || (manifest == true))
+    if outdated && updated_env !== nothing
+        any_upgradable = any(pkg -> pkg.upgradable, package_statuses)
+        any_heldback = any(pkg -> pkg.heldback, package_statuses)
+        msg = String[]
+        any_upgradable && push!(msg, "An update upgrades the packages marked with $upgradable_indicator, to the version in brackets when that is not the latest.")
+        any_heldback && push!(msg, "Packages marked with $heldback_indicator are held back by the packages listed after them.")
+        isempty(msg) || printpkgstyle(io, :Info, join(msg, " "), color = Base.info_color(), ignore_indent)
+    end
+    if !outdated && (mode != PKGMODE_COMBINED || (manifest == true)) && !no_packages_upgradable
         tipend = manifest ? " -m" : ""
-        tip = show_usagetips ? " To see why use `status --outdated$tipend`" : ""
-        if !no_packages_upgradable && no_visible_packages_heldback
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available and may be upgradable.", color = Base.info_color(), ignore_indent)
-        end
-        if !no_visible_packages_heldback && no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $heldback_indicator have new versions available but compatibility constraints restrict them from upgrading.$tip", color = Base.info_color(), ignore_indent)
-        end
-        if !no_visible_packages_heldback && !no_packages_upgradable
-            printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator and $heldback_indicator have new versions available. Those with $upgradable_indicator may be upgradable, but those with $heldback_indicator are restricted by compatibility constraints from upgrading.$tip", color = Base.info_color(), ignore_indent)
-        end
-        if !manifest && hidden_upgrades_info && no_visible_packages_heldback && !no_packages_heldback
-            # only warn if showing project and outdated indirect deps are hidden
-            printpkgstyle(io, :Info, "Some packages have new versions but compatibility constraints restrict them from upgrading.$tip", color = Base.info_color(), ignore_indent)
-        end
+        tip = show_usagetips ? " Use `status --outdated$tipend` to see which of them an update upgrades and what holds the others back." : ""
+        printpkgstyle(io, :Info, "Packages marked with $upgradable_indicator have new versions available.$tip", color = Base.info_color(), ignore_indent)
     end
 
     # Check if any packages are yanked for warning message
@@ -4865,18 +4923,20 @@ function git_head_env(env, project_dir)
     end
 end
 
-function show_update(env::EnvCache, registries::Vector{Registry.RegistryInstance}; io::IO, hidden_upgrades_info = false)
+function show_update(env::EnvCache, registries::Vector{Registry.RegistryInstance}; io::IO)
     old_env = EnvCache()
     old_env.project = env.original_project
     old_env.manifest = env.original_manifest
-    status(env, registries; header = :Updating, mode = PKGMODE_COMBINED, env_diff = old_env, ignore_indent = false, io = io, hidden_upgrades_info)
+    status(env, registries; header = :Updating, mode = PKGMODE_COMBINED, env_diff = old_env, ignore_indent = false, io = io)
     return nothing
 end
 
 function status(
         env::EnvCache, registries::Vector{Registry.RegistryInstance}, pkgs::Vector{PackageSpec} = PackageSpec[];
         header = nothing, mode::PackageMode = PKGMODE_PROJECT, git_diff::Bool = false, env_diff = nothing, ignore_indent = true,
-        io::IO, workspace::Bool = false, outdated::Bool = false, deprecated::Bool = false, extensions::Bool = false, hidden_upgrades_info::Bool = false, show_usagetips::Bool = true
+        io::IO, workspace::Bool = false, outdated::Bool = false, deprecated::Bool = false, extensions::Bool = false, show_usagetips::Bool = true,
+        # for `outdated`: the environment as an update leaves it, when one resolves
+        updated_env::Union{Nothing, EnvCache} = nothing
     )
     io == Base.devnull && return
     # if a package, print header
@@ -4907,10 +4967,16 @@ function status(
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest = false, diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest = false, diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, show_usagetips, updated_env)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, hidden_upgrades_info, show_usagetips)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, show_usagetips, updated_env)
+    end
+    if outdated && updated_env === nothing && !isempty(env.manifest.deps)
+        printpkgstyle(
+            io, :Info, "An update of this environment does not resolve, so the ⌃ and ⌅ markers are estimated from the constraints directly on each package.",
+            ignore_indent; color = Base.info_color()
+        )
     end
     manifest_julia = env.manifest.julia_version
     if !diff && !isempty(env.manifest.deps) && manifest_julia !== nothing && Base.thisminor(manifest_julia) != Base.thisminor(VERSION)

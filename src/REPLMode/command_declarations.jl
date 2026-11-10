@@ -538,10 +538,11 @@ compound_declarations = [
                     [st|status] [-c|--compat] [pkgs...]
 
                 Show the status of the current environment. Packages marked with `⌃` have new
-                versions that may be installed, e.g. via `pkg> up`. Those marked with `⌅` have
-                new versions available, but cannot be installed due to compatibility
-                constraints. To see why use `pkg> status --outdated` which shows any packages
-                that are not at their latest version and if any packages are holding them back.
+                versions available. Whether they can be installed depends on the other packages
+                in the environment: `pkg> status --outdated` shows the packages that are not at
+                their latest version and resolves an update (without changing anything) to tell
+                them apart. There `⌃` marks the packages that `pkg> up` upgrades and `⌅` those
+                that it leaves at their version, followed by the packages holding them back.
                 Packages marked with `[yanked]` have been yanked from the registry and should be
                 updated or removed. Packages marked with `[deprecated]` are no longer maintained.
 
@@ -562,6 +563,9 @@ compound_declarations = [
                 !!! compat "Julia 1.8"
                     The `⌃` and `⌅` indicators were added in Julia 1.8.
                     The `--outdated` and `--compat` options require at least Julia 1.8.
+
+                !!! compat "Julia 1.14"
+                    As of Julia 1.14 the `⌅` indicator is only shown with `--outdated`.
                 """,
         ],
         PSA[
