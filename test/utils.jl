@@ -13,7 +13,8 @@ export temp_pkg_dir, cd_tempdir, isinstalled, write_build, with_current_env,
     with_temp_env, with_pkg_env, git_init_and_commit, copy_test_package,
     git_init_package, add_this_pkg, TEST_SIG, TEST_PKG, isolate, LOADED_DEPOT,
     list_tarball_files, recursive_rm_cov_files, copy_this_pkg_cache, make_file_url,
-    http_server, stalling_http_server, run_in_subprocess, packages_loaded_since
+    http_server, stalling_http_server, run_in_subprocess, packages_loaded_since,
+    depot_path_string
 
 # The cache directory is shared between the test-runner main process and its
 # worker processes: the first process to include this file creates the
@@ -274,6 +275,12 @@ function populate_loaded_depot!()
     return
 end
 
+# Point julia subprocesses at the isolated depots, keeping them out of `~/.julia`.
+# This is a snapshot taken on entry to `isolate()`/`temp_pkg_dir()`: a test that
+# changes `DEPOT_PATH` inside the block has to pass `depot_path_string()` itself.
+depot_path_string() = join(DEPOT_PATH, Sys.iswindows() ? ";" : ":")
+set_depot_path_env!() = (ENV["JULIA_DEPOT_PATH"] = depot_path_string())
+
 # The helpers taking a `do` block are called with hundreds of distinct closures
 # across the test suite; `@nospecialize` keeps them from being compiled once per
 # closure type (each specialization took 0.2-0.5 s).
@@ -312,6 +319,7 @@ function isolate(@nospecialize(fn::Function); loaded_depot = false, linked_reg =
             push!(DEPOT_PATH, target_depot)
             Base.append_bundled_depot_path!(DEPOT_PATH)
             loaded_depot && push!(DEPOT_PATH, LOADED_DEPOT)
+            set_depot_path_env!()
             # (with the loaded depot the registry is reachable through that)
             registry_is_compressed() && linked_reg && !loaded_depot && link_shared_registry!(target_depot)
             depot_mtimes = Dict(d => mtime(d) for d in DEPOT_PATH if isdir(d))
@@ -428,6 +436,7 @@ function temp_pkg_dir(@nospecialize(fn::Function); rm = true, linked_reg = true)
                 push!(LOAD_PATH, "@", "@v#.#", "@stdlib")
                 push!(DEPOT_PATH, depot_dir)
                 Base.append_bundled_depot_path!(DEPOT_PATH)
+                set_depot_path_env!()
                 registry_is_compressed() && linked_reg && link_shared_registry!(depot_dir)
                 fn(env_dir)
             finally
@@ -719,7 +728,7 @@ function run_in_subprocess(code::AbstractString)
     pathsep = Sys.iswindows() ? ";" : ":"
     cmd = addenv(
         `$(Base.julia_cmd()) --startup-file=no --color=no -e $code`,
-        "JULIA_DEPOT_PATH" => join(DEPOT_PATH, pathsep),
+        "JULIA_DEPOT_PATH" => depot_path_string(),
         "JULIA_LOAD_PATH" => join(LOAD_PATH, pathsep),
         "JULIA_PROJECT" => Base.active_project(),
     )
