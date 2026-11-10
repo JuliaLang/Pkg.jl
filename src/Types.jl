@@ -804,8 +804,213 @@ function record_manifest_usage(manifest_file::String)
     key = (logdir(), manifest_file, mtime(manifest_file))
     @lock RECORDED_MANIFEST_USAGE_LOCK (key in RECORDED_MANIFEST_USAGE) && return
     write_env_usage(manifest_file, "manifest_usage.toml")
+    record_julia_usage()
     isfile(manifest_file) && @lock RECORDED_MANIFEST_USAGE_LOCK push!(RECORDED_MANIFEST_USAGE, key)
     return
+end
+
+# Log directories in which the running Julia build was recorded in this session
+const RECORDED_JULIA_USAGE = Set{String}()
+
+"""
+    record_julia_usage()
+
+Record the running Julia build in `logs/julia_usage.toml`, keyed by the build id of `Base`
+that its precompilation cache files are compiled against, with the system image it was
+started with. `Pkg.gc` deletes the cache files of a recorded build once that system image is
+gone or has been replaced, as when Julia was uninstalled or updated.
+"""
+function record_julia_usage()
+    usage_file = joinpath(logdir(), "julia_usage.toml")
+    @lock RECORDED_MANIFEST_USAGE_LOCK begin
+        usage_file in RECORDED_JULIA_USAGE && return
+        # tried once per session: a log that can not be written is not tried again
+        push!(RECORDED_JULIA_USAGE, usage_file)
+    end
+    try
+        # an absolute path: Julia resolves the `-J` option when it starts
+        image = unsafe_string(Base.JLOptions().image_file)
+        build = JuliaBuild(Base.module_build_id(Base), image, VERSION)
+        # the usual case: recorded unchanged in an earlier session, nothing to write
+        is_recorded(parse_toml_nothrow(usage_file), build) || write_julia_usage(usage_file, build)
+    catch err
+        err isa InterruptException && rethrow()
+    end
+    return
+end
+
+# A Julia build to record in the usage log
+struct JuliaBuild
+    build_id::UInt128
+    image::String
+    version::VersionNumber
+end
+
+usage_key(build_id::UInt128) = string(build_id; base = 16, pad = 32)
+
+# Whether the parsed usage log `usage` records `b` with its system image as it is now
+function is_recorded(usage, b::JuliaBuild)
+    usage isa Dict || return false
+    entries = get(usage, usage_key(b.build_id), nothing)
+    entries isa Vector || return false
+    st = stat(b.image)
+    isfile(st) || return true  # nothing to record
+    return any(entries) do e
+        e isa Dict && get(e, "image", nothing) == b.image && get(e, "image_mtime", nothing) == st.mtime &&
+            get(e, "image_size", nothing) == st.size && get(e, "version", nothing) == string(b.version)
+    end
+end
+
+# Add the build `b` to the usage log `usage_file`
+function write_julia_usage(usage_file::String, b::JuliaBuild)
+    try
+        st = stat(b.image)
+        isfile(st) || return
+        mkpath(dirname(usage_file))
+        FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+            usage = isfile(usage_file) ? TOML.parsefile(usage_file) : Dict{String, Any}()
+            entry = Dict{String, Any}(
+                "version" => string(b.version),
+                "image" => b.image,
+                "image_mtime" => st.mtime,
+                "image_size" => st.size,
+                "time" => now(),
+            )
+            key = usage_key(b.build_id)
+            entries = filter(e -> e isa Dict && get(e, "image", nothing) != b.image, get(usage, key, Any[]))
+            push!(entries, entry)
+            usage[key] = entries
+            atomic_toml_write(usage_file, usage, sorted = true)
+        end
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Failed to record usage in `$usage_file`, ignoring." exception = err maxlog = 1
+    end
+    return
+end
+
+"""
+    condense_julia_usage(keep, usage_file)
+
+Rewrite the usage log `usage_file` with only the builds `b` for which `keep(b)`.
+"""
+function condense_julia_usage(keep::Function, usage_file::String)
+    isfile(usage_file) || return
+    try
+        FileWatching.mkpidlock(usage_file * ".pid", stale_age = 3) do
+            usage = TOML.parsefile(usage_file)
+            n = length(usage)
+            filter!(usage) do (key, _)
+                build = tryparse(UInt128, key; base = 16)
+                build === nothing || keep(build)
+            end
+            length(usage) == n || atomic_toml_write(usage_file, usage, sorted = true)
+        end
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Failed to condense `$usage_file`, ignoring." exception = err maxlog = 1
+    end
+    return
+end
+
+function parse_toml_nothrow(file::String)
+    return try
+        isfile(file) ? TOML.parsefile(file) : nothing
+    catch err
+        err isa InterruptException && rethrow()
+        nothing
+    end
+end
+
+# The Julia binaries that the apps installed in `depots` run with
+function app_julias(depots::Vector{String})
+    juliae = String[]
+    for depot in depots
+        manifest = parse_toml_nothrow(joinpath(depot, "environments", "apps", "AppManifest.toml"))
+        manifest isa Dict || continue
+        deps = get(manifest, "deps", nothing)
+        deps isa Dict || continue
+        for entries in values(deps)
+            entries isa Vector || continue
+            for entry in entries
+                apps = entry isa Dict ? get(entry, "apps", nothing) : nothing
+                apps isa Dict || continue
+                for app in values(apps)
+                    julia = app isa Dict ? get(app, "julia_command", nothing) : nothing
+                    julia isa String && push!(juliae, julia)
+                end
+            end
+        end
+    end
+    return juliae
+end
+
+# The directory where juliaup keeps its installations, as juliaup finds it
+juliaup_dir() = joinpath(get(() -> joinpath(homedir(), ".julia"), ENV, "JULIAUP_DEPOT_PATH"), "juliaup")
+
+# The Julia binaries installed with juliaup: every installed version, every channel that
+# downloads its own (as nightlies do) and every channel linked to a Julia elsewhere. Only
+# the string values of the `BinaryPath`, `Path` and `Command` keys of `juliaup.json` are
+# needed, so they are picked out of it rather than parsing the JSON. Older versions of
+# juliaup record only the `Path` of an installation, so `bin/julia` in it is tried too
+# (candidates that do not exist are skipped by the caller).
+function juliaup_julias(dir::String = juliaup_dir())
+    config = try
+        read(joinpath(dir, "juliaup.json"), String)
+    catch err
+        err isa InterruptException && rethrow()
+        return String[]
+    end
+    juliae = String[]
+    for m in eachmatch(r"\"(BinaryPath|Path|Command)\"\s*:\s*\"((?:[^\"\\]|\\.)*)\"", config)
+        path = try
+            unescape_string(replace(m.captures[2], "\\/" => "/"))
+        catch
+            continue
+        end
+        key = m.captures[1]
+        if key == "BinaryPath"
+            push!(juliae, normpath(joinpath(dir, path)))
+        elseif key == "Path"
+            push!(juliae, normpath(joinpath(dir, path, "bin", Base.julia_exename())))
+        elseif isabspath(path)
+            push!(juliae, path)
+        end
+    end
+    return unique!(juliae)
+end
+
+# The version of the Julia binary `julia`, from the `julia_version.h` it ships with (in
+# binary distributions and source builds alike), without running it. The binary is resolved
+# first, as a `julia` symlink (say, the one at the top of a source build) is not next to it.
+function julia_binary_version(julia::String)
+    return try
+        header = joinpath(dirname(realpath(julia)), "..", "include", "julia", "julia_version.h")
+        m = match(r"#define\s+JULIA_VERSION_STRING\s+\"([^\"]+)\"", read(header, String))
+        m === nothing ? nothing : tryparse(VersionNumber, m.captures[1])
+    catch err
+        err isa InterruptException && rethrow()
+        nothing
+    end
+end
+
+"""
+    installed_julia_releases(depots) -> Set{VersionNumber}
+
+The release versions of the Julias that are installed but may never load this Pkg, and so
+never record themselves in `julia_usage.toml`: the ones the apps installed in `depots` run
+with (running an app does not load Pkg), and the ones installed with juliaup (older Julia
+versions ship a Pkg that does not record itself). The caches of a build of one of these
+versions are kept. Prereleases are left out: their version does not tell their builds apart.
+"""
+function installed_julia_releases(depots::Vector{String})
+    releases = Set{VersionNumber}()
+    for julia in unique!(vcat(app_julias(depots), juliaup_julias()))
+        v = julia_binary_version(julia)
+        (v === nothing || !isempty(v.prerelease)) && continue
+        push!(releases, VersionNumber(v.major, v.minor, v.patch))
+    end
+    return releases
 end
 
 write_env_usage(source_file::AbstractString, usage_filepath::AbstractString) =

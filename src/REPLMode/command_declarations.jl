@@ -601,9 +601,32 @@ compound_declarations = [
                     gc [-v|--verbose]
 
                 Free disk space by garbage collecting packages, artifacts, repos and
-                scratchspaces that can not be reached from any existing project.
+                scratchspaces that can not be reached from any existing project, and
+                precompilation caches that can never be loaded again (those of deleted
+                package versions and of Julia builds that are gone).
+                Use `du` to see how much would be freed.
                 Use verbose mode for detailed output.
                 The `--all` option is accepted for backwards compatibility but has no effect.
+                """,
+        ],
+        PSA[
+            :name => "du",
+            :api => API.du,
+            :option_spec => [
+                PSA[:name => "all", :api => :force => true],
+                PSA[:name => "verbose", :short_name => "v", :api => :verbose => true],
+            ],
+            :description => "show the disk usage of the depot and what `gc` would free",
+            :help => md"""
+                    du [-v|--verbose] [--all]
+
+                Show how much disk space each part of the user depot (packages, artifacts,
+                precompilation caches, ...) uses, and how much of it `gc` would free. The
+                precompilation caches are split up by Julia version and by the Julia build they
+                were compiled with. Nothing is deleted.
+
+                With `--all`, show every depot in the depot path. With `-v`/`--verbose`, also
+                list the largest packages.
                 """,
         ],
         PSA[
