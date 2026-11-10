@@ -1,7 +1,7 @@
 module Apps
 
 using Pkg
-using Pkg: atomic_toml_write, stdout_f
+using Pkg: atomic_toml_write, stdout_f, isurl
 using Pkg.Versions
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
     pkgerror, projectfile_path
@@ -338,6 +338,11 @@ end
 add(pkg::PackageSpec) = with_apps_lock(() -> _add(pkg))
 function _add(pkg::PackageSpec)
     handle_package_input!(pkg)
+    # A relative local path is given relative to the working directory, but
+    # the app manifest lives in the depot, so store it as an absolute path
+    if pkg.repo.source !== nothing && !isurl(pkg.repo.source)
+        pkg.repo.source = abspath(pkg.repo.source)
+    end
 
     # Must run before `app_context()` since `Context` loads the registries
     Pkg.Registry.download_default_registries(Pkg.stderr_f())

@@ -131,6 +131,13 @@ using Test
                 @test Sys.which(exename) == nothing
                 @test Sys.which(cliexename) == nothing
                 @test Sys.which(flagsexename) == nothing
+
+                # A relative path is relative to the working directory (#4893)
+                cd(path) do
+                    Pkg.REPLMode.pkgstr("app add .")
+                end
+                @test read(`$exename test`, String) == "grfg\n"
+                Pkg.Apps.rm("Rot13")
             end
 
             # Test both absolute path and relative path "." work for develop
