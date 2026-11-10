@@ -785,14 +785,14 @@ end
 
 @testset "status showing incompatible loaded deps" begin
     isolate(loaded_depot = true) do
-        cmd = addenv(`$(Base.julia_cmd()) --color=no --startup-file=no -e "
+        cmd = `$(Base.julia_cmd()) --color=no --startup-file=no -e "
             using Pkg
             Pkg.activate(temp=true)
             Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.4\"))
             using Example
             Pkg.activate(temp=true)
             Pkg.add(Pkg.PackageSpec(name=\"Example\", version=v\"0.5.5\"))
-            "`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"))
+            "`
         iob = IOBuffer()
         run(pipeline(cmd, stderr = iob, stdout = iob))
         out = String(take!(iob))

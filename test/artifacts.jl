@@ -462,15 +462,10 @@ end
         Pkg.instantiate()
         @test selector_runs() == 3
 
-        depot_env = "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
-
         # Loading the dependency from the selector precompiled it. That cache must be
         # usable at the default optimization level, or it is recompiled on first use.
         dependency_id = "Base.PkgId(Base.UUID(\"b8df255f-45df-4e3b-8d04-6a7f7496dbd4\"), \"ArtifactSelectorDependency\")"
-        cmd = addenv(
-            `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e "print(Base.isprecompiled($dependency_id))"`,
-            depot_env,
-        )
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e "print(Base.isprecompiled($dependency_id))"`
         @test read(cmd, String) == "true"
 
         # Instantiation checks a dependency's static artifacts before running the
@@ -486,10 +481,7 @@ end
         @test artifact_exists(selected["new"].hash)
         @test selector_runs() == runs_before + 1
 
-        cmd = addenv(
-            `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e 'using ArtifactSelectorWithDependency; print(ArtifactSelectorWithDependency.selected_artifact())'`,
-            depot_env,
-        )
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e 'using ArtifactSelectorWithDependency; print(ArtifactSelectorWithDependency.selected_artifact())'`
         @test chomp(read(cmd, String)) == "new"
 
         # Exercise loading through the consumer's [deps], without a direct dependency
@@ -971,7 +963,6 @@ end
             # because it feeds the right `Platform` object through to `@artifact_str()`
             cmd = addenv(
                 `$(Base.julia_cmd()) --color=yes --code-coverage=none --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
-                "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                 "FLOOBLECRANK" => flooblecrank_status
             )
             using_output = chomp(String(read(cmd)))
