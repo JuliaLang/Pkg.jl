@@ -155,6 +155,30 @@ version of `MyPackage` that it was installed with. For this to also work when de
 package, make the project part of the [workspace](@ref Workspaces) of the package as above, or
 give it a `[sources]` entry such as `MyPackage = {path = ".."}`.
 
+## Shipping a manifest
+
+By default the dependencies of an app are resolved when it is installed, to the latest versions
+that are compatible. To instead have the app run with the versions it was tested with, commit
+the `Manifest.toml` of the package (for an app with its own `project`, the manifest of that
+project or of the workspace it is part of). When a package has a manifest, the apps are installed
+with the versions recorded in it, and `app update` only changes them when a new version of the
+package comes with a new manifest.
+
+A manifest is written for one machine and one Julia version, so not all of it carries over:
+
+- Paths in it that lead to a place inside the package (a package in a subdirectory, the other
+  projects of a workspace) lead into the installed package. Other paths, such as a package
+  developed next to the repository, only exist on the machine of the author: they are ignored with
+  a warning and the dependency is then taken from a registry. (They are followed when the app is
+  installed from a local path.)
+- The versions of the standard libraries are those of the Julia that the app is installed with. A
+  manifest for a specific Julia version (`Manifest-v1.12.toml`) is preferred when it matches.
+- If the recorded versions can not be used with the running Julia, the latest compatible versions
+  are installed instead, with a warning.
+- Registries named in the manifest are not installed.
+
+Developed apps (`app develop`) run in the project they are developed in, with its manifest as it is.
+
 ## Configuring Julia Flags
 
 Apps can specify default Julia command-line flags that will be passed to the Julia process when the app is run. This is useful for configuring performance settings, threading, or other Julia options specific to your application.
