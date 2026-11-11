@@ -720,14 +720,14 @@ compound_declarations = [
             :api => Apps.status,
             :should_splat => false,
             :arg_count => 0 => Inf,
-            :arg_parser => parse_package,
+            :arg_parser => parse_app,
             :completions => :complete_installed_apps,
             :description => "show status of apps",
             :help => md"""
-                    app status [pkg[=uuid]] ...
+                    app status [app|pkg] ...
 
-                Show the status of installed apps. If packages are specified, only show
-                apps for those packages.
+                Show the installed apps, the version of their package, and the julia that
+                runs them. If packages or apps are specified, only show those.
                     """,
         ],
         PSA[
@@ -743,11 +743,13 @@ compound_declarations = [
 
                 Add apps provided by packages `pkg...`. This will make the apps available
                 as executables in `~/.julia/bin` (which should be added to PATH).
+                A package that is already installed is replaced.
 
                 **Examples**
                 ```
                 pkg> app add Example
                 pkg> app add Example@0.5.0
+                pkg> app add https://github.com/JuliaLang/Example.jl
                 ```
                 """,
         ],
@@ -757,18 +759,19 @@ compound_declarations = [
             :api => Apps.rm,
             :should_splat => false,
             :arg_count => 0 => Inf,
-            :arg_parser => parse_package,
+            :arg_parser => parse_app,
             :completions => :complete_installed_apps,
             :description => "remove apps",
             :help => md"""
-                    app [rm|remove] pkg[=uuid] ...
+                    app [rm|remove] app|pkg ...
 
-                Remove apps provided by packages `pkg...`. This will remove the executables
-                from `~/.julia/bin`.
+                Remove the apps provided by packages `pkg...`, or single apps by their name.
+                This will remove the executables from `~/.julia/bin`.
 
                 **Examples**
                 ```
                 pkg> app rm Example
+                pkg> app rm exampleapp
                 ```
                     """,
         ],
@@ -804,12 +807,13 @@ compound_declarations = [
             :completions => :complete_installed_apps,
             :should_splat => false,
             :arg_count => 0 => Inf,
-            :arg_parser => parse_package,
+            :arg_parser => parse_app,
             :description => "update app",
             :help => md"""
-                    app [up|update] [pkg[=uuid]] ...
+                    app [up|update] [app|pkg] ...
 
                 Update apps for packages `pkg...`. If no packages are specified, all apps will be updated.
+                Apps of a package that were removed with `app rm` are not installed again.
 
                 **Examples**
                 ```
@@ -824,10 +828,10 @@ compound_declarations = [
             :completions => :complete_installed_apps,
             :should_splat => false,
             :arg_count => 0 => Inf,
-            :arg_parser => parse_package,
+            :arg_parser => parse_app,
             :description => "make apps use the running julia",
             :help => md"""
-                    app relink [pkg[=uuid]] ...
+                    app relink [app|pkg] ...
 
                 Make the apps of packages `pkg...` (all apps if no packages are specified) run with
                 the running julia instead of the julia they were installed with, keeping the versions

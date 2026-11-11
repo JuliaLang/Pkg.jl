@@ -4923,7 +4923,11 @@ function git_head_env(env, project_dir)
     end
 end
 
+# Set to `false` by callers that report the changes of an operation in their own way
+const SHOW_UPDATE = Base.ScopedValues.ScopedValue(true)
+
 function show_update(env::EnvCache, registries::Vector{Registry.RegistryInstance}; io::IO)
+    SHOW_UPDATE[] || return nothing
     old_env = EnvCache()
     old_env.project = env.original_project
     old_env.manifest = env.original_manifest
