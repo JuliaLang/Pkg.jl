@@ -33,8 +33,11 @@ function pathrepr(path::String)
     # print stdlib paths as @stdlib/Name
     if startswith(path, Sys.STDLIB)
         path = "@stdlib/" * basename(path)
+    elseif isabspath(path)
+        # relative paths are relative to a project, not the working directory
+        path = Base.contractuser(path)
     end
-    return "`" * Base.contractuser(path) * "`"
+    return "`" * path * "`"
 end
 
 """
