@@ -16,6 +16,23 @@ import Downloads
 # the immutable content-addressed pkg-server resources
 const RESOURCE_RE = r"^/(?:registry/[0-9a-f-]{36}|package/[0-9a-f-]{36}|artifact)/[0-9a-f]{40}$"
 
+# Return the cached copy of `target`, downloading it first on a miss, or
+# `nothing` if the upstream server can't provide it.
+function fetch!(upstream::String, cache_dir::String, target::String)
+    file = joinpath(cache_dir, split(target, '/'; keepempty = false)...)
+    isfile(file) && return file
+    mkpath(dirname(file))
+    tmp = tempname(dirname(file)) # same filesystem, for an atomic move
+    try
+        Downloads.download(upstream * target, tmp)
+        mv(tmp, file; force = true) # concurrent misses overwrite with identical content
+        return file
+    catch
+        rm(tmp; force = true)
+        return nothing
+    end
+end
+
 function handle_connection(sock, upstream::String, cache_dir::String, registries::Vector{UInt8})
     try
         request = readline(sock)
@@ -28,18 +45,8 @@ function handle_connection(sock, upstream::String, cache_dir::String, registries
         if target == "/registries"
             body = registries
         elseif occursin(RESOURCE_RE, target)
-            file = joinpath(cache_dir, split(target, '/'; keepempty = false)...)
-            if !isfile(file)
-                mkpath(dirname(file))
-                tmp = tempname(dirname(file)) # same filesystem, for an atomic move
-                try
-                    Downloads.download(upstream * target, tmp)
-                    mv(tmp, file; force = true) # concurrent misses overwrite with identical content
-                catch
-                    rm(tmp; force = true) # upstream 404 etc: serve 404 below
-                end
-            end
-            isfile(file) && (body = read(file))
+            file = fetch!(upstream, cache_dir, target)
+            file === nothing || (body = read(file))
         end
         if body === nothing
             write(sock, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -73,6 +80,16 @@ function start!(; upstream::Union{AbstractString, Nothing}, cache_dir::String)
     catch err
         @warn "Could not fetch registry index, tests will download directly" upstream err
         return nothing
+    end
+    # The proxy only answers once a miss is fully downloaded, and clients give
+    # up after 20 seconds without data, so a slow link can fail the large
+    # registry downloads every test run starts with. Fetch them up front.
+    for target in split(String(copy(registries)))
+        occursin(RESOURCE_RE, target) || continue
+        if fetch!(upstream, cache_dir, String(target)) === nothing
+            @warn "Could not fetch registry, tests will download directly" upstream target
+            return nothing
+        end
     end
     mkpath(cache_dir)
     port, server = Sockets.listenany(Sockets.localhost, 40000)
