@@ -248,8 +248,13 @@ struct AppInfo
     julia_command::Union{String, Nothing}
     submodule::Union{String, Nothing}
     julia_flags::Vector{String}
+    # Directory (relative to the package) of the project the app runs in,
+    # `nothing` for the package itself
+    project::Union{String, Nothing}
     other::Dict{String, Any}
 end
+AppInfo(name, julia_command, submodule, julia_flags, other::Dict{String, Any}) =
+    AppInfo(name, julia_command, submodule, julia_flags, nothing, other)
 Base.@kwdef mutable struct Project
     other::Dict{String, Any} = Dict{String, Any}()
     # The comments of the project file, preserved across writes.

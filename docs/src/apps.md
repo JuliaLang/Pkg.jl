@@ -99,6 +99,62 @@ This will create two executables:
 - `main-app` that runs `julia -m MyMultiApp`
 - `cli-app` that runs `julia -m MyMultiApp.CLI`
 
+## Apps with their own environment
+
+By default an app runs in the environment of its package: it can load the package and the
+dependencies of the package. An app that needs other dependencies (for example an argument
+parser or a plotting package that the library itself should not depend on) can instead run in
+another project of the same repository, named with the `project` key:
+
+```toml
+# Project.toml
+name = "MyPackage"
+uuid = "..."
+
+[workspace]
+projects = ["cli"]
+
+[apps]
+mypackage = {}                           # runs MyPackage.main
+mypackage-cli = { project = "cli" }      # runs MyPackageCLI.main in the environment of cli/
+```
+
+```toml
+# cli/Project.toml
+name = "MyPackageCLI"
+uuid = "..."
+
+[deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+MyPackage = "..."
+```
+
+```julia
+# cli/src/MyPackageCLI.jl
+module MyPackageCLI
+
+using ArgParse, MyPackage
+
+function @main(ARGS)
+    # ...
+end
+
+end # module
+```
+
+The `project` is the path (relative to the package, with `/` as separator) of a directory in the
+package holding a project that is itself a package, that is, it has a `name`, a `uuid` and a
+`src/<name>.jl` file with the `@main` entry point. The `submodule` and `julia_flags` keys work
+as for other apps, with `submodule` naming a submodule of that package.
+
+Each such project gets an environment of its own when the apps are installed, so apps of the same
+package can use different (even incompatible) dependencies and an app only loads what it needs.
+Dependencies on packages in the same repository (the package itself and the projects of its
+workspace) are loaded from the installed package, so `mypackage-cli` above always runs with the
+version of `MyPackage` that it was installed with. For this to also work when developing the
+package, make the project part of the [workspace](@ref Workspaces) of the package as above, or
+give it a `[sources]` entry such as `MyPackage = {path = ".."}`.
+
 ## Configuring Julia Flags
 
 Apps can specify default Julia command-line flags that will be passed to the Julia process when the app is run. This is useful for configuring performance settings, threading, or other Julia options specific to your application.

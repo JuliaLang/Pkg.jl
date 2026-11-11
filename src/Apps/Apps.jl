@@ -97,6 +97,38 @@ function validate_submodule_name(name::Union{AbstractString, Nothing})
     end
 end
 
+# The `project` of an app is the directory, relative to the package and with
+# `/` as separator, of the project the app runs in
+function validate_app_project(appname::AbstractString, project::Union{AbstractString, Nothing})
+    project === nothing && return
+    parts = split(project, '/')
+    if any(part -> part in (".", "..") || !occursin(r"^[a-zA-Z0-9_.-]+$", part), parts)
+        pkgerror("The `project` of app `$appname` must be a relative path (with `/` as separator) to a directory inside the package, got `$project`")
+    end
+    return
+end
+
+subproject_path(root::AbstractString, subproject::Union{String, Nothing}) =
+    subproject === nothing ? root : joinpath(root, split(subproject, '/')...)
+
+# The projects used by `apps`, the package itself (`nothing`) first
+subprojects(apps) = sort!(unique(Union{String, Nothing}[app.project for app in values(apps)]); by = p -> something(p, ""))
+
+# The project in the package `pkgname` at `sourcepath` that the apps with `project = subproject` run in
+function read_subproject(pkgname, sourcepath::AbstractString, subproject::String)
+    project_file = projectfile_path(subproject_path(sourcepath, subproject); strict = true)
+    project_file === nothing && pkgerror("The project `$subproject` used by apps of package $pkgname does not exist")
+    project = read_project(project_file)
+    if project.name === nothing || project.uuid === nothing
+        pkgerror("The project `$subproject` used by apps of package $pkgname must be a package (have a `name` and a `uuid`)")
+    end
+    return project
+end
+
+# The name of the package holding the module that `app` of the package `pkgname` at `sourcepath` runs
+app_package_name(pkgname, sourcepath::AbstractString, app::AppInfo) =
+    app.project === nothing ? pkgname : read_subproject(pkgname, sourcepath, app.project).name
+
 function rm_shim(name; kwargs...)
     validate_app_name(name)
     return Base.rm(shim_path(name); kwargs...)
@@ -112,6 +144,8 @@ function get_project(sourcepath)
     for app in values(project.apps)
         validate_app_name(app.name)
         validate_submodule_name(app.submodule)
+        validate_app_project(app.name, app.project)
+        app.project === nothing || read_subproject(project.name, sourcepath, app.project)
     end
     return project
 end
@@ -310,12 +344,22 @@ end
 # Main Functions #
 ##################
 
-# Create the environment in `envdir` that the apps of the tracked package `info` run in.
-# `old_envdir` is the environment of a previous installation, if any, that the changes
-# are shown relative to.
-function resolve_app_env(info::PackageEntry, envdir::String, old_envdir::Union{String, Nothing})
-    sourcepath = source_path(app_manifest_file(), info)
-    original_project_file = projectfile_path(sourcepath)
+# Packages in the repository of the package `info` (the package itself and the
+# projects of its workspace), which the project of an app uses as they are installed
+function inrepo_packages(info::PackageEntry, sourcepath::String)
+    paths = Dict{UUID, String}(info.uuid => sourcepath)
+    for (project_file, project) in Pkg.Types.collect_workspace(projectfile_path(sourcepath))
+        project.uuid === nothing || get!(paths, project.uuid, dirname(project_file))
+    end
+    return paths
+end
+
+# Create the environment in `envdir` for the apps of the package `info` (installed at
+# `sourcepath`) that run in `subproject`. `old_envdir` is the environment of a previous
+# installation, if any, that the changes are shown relative to.
+function create_app_env(info::PackageEntry, sourcepath::String, subproject::Union{String, Nothing}, envdir::String, old_envdir::Union{String, Nothing})
+    project_source = subproject_path(sourcepath, subproject)
+    original_project_file = projectfile_path(project_source)
     isfile(original_project_file) || pkgerror("could not find project file for package $(info.name)")
 
     projectfile = joinpath(envdir, "Project.toml")
@@ -333,49 +377,60 @@ function resolve_app_env(info::PackageEntry, envdir::String, old_envdir::Union{S
 
     # Add entryfile stanza pointing to the package entry file,
     # respecting an existing entryfile in the project
-    entryfile = get(project_data, "entryfile", joinpath("src", "$(info.name).jl"))
-    entryfile = isabspath(entryfile) ? entryfile : normpath(joinpath(sourcepath, entryfile))
+    entryfile = get(project_data, "entryfile", joinpath("src", "$(project_data["name"]).jl"))
+    entryfile = isabspath(entryfile) ? entryfile : normpath(joinpath(project_source, entryfile))
     project_data["entryfile"] = relative_to_depot(entryfile)
+
+    # The environment is on its own, not part of the workspace of the package
+    delete!(project_data, "workspace")
 
     # Relative paths in [sources] are relative to the original project
     # location, not the app environment the project file is copied to.
-    # Resolve them against the original location (for packages added
-    # from a local path) or the installed package tree; drop entries
-    # that do not resolve so the dependency comes from a registry.
-    sources = get(project_data, "sources", nothing)
-    if sources !== nothing
-        original_dir = nothing
-        if info.repo.source !== nothing && !Pkg.isurl(info.repo.source)
-            original_dir = normpath(joinpath(app_env_folder(), info.repo.source))
-            if info.repo.subdir !== nothing
-                original_dir = joinpath(original_dir, info.repo.subdir)
-            end
+    # Paths inside the package resolve to the installed package tree and
+    # other paths to the original location (for packages added from a local
+    # path); entries that do not resolve are dropped so the dependency
+    # comes from a registry.
+    sources = get!(project_data, "sources", Dict{String, Any}())
+    original_dir = nothing
+    if info.repo.source !== nothing && !Pkg.isurl(info.repo.source)
+        original_dir = normpath(joinpath(app_env_folder(), info.repo.source))
+        if info.repo.subdir !== nothing
+            original_dir = joinpath(original_dir, info.repo.subdir)
         end
-        for (depname, source) in collect(sources)
-            path = get(source, "path", nothing)
-            (path === nothing || isabspath(path)) && continue
-            candidates = String[]
-            original_dir !== nothing && push!(candidates, normpath(joinpath(original_dir, path)))
-            push!(candidates, normpath(joinpath(sourcepath, path)))
-            resolved = findfirst(isdir, candidates)
-            if resolved === nothing
-                @warn "Ignoring source with relative path `$(path)` for dependency $(depname) of package $(info.name) since it does not exist relative to the installed package"
-                delete!(source, "path")
-                isempty(source) && delete!(sources, depname)
-            else
-                source["path"] = relative_to_depot(candidates[resolved])
-            end
-        end
-        isempty(sources) && delete!(project_data, "sources")
+        original_dir = subproject_path(original_dir, subproject)
     end
+    package_prefix = joinpath(normpath(sourcepath), "")
+    for (depname, source) in collect(sources)
+        path = get(source, "path", nothing)
+        (path === nothing || isabspath(path)) && continue
+        candidates = String[]
+        installed = normpath(joinpath(project_source, path))
+        startswith(joinpath(installed, ""), package_prefix) && push!(candidates, installed)
+        original_dir !== nothing && push!(candidates, normpath(joinpath(original_dir, path)))
+        resolved = findfirst(isdir, candidates)
+        if resolved === nothing
+            @warn "Ignoring source with relative path `$(path)` for dependency $(depname) of package $(project_data["name"]) since it does not exist relative to the installed package"
+            delete!(source, "path")
+            isempty(source) && delete!(sources, depname)
+        else
+            source["path"] = relative_to_depot(candidates[resolved])
+        end
+    end
+    if subproject !== nothing
+        inrepo = inrepo_packages(info, sourcepath)
+        for section in ("deps", "weakdeps"), (depname, uuid) in get(project_data, section, Dict{String, Any}())
+            path = get(inrepo, UUID(uuid), nothing)
+            (path === nothing || haskey(sources, depname)) && continue
+            sources[depname] = Dict{String, Any}("path" => relative_to_depot(path))
+        end
+    end
+    isempty(sources) && delete!(project_data, "sources")
 
     # Preserves Pkg's project key ordering, inline [sources] tables and comments
     write_project(project_data, projectfile; comments)
 
-    # Create a manifest with the manifest entry
     Pkg.activate(envdir) do
         ctx = Context()
-        ctx.env.manifest.deps[info.uuid] = info
         Base.ScopedValues.@with Pkg.Operations.SHOW_UPDATE => false Pkg.resolve(ctx)
         show_env_changes(ctx, old_envdir)
     end
@@ -408,19 +463,23 @@ function show_env_changes(ctx::Context, old_envdir::Union{String, Nothing})
     return
 end
 
-# Create the environment that the apps of the tracked package `info` run in.
-# A previous installation is kept if this fails.
-function create_app_env(info::PackageEntry)
-    envdir = app_env_dir(info.name)
-    backup = envdir * ".old"
+# Create the environments that the apps of the tracked package `info` run in, one
+# for each project that the apps use. A previous installation is kept if this fails.
+function create_app_envs(info::PackageEntry)
+    sourcepath = source_path(app_manifest_file(), info)
+    envroot = app_env_dir(info.name)
+    backup = envroot * ".old"
     Base.rm(backup; force = true, recursive = true)
-    has_backup = ispath(envdir)
-    has_backup && mv(envdir, backup)
+    has_backup = ispath(envroot)
+    has_backup && mv(envroot, backup)
     try
-        resolve_app_env(info, envdir, has_backup ? backup : nothing)
+        for subproject in subprojects(info.apps)
+            old_envdir = has_backup ? subproject_path(backup, subproject) : nothing
+            create_app_env(info, sourcepath, subproject, subproject_path(envroot, subproject), old_envdir)
+        end
     catch
-        Base.rm(envdir; force = true, recursive = true)
-        has_backup && mv(backup, envdir)
+        Base.rm(envroot; force = true, recursive = true)
+        has_backup && mv(backup, envroot)
         rethrow()
     end
     Base.rm(backup; force = true, recursive = true)
@@ -428,9 +487,14 @@ function create_app_env(info::PackageEntry)
 end
 
 function generate_shims_for_apps(info::PackageEntry)
-    # Tracked apps run in their app environment, developed ones in the developed project
-    env = something(developed_source_path(app_manifest_file(), info), app_env_dir(info.name))
-    return generate_shims_for_apps(info.name, info.apps, env, julia_executable())
+    sourcepath = developed_source_path(app_manifest_file(), info)
+    if sourcepath === nothing
+        # Tracked apps run in their app environment, developed ones in the developed project
+        generate_shims_for_apps(info.name, info.apps, source_path(app_manifest_file(), info), app_env_dir(info.name), julia_executable())
+    else
+        generate_shims_for_apps(info.name, info.apps, sourcepath, sourcepath, julia_executable())
+    end
+    return
 end
 
 
@@ -507,8 +571,8 @@ function _add(pkg::PackageSpec; updating::Bool = false)
     # TODO: Wrong if package itself has a sourcepath?
     entry = package_entry(pkg, project, apps, pkg.path)
 
-    # Nothing of a previous installation is touched until the environment is in place
-    create_app_env(entry)
+    # Nothing of a previous installation is touched until the environments are in place
+    create_app_envs(entry)
     reconcile_shims!(manifest, entry)
     manifest.deps[pkg.uuid] = entry
     generate_shims_for_apps(entry)
@@ -569,10 +633,8 @@ function _develop(pkg::PackageSpec)
     entry = package_entry(pkg, project, project.apps, sourcepath)
 
     # For dev, we don't create an app environment - the shims point directly to the
-    # dev'd project, which needs a resolved manifest for the dependencies to be loadable
-    Pkg.activate(sourcepath) do
-        Pkg.instantiate()
-    end
+    # dev'd project, which needs resolved manifests for the dependencies to be loadable
+    instantiate_developed(sourcepath, entry.apps)
 
     reconcile_shims!(manifest, entry)
     manifest.deps[pkg.uuid] = entry
@@ -582,6 +644,16 @@ function _develop(pkg::PackageSpec)
 
     report_apps(entry, old_entry)
     return check_apps_in_path(entry.apps)
+end
+
+function instantiate_developed(sourcepath::String, apps; resolve::Bool = false)
+    for subproject in subprojects(apps)
+        Pkg.activate(subproject_path(sourcepath, subproject)) do
+            resolve && Pkg.resolve()
+            Pkg.instantiate()
+        end
+    end
+    return
 end
 
 
@@ -642,10 +714,14 @@ end
 function update_package(ctx::Context, info::PackageEntry)
     sourcepath = developed_source_path(ctx.env.manifest_file, info)
     if sourcepath !== nothing
-        # Developed app: update the dependencies of the developed project
+        # Developed app: update the dependencies of the developed projects
         # and refresh the app info from it
-        Pkg.activate(sourcepath) do
-            Pkg.update()
+        for subproject in subprojects(info.apps)
+            dir = subproject_path(sourcepath, subproject)
+            isdir(dir) || continue
+            Pkg.activate(dir) do
+                Pkg.update()
+            end
         end
         _develop(PackageSpec(path = sourcepath))
     elseif info.repo.source !== nothing || info.repo.rev !== nothing
@@ -705,16 +781,13 @@ function _relink(pkg::Union{PackageSpec, Nothing})
         push!(relinked, info.name)
         for (appname, app) in info.apps
             # an unset julia command is written as the running julia
-            info.apps[appname] = AppInfo(app.name, nothing, app.submodule, app.julia_flags, app.other)
+            info.apps[appname] = AppInfo(app.name, nothing, app.submodule, app.julia_flags, app.project, app.other)
         end
         if sourcepath === nothing
-            create_app_env(info)
+            create_app_envs(info)
         else
             # resolve for the running julia, which can have other stdlib versions
-            Pkg.activate(sourcepath) do
-                Pkg.resolve()
-                Pkg.instantiate()
-            end
+            instantiate_developed(sourcepath, info.apps; resolve = true)
         end
         generate_shims_for_apps(info)
     end
@@ -815,10 +888,12 @@ function precompile(pkg::Union{Nothing, String} = nothing)
         end
         # Developed apps run directly from their project, tracked ones from the app environment
         sourcepath = developed_source_path(app_manifest_file(), info)
-        env_dir = sourcepath !== nothing ? sourcepath : app_env_dir(info.name)
-        Pkg.activate(env_dir) do
-            Pkg.instantiate()
-            Pkg.precompile()
+        envroot = sourcepath !== nothing ? sourcepath : app_env_dir(info.name)
+        for subproject in subprojects(info.apps)
+            Pkg.activate(subproject_path(envroot, subproject)) do
+                Pkg.instantiate()
+                Pkg.precompile()
+            end
         end
     end
     return
@@ -922,9 +997,11 @@ function stacked_depots()
     return String[normpath(d) for d in DEPOT_PATH[2:end] if normpath(d) ∉ bundled]
 end
 
-function generate_shims_for_apps(pkgname, apps, env, julia)
+# Shims for the `apps` of the package `pkgname` at `sourcepath`, which run in the
+# environments (one for each project used by the apps) in `envroot`
+function generate_shims_for_apps(pkgname, apps, sourcepath, envroot, julia)
     for app in values(apps)
-        generate_shim(pkgname, app, env, julia)
+        generate_shim(app_package_name(pkgname, sourcepath, app), app, subproject_path(envroot, app.project), julia)
     end
     return
 end
