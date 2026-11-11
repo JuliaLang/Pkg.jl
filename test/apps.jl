@@ -332,6 +332,46 @@ using Test
         end
     end
 
+    @testset "apps with their own project" begin
+        isolate(loaded_depot = true) do
+            mktempdir() do tmpdir
+                path = git_init_package(tmpdir, joinpath(@__DIR__, "test_packages", "AppProjects.jl"))
+                exe(name) = joinpath(first(DEPOT_PATH), "bin", Sys.iswindows() ? name * ".bat" : name)
+                envdir = joinpath(first(DEPOT_PATH), "environments", "apps", "AppProjects")
+                run_apps() = [readchomp(`$(exe(name)) world`) for name in ("appprojects", "appprojects-cli", "appprojects-shout")]
+                outputs = ["Hello, world!", "CLI: Hello, world! January", "HELLO, WORLD!"]
+
+                Pkg.Apps.add(path = path)
+                @test run_apps() == outputs
+                # each project used by the apps has its own environment
+                manifest_names(dir) = [e.name for e in values(Pkg.Types.read_manifest(joinpath(dir, "Manifest.toml")).deps)]
+                @test !("Dates" in manifest_names(envdir))
+                @test "Dates" in manifest_names(joinpath(envdir, "cli"))
+                @test !("Dates" in manifest_names(joinpath(envdir, "tools", "shout")))
+
+                # an update that fails in one of the projects leaves the installed apps as they were
+                cli_project = joinpath(path, "cli", "Project.toml")
+                original = read(cli_project, String)
+                write(cli_project, replace(original, "[deps]" => "[deps]\nNotRegistered = \"1a2b3c4d-0000-4000-8000-123456789abc\""))
+                git_init_and_commit(path; msg = "broken")
+                @test_throws Pkg.Types.PkgError Pkg.Apps.update("AppProjects")
+                @test run_apps() == outputs
+                @test readdir(dirname(envdir)) == ["AppManifest.toml", "AppProjects"]
+                write(cli_project, original)
+
+                Pkg.Apps.rm("AppProjects")
+                @test !isdir(envdir)
+
+                # developed apps run in the projects of the developed package
+                Pkg.Apps.develop(path = path)
+                @test run_apps() == outputs
+                @test !isdir(envdir)
+                Pkg.Apps.rm("AppProjects")
+            end
+        end
+        @test_throws Pkg.Types.PkgError Pkg.Apps.validate_app_project("app", "../outside")
+    end
+
     @testset "windows shim quoting (#4741)" begin
         julia = "C:\\Users\\test user\\.julia\\juliaup\\julia-1.12.6+0.x64.w64.mingw32\\bin\\julia.exe"
         content = Pkg.Apps.windows_shim(julia, "Rot13", pwd(), String[])
@@ -414,7 +454,7 @@ using Test
                     write(manifest_file, replace(read(manifest_file, String), Pkg.Apps.julia_executable() => gone))
                     manifest = Pkg.Types.read_manifest(manifest_file)
                     entry = only(values(manifest.deps))
-                    Pkg.Apps.generate_shims_for_apps(entry.name, entry.apps, Pkg.Apps.developed_source_path(manifest_file, entry), gone)
+                    Pkg.Apps.generate_shims_for_apps(entry.name, entry.apps, rot13, rot13, gone)
 
                     # the app runs with the julia in PATH and warns
                     bindir = mkpath(joinpath(tmp, "bin"))

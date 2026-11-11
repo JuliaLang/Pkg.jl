@@ -1,0 +1,7 @@
+name = "AppProjectsCLI"
+uuid = "b8331ccd-8c76-49d1-8f97-afa81aeb6de0"
+version = "0.1.0"
+
+[deps]
+AppProjects = "ef6ff6be-452d-4c5f-9539-80713739b7f4"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"

@@ -96,6 +96,8 @@ function read_project_apps(raw::Dict{String, Any}, project::Project)
         )
         submodule = get(info, "submodule", nothing)
         submodule isa Union{String, Nothing} || pkgerror("Expected `submodule` for app `$name` to be a string")
+        app_project = get(info, "project", nothing)
+        app_project isa Union{String, Nothing} || pkgerror("Expected `project` for app `$name` to be a string")
         julia_flags_raw = get(info, "julia_flags", nothing)
         julia_flags = if julia_flags_raw === nothing
             String[]
@@ -104,7 +106,7 @@ function read_project_apps(raw::Dict{String, Any}, project::Project)
         else
             pkgerror("Expected `julia_flags` for app `$name` to be an array of strings")
         end
-        appinfos[name] = AppInfo(name, nothing, submodule, julia_flags, other)
+        appinfos[name] = AppInfo(name, nothing, submodule, julia_flags, app_project, other)
     end
     return appinfos
 end
