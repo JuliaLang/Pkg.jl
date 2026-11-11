@@ -8,6 +8,10 @@ Pkg v1.14 Release Notes
   the package with the new `project` key (`[apps] mytool = { project = "cli" }`). Each such project gets its
   own environment when the apps are installed, so the apps of a package can have different dependencies.
   ([#4928])
+- Apps are installed with the dependency versions recorded in the `Manifest.toml` of their package, when it has
+  one. Paths in the manifest that lead outside the package are ignored unless the app is added from a local
+  path, and the latest compatible versions are used if the recorded ones do not work with the running Julia.
+  ([#4929])
 - Installing and updating apps is safer and clearer: a failed `app add` or `app update` leaves the installed
   apps as they were, the output shows what changed since the previous installation, an app removed on its own
   with `app rm` stays removed on `app update`, and when `~/.julia/bin` is not in `PATH` Pkg prints the command
@@ -309,3 +313,4 @@ Pkg v1.7 Release Notes
 [#4922]: https://github.com/JuliaLang/Pkg.jl/pull/4922
 [#4926]: https://github.com/JuliaLang/Pkg.jl/pull/4926
 [#4928]: https://github.com/JuliaLang/Pkg.jl/pull/4928
+[#4929]: https://github.com/JuliaLang/Pkg.jl/pull/4929

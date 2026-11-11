@@ -362,6 +362,23 @@ using Test
                 Pkg.Apps.rm("AppProjects")
                 @test !isdir(envdir)
 
+                # manifests shipped with the package: the one of the workspace is used for
+                # `cli`, and their paths lead into the installed package
+                Pkg.activate(Pkg.resolve, path)
+                Pkg.activate(Pkg.resolve, joinpath(path, "tools", "shout"))
+                git_init_and_commit(path; msg = "manifests")
+                Pkg.Apps.add(path = path)
+                @test run_apps() == outputs
+                app_manifest = Pkg.Types.read_manifest(joinpath(dirname(envdir), "AppManifest.toml"))
+                installed = Pkg.Operations.source_path(joinpath(dirname(envdir), "AppManifest.toml"), only(values(app_manifest.deps)))
+                @test Pkg.Apps.bundled_manifest_file(installed, joinpath(installed, "cli")) == joinpath(installed, "Manifest.toml")
+                for project in ("cli", joinpath("tools", "shout"))
+                    env_manifest = Pkg.Types.read_manifest(joinpath(envdir, project, "Manifest.toml"))
+                    entry = only(e for e in values(env_manifest.deps) if e.name == "AppProjects")
+                    @test normpath(joinpath(envdir, project, entry.path)) == installed
+                end
+                Pkg.Apps.rm("AppProjects")
+
                 # developed apps run in the projects of the developed package
                 Pkg.Apps.develop(path = path)
                 @test run_apps() == outputs
@@ -370,6 +387,100 @@ using Test
             end
         end
         @test_throws Pkg.Types.PkgError Pkg.Apps.validate_app_project("app", "../outside")
+    end
+
+    @testset "manifest shipped with the package" begin
+        isolate(loaded_depot = true) do
+            mktempdir() do tmpdir
+                stage = joinpath(tmpdir, "stage", "LockedApp")
+                mkpath(joinpath(stage, "src"))
+                mkpath(joinpath(stage, "lib", "Helper", "src"))
+                write(
+                    joinpath(stage, "Project.toml"), """
+                    name = "LockedApp"
+                    uuid = "0c3d7f6e-4a3f-4c1e-9d0a-5b7c2e1f8a01"
+                    version = "0.1.0"
+
+                    [deps]
+                    Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+                    Helper = "0c3d7f6e-4a3f-4c1e-9d0a-5b7c2e1f8a02"
+
+                    [apps]
+                    lockedapp = {}
+                    """
+                )
+                write(
+                    joinpath(stage, "src", "LockedApp.jl"), """
+                    module LockedApp
+                    using Example, Helper
+                    function (@main)(ARGS)
+                        println(Helper.greet(), " Example v", pkgversion(Example))
+                        return 0
+                    end
+                    end
+                    """
+                )
+                write(
+                    joinpath(stage, "lib", "Helper", "Project.toml"), """
+                    name = "Helper"
+                    uuid = "0c3d7f6e-4a3f-4c1e-9d0a-5b7c2e1f8a02"
+                    version = "0.1.0"
+                    """
+                )
+                write(joinpath(stage, "lib", "Helper", "src", "Helper.jl"), "module Helper\ngreet() = \"helper\"\nend\n")
+                # as written by another julia: an older Example than the latest one, and
+                # a package of the repository that only the manifest knows the place of
+                manifest(example_version) = """
+                julia_version = "1.12.7"
+                manifest_format = "2.0"
+
+                [[deps.Example]]
+                git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+                uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+                version = "$example_version"
+
+                [[deps.Helper]]
+                path = "lib/Helper"
+                uuid = "0c3d7f6e-4a3f-4c1e-9d0a-5b7c2e1f8a02"
+                version = "0.1.0"
+
+                [[deps.LockedApp]]
+                deps = ["Example", "Helper"]
+                path = "."
+                uuid = "0c3d7f6e-4a3f-4c1e-9d0a-5b7c2e1f8a01"
+                version = "0.1.0"
+                """
+                write(joinpath(stage, "Manifest.toml"), manifest("0.5.3"))
+                lockedapp = git_init_package(tmpdir, stage)
+                exe = joinpath(first(DEPOT_PATH), "bin", Sys.iswindows() ? "lockedapp.bat" : "lockedapp")
+                envdir = joinpath(first(DEPOT_PATH), "environments", "apps", "LockedApp")
+                helper_path() = only(e for e in values(Pkg.Types.read_manifest(joinpath(envdir, "Manifest.toml")).deps) if e.name == "Helper").path
+
+                # the app gets the versions of the manifest, also when updated
+                Pkg.Apps.add(path = lockedapp)
+                @test readchomp(`$exe`) == "helper Example v0.5.3"
+                Pkg.Apps.update("LockedApp")
+                @test readchomp(`$exe`) == "helper Example v0.5.3"
+                # the path of the manifest leads into the installed package, not to where it was added from
+                @test startswith(normpath(joinpath(envdir, helper_path())), joinpath(first(DEPOT_PATH), "packages"))
+
+                # versions that can not be used are replaced, with a warning
+                write(joinpath(lockedapp, "Manifest.toml"), manifest("0.5.99"))
+                git_init_and_commit(lockedapp; msg = "version that does not exist")
+                @test_logs (:warn, r"can not be used here") match_mode = :any Pkg.Apps.update("LockedApp")
+                @test readchomp(`$exe`) != "helper Example v0.5.3"
+                @test startswith(readchomp(`$exe`), "helper Example v0.5.")
+                Pkg.Apps.rm("LockedApp")
+
+                # a path out of the package is followed only for a package added from a local path
+                outside = mkpath(joinpath(tmpdir, "stage", "Outside"))
+                relative = joinpath("..", "Outside")
+                @test Pkg.Apps.bundled_path(joinpath("lib", "Helper"), stage, stage, nothing) == joinpath(stage, "lib", "Helper")
+                @test Pkg.Apps.bundled_path(relative, stage, stage, nothing) === nothing
+                @test Pkg.Apps.bundled_path(outside, stage, stage, nothing) === nothing
+                @test Pkg.Apps.bundled_path(relative, stage, stage, stage) == outside
+            end
+        end
     end
 
     @testset "windows shim quoting (#4741)" begin

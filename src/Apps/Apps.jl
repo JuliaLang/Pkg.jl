@@ -354,9 +354,90 @@ function inrepo_packages(info::PackageEntry, sourcepath::String)
     return paths
 end
 
+# The manifest that the package installed at `sourcepath` ships for its project in
+# `project_source`, if any: the manifest of the workspace the project is part of, else its own
+function bundled_manifest_file(sourcepath::String, project_source::String)
+    root = dirname(Pkg.Types.find_root_base_project(projectfile_path(project_source)))
+    Pkg.Operations.path_inside(root, sourcepath) || (root = project_source)
+    for name in Base.manifest_names
+        file = joinpath(root, name)
+        isfile(file) && return file
+    end
+    return nothing
+end
+
+# Where `path` in the manifest in `manifest_dir`, shipped with the package installed at
+# `sourcepath`, leads on this machine, or `nothing` if nowhere. A path into the package
+# leads into the installed package. Any other path is only followed for a package added
+# from a local path, whose manifest is then at `original_dir`: it was written for this
+# machine, while the paths of a downloaded package are those of the machine of its author.
+function bundled_path(path::String, manifest_dir::String, sourcepath::String, original_dir::Union{String, Nothing})
+    if !isabspath(path)
+        installed = normpath(joinpath(manifest_dir, path))
+        # (a symlink in the package must not lead out of it either)
+        if ispath(installed) && Pkg.Operations.path_inside(realpath(installed), realpath(sourcepath))
+            return installed
+        end
+        original_dir === nothing && return nothing
+        path = normpath(joinpath(original_dir, path))
+    end
+    return original_dir !== nothing && ispath(path) ? path : nothing
+end
+
+# Start the app environment in `envdir` from the manifest `file` that the package `info`
+# (installed at `sourcepath`, added from `original_root` if from a local path) ships, so
+# that the app runs with the versions recorded there. Returns whether there is such a start.
+function seed_bundled_manifest(
+        file::String, envdir::String, project_uuid::UUID, info::PackageEntry,
+        sourcepath::String, original_root::Union{String, Nothing}, relative_to_depot
+    )
+    manifest = try
+        read_manifest(file)
+    catch err
+        err isa InterruptException && rethrow()
+        @warn "Ignoring the manifest that $(info.name) comes with, it could not be read: $(first(eachline(IOBuffer(sprint(showerror, err)))))"
+        return false
+    end
+    manifest_dir = dirname(file)
+    original_dir = original_root === nothing ? nothing : normpath(joinpath(original_root, relpath(manifest_dir, sourcepath)))
+    for (uuid, entry) in collect(manifest.deps)
+        if uuid == project_uuid
+            # the project of the environment itself
+            entry.path = "."
+            continue
+        end
+        local_repo = entry.repo.source !== nothing && !isurl(entry.repo.source)
+        recorded = entry.path !== nothing ? entry.path : local_repo ? entry.repo.source : nothing
+        recorded === nothing && continue
+        path = bundled_path(recorded, manifest_dir, sourcepath, original_dir)
+        if path === nothing
+            # the dependency is then looked up in the registries instead
+            @warn "Ignoring the path `$recorded` of $(entry.name) in the manifest that $(info.name) comes with, it does not exist in the installed package"
+            delete!(manifest.deps, uuid)
+            for other in values(manifest.deps)
+                filter!(dep -> dep.second != uuid, other.deps)
+                filter!(dep -> dep.second != uuid, other.weakdeps)
+            end
+        elseif entry.path !== nothing
+            entry.path = relative_to_depot(path)
+        else
+            entry.repo.source = path
+        end
+    end
+    # Registries are recorded anew from the ones in use here (and never installed because
+    # the manifest names them), and so is the identity of the environment
+    empty!(manifest.registries)
+    foreach(entry -> empty!(entry.registries), values(manifest.deps))
+    manifest.environment_id = nothing
+    manifest.environment_name = nothing
+    write_manifest(manifest, joinpath(envdir, "Manifest.toml"))
+    return true
+end
+
 # Create the environment in `envdir` for the apps of the package `info` (installed at
 # `sourcepath`) that run in `subproject`. `old_envdir` is the environment of a previous
-# installation, if any, that the changes are shown relative to.
+# installation, if any, that the changes are shown relative to. Returns whether the
+# versions come from a manifest that the package ships.
 function create_app_env(info::PackageEntry, sourcepath::String, subproject::Union{String, Nothing}, envdir::String, old_envdir::Union{String, Nothing})
     project_source = subproject_path(sourcepath, subproject)
     original_project_file = projectfile_path(project_source)
@@ -391,14 +472,14 @@ function create_app_env(info::PackageEntry, sourcepath::String, subproject::Unio
     # path); entries that do not resolve are dropped so the dependency
     # comes from a registry.
     sources = get!(project_data, "sources", Dict{String, Any}())
-    original_dir = nothing
+    original_root = nothing
     if info.repo.source !== nothing && !Pkg.isurl(info.repo.source)
-        original_dir = normpath(joinpath(app_env_folder(), info.repo.source))
+        original_root = normpath(joinpath(app_env_folder(), info.repo.source))
         if info.repo.subdir !== nothing
-            original_dir = joinpath(original_dir, info.repo.subdir)
+            original_root = joinpath(original_root, info.repo.subdir)
         end
-        original_dir = subproject_path(original_dir, subproject)
     end
+    original_dir = original_root === nothing ? nothing : subproject_path(original_root, subproject)
     package_prefix = joinpath(normpath(sourcepath), "")
     for (depname, source) in collect(sources)
         path = get(source, "path", nothing)
@@ -429,12 +510,28 @@ function create_app_env(info::PackageEntry, sourcepath::String, subproject::Unio
     # Preserves Pkg's project key ordering, inline [sources] tables and comments
     write_project(project_data, projectfile; comments)
 
-    Pkg.activate(envdir) do
+    # With a manifest shipped by the package, resolving keeps the versions in it
+    bundled = bundled_manifest_file(sourcepath, project_source)
+    seeded = bundled !== nothing &&
+        seed_bundled_manifest(bundled, envdir, UUID(project_data["uuid"]), info, sourcepath, original_root, relative_to_depot)
+
+    return Pkg.activate(envdir) do
         ctx = Context()
-        Base.ScopedValues.@with Pkg.Operations.SHOW_UPDATE => false Pkg.resolve(ctx)
+        locked = seeded
+        try
+            Base.ScopedValues.@with Pkg.Operations.SHOW_UPDATE => false Pkg.resolve(ctx)
+        catch err
+            (seeded && !(err isa InterruptException)) || rethrow()
+            reason = first(eachline(IOBuffer(sprint(showerror, err))))
+            @warn "The versions in the manifest that $(info.name) comes with can not be used here (julia $VERSION), using the latest compatible ones instead: $reason"
+            locked = false
+            # keeps where the manifest says packages are but not their versions
+            ctx = Context()
+            Base.ScopedValues.@with Pkg.Operations.SHOW_UPDATE => false Pkg.update(ctx; mode = Pkg.PKGMODE_MANIFEST, update_registry = false)
+        end
         show_env_changes(ctx, old_envdir)
+        return locked
     end
-    return
 end
 
 # Show how the packages in a new app environment differ from the ones of the
@@ -473,10 +570,12 @@ function create_app_envs(info::PackageEntry)
     has_backup = ispath(envroot)
     has_backup && mv(envroot, backup)
     try
+        locked = false
         for subproject in subprojects(info.apps)
             old_envdir = has_backup ? subproject_path(backup, subproject) : nothing
-            create_app_env(info, sourcepath, subproject, subproject_path(envroot, subproject), old_envdir)
+            locked |= create_app_env(info, sourcepath, subproject, subproject_path(envroot, subproject), old_envdir)
         end
+        locked && printpkgstyle(stderr_f(), :Using, "the versions in the manifest that $(info.name) comes with")
     catch
         Base.rm(envroot; force = true, recursive = true)
         has_backup && mv(backup, envroot)
@@ -509,6 +608,9 @@ path (which needs to be a git repository).
 
 If the package is already installed it is replaced, and all of its apps are
 installed again. A previous installation is kept if the installation fails.
+
+If the package has a `Manifest.toml`, the versions of the dependencies are
+taken from it. Otherwise the latest compatible versions are installed.
 
 # Examples
 ```julia
