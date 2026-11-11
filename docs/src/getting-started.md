@@ -172,6 +172,22 @@ This returns you to the default `@v1.10` environment. There is no separate "deac
 
 For more information about environments, see the [Working with Environments](@ref Working-with-Environments) section of the documentation.
 
+## Using Pkg from the Command Line
+
+The commands of the Pkg REPL can also be run from a terminal with `julia -m Pkg`:
+
+```
+$ julia -m Pkg add Example
+$ julia -m Pkg status
+```
+
+Here the commands apply to the project in the current directory, or in a parent of it, and to the default
+environment when there is none. To use another environment, give `--project=<path>` before the command, or
+select it with the `--project` option of `julia` or the `JULIA_PROJECT` environment variable.
+`julia -m Pkg --help` lists the options and the commands.
+
+Pkg also declares this interface as the [app](@ref Apps) `pkg`.
+
 ## Asking for Help
 
 If you are ever stuck, you can ask `Pkg` for help:

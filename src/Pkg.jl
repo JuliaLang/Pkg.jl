@@ -1140,6 +1140,8 @@ function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = Packag
     end
 end
 
+include("cli.jl")
+
 include("precompile.jl")
 
 # Reset globals that might have been mutated during precompilation.
