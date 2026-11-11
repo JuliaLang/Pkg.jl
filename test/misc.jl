@@ -227,6 +227,19 @@ end
     @test Pkg.pathrepr(path) == "`@stdlib/Test`"
 end
 
+@testset "printing of relative paths" begin
+    # a path relative to a project is not taken to be relative to the working directory
+    mktempdir() do home
+        withenv("HOME" => home, "USERPROFILE" => home) do
+            cd(mkpath(joinpath(home, "a", "b"))) do
+                path = joinpath("..", "..", "Dep")
+                @test Pkg.pathrepr(path) == "`$path`"
+                Sys.iswindows() || @test Pkg.pathrepr(joinpath(home, "Dep")) == "`~/Dep`"
+            end
+        end
+    end
+end
+
 @testset "stdlib_resolve!" begin
     a = Pkg.Types.PackageSpec(name = "Markdown")
     b = Pkg.Types.PackageSpec(uuid = UUID("9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"))
