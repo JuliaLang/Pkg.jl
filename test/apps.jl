@@ -9,7 +9,11 @@ using Test
 
     isolate(loaded_depot = true) do
         sep = Sys.iswindows() ? ';' : ':'
-        Pkg.Apps.develop(path = joinpath(@__DIR__, "test_packages", "Rot13.jl"))
+        # the directory with the apps is not in PATH: tells how to add it for the shell in use
+        withenv("SHELL" => "/bin/zsh") do
+            path_help = Sys.iswindows() ? r"not in PATH" : r"not in PATH(.|\n)*>> ~/\.zshrc"
+            @test_logs (:warn, path_help) match_mode = :any Pkg.Apps.develop(path = joinpath(@__DIR__, "test_packages", "Rot13.jl"))
+        end
         current_path = ENV["PATH"]
         exename = Sys.iswindows() ? "juliarot13.bat" : "juliarot13"
         cliexename = Sys.iswindows() ? "juliarot13cli.bat" : "juliarot13cli"
@@ -205,6 +209,7 @@ using Test
                 [apps]
                 someapp = {}
                 someapp2 = {}
+                some-app3 = {}
                 """
             )
             write(
@@ -236,8 +241,20 @@ using Test
             end
             @test read(`$(joinpath(relocated, "bin", exename))`, String) == "hello from SomeDep\n"
 
-            # update of a repo-tracked app fetches the latest commit (#4634)
-            # and removes shims for apps the new version no longer provides
+            io = IOBuffer()
+            Pkg.Apps.status("someapp2"; io)
+            @test contains(String(take!(io)), "someapp2")
+            @test_throws Pkg.Types.PkgError Pkg.Apps.status("not-installed")
+
+            # a single app is removed by its name
+            exename3 = Sys.iswindows() ? "some-app3.bat" : "some-app3"
+            @test isfile(joinpath(first(DEPOT_PATH), "bin", exename3))
+            Pkg.REPLMode.pkgstr("app rm some-app3")
+            @test !isfile(joinpath(first(DEPOT_PATH), "bin", exename3))
+
+            # update of a repo-tracked app fetches the latest commit (#4634),
+            # removes shims for apps the new version no longer provides
+            # and leaves apps that were removed on their own removed
             exename2 = Sys.iswindows() ? "someapp2.bat" : "someapp2"
             @test isfile(joinpath(first(DEPOT_PATH), "bin", exename2))
             write(
@@ -266,6 +283,7 @@ using Test
 
                 [apps]
                 someapp = {}
+                some-app3 = {}
                 """
             )
             git_init_and_commit(someapp; msg = "v2")
@@ -274,6 +292,19 @@ using Test
                 @test read(`$exename`, String) == "hello from SomeDep\nv2\n"
             end
             @test !isfile(joinpath(first(DEPOT_PATH), "bin", exename2))
+            @test !isfile(joinpath(first(DEPOT_PATH), "bin", exename3))
+
+            # an update that fails leaves the installed app as it was
+            v2_project = read(joinpath(someapp, "Project.toml"), String)
+            write(joinpath(someapp, "Project.toml"), replace(v2_project, "[deps]" => "[deps]\nNotRegistered = \"1a2b3c4d-0000-4000-8000-123456789abc\""))
+            git_init_and_commit(someapp; msg = "broken")
+            @test_throws Pkg.Types.PkgError Pkg.Apps.update("SomeApp")
+            withenv("PATH" => string(joinpath(first(DEPOT_PATH), "bin"), sep, current_path)) do
+                @test read(`$exename`, String) == "hello from SomeDep\nv2\n"
+            end
+            @test !ispath(joinpath(first(DEPOT_PATH), "environments", "apps", "SomeApp.old"))
+            write(joinpath(someapp, "Project.toml"), v2_project)
+            git_init_and_commit(someapp; msg = "v2 again")
             Pkg.Apps.rm("SomeApp")
 
             # develop of an app with dependencies should give it a resolved

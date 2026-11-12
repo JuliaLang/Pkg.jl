@@ -4,7 +4,8 @@
     The app support in Pkg is currently considered experimental and some functionality and API may change.
 
     Some inconveniences that can be encountered are:
-    - You need to manually make `~/.julia/bin` available on the PATH environment.
+    - You need to manually make `~/.julia/bin` available on the PATH environment
+      (Pkg tells you how when an app is installed and the directory is not in PATH).
 
 Apps are Julia packages that are intended to be run as "standalone programs" (by e.g. typing the name of the app in the terminal possibly together with some arguments or flags/options).
 This is in contrast to most Julia packages that are used as "libraries" and are loaded by other files or in the Julia REPL.
@@ -188,13 +189,39 @@ pkg> app add https://github.com/fredrikekre/Runic.jl
 pkg> app add path/to/Package  # local path (must be a git repository)
 ```
 
+The apps are installed as small launcher scripts in `~/.julia/bin`. If that directory is not in
+`PATH`, Pkg prints the command that adds it for your shell.
+
+### Managing installed apps
+
+```julia-repl
+pkg> app status             # the installed apps, their package and the julia that runs them
+pkg> app update             # update all apps (or `app update Runic`)
+pkg> app rm Runic           # remove all apps of a package
+pkg> app rm git-runic       # remove a single app
+```
+
+`app update` installs the latest version of the package and of its dependencies and shows what
+changed. An update (or a new `app add`) that fails, for example because the new version cannot be
+resolved, leaves the installed apps as they were. An app that was removed on its own with
+`app rm` stays removed when its package is updated; `app add` the package again to get it back.
+
+If two packages provide an app with the same name, the one installed last replaces the other.
+
+### Developing apps
+
 To install an app from a local package such that changes to the package are immediately reflected in the app, use `Pkg.Apps.develop` or `pkg> app develop`:
 
 ```julia-repl
 pkg> app develop path/to/Package
 ```
 
-Installed apps are updated with `pkg> app update [name]` (all apps if no name is given), listed with `pkg> app status`, and removed with `pkg> app rm name`.
+The apps then run directly from that directory, in the environment of the project there.
+While working on an app it can also be run without installing it:
+
+```
+$ julia --project=path/to/Package -m MyPackage arg1 arg2
+```
 
 ## Apps API Reference
 

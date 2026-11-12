@@ -95,10 +95,11 @@ function read_project_apps(raw::Dict{String, Any}, project::Project)
             """
         )
         submodule = get(info, "submodule", nothing)
+        submodule isa Union{String, Nothing} || pkgerror("Expected `submodule` for app `$name` to be a string")
         julia_flags_raw = get(info, "julia_flags", nothing)
         julia_flags = if julia_flags_raw === nothing
             String[]
-        elseif julia_flags_raw isa Vector
+        elseif julia_flags_raw isa Vector && all(flag -> flag isa String, julia_flags_raw)
             String[flag::String for flag in julia_flags_raw]
         else
             pkgerror("Expected `julia_flags` for app `$name` to be an array of strings")

@@ -507,6 +507,20 @@ function parse_app_add(raw_args::Vector{QString}, options)
     return parse_package(raw_args, options; add_or_dev = true)
 end
 
+# Installed apps are given by the name of the app (which, unlike the name of
+# a package, can have hyphens) or of the package that provides it
+function parse_app(args::Vector{QString}, options)::Vector{PackageSpec}
+    pkgs = PackageSpec[]
+    for arg in args
+        if occursin(r"^[a-zA-Z][a-zA-Z0-9_-]*$", arg.raw)
+            push!(pkgs, PackageSpec(name = arg.raw))
+        else
+            append!(pkgs, parse_package([arg], options))
+        end
+    end
+    return pkgs
+end
+
 
 #
 # # Other

@@ -1,10 +1,10 @@
 module Apps
 
 using Pkg
-using Pkg: atomic_toml_write, stdout_f, isurl
+using Pkg: atomic_toml_write, stdout_f, stderr_f, isurl, printpkgstyle, pathrepr
 using Pkg.Versions
 using Pkg.Types: AppInfo, PackageSpec, Context, EnvCache, PackageEntry, Manifest, handle_repo_add!, handle_repo_develop!, write_manifest, write_project,
-    pkgerror, projectfile_path
+    pkgerror, projectfile_path, manifestfile_path, read_project, read_manifest
 using Pkg.Operations: print_single, source_path, update_package_add
 using Pkg.API: handle_package_input!
 using TOML, UUIDs
@@ -97,7 +97,6 @@ function validate_submodule_name(name::Union{AbstractString, Nothing})
     end
 end
 
-
 function rm_shim(name; kwargs...)
     validate_app_name(name)
     return Base.rm(shim_path(name); kwargs...)
@@ -108,8 +107,12 @@ function get_project(sourcepath)
 
     isfile(project_file) || pkgerror("Project file not found: $project_file")
 
-    project = Pkg.Types.read_project(project_file)
+    project = read_project(project_file)
     isempty(project.apps) && pkgerror("No apps found in Project.toml for package $(project.name) at version $(project.version)")
+    for app in values(project.apps)
+        validate_app_name(app.name)
+        validate_submodule_name(app.submodule)
+    end
     return project
 end
 
@@ -126,26 +129,57 @@ function overwrite_file_if_different(file, content)
     end
 end
 
+# Whether the directory with the app shims is in PATH
+function bin_in_path()
+    bindir = julia_bin_path()
+    isdir(bindir) || return false
+    for dir in split(get(ENV, "PATH", ""), Sys.iswindows() ? ';' : ':'; keepempty = false)
+        (dir == bindir || (isdir(dir) && Base.Filesystem.samefile(dir, bindir))) && return true
+    end
+    return false
+end
+
+# How to add the directory with the app shims to PATH, for the shell of the user
+function path_instructions()
+    bindir = julia_bin_path()
+    if Sys.iswindows()
+        return """
+        To add it, run the following in PowerShell and open a new terminal:
+            [Environment]::SetEnvironmentVariable("Path", "$bindir;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")"""
+    end
+    home = joinpath(homedir(), "")
+    dir = startswith(bindir, home) ? "\$HOME/" * relpath(bindir, home) : bindir
+    shell = basename(get(ENV, "SHELL", ""))
+    command = if !occursin(r"^[a-zA-Z0-9_.\-/$]+$", dir)
+        nothing
+    elseif shell == "fish"
+        "fish_add_path \"$dir\""
+    elseif shell == "zsh"
+        "echo 'export PATH=\"$dir:\$PATH\"' >> ~/.zshrc"
+    elseif shell == "bash"
+        "echo 'export PATH=\"$dir:\$PATH\"' >> ~/.$(Sys.isapple() ? "bash_profile" : "bashrc")"
+    else
+        nothing
+    end
+    command === nothing && return "To add it, put it in the PATH environment variable in the startup file of your shell."
+    return """
+    To add it, run the following and open a new terminal:
+        $command"""
+end
+
 function check_apps_in_path(apps)
-    for app_name in keys(apps)
-        which_result = Sys.which(shim_filename(app_name))
-        if which_result === nothing
-            @warn """
-            App '$app_name' was installed but is not available in PATH.
-            Consider adding '$(julia_bin_path())' to your PATH environment variable.
-            """ maxlog = 1
-            break  # Only show warning once per installation
-        else
-            # Check for collisions
-            expected_path = shim_path(app_name)
-            if which_result != expected_path
-                @warn """
-                App '$app_name' collision detected:
-                Expected: $expected_path
-                Found: $which_result
-                Another application with the same name exists in PATH.
-                """
-            end
+    if !bin_in_path()
+        @warn """
+        The directory with the apps, $(pathrepr(julia_bin_path())), is not in PATH so the apps can not be run by their name.
+        $(path_instructions())
+        """
+        return
+    end
+    for app_name in sort!(collect(keys(apps)))
+        found = Sys.which(shim_filename(app_name))
+        expected = shim_path(app_name)
+        if found !== nothing && found != expected && !Base.Filesystem.samefile(found, expected)
+            @warn "App `$app_name` is shadowed by $(pathrepr(found)) which comes before $(pathrepr(julia_bin_path())) in PATH"
         end
     end
     return
@@ -162,9 +196,9 @@ function developed_source_path(manifest_file::String, info::PackageEntry)
 end
 
 # PackageEntry requires version::Union{VersionNumber, Nothing}, but project.version can be a VersionSpec
-function package_entry(pkg::PackageSpec, project, path)
+function package_entry(pkg::PackageSpec, project, apps, path)
     version = project.version isa VersionNumber ? project.version : nothing
-    return PackageEntry(; apps = project.apps, name = pkg.name, version, tree_hash = pkg.tree_hash, path, repo = pkg.repo, uuid = pkg.uuid)
+    return PackageEntry(; apps, name = pkg.name, version, tree_hash = pkg.tree_hash, path, repo = pkg.repo, uuid = pkg.uuid)
 end
 
 function get_max_version_register(pkg::PackageSpec, regs)
@@ -200,22 +234,74 @@ function get_max_version_register(pkg::PackageSpec, regs)
 end
 
 
-# Remove shims from a previous version of the package that it no longer
-# provides and warn about app names that other packages already provide
-function reconcile_shims(manifest::Manifest, pkg::PackageSpec, project)
-    old_entry = get(manifest.deps, pkg.uuid, nothing)
+# Remove the shims of apps that the installed version of the package `entry`
+# provides but the new one does not, and take over apps with the same name
+# from other packages
+function reconcile_shims!(manifest::Manifest, entry::PackageEntry)
+    old_entry = get(manifest.deps, entry.uuid, nothing)
     if old_entry !== nothing
         for appname in keys(old_entry.apps)
-            haskey(project.apps, appname) || rm_shim(appname; force = true)
+            haskey(entry.apps, appname) || rm_shim(appname; force = true)
         end
     end
-    for (uuid, entry) in manifest.deps
-        uuid == pkg.uuid && continue
-        overlap = sort!(collect(intersect(keys(entry.apps), keys(project.apps))))
-        if !isempty(overlap)
-            @warn "Overwriting apps $(join(overlap, ", ")) provided by package $(entry.name)"
-        end
+    for (uuid, other) in collect(manifest.deps)
+        uuid == entry.uuid && continue
+        overlap = sort!(collect(intersect(keys(other.apps), keys(entry.apps))))
+        isempty(overlap) && continue
+        what = length(overlap) == 1 ? "app" : "apps"
+        @warn "Replacing the $what $(join(overlap, ", ")) of package $(other.name) with the $what of package $(entry.name)"
+        foreach(appname -> delete!(other.apps, appname), overlap)
+        isempty(other.apps) && rm_package!(manifest, other)
     end
+    return
+end
+
+# Remove a package without apps left from the app manifest
+function rm_package!(manifest::Manifest, entry::PackageEntry)
+    delete!(manifest.deps, entry.uuid)
+    if entry.path === nothing
+        Base.rm(app_env_dir(entry.name); recursive = true, force = true)
+    end
+    return
+end
+
+# Apps that the installed version of a package provides but that have been
+# removed stay removed when the package is updated
+function without_removed_apps(manifest_file::String, old_entry::PackageEntry, apps::Dict{String, AppInfo})
+    old_source = source_path(manifest_file, old_entry)
+    old_source === nothing && return apps
+    project_file = projectfile_path(old_source; strict = true)
+    project_file === nothing && return apps
+    old_apps = try
+        read_project(project_file).apps
+    catch
+        return apps
+    end
+    removed = setdiff(keys(old_apps), keys(old_entry.apps))
+    kept = filter(app -> !(app.first in removed), apps)
+    return isempty(kept) ? apps : kept
+end
+
+function report_apps(entry::PackageEntry, old_entry::Union{PackageEntry, Nothing}; updating::Bool = false)
+    version(e) = e.version === nothing ? "" : " v$(e.version)"
+    names = join(("`$name`" for name in sort!(collect(keys(entry.apps)))), ", ")
+    what = length(entry.apps) == 1 ? "app" : "apps"
+    io = stderr_f()
+    if entry.path !== nothing
+        printpkgstyle(io, :Installed, "$what $names of $(entry.name)$(version(entry)) developed at $(pathrepr(entry.path))")
+    elseif !updating || old_entry === nothing
+        printpkgstyle(io, :Installed, "$what $names of $(entry.name)$(version(entry))")
+    elseif old_entry.version == entry.version && old_entry.tree_hash == entry.tree_hash
+        printpkgstyle(io, Symbol("No Changes"), "to $(entry.name)$(version(entry)) with $what $names")
+    else
+        printpkgstyle(io, :Updated, "$what $names of $(entry.name)$(version(old_entry)) ⇒$(version(entry))")
+    end
+    return
+end
+
+function report_removed(entry::PackageEntry, appnames::Vector{String})
+    names = join(("`$name`" for name in sort(appnames)), ", ")
+    printpkgstyle(stderr_f(), :Removed, "$(length(appnames) == 1 ? "app" : "apps") $names of $(entry.name)")
     return
 end
 
@@ -224,88 +310,127 @@ end
 # Main Functions #
 ##################
 
-function _resolve(manifest::Manifest, pkgname = nothing)
-    for (uuid, pkg) in manifest.deps
-        if pkgname !== nothing && pkg.name !== pkgname
-            continue
-        end
+# Create the environment in `envdir` that the apps of the tracked package `info` run in.
+# `old_envdir` is the environment of a previous installation, if any, that the changes
+# are shown relative to.
+function resolve_app_env(info::PackageEntry, envdir::String, old_envdir::Union{String, Nothing})
+    sourcepath = source_path(app_manifest_file(), info)
+    original_project_file = projectfile_path(sourcepath)
+    isfile(original_project_file) || pkgerror("could not find project file for package $(info.name)")
 
-        # TODO: Add support for existing manifest
+    projectfile = joinpath(envdir, "Project.toml")
+    mkpath(envdir)
+    cp(original_project_file, projectfile; force = true)
+    chmod(projectfile, 0o644)  # Make the copied project file writable
 
-        projectfile = joinpath(app_env_dir(pkg.name), "Project.toml")
+    comments = TOML.Comments()
+    project_data = TOML.parsefile(projectfile; comments)
 
-        sourcepath = source_path(app_manifest_file(), pkg)
-        original_project_file = projectfile_path(sourcepath)
+    # Paths inside the depot are written relative to the app environment
+    # so that the depot can be relocated
+    depot_prefix = joinpath(normpath(first(DEPOT_PATH)), "")
+    relative_to_depot(path) = startswith(normpath(path), depot_prefix) ? relpath(path, envdir) : path
 
-        mkpath(dirname(projectfile))
+    # Add entryfile stanza pointing to the package entry file,
+    # respecting an existing entryfile in the project
+    entryfile = get(project_data, "entryfile", joinpath("src", "$(info.name).jl"))
+    entryfile = isabspath(entryfile) ? entryfile : normpath(joinpath(sourcepath, entryfile))
+    project_data["entryfile"] = relative_to_depot(entryfile)
 
-        if isfile(original_project_file)
-            cp(original_project_file, projectfile; force = true)
-            chmod(projectfile, 0o644)  # Make the copied project file writable
-
-            comments = TOML.Comments()
-            project_data = TOML.parsefile(projectfile; comments)
-
-            # Paths inside the depot are written relative to the app environment
-            # so that the depot can be relocated
-            depot_prefix = joinpath(normpath(first(DEPOT_PATH)), "")
-            project_dir = dirname(projectfile)
-            relative_to_depot(path) = startswith(normpath(path), depot_prefix) ? relpath(path, project_dir) : path
-
-            # Add entryfile stanza pointing to the package entry file,
-            # respecting an existing entryfile in the project
-            entryfile = get(project_data, "entryfile", joinpath("src", "$(pkg.name).jl"))
-            entryfile = isabspath(entryfile) ? entryfile : normpath(joinpath(sourcepath, entryfile))
-            project_data["entryfile"] = relative_to_depot(entryfile)
-
-            # Relative paths in [sources] are relative to the original project
-            # location, not the app environment the project file is copied to.
-            # Resolve them against the original location (for packages added
-            # from a local path) or the installed package tree; drop entries
-            # that do not resolve so the dependency comes from a registry.
-            sources = get(project_data, "sources", nothing)
-            if sources !== nothing
-                original_dir = nothing
-                if pkg.repo.source !== nothing && !Pkg.isurl(pkg.repo.source)
-                    original_dir = normpath(joinpath(app_env_folder(), pkg.repo.source))
-                    if pkg.repo.subdir !== nothing
-                        original_dir = joinpath(original_dir, pkg.repo.subdir)
-                    end
-                end
-                for (depname, source) in collect(sources)
-                    path = get(source, "path", nothing)
-                    (path === nothing || isabspath(path)) && continue
-                    candidates = String[]
-                    original_dir !== nothing && push!(candidates, normpath(joinpath(original_dir, path)))
-                    push!(candidates, normpath(joinpath(sourcepath, path)))
-                    resolved = findfirst(isdir, candidates)
-                    if resolved === nothing
-                        @warn "Ignoring source with relative path `$(path)` for dependency $(depname) of package $(pkg.name) since it does not exist relative to the installed package"
-                        delete!(source, "path")
-                        isempty(source) && delete!(sources, depname)
-                    else
-                        source["path"] = relative_to_depot(candidates[resolved])
-                    end
-                end
-                isempty(sources) && delete!(project_data, "sources")
+    # Relative paths in [sources] are relative to the original project
+    # location, not the app environment the project file is copied to.
+    # Resolve them against the original location (for packages added
+    # from a local path) or the installed package tree; drop entries
+    # that do not resolve so the dependency comes from a registry.
+    sources = get(project_data, "sources", nothing)
+    if sources !== nothing
+        original_dir = nothing
+        if info.repo.source !== nothing && !Pkg.isurl(info.repo.source)
+            original_dir = normpath(joinpath(app_env_folder(), info.repo.source))
+            if info.repo.subdir !== nothing
+                original_dir = joinpath(original_dir, info.repo.subdir)
             end
-
-            # Preserves Pkg's project key ordering, inline [sources] tables and comments
-            write_project(project_data, projectfile; comments)
-        else
-            pkgerror("could not find project file for package $pkg")
         end
-
-        # Create a manifest with the manifest entry
-        Pkg.activate(app_env_dir(pkg.name)) do
-            ctx = Context()
-            ctx.env.manifest.deps[uuid] = pkg
-            Pkg.resolve(ctx)
+        for (depname, source) in collect(sources)
+            path = get(source, "path", nothing)
+            (path === nothing || isabspath(path)) && continue
+            candidates = String[]
+            original_dir !== nothing && push!(candidates, normpath(joinpath(original_dir, path)))
+            push!(candidates, normpath(joinpath(sourcepath, path)))
+            resolved = findfirst(isdir, candidates)
+            if resolved === nothing
+                @warn "Ignoring source with relative path `$(path)` for dependency $(depname) of package $(info.name) since it does not exist relative to the installed package"
+                delete!(source, "path")
+                isempty(source) && delete!(sources, depname)
+            else
+                source["path"] = relative_to_depot(candidates[resolved])
+            end
         end
-
-        generate_shims_for_apps(pkg.name, pkg.apps, dirname(projectfile), julia_executable())
+        isempty(sources) && delete!(project_data, "sources")
     end
-    return write_manifest(manifest, app_manifest_file())
+
+    # Preserves Pkg's project key ordering, inline [sources] tables and comments
+    write_project(project_data, projectfile; comments)
+
+    # Create a manifest with the manifest entry
+    Pkg.activate(envdir) do
+        ctx = Context()
+        ctx.env.manifest.deps[info.uuid] = info
+        Base.ScopedValues.@with Pkg.Operations.SHOW_UPDATE => false Pkg.resolve(ctx)
+        show_env_changes(ctx, old_envdir)
+    end
+    return
+end
+
+# Show how the packages in a new app environment differ from the ones of the
+# previous installation of the app in `old_envdir`, if any
+function show_env_changes(ctx::Context, old_envdir::Union{String, Nothing})
+    old_env = EnvCache()
+    old_env.project = Pkg.Types.Project()
+    old_env.manifest = Manifest()
+    if old_envdir !== nothing && isfile(projectfile_path(old_envdir))
+        try
+            old_env.manifest = read_manifest(manifestfile_path(old_envdir))
+            old_env.project = read_project(projectfile_path(old_envdir))
+        catch
+        end
+    end
+    # (the manifest also has an entry for the project itself)
+    installed(manifest) = Dict(
+        uuid => (entry.version, entry.tree_hash, entry.path, entry.repo)
+            for (uuid, entry) in manifest.deps if uuid != ctx.env.project.uuid
+    )
+    installed(ctx.env.manifest) == installed(old_env.manifest) && return
+    Pkg.Operations.status(
+        ctx.env, ctx.registries; header = :Updating, mode = Pkg.Types.PKGMODE_MANIFEST, env_diff = old_env,
+        ignore_indent = false, show_usagetips = false, io = ctx.io
+    )
+    return
+end
+
+# Create the environment that the apps of the tracked package `info` run in.
+# A previous installation is kept if this fails.
+function create_app_env(info::PackageEntry)
+    envdir = app_env_dir(info.name)
+    backup = envdir * ".old"
+    Base.rm(backup; force = true, recursive = true)
+    has_backup = ispath(envdir)
+    has_backup && mv(envdir, backup)
+    try
+        resolve_app_env(info, envdir, has_backup ? backup : nothing)
+    catch
+        Base.rm(envdir; force = true, recursive = true)
+        has_backup && mv(backup, envdir)
+        rethrow()
+    end
+    Base.rm(backup; force = true, recursive = true)
+    return
+end
+
+function generate_shims_for_apps(info::PackageEntry)
+    # Tracked apps run in their app environment, developed ones in the developed project
+    env = something(developed_source_path(app_manifest_file(), info), app_env_dir(info.name))
+    return generate_shims_for_apps(info.name, info.apps, env, julia_executable())
 end
 
 
@@ -317,6 +442,9 @@ Install the apps of package `pkg`. The package is installed into an isolated
 environment and shims for its apps are created in `~/.julia/bin` (which should
 be added to `PATH`). Apps can be added from a registry, a git URL, or a local
 path (which needs to be a git repository).
+
+If the package is already installed it is replaced, and all of its apps are
+installed again. A previous installation is kept if the installation fails.
 
 # Examples
 ```julia
@@ -336,7 +464,7 @@ end
 
 
 add(pkg::PackageSpec) = with_apps_lock(() -> _add(pkg))
-function _add(pkg::PackageSpec)
+function _add(pkg::PackageSpec; updating::Bool = false)
     handle_package_input!(pkg)
     # A relative local path is given relative to the working directory, but
     # the app manifest lives in the depot, so store it as an absolute path
@@ -369,22 +497,31 @@ function _add(pkg::PackageSpec)
         new = Pkg.Operations.download_source(ctx, pkgs)
     end
 
-    Base.rm(app_env_dir(pkg.name); force = true, recursive = true)
     sourcepath = source_path(ctx.env.manifest_file, pkg)
     project = get_project(sourcepath)
-    reconcile_shims(manifest, pkg, project)
+    old_entry = get(manifest.deps, pkg.uuid, nothing)
+    apps = project.apps
+    if updating && old_entry !== nothing
+        apps = without_removed_apps(ctx.env.manifest_file, old_entry, apps)
+    end
     # TODO: Wrong if package itself has a sourcepath?
-    manifest.deps[pkg.uuid] = package_entry(pkg, project, pkg.path)
+    entry = package_entry(pkg, project, apps, pkg.path)
 
-    _resolve(manifest, pkg.name)
+    # Nothing of a previous installation is touched until the environment is in place
+    create_app_env(entry)
+    reconcile_shims!(manifest, entry)
+    manifest.deps[pkg.uuid] = entry
+    generate_shims_for_apps(entry)
+    write_manifest(manifest, app_manifest_file())
+
     if new === true || (new isa Set{UUID} && pkg.uuid in new)
         Pkg.Operations.build_versions(ctx, Set([pkg.uuid]); verbose = true)
     end
     # Like for the other operations, only precompile if auto-precompilation is enabled
     Pkg.should_autoprecompile() && precompile(pkg.name)
 
-    @info "For package: $(pkg.name) installed apps $(join(keys(project.apps), ","))"
-    return check_apps_in_path(project.apps)
+    report_apps(entry, old_entry; updating)
+    return check_apps_in_path(entry.apps)
 end
 
 """
@@ -416,7 +553,6 @@ function _develop(pkg::PackageSpec)
     handle_package_input!(pkg)
     ctx = app_context()
     handle_repo_develop!(ctx, pkg, #=shared =# true)
-    Base.rm(app_env_dir(pkg.name); force = true, recursive = true)
     sourcepath = abspath(source_path(ctx.env.manifest_file, pkg))
     project = get_project(sourcepath)
 
@@ -429,22 +565,23 @@ function _develop(pkg::PackageSpec)
     end
 
     manifest = ctx.env.manifest
-    reconcile_shims(manifest, pkg, project)
-    manifest.deps[pkg.uuid] = package_entry(pkg, project, sourcepath)
+    old_entry = get(manifest.deps, pkg.uuid, nothing)
+    entry = package_entry(pkg, project, project.apps, sourcepath)
 
-    # For dev, we don't create an app environment - just point shims directly to the dev'd project
-    write_manifest(manifest, app_manifest_file())
-
-    # The shims run with the dev'd project as the load path so it needs
-    # a resolved manifest for the dependencies to be loadable
+    # For dev, we don't create an app environment - the shims point directly to the
+    # dev'd project, which needs a resolved manifest for the dependencies to be loadable
     Pkg.activate(sourcepath) do
         Pkg.instantiate()
     end
 
-    generate_shims_for_apps(pkg.name, project.apps, sourcepath, julia_executable())
+    reconcile_shims!(manifest, entry)
+    manifest.deps[pkg.uuid] = entry
+    Base.rm(app_env_dir(pkg.name); force = true, recursive = true)
+    generate_shims_for_apps(entry)
+    write_manifest(manifest, app_manifest_file())
 
-    @info "For package: $(pkg.name) installed apps: $(join(keys(project.apps), ","))"
-    return check_apps_in_path(project.apps)
+    report_apps(entry, old_entry)
+    return check_apps_in_path(entry.apps)
 end
 
 
@@ -454,6 +591,9 @@ end
 Update the package providing the app `name` (or the package named `name`) to
 the latest compatible version, or all installed apps if no name is given.
 For developed packages the dependencies of the project are updated instead.
+
+Apps of a package that have been removed with [`Pkg.Apps.rm`](@ref) are not
+installed again.
 """
 update(pkgs_or_apps::String) = update([pkgs_or_apps])
 function update(pkgs_or_apps::Vector)
@@ -476,30 +616,44 @@ function _update(pkg::Union{PackageSpec, Nothing})
     manifest = ctx.env.manifest
     deps = Pkg.Operations.load_manifest_deps(manifest)
     updated = false
+    failed = String[]
     for dep in deps
         info = manifest.deps[dep.uuid]
         if pkg !== nothing && info.name != pkg.name && !(pkg.name in keys(info.apps))
             continue
         end
         updated = true
-        sourcepath = developed_source_path(ctx.env.manifest_file, info)
-        if sourcepath !== nothing
-            # Developed app: update the dependencies of the developed project
-            # and refresh the app info from it
-            Pkg.activate(sourcepath) do
-                Pkg.update()
-            end
-            develop(PackageSpec(path = sourcepath))
-        elseif info.repo.source !== nothing || info.repo.rev !== nothing
-            # Repo tracked app: re-add to fetch the latest revision
-            add(PackageSpec(name = info.name, uuid = info.uuid, url = info.repo.source, rev = info.repo.rev, subdir = info.repo.subdir))
-        else
-            # Registry tracked app: re-add to resolve the latest version
-            add(PackageSpec(name = info.name, uuid = info.uuid))
+        try
+            update_package(ctx, info)
+        catch err
+            # When updating everything, a package that fails does not stop the others
+            (pkg !== nothing || err isa InterruptException) && rethrow()
+            push!(failed, info.name)
+            printpkgstyle(stderr_f(), :Error, "could not update $(info.name): $(sprint(showerror, err))"; color = Base.error_color())
         end
     end
+    isempty(failed) || pkgerror("could not update $(join(failed, ", ")), the installed apps of $(length(failed) == 1 ? "that package" : "those packages") are unchanged")
     if pkg !== nothing && !updated
         pkgerror("no app or package named `$(pkg.name)` found in the app manifest")
+    end
+    return
+end
+
+function update_package(ctx::Context, info::PackageEntry)
+    sourcepath = developed_source_path(ctx.env.manifest_file, info)
+    if sourcepath !== nothing
+        # Developed app: update the dependencies of the developed project
+        # and refresh the app info from it
+        Pkg.activate(sourcepath) do
+            Pkg.update()
+        end
+        _develop(PackageSpec(path = sourcepath))
+    elseif info.repo.source !== nothing || info.repo.rev !== nothing
+        # Repo tracked app: re-add to fetch the latest revision
+        _add(PackageSpec(name = info.name, uuid = info.uuid, url = info.repo.source, rev = info.repo.rev, subdir = info.repo.subdir); updating = true)
+    else
+        # Registry tracked app: re-add to resolve the latest version
+        _add(PackageSpec(name = info.name, uuid = info.uuid); updating = true)
     end
     return
 end
@@ -554,15 +708,15 @@ function _relink(pkg::Union{PackageSpec, Nothing})
             info.apps[appname] = AppInfo(app.name, nothing, app.submodule, app.julia_flags, app.other)
         end
         if sourcepath === nothing
-            _resolve(manifest, info.name)
+            create_app_env(info)
         else
             # resolve for the running julia, which can have other stdlib versions
             Pkg.activate(sourcepath) do
                 Pkg.resolve()
                 Pkg.instantiate()
             end
-            generate_shims_for_apps(info.name, info.apps, sourcepath, julia_executable())
         end
+        generate_shims_for_apps(info)
     end
     if pkg !== nothing && !found
         pkgerror("no app or package named `$(pkg.name)` found in the app manifest")
@@ -593,16 +747,17 @@ function status(pkgs_or_apps::Vector; io::IO = stdout_f())
     end
 end
 
+status(pkg_or_app::String; kwargs...) = status(PackageSpec(pkg_or_app); kwargs...)
 function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing; io::IO = stdout_f())
-    # TODO: Sort.
     pkg_or_app = pkg_or_app === nothing ? nothing : pkg_or_app.name
-    manifest = Pkg.Types.read_manifest(app_manifest_file())
+    manifest = read_manifest(app_manifest_file())
     deps = Pkg.Operations.load_manifest_deps(manifest)
 
     is_pkg = pkg_or_app !== nothing && any(dep -> dep.name == pkg_or_app, values(manifest.deps))
     missing_julia = false
+    found = false
 
-    for dep in deps
+    for dep in sort!(deps; by = dep -> dep.name)
         info = manifest.deps[dep.uuid]
         if is_pkg && dep.name !== pkg_or_app
             continue
@@ -612,11 +767,13 @@ function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing; io::IO = stdo
                 continue
             end
         end
+        found = true
 
         printstyled(io, "[", string(dep.uuid)[1:8], "] "; color = :light_black)
         print_single(io, dep)
         println(io)
-        for (appname, appinfo) in info.apps
+        for appname in sort!(collect(keys(info.apps)))
+            appinfo = info.apps[appname]
             if !is_pkg && pkg_or_app !== nothing && appname !== pkg_or_app
                 continue
             end
@@ -630,12 +787,19 @@ function status(pkg_or_app::Union{PackageSpec, Nothing} = nothing; io::IO = stdo
             println(io)
         end
     end
+    if pkg_or_app !== nothing && !found
+        pkgerror("no app or package named `$(pkg_or_app)` found in the app manifest")
+    end
     if missing_julia
         printstyled(io, "Info"; color = :cyan, bold = true)
         println(
             io, " Some apps were installed with a julia that no longer exists and run with a fallback julia,",
             " use `app relink` to make them use the running julia"
         )
+    end
+    if found && !bin_in_path()
+        printstyled(io, "Info"; color = :cyan, bold = true)
+        println(io, " The directory with the apps, $(pathrepr(julia_bin_path())), is not in PATH. ", path_instructions())
     end
     return
 end
@@ -695,15 +859,9 @@ function _rm(pkg_or_app::Union{PackageSpec, Nothing})
     dep_idx = findfirst(dep -> dep.name == pkg_or_app, manifest.deps)
     if dep_idx !== nothing
         dep = manifest.deps[dep_idx]
-        @info "Deleting all apps for package $(dep.name)"
-        delete!(manifest.deps, dep.uuid)
-        for (appname, appinfo) in dep.apps
-            @info "Deleted $(appname)"
-            rm_shim(appname; force = true)
-        end
-        if dep.path === nothing
-            Base.rm(app_env_dir(dep.name); recursive = true, force = true)
-        end
+        foreach(appname -> rm_shim(appname; force = true), keys(dep.apps))
+        report_removed(dep, collect(keys(dep.apps)))
+        rm_package!(manifest, dep)
     else
         found = false
         for (uuid, pkg) in collect(manifest.deps)
@@ -711,15 +869,10 @@ function _rm(pkg_or_app::Union{PackageSpec, Nothing})
             app_idx === nothing && continue
             found = true
             app = pkg.apps[app_idx]
-            @info "Deleted app $(app.name)"
             delete!(pkg.apps, app.name)
             rm_shim(app.name; force = true)
-            if isempty(pkg.apps)
-                delete!(manifest.deps, uuid)
-                if pkg.path === nothing
-                    Base.rm(app_env_dir(pkg.name); recursive = true, force = true)
-                end
-            end
+            report_removed(pkg, [app.name])
+            isempty(pkg.apps) && rm_package!(manifest, pkg)
         end
         if !found
             pkgerror("no app or package named `$(pkg_or_app)` found in the app manifest")
