@@ -331,4 +331,40 @@ end
     @test !is_local_repo("https://user:" * "x"^5000 * "@example.com/repo.git")
 end
 
+@testset "closures capture concretely typed values" begin
+    # A closure's type has a parameter for each captured variable, so when a captured variable
+    # is not concretely inferred (e.g. a `Union`) the closure's type can only be computed at
+    # run time, which ahead-of-time compilation (e.g. `juliac --trim`) cannot do.
+    function closures_built_at_runtime(@nospecialize(f), argtypes::Tuple, kwargtypes::Tuple = ())
+        tt = if isempty(kwargtypes)
+            Tuple{typeof(f), argtypes...}
+        else
+            Tuple{typeof(Base.bodyfunction(which(f, argtypes))), kwargtypes..., typeof(f), argtypes...}
+        end
+        types = Any[]
+        for (ci, _) in Base.code_typed_by_type(tt; optimize = false)
+            for stmt in ci.code
+                Meta.isexpr(stmt, :(=)) && (stmt = stmt.args[2])
+                Meta.isexpr(stmt, :new) || continue
+                T = stmt.args[1]
+                T isa Core.SSAValue && !(ci.ssavaluetypes[T.id] isa Core.Const) && push!(types, ci.ssavaluetypes[T.id])
+            end
+        end
+        return types
+    end
+    Ops = Pkg.Operations
+    Context, PackageSpec = Pkg.Types.Context, Pkg.Types.PackageSpec
+    Platform = Base.BinaryPlatforms.Platform
+    DownloadJob = NamedTuple{(:pkg, :urls, :path), Tuple{Ops.DownloadPkg, Set{String}, String}}
+    @test isempty(closures_built_at_runtime(Pkg.Resolve.build_eq_classes1!, (Pkg.Resolve.Graph, Int, BitMatrix, Vector{BitVector})))
+    @test isempty(closures_built_at_runtime(Pkg.Types.handle_repo_add!, (Context, PackageSpec)))
+    @test isempty(closures_built_at_runtime(Ops.download_source, (Context, Vector{DownloadJob}, Bool, Int, Symbol)))
+    @test isempty(closures_built_at_runtime(Ops.add, (Context, Vector{PackageSpec}, Set{UUID}), (Bool, Pkg.Types.PreserveLevel, Platform, Symbol, Bool, Bool)))
+    @test isempty(closures_built_at_runtime(Ops.print_compat, (Context, Vector{PackageSpec}), (Nothing,)))
+    @test isempty(closures_built_at_runtime(Ops.download_artifacts, (Context, Vector{PackageSpec}), (Platform, VersionNumber, Bool, IOContext{IO}, Bool, Bool)))
+    @test isempty(closures_built_at_runtime(Ops.sandbox, (typeof(identity), Context, PackageSpec, String, Nothing), (Nothing, Bool, Bool, Bool)))
+    @test isempty(closures_built_at_runtime(Ops.collect_project, (Union{PackageSpec, Nothing}, String, String, Union{VersionNumber, Nothing}), (Union{Nothing, Tuple{String, Pkg.Types.Project}},)))
+    @test isempty(closures_built_at_runtime(Pkg.PlatformEngines.download, (String, String), (Bool, Vector{Pair{String, String}}, Nothing, IOContext{IO}, Nothing)))
+end
+
 end # module

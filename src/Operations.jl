@@ -725,12 +725,13 @@ function collect_project(
     if !isnothing(julia_compat) && !isnothing(julia_version) && !(julia_version in julia_compat)
         pkgerror("julia version requirement for package at `$path` not satisfied: compat entry \"julia = $(get_compat_str(project, "julia"))\" does not include Julia version $julia_version")
     end
+    project_path = something(project_file, path)
     # A `[compat-overrides]` entry replaces every other constraint on the package, including the
     # project's own `[compat]`. Only the projects loaded into the environment apply theirs.
     function constraint(name, uuid)
         override = loaded === nothing ? nothing : get_compat_override(project, name)
         override === nothing || return override
-        return get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
+        return get_compat_with_stdlib_check(project, project_path, name, uuid, julia_version)
     end
     for (name, uuid) in project.deps
         dep_path, repo = get_path_repo(project, project_file, manifest_file, name)
@@ -746,7 +747,7 @@ function collect_project(
         for (name, uuid) in project.extras
             (haskey(project.deps, name) || haskey(project.weakdeps, name)) && continue
             haskey(project.compat, name) || continue
-            vspec = get_compat_with_stdlib_check(project, something(project_file, path), name, uuid, julia_version)
+            vspec = get_compat_with_stdlib_check(project, project_path, name, uuid, julia_version)
             push!(deps, PackageSpec(name, uuid, vspec))
             push!(weakdeps, uuid)
         end
@@ -2216,7 +2217,7 @@ function download_artifacts(
     )
     env = ctx.env
     io = ctx.io
-    pkg_uuids = Set(pkg.uuid for pkg in pkgs)
+    pkg_uuids = Set{Union{Nothing, UUID}}(pkg.uuid for pkg in pkgs)
     manifest_pkgs = [uuid => manifest_info(env.manifest, uuid) for uuid in keys(env.manifest) if uuid in pkg_uuids]
     pkg_info = artifact_package_info(env, manifest_pkgs; julia_version, include_project)
     used_artifact_tomls = Set{String}()
@@ -2249,7 +2250,11 @@ function download_artifacts(
 
     if !isempty(levels)
         env_key = selector_env_key(env)
+        # (wrapped in `Some` so that the closure below captures a concrete type)
+        server_registry_info_some = Some{Union{Nothing, Tuple{SubString{String}, Dict{UUID, SHA1}}}}(server_registry_info)
         with_resolved_artifact_env(env) do selector_project
+            local server_registry_info = something(server_registry_info_some)
+            local io = ctx.io
             # Run each level's selectors, then download their artifacts concurrently
             # before starting selectors that may load those packages.
             for level in levels
@@ -2407,7 +2412,8 @@ function download_source(
     max_name = maximum(widths; init = 0)
 
     # Check what registries the current pkg server tracks
-    server_registry_info = Registry.pkg_server_registry_info()
+    # (wrapped in `Some` so that the closures below capture a concrete type)
+    server_registry_info_some = Some{Union{Nothing, Tuple{SubString{String}, Dict{UUID, SHA1}}}}(Registry.pkg_server_registry_info())
 
     # use eager throw version
     Base.Experimental.@sync begin
@@ -2436,6 +2442,7 @@ function download_source(
                         archive_urls = Pair{String, Bool}[]
                         # Check if the current package is available in one of the registries being tracked by the pkg server
                         # In that case, download from the package server
+                        local server_registry_info = something(server_registry_info_some)
                         if Registry.is_pkg_in_pkgserver_registry(pkg.uuid, server_registry_info, ctx.registries)
                             server, registry_info = server_registry_info
                             url = "$server/package/$(pkg.uuid)/$(pkg.tree_hash)"
@@ -2467,7 +2474,9 @@ function download_source(
             mode = :int, always_reprint = true
         )
         bar.max = length(pkgs_to_install)
-        fancyprint = can_fancyprint(ctx.io)
+        # `::Bool`: the closure below captures it, and `can_fancyprint` may have methods for other
+        # `IO` types (`max_methods` is 1 in Pkg, so a call with an abstract `IO` then infers as `Any`)
+        fancyprint = can_fancyprint(ctx.io)::Bool
         # `sprint` draws into a buffer, which does not know the width of the terminal
         context = IOContext(ctx.io, :displaysize => displaysize(ctx.io))
         try
@@ -3367,7 +3376,7 @@ function add(
         end
         build_versions(ctx, union(new_apply, new_git))
         if allow_autoprecomp
-            added = Set(pkg.uuid for pkg in pkgs)
+            added = Set{Union{Nothing, UUID}}(pkg.uuid for pkg in pkgs)
             affected = filter(pkg -> !(pkg.uuid in added), changed_packages_and_dependents(ctx.env))
             Pkg._auto_precompile(ctx, vcat(pkgs, affected))
         end
@@ -3934,7 +3943,7 @@ function sandbox(
         allow_earlier_backwards_compatible_versions::Bool = true,
         allow_reresolve::Bool = true
     )
-    sandbox_project = projectfile_path(sandbox_path)
+    sandbox_project = projectfile_path(sandbox_path)::String
 
     return mktempdir() do tmp
         sandbox_project_override_local = sandbox_project_override_in
@@ -5060,7 +5069,7 @@ end
 function print_compat(ctx::Context, pkgs_in::Vector{PackageSpec} = PackageSpec[]; io = nothing)
     io = something(io, ctx.io)
     printpkgstyle(io, :Compat, pathrepr(ctx.env.project_file))
-    names = [pkg.name for pkg in pkgs_in]
+    names = Union{Nothing, String}[pkg.name for pkg in pkgs_in]
     pkgs = isempty(pkgs_in) ? ctx.env.project.deps : filter(pkg -> in(first(pkg), names), ctx.env.project.deps)
     add_julia = isempty(pkgs_in) || any(p -> p.name == "julia", pkgs_in)
     longest_dep_len = isempty(pkgs) ? length("julia") : max(reduce(max, map(length, collect(keys(pkgs)))), length("julia"))

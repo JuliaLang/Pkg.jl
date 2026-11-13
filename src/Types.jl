@@ -1158,7 +1158,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
         end
     end
 
-    return let repo_source = repo_source
+    return let repo_source = repo_source::String
         # The type-assertions below are necessary presumably due to julia#36454
         LibGit2.with(GitTools.ensure_clone(ctx.io, add_repo_cache_path(repo_source::String), repo_source::String; isbare = true, depth = 1)) do repo
             repo_source_typed = repo_source::Union{Nothing, String}
