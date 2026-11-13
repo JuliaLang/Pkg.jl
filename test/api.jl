@@ -268,7 +268,6 @@ import .FakeTerminals.FakeTerminal
                 Pkg.precompile()
             "`,
                     "JULIA_PKG_PRECOMPILE_AUTO" => "0",
-                    "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                 )
                 iob1 = IOBuffer()
                 iob2 = IOBuffer()
@@ -596,11 +595,9 @@ end
             make_env(env_a, pkg_a)
             make_env(env_b, pkg_b)
 
-            depot_path = join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
             function run_script(script)
                 cmd = addenv(
                     `$(Base.julia_cmd()) --color=no --startup-file=no --project=$(pkgdir(Pkg)) -e $script`,
-                    "JULIA_DEPOT_PATH" => depot_path,
                     "JULIA_LOAD_PATH" => nothing,
                     "JULIA_PROJECT" => nothing,
                     "JULIA_PKG_PRECOMPILE_AUTO" => "0",

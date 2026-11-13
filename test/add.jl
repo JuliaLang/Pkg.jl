@@ -1336,10 +1336,7 @@ end
         @test occursin("was able to add the version of Example that is already loaded", add_output)
         @test occursin("[7876af07] + Example v0.5.4", add_output)
         """
-        cmd = addenv(
-            `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`,
-            "JULIA_DEPOT_PATH" => join(DEPOT_PATH, Sys.iswindows() ? ";" : ":")
-        )
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(dirname(@__DIR__)) -e $script`
         @test Utils.show_output_if_command_errors(cmd)
     end
 end
