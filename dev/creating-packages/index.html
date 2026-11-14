@@ -2,7 +2,10 @@
 <html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="referrer" content="no-referrer"/><title>5. Creating Packages · Pkg.jl</title><meta name="title" content="5. Creating Packages · Pkg.jl"/><meta property="og:title" content="5. Creating Packages · Pkg.jl"/><meta property="twitter:title" content="5. Creating Packages · Pkg.jl"/><meta name="description" content="Documentation for Pkg.jl."/><meta property="og:description" content="Documentation for Pkg.jl."/><meta property="twitter:description" content="Documentation for Pkg.jl."/><meta property="og:url" content="https://julialang.github.io/Pkg.jl/v1/creating-packages/"/><meta property="twitter:url" content="https://julialang.github.io/Pkg.jl/v1/creating-packages/"/><link rel="canonical" href="https://julialang.github.io/Pkg.jl/v1/creating-packages/"/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/><link href="../assets/favicon.ico" rel="icon" type="image/x-icon"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../"><img src="../assets/logo.png" alt="Pkg.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../">Pkg.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../"><strong>1.</strong> Introduction</a></li><li><a class="tocitem" href="../getting-started/"><strong>2.</strong> Getting Started</a></li><li><a class="tocitem" href="../managing-packages/"><strong>3.</strong> Managing Packages</a></li><li><a class="tocitem" href="../environments/"><strong>4.</strong> Working with Environments</a></li><li class="is-active"><a class="tocitem" href><strong>5.</strong> Creating Packages</a><ul class="internal"><li><a class="tocitem" href="#Generating-files-for-a-package"><span>Generating files for a package</span></a></li><li><a class="tocitem" href="#Adding-dependencies-to-the-project"><span>Adding dependencies to the project</span></a></li><li><a class="tocitem" href="#Defining-a-public-API"><span>Defining a public API</span></a></li><li><a class="tocitem" href="#Adding-a-build-step-to-the-package"><span>Adding a build step to the package</span></a></li><li><a class="tocitem" href="#adding-tests-to-packages"><span>Adding tests to the package</span></a></li><li><a class="tocitem" href="#Compatibility-on-dependencies"><span>Compatibility on dependencies</span></a></li><li><a class="tocitem" href="#Weak-dependencies"><span>Weak dependencies</span></a></li><li><a class="tocitem" href="#Conditional-loading-of-code-in-packages-(Extensions)"><span>Conditional loading of code in packages (Extensions)</span></a></li><li><a class="tocitem" href="#Package-naming-guidelines"><span>Package naming guidelines</span></a></li><li><a class="tocitem" href="#Registering-packages"><span>Registering packages</span></a></li><li><a class="tocitem" href="#Creating-new-package-versions"><span>Creating new package versions</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li><li><a class="tocitem" href="../apps/"><strong>6.</strong> Apps</a></li><li><a class="tocitem" href="../compatibility/"><strong>7.</strong> Compatibility</a></li><li><a class="tocitem" href="../registries/"><strong>8.</strong> Registries</a></li><li><a class="tocitem" href="../artifacts/"><strong>9.</strong> Artifacts</a></li><li><a class="tocitem" href="../glossary/"><strong>10.</strong> Glossary</a></li><li><a class="tocitem" href="../toml-files/"><strong>11.</strong> <code>Project.toml</code> and <code>Manifest.toml</code></a></li><li><a class="tocitem" href="../repl/"><strong>11.</strong> REPL Mode Reference</a></li><li><a class="tocitem" href="../api/"><strong>13.</strong> API Reference</a></li><li><a class="tocitem" href="../protocol/"><strong>14.</strong> Package and Storage Server Protocol Reference</a></li><li><a class="tocitem" href="../depots/"><strong>15.</strong> Depots</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href><strong>5.</strong> Creating Packages</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href><strong>5.</strong> Creating Packages</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaLang/Pkg.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaLang/Pkg.jl/blob/master/docs/src/creating-packages.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="creating-packages-tutorial"><a class="docs-heading-anchor" href="#creating-packages-tutorial"><strong>5.</strong> Creating Packages</a><a id="creating-packages-tutorial-1"></a><a class="docs-heading-anchor-permalink" href="#creating-packages-tutorial" title="Permalink"></a></h1><h2 id="Generating-files-for-a-package"><a class="docs-heading-anchor" href="#Generating-files-for-a-package">Generating files for a package</a><a id="Generating-files-for-a-package-1"></a><a class="docs-heading-anchor-permalink" href="#Generating-files-for-a-package" title="Permalink"></a></h2><div class="admonition is-info" id="Note-c9e018e246a54e14"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-c9e018e246a54e14" title="Permalink"></a></header><div class="admonition-body"><p>The <a href="https://github.com/invenia/PkgTemplates.jl">PkgTemplates</a> package offers an easy, repeatable, and
 customizable way to generate the files for a new package. It can also generate files needed for Documentation, CI, etc.
 We recommend that you use PkgTemplates for creating
-new packages instead of using the minimal <code>pkg&gt; generate</code> functionality described below.</p></div></div><p>To generate the bare minimum files for a new package, use <code>pkg&gt; generate</code>.</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; generate HelloWorld</code></pre><p>This creates a new project <code>HelloWorld</code> in a subdirectory by the same name, with the following files (visualized with the external <a href="https://linux.die.net/man/1/tree"><code>tree</code> command</a>):</p><pre><code class="language-julia-repl hljs">shell&gt; tree HelloWorld/
+new packages instead of using the minimal <code>pkg&gt; generate</code> functionality described below.</p></div></div><p>To generate the bare minimum files for a new package, use <code>pkg&gt; generate</code>.</p><pre><code class="language-julia-repl hljs">(@v1.14) pkg&gt; generate HelloWorld
+  Generating  project HelloWorld:
+    HelloWorld/Project.toml
+    HelloWorld/src/HelloWorld.jl</code></pre><p>This creates a new project <code>HelloWorld</code> in a subdirectory by the same name, with the following files (visualized with the external <a href="https://linux.die.net/man/1/tree"><code>tree</code> command</a>):</p><pre><code class="language-julia-repl hljs">shell&gt; tree HelloWorld/
 HelloWorld/
 ├── Project.toml
 └── src
@@ -11,29 +14,41 @@ HelloWorld/
 2 directories, 2 files</code></pre><p>The <code>Project.toml</code> file contains the name of the package, its unique UUID, its version, the authors and potential dependencies:</p><pre><code class="language-toml hljs">name = &quot;HelloWorld&quot;
 uuid = &quot;b4cd1eb8-1e24-11e8-3319-93036a3eb9f3&quot;
 version = &quot;0.1.0&quot;
-authors = [&quot;Some One &lt;someone@email.com&gt;&quot;]
+authors = [&quot;Some One &lt;someone@email.com&gt;&quot;]</code></pre><p>The content of <code>src/HelloWorld.jl</code> is:</p><pre><code class="language-julia hljs">module HelloWorld
 
-[deps]</code></pre><p>The content of <code>src/HelloWorld.jl</code> is:</p><pre><code class="language-julia hljs">module HelloWorld
+&quot;&quot;&quot;
+    hello(who::String)
 
-greet() = print(&quot;Hello World!&quot;)
+Return &quot;Hello, `who`&quot;.
+&quot;&quot;&quot;
+hello(who::String) = &quot;Hello, $who&quot;
 
-end # module</code></pre><p>We can now activate the project by using the path to the directory where it is installed, and load the package:</p><pre><code class="language-julia-repl hljs">pkg&gt; activate ./HelloWorld
+&quot;&quot;&quot;
+    domath(x::Number)
+
+Return `x + 5`.
+&quot;&quot;&quot;
+domath(x::Number) = x + 5
+
+end # module HelloWorld</code></pre><p>We can now activate the project by using the path to the directory where it is installed, and load the package:</p><pre><code class="language-julia-repl hljs">(@v1.14) pkg&gt; activate ./HelloWorld
+  Activating project at `~/HelloWorld`
 
 julia&gt; import HelloWorld
 
-julia&gt; HelloWorld.greet()
-Hello World!</code></pre><p>For the rest of the tutorial we enter inside the directory of the project, for convenience:</p><pre><code class="language-julia-repl hljs">julia&gt; cd(&quot;HelloWorld&quot;)</code></pre><h2 id="Adding-dependencies-to-the-project"><a class="docs-heading-anchor" href="#Adding-dependencies-to-the-project">Adding dependencies to the project</a><a id="Adding-dependencies-to-the-project-1"></a><a class="docs-heading-anchor-permalink" href="#Adding-dependencies-to-the-project" title="Permalink"></a></h2><p>Let’s say we want to use the standard library package <code>Random</code> and the registered package <code>JSON</code> in our project.
+julia&gt; HelloWorld.hello(&quot;World&quot;)
+&quot;Hello, World&quot;</code></pre><p>For the rest of the tutorial we enter inside the directory of the project, for convenience:</p><pre><code class="language-julia-repl hljs">julia&gt; cd(&quot;HelloWorld&quot;)</code></pre><h2 id="Adding-dependencies-to-the-project"><a class="docs-heading-anchor" href="#Adding-dependencies-to-the-project">Adding dependencies to the project</a><a id="Adding-dependencies-to-the-project-1"></a><a class="docs-heading-anchor-permalink" href="#Adding-dependencies-to-the-project" title="Permalink"></a></h2><p>Let’s say we want to use the standard library package <code>Random</code> and the registered package <code>JSON</code> in our project.
 We simply <code>add</code> these packages (note how the prompt now shows the name of the newly generated project,
 since we <code>activate</code>d it):</p><pre><code class="language-julia-repl hljs">(HelloWorld) pkg&gt; add Random JSON
    Resolving package versions...
+      Compat entries added for Random, JSON
     Updating `~/HelloWorld/Project.toml`
-  [682c06a0] + JSON v0.21.3
-  [9a3f8284] + Random
+  [682c06a0] + JSON v1.13.4
+  [9a3f8284] + Random v1.11.0
     Updating `~/HelloWorld/Manifest.toml`
-  [682c06a0] + JSON v0.21.3
-  [69de0a69] + Parsers v2.4.0
-  [ade2ca70] + Dates
- ...</code></pre><p>Both <code>Random</code> and <code>JSON</code> got added to the project’s <code>Project.toml</code> file, and the resulting dependencies got added to the <code>Manifest.toml</code> file.
+  [682c06a0] + JSON v1.13.4
+  [69de0a69] + Parsers v3.0.6
+  [aea7be01] + PrecompileTools v1.4.0
+  ...</code></pre><p>Both <code>Random</code> and <code>JSON</code> got added to the project’s <code>Project.toml</code> file, together with <code>[compat]</code> entries for them, and the resulting dependencies got added to the <code>Manifest.toml</code> file.
 The resolver has installed each package with the highest possible version, while still respecting the compatibility that each package enforces on its dependencies.</p><p>We can now use both <code>Random</code> and <code>JSON</code> in our project. Changing <code>src/HelloWorld.jl</code> to</p><pre><code class="language-julia hljs">module HelloWorld
 
 import Random
@@ -92,8 +107,9 @@ julia&gt; write(&quot;deps/build.jl&quot;,
              &quot;&quot;&quot;);
 
 (HelloWorld) pkg&gt; build
-  Building HelloWorld → `deps/build.log`
- Resolving package versions...
+    Building HelloWorld → `~/HelloWorld/deps/build.log`
+Precompiling project...
+  1 dependency successfully precompiled in 0 seconds. 11 already precompiled.
 
 julia&gt; print(readchomp(&quot;deps/build.log&quot;))
 I am being built...</code></pre><p>If the build step fails, the output of the build step is printed to the console</p><pre><code class="language-julia-repl hljs">julia&gt; write(&quot;deps/build.jl&quot;,
@@ -107,14 +123,14 @@ ERROR: Error building `HelloWorld`:
 ERROR: LoadError: Ooops
 Stacktrace:
  [1] error(s::String)
-   @ Base ./error.jl:35
+   @ Base error.jl:56
  [2] top-level scope
    @ ~/HelloWorld/deps/build.jl:1
- [3] include(fname::String)
-   @ Base.MainInclude ./client.jl:476
+ [3] include(mapexpr::Function, mod::Module, _path::String)
+   @ Base Base.jl:365
  [4] top-level scope
-   @ none:5
-in expression starting at /home/kc/HelloWorld/deps/build.jl:1</code></pre><div class="admonition is-warning" id="Warning-18f7b6980fc9871b"><header class="admonition-header">Warning<a class="admonition-anchor" href="#Warning-18f7b6980fc9871b" title="Permalink"></a></header><div class="admonition-body"><p>A build step should generally not create or modify any files in the package directory. If you need to store some files
+   @ none:8
+in expression starting at /home/user/HelloWorld/deps/build.jl:1</code></pre><div class="admonition is-warning" id="Warning-18f7b6980fc9871b"><header class="admonition-header">Warning<a class="admonition-anchor" href="#Warning-18f7b6980fc9871b" title="Permalink"></a></header><div class="admonition-body"><p>A build step should generally not create or modify any files in the package directory. If you need to store some files
 from the build step, use the <a href="https://github.com/JuliaPackaging/Scratch.jl">Scratch.jl</a> package.</p></div></div><h2 id="adding-tests-to-packages"><a class="docs-heading-anchor" href="#adding-tests-to-packages">Adding tests to the package</a><a id="adding-tests-to-packages-1"></a><a class="docs-heading-anchor-permalink" href="#adding-tests-to-packages" title="Permalink"></a></h2><p>When a package is tested the file <code>test/runtests.jl</code> is executed:</p><pre><code class="language-julia-repl hljs">julia&gt; mkpath(&quot;test&quot;);
 
 julia&gt; write(&quot;test/runtests.jl&quot;,
@@ -123,24 +139,25 @@ julia&gt; write(&quot;test/runtests.jl&quot;,
              &quot;&quot;&quot;);
 
 (HelloWorld) pkg&gt; test
-   Testing HelloWorld
- Resolving package versions...
+     Testing HelloWorld
+...
+     Testing Running tests...
 Testing...
-   Testing HelloWorld tests passed</code></pre><p>Tests are run in a new Julia process, where the package itself, and any
+     Testing HelloWorld tests passed</code></pre><p>Tests are run in a new Julia process, where the package itself, and any
 test-specific dependencies, are available, see below.</p><div class="admonition is-warning" id="Warning-d48ed01c29d330d1"><header class="admonition-header">Warning<a class="admonition-anchor" href="#Warning-d48ed01c29d330d1" title="Permalink"></a></header><div class="admonition-body"><p>Tests should generally not create or modify any files in the package directory. If you need to store some files
 from the build step, use the <a href="https://github.com/JuliaPackaging/Scratch.jl">Scratch.jl</a> package.</p></div></div><h3 id="Test-specific-dependencies"><a class="docs-heading-anchor" href="#Test-specific-dependencies">Test-specific dependencies</a><a id="Test-specific-dependencies-1"></a><a class="docs-heading-anchor-permalink" href="#Test-specific-dependencies" title="Permalink"></a></h3><p>Test-specific dependencies are dependencies that are not dependencies of the package itself but are available when the package is tested.</p><h4 id="Recommended-approach:-Using-workspaces-with-test/Project.toml"><a class="docs-heading-anchor" href="#Recommended-approach:-Using-workspaces-with-test/Project.toml">Recommended approach: Using workspaces with <code>test/Project.toml</code></a><a id="Recommended-approach:-Using-workspaces-with-test/Project.toml-1"></a><a class="docs-heading-anchor-permalink" href="#Recommended-approach:-Using-workspaces-with-test/Project.toml" title="Permalink"></a></h4><div class="admonition is-compat" id="Compat-c1ac8dae7e5c883f"><header class="admonition-header">Compat<a class="admonition-anchor" href="#Compat-c1ac8dae7e5c883f" title="Permalink"></a></header><div class="admonition-body"><p>Workspaces require Julia 1.12+. For older Julia versions, see the legacy approaches below.</p></div></div><p>The recommended way to add test-specific dependencies is to use workspaces. This is done by:</p><ol><li>Adding a <code>[workspace]</code> section to your package&#39;s <code>Project.toml</code>:</li></ol><pre><code class="language-toml hljs">[workspace]
 projects = [&quot;test&quot;]</code></pre><ol><li>Creating a <code>test/Project.toml</code> file with your test dependencies:</li></ol><pre><code class="language-julia-repl hljs">(HelloWorld) pkg&gt; activate ./test
-[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
+  Activating new project at `~/HelloWorld/test`
 
 (HelloWorld/test) pkg&gt; dev .  # add current package to test dependencies using its path
- Resolving package versions...
-  Updating `~/HelloWorld/test/Project.toml`
-  [8dfed614] + HelloWorld v0.1.0 `..`
+   Resolving package versions...
+    Updating `~/HelloWorld/test/Project.toml`
+  [b4cd1eb8] + HelloWorld v0.1.0 `..`
 
 (HelloWorld/test) pkg&gt; add Test  # add other test dependencies
- Resolving package versions...
-  Updating `~/HelloWorld/test/Project.toml`
-  [8dfed614] + Test</code></pre><p>When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single <code>Manifest.toml</code> next to the base <code>Project.toml</code>. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
+   Resolving package versions...
+    Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + Test v1.11.0</code></pre><p>When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single <code>Manifest.toml</code> next to the base <code>Project.toml</code>. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
 Note that dependencies of <code>HelloWorld</code> itself are <strong>not</strong> automatically inherited. Any package used directly in tests must also be listed under <code>[deps]</code>.</p><div class="admonition is-info" id="Info-5b96cee26b93e3d0"><header class="admonition-header">Info<a class="admonition-anchor" href="#Info-5b96cee26b93e3d0" title="Permalink"></a></header><div class="admonition-body"><p>Unlike some earlier test dependency workflows, this one explicitly requires adding <code>HelloWorld</code> (the parent package) to your <code>test/Project.toml</code>.</p></div></div><p>The resulting <code>test/Project.toml</code> will look like:</p><pre><code class="language-toml hljs">[deps]
 HelloWorld = &quot;xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx&quot;  # UUID from HelloWorld&#39;s Project.toml
 Test = &quot;8dfed614-e22c-5e08-85e1-65c5234f0b40&quot;
@@ -155,16 +172,19 @@ HelloWorld = {path = &quot;..&quot;}</code></pre><p>You can now use <code>Test</
 (HelloWorld/test) pkg&gt; activate .
 
 (HelloWorld) pkg&gt; test
-   Testing HelloWorld
- Resolving package versions...
-   Testing HelloWorld tests passed</code></pre><p>Workspaces can also be used for other purposes, such as documentation or benchmarks, by adding additional projects to the workspace:</p><pre><code class="language-toml hljs">[workspace]
+     Testing HelloWorld
+...
+     Testing Running tests...
+     Testing HelloWorld tests passed</code></pre><p>Workspaces can also be used for other purposes, such as documentation or benchmarks, by adding additional projects to the workspace:</p><pre><code class="language-toml hljs">[workspace]
 projects = [&quot;test&quot;, &quot;docs&quot;, &quot;benchmarks&quot;]</code></pre><p>See the section on <a href="../toml-files/#Workspaces">Workspaces</a> in the <code>Project.toml</code> documentation for more details.</p><h4 id="Alternative-approach:-Using-[sources]-with-path-based-dependencies"><a class="docs-heading-anchor" href="#Alternative-approach:-Using-[sources]-with-path-based-dependencies">Alternative approach: Using <code>[sources]</code> with path-based dependencies</a><a id="Alternative-approach:-Using-[sources]-with-path-based-dependencies-1"></a><a class="docs-heading-anchor-permalink" href="#Alternative-approach:-Using-[sources]-with-path-based-dependencies" title="Permalink"></a></h4><p>An alternative to workspaces is to use the <code>[sources]</code> section in <code>test/Project.toml</code> to reference the parent package. The <code>[sources]</code> section allows you to specify custom locations (paths or URLs) for dependencies, overriding registry information. This approach creates a <strong>separate manifest</strong> in the <code>test/</code> directory (unlike workspaces which create a single shared manifest).</p><p>To use this approach:</p><ol><li>Create a <code>test/Project.toml</code> file and add your test dependencies:</li></ol><pre><code class="language-julia-repl hljs">(HelloWorld) pkg&gt; activate ./test
-[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
+  Activating new project at `~/HelloWorld/test`
 
-(HelloWorld/test) pkg&gt; add Test
- Resolving package versions...
-  Updating `~/HelloWorld/test/Project.toml`
-  [8dfed614] + Test</code></pre><ol><li>Add the parent package as a dependency using <code>[sources]</code> with a relative path:</li></ol><pre><code class="language-toml hljs"># In test/Project.toml
+(test) pkg&gt; add Test
+   Resolving package versions...
+    Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + Test v1.11.0
+    Updating `~/HelloWorld/test/Manifest.toml`
+  ...</code></pre><ol><li>Add the parent package as a dependency using <code>[sources]</code> with a relative path:</li></ol><pre><code class="language-toml hljs"># In test/Project.toml
 [deps]
 HelloWorld = &quot;00000000-0000-0000-0000-000000000000&quot;  # Your package UUID
 Test = &quot;8dfed614-e22c-5e08-85e1-65c5234f0b40&quot;
@@ -300,4 +320,4 @@ Artifacts can be bundled and accessed easily using the <code>artifact&quot;name&
 Scratch spaces are designed for data caches that are completely managed by a package and should be removed when the package itself is uninstalled.
 For important user-generated data, packages should continue to write out to a user-specified path that is not managed by Julia or Pkg.</p></li><li><p><a href="https://github.com/JuliaPackaging/Preferences.jl"><code>Preferences.jl</code></a> allows packages to read and write preferences to the top-level <code>Project.toml</code>.
 These preferences can be read at runtime or compile-time, to enable or disable different aspects of package behavior.
-Packages previously would write out files to their own package directories to record options set by the user or environment, but this is highly discouraged now that <code>Preferences</code> is available.</p></li></ul><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="../managing-packages/#Managing-Packages">Managing Packages</a> - Learn how to add, update, and manage package dependencies</li><li><a href="../environments/#Working-with-Environments">Working with Environments</a> - Understand environments and reproducible development</li><li><a href="../compatibility/#Compatibility">Compatibility</a> - Specify version constraints for dependencies</li><li><a href="../api/#API-Reference">API Reference</a> - Functional API for non-interactive package management</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../environments/">« <strong>4.</strong> Working with Environments</a><a class="docs-footer-nextpage" href="../apps/"><strong>6.</strong> Apps »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Thursday 12 November 2026 12:15">Thursday 12 November 2026</span>. Using Julia version 1.15.0-DEV.676.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+Packages previously would write out files to their own package directories to record options set by the user or environment, but this is highly discouraged now that <code>Preferences</code> is available.</p></li></ul><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="../managing-packages/#Managing-Packages">Managing Packages</a> - Learn how to add, update, and manage package dependencies</li><li><a href="../environments/#Working-with-Environments">Working with Environments</a> - Understand environments and reproducible development</li><li><a href="../compatibility/#Compatibility">Compatibility</a> - Specify version constraints for dependencies</li><li><a href="../api/#API-Reference">API Reference</a> - Functional API for non-interactive package management</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../environments/">« <strong>4.</strong> Working with Environments</a><a class="docs-footer-nextpage" href="../apps/"><strong>6.</strong> Apps »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Saturday 14 November 2026 23:41">Saturday 14 November 2026</span>. Using Julia version 1.15.0-DEV.740.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
