@@ -35,6 +35,8 @@ To see which registries are currently installed you can use the `registry status
 pkg> registry st
 Registry Status
  [23338594] General (https://github.com/JuliaRegistries/General.git)
+    packed registry with hash c988d8608a8ea25ecf47cd6a0571deea0c634755, last updated 2026-11-14 16:48:19
+    served by https://pkg.julialang.org
 ```
 
 Registries are always added to the user depot, which is the first entry in `DEPOT_PATH` (cf. the [Glossary](@ref) section).
@@ -55,7 +57,7 @@ Here we remove the `General` registry
 
 ```julia-repl
 pkg> registry rm General
-  Removing registry `General` from ~/.julia/registries/General
+    Removing registry `General` from ~/.julia/registries/General.toml
 
 pkg> registry st
 Registry Status
@@ -67,7 +69,7 @@ disambiguate with the `uuid`, just as when manipulating packages, e.g.
 
 ```julia-repl
 pkg> registry rm General=23338594-aafe-5451-b93e-139f81909106
-  Removing registry `General` from ~/.julia/registries/General
+    Removing registry `General` from ~/.julia/registries/General.toml
 ```
 
 ### Updating registries
@@ -77,16 +79,14 @@ Here we update the `General` registry:
 
 ```julia-repl
 pkg> registry up General
-  Updating registry at `~/.julia/registries/General`
-  Updating git-repo `https://github.com/JuliaRegistries/General`
+    Updating registry at `~/.julia/registries/General.toml`
 ```
 
 and to update all installed registries just do:
 
 ```julia-repl
 pkg> registry up
-  Updating registry at `~/.julia/registries/General`
-  Updating git-repo `https://github.com/JuliaRegistries/General`
+    Updating registry at `~/.julia/registries/General.toml`
 ```
 
 Registries automatically update once per session when a package operation is performed so it

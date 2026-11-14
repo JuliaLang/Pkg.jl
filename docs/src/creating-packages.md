@@ -11,7 +11,10 @@
 To generate the bare minimum files for a new package, use `pkg> generate`.
 
 ```julia-repl
-(@v1.10) pkg> generate HelloWorld
+(@v{{VERSION}}) pkg> generate HelloWorld
+  Generating  project HelloWorld:
+    HelloWorld/Project.toml
+    HelloWorld/src/HelloWorld.jl
 ```
 
 This creates a new project `HelloWorld` in a subdirectory by the same name, with the following files (visualized with the external [`tree` command](https://linux.die.net/man/1/tree)):
@@ -33,8 +36,6 @@ name = "HelloWorld"
 uuid = "b4cd1eb8-1e24-11e8-3319-93036a3eb9f3"
 version = "0.1.0"
 authors = ["Some One <someone@email.com>"]
-
-[deps]
 ```
 
 The content of `src/HelloWorld.jl` is:
@@ -42,20 +43,33 @@ The content of `src/HelloWorld.jl` is:
 ```julia
 module HelloWorld
 
-greet() = print("Hello World!")
+"""
+    hello(who::String)
 
-end # module
+Return "Hello, `who`".
+"""
+hello(who::String) = "Hello, $who"
+
+"""
+    domath(x::Number)
+
+Return `x + 5`.
+"""
+domath(x::Number) = x + 5
+
+end # module HelloWorld
 ```
 
 We can now activate the project by using the path to the directory where it is installed, and load the package:
 
 ```julia-repl
-pkg> activate ./HelloWorld
+(@v{{VERSION}}) pkg> activate ./HelloWorld
+  Activating project at `~/HelloWorld`
 
 julia> import HelloWorld
 
-julia> HelloWorld.greet()
-Hello World!
+julia> HelloWorld.hello("World")
+"Hello, World"
 ```
 
 For the rest of the tutorial we enter inside the directory of the project, for convenience:
@@ -73,17 +87,18 @@ since we `activate`d it):
 ```julia-repl
 (HelloWorld) pkg> add Random JSON
    Resolving package versions...
+      Compat entries added for Random, JSON
     Updating `~/HelloWorld/Project.toml`
-  [682c06a0] + JSON v0.21.3
-  [9a3f8284] + Random
+  [682c06a0] + JSON v1.13.4
+  [9a3f8284] + Random v1.11.0
     Updating `~/HelloWorld/Manifest.toml`
-  [682c06a0] + JSON v0.21.3
-  [69de0a69] + Parsers v2.4.0
-  [ade2ca70] + Dates
- ...
+  [682c06a0] + JSON v1.13.4
+  [69de0a69] + Parsers v3.0.6
+  [aea7be01] + PrecompileTools v1.4.0
+  ...
 ```
 
-Both `Random` and `JSON` got added to the project’s `Project.toml` file, and the resulting dependencies got added to the `Manifest.toml` file.
+Both `Random` and `JSON` got added to the project’s `Project.toml` file, together with `[compat]` entries for them, and the resulting dependencies got added to the `Manifest.toml` file.
 The resolver has installed each package with the highest possible version, while still respecting the compatibility that each package enforces on its dependencies.
 
 We can now use both `Random` and `JSON` in our project. Changing `src/HelloWorld.jl` to
@@ -211,8 +226,9 @@ julia> write("deps/build.jl",
              """);
 
 (HelloWorld) pkg> build
-  Building HelloWorld → `deps/build.log`
- Resolving package versions...
+    Building HelloWorld → `~/HelloWorld/deps/build.log`
+Precompiling project...
+  1 dependency successfully precompiled in 0 seconds. 11 already precompiled.
 
 julia> print(readchomp("deps/build.log"))
 I am being built...
@@ -232,14 +248,14 @@ ERROR: Error building `HelloWorld`:
 ERROR: LoadError: Ooops
 Stacktrace:
  [1] error(s::String)
-   @ Base ./error.jl:35
+   @ Base error.jl:56
  [2] top-level scope
    @ ~/HelloWorld/deps/build.jl:1
- [3] include(fname::String)
-   @ Base.MainInclude ./client.jl:476
+ [3] include(mapexpr::Function, mod::Module, _path::String)
+   @ Base Base.jl:365
  [4] top-level scope
-   @ none:5
-in expression starting at /home/kc/HelloWorld/deps/build.jl:1
+   @ none:8
+in expression starting at /home/user/HelloWorld/deps/build.jl:1
 ```
 
 !!! warning
@@ -259,10 +275,11 @@ julia> write("test/runtests.jl",
              """);
 
 (HelloWorld) pkg> test
-   Testing HelloWorld
- Resolving package versions...
+     Testing HelloWorld
+...
+     Testing Running tests...
 Testing...
-   Testing HelloWorld tests passed
+     Testing HelloWorld tests passed
 ```
 
 Tests are run in a new Julia process, where the package itself, and any
@@ -295,17 +312,17 @@ projects = ["test"]
 
 ```julia-repl
 (HelloWorld) pkg> activate ./test
-[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
+  Activating new project at `~/HelloWorld/test`
 
 (HelloWorld/test) pkg> dev .  # add current package to test dependencies using its path
- Resolving package versions...
-  Updating `~/HelloWorld/test/Project.toml`
-  [8dfed614] + HelloWorld v0.1.0 `..`
+   Resolving package versions...
+    Updating `~/HelloWorld/test/Project.toml`
+  [b4cd1eb8] + HelloWorld v0.1.0 `..`
 
 (HelloWorld/test) pkg> add Test  # add other test dependencies
- Resolving package versions...
-  Updating `~/HelloWorld/test/Project.toml`
-  [8dfed614] + Test
+   Resolving package versions...
+    Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + Test v1.11.0
 ```
 
 When using workspaces, the package manager resolves dependencies for all projects in the workspace together, and creates a single `Manifest.toml` next to the base `Project.toml`. This provides better dependency resolution and makes it easier to manage test-specific dependencies.
@@ -337,9 +354,10 @@ julia> write("test/runtests.jl",
 (HelloWorld/test) pkg> activate .
 
 (HelloWorld) pkg> test
-   Testing HelloWorld
- Resolving package versions...
-   Testing HelloWorld tests passed
+     Testing HelloWorld
+...
+     Testing Running tests...
+     Testing HelloWorld tests passed
 ```
 
 Workspaces can also be used for other purposes, such as documentation or benchmarks, by adding additional projects to the workspace:
@@ -361,12 +379,14 @@ To use this approach:
 
 ```julia-repl
 (HelloWorld) pkg> activate ./test
-[ Info: activating environment at `~/HelloWorld/test/Project.toml`.
+  Activating new project at `~/HelloWorld/test`
 
-(HelloWorld/test) pkg> add Test
- Resolving package versions...
-  Updating `~/HelloWorld/test/Project.toml`
-  [8dfed614] + Test
+(test) pkg> add Test
+   Resolving package versions...
+    Updating `~/HelloWorld/test/Project.toml`
+  [8dfed614] + Test v1.11.0
+    Updating `~/HelloWorld/test/Manifest.toml`
+  ...
 ```
 
 2. Add the parent package as a dependency using `[sources]` with a relative path:

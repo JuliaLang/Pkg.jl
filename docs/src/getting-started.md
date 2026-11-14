@@ -22,19 +22,21 @@ To get back to the Julia REPL, press `Ctrl+C` or backspace (when the REPL cursor
 Upon entering the Pkg REPL, you should see the following prompt:
 
 ```julia-repl
-(@v1.10) pkg>
+(@v{{VERSION}}) pkg>
 ```
 
 To add a package, use `add`:
 
 ```julia-repl
-(@v1.10) pkg> add Example
+(@v{{VERSION}}) pkg> add Example
    Resolving package versions...
-   Installed Example ─ v0.5.3
-    Updating `~/.julia/environments/v1.10/Project.toml`
-  [7876af07] + Example v0.5.3
-    Updating `~/.julia/environments/v1.10/Manifest.toml`
-  [7876af07] + Example v0.5.3
+   Installed Example ─ v0.5.5
+    Updating `~/.julia/environments/v{{VERSION}}/Project.toml`
+  [7876af07] + Example v0.5.5
+    Updating `~/.julia/environments/v{{VERSION}}/Manifest.toml`
+  [7876af07] + Example v0.5.5
+Precompiling packages...
+  1 dependency successfully precompiled in 0 seconds
 ```
 
 After the package is installed, it can be loaded into the Julia session:
@@ -49,17 +51,17 @@ julia> Example.hello("friend")
 We can also specify multiple packages at once to install:
 
 ```julia-repl
-(@v1.10) pkg> add JSON StaticArrays
+(@v{{VERSION}}) pkg> add JSON StaticArrays
 ```
 
 The `status` command (or the shorter `st` command) can be used to see installed packages.
 
 ```julia-repl
-(@v1.10) pkg> st
-Status `~/.julia/environments/v1.10/Project.toml`
-  [7876af07] Example v0.5.3
-  [682c06a0] JSON v0.21.3
-  [90137ffa] StaticArrays v1.5.9
+(@v{{VERSION}}) pkg> st
+Status `~/.julia/environments/v{{VERSION}}/Project.toml`
+  [7876af07] Example v0.5.5
+  [682c06a0] JSON v1.13.4
+  [90137ffa] StaticArrays v1.9.25
 ```
 
 !!! note
@@ -68,13 +70,13 @@ Status `~/.julia/environments/v1.10/Project.toml`
 To remove packages, use `rm` (or `remove`):
 
 ```julia-repl
-(@v1.10) pkg> rm JSON StaticArrays
+(@v{{VERSION}}) pkg> rm JSON StaticArrays
 ```
 
 Use `up` (or `update`) to update the installed packages
 
 ```julia-repl
-(@v1.10) pkg> up
+(@v{{VERSION}}) pkg> up
 ```
 
 If you have been following this guide it is likely that the packages installed are at the latest version
@@ -82,14 +84,16 @@ so `up` will not do anything. Below we show the status output in the case where 
 an old version of the Example package and then upgrade it:
 
 ```julia-repl
-(@v1.10) pkg> st
-Status `~/.julia/environments/v1.10/Project.toml`
+(@v{{VERSION}}) pkg> st
+Status `~/.julia/environments/v{{VERSION}}/Project.toml`
 ⌃ [7876af07] Example v0.5.1
 Info Packages marked with ⌃ have new versions available. Use `status --outdated` to see which of them an update upgrades and what holds the others back.
 
-(@v1.10) pkg> up
-    Updating `~/.julia/environments/v1.10/Project.toml`
-  [7876af07] ↑ Example v0.5.1 ⇒ v0.5.3
+(@v{{VERSION}}) pkg> up
+    Updating `~/.julia/environments/v{{VERSION}}/Project.toml`
+  [7876af07] ↑ Example v0.5.1 ⇒ v0.5.5
+    Updating `~/.julia/environments/v{{VERSION}}/Manifest.toml`
+  [7876af07] ↑ Example v0.5.1 ⇒ v0.5.5
 ```
 
 We can see that the status output tells us that there is a newer version available and that `up` upgrades the package.
@@ -101,8 +105,8 @@ For more information about managing packages, see the [Managing Packages](@ref M
 
 Up to this point, we have covered basic package management: adding, updating, and removing packages.
 
-You may have noticed the `(@v1.10)` in the REPL prompt.
-This lets us know that `v1.10` is the **active environment**.
+You may have noticed the `(@v{{VERSION}})` in the REPL prompt.
+This lets us know that `v{{VERSION}}` is the **active environment**.
 Different environments can have totally different packages and versions installed from another environment.
 The active environment is the environment that will be modified by Pkg commands such as `add`, `rm` and `update`.
 
@@ -110,8 +114,8 @@ Let's set up a new environment so we may experiment.
 To set the active environment, use `activate`:
 
 ```julia-repl
-(@v1.10) pkg> activate tutorial
-[ Info: activating new environment at `~/tutorial/Project.toml`.
+(@v{{VERSION}}) pkg> activate tutorial
+  Activating new project at `~/tutorial`
 ```
 
 Pkg lets us know we are creating a new environment and that this environment
@@ -129,8 +133,7 @@ We can ask for information about the active environment by using `status`:
 
 ```julia-repl
 (tutorial) pkg> status
-    Status `~/tutorial/Project.toml`
-   (empty environment)
+Status `~/tutorial/Project.toml` (empty project)
 ```
 
 `~/tutorial/Project.toml` is the location of the active environment's **project file**.
@@ -143,9 +146,9 @@ Let us add some packages and observe:
 ...
 
 (tutorial) pkg> status
-    Status `~/tutorial/Project.toml`
-  [7876af07] Example v0.5.3
-  [682c06a0] JSON v0.21.3
+Status `~/tutorial/Project.toml`
+  [7876af07] Example v0.5.5
+  [682c06a0] JSON v1.13.4
 ```
 
 We can see that the `tutorial` environment now contains `Example` and `JSON`.
@@ -163,12 +166,12 @@ When you're done working in a specific environment and want to return to the def
 
 ```julia-repl
 (tutorial) pkg> activate
-  Activating project at `~/.julia/environments/v1.10`
+  Activating project at `~/.julia/environments/v{{VERSION}}`
 
-(@v1.10) pkg>
+(@v{{VERSION}}) pkg>
 ```
 
-This returns you to the default `@v1.10` environment. There is no separate "deactivate" command—`activate` with no arguments serves this purpose.
+This returns you to the default `@v{{VERSION}}` environment. There is no separate "deactivate" command—`activate` with no arguments serves this purpose.
 
 For more information about environments, see the [Working with Environments](@ref Working-with-Environments) section of the documentation.
 
@@ -177,14 +180,14 @@ For more information about environments, see the [Working with Environments](@re
 If you are ever stuck, you can ask `Pkg` for help:
 
 ```julia-repl
-(@v1.10) pkg> ?
+(@v{{VERSION}}) pkg> ?
 ```
 
 You should see a list of available commands along with short descriptions.
 You can ask for more detailed help by specifying a command:
 
 ```julia-repl
-(@v1.10) pkg> ?develop
+(@v{{VERSION}}) pkg> ?develop
 ```
 
 This guide should help you get started with `Pkg`.
