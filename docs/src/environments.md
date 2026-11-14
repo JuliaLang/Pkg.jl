@@ -4,17 +4,17 @@ The following discusses Pkg's interaction with environments. For more on the rol
 
 ## Creating your own environments
 
-So far we have added packages to the default environment at `~/.julia/environments/v1.10`. It is however easy to create other, independent, projects.
+So far we have added packages to the default environment at `~/.julia/environments/v{{VERSION}}`. It is however easy to create other, independent, projects.
 This approach has the benefit of allowing you to check in a `Project.toml`, and even a `Manifest.toml` if you wish, into version control (e.g. git) alongside your code.
 It should be pointed out that when two projects use the same package at the same version, the content of this package is not duplicated.
 In order to create a new project, create a directory for it and then activate that directory to make it the "active project", which package operations manipulate:
 
 ```julia-repl
-(@v1.10) pkg> activate MyProject
-Activating new environment at `~/MyProject/Project.toml`
+(@v{{VERSION}}) pkg> activate MyProject
+  Activating new project at `~/MyProject`
 
 (MyProject) pkg> st
-    Status `~/MyProject/Project.toml` (empty project)
+Status `~/MyProject/Project.toml` (empty project)
 ```
 
 Note that the REPL prompt changes when the new project is activated. Until a package is added, there are no files in this environment and the directory to the environment might not even be created:
@@ -25,13 +25,13 @@ false
 
 (MyProject) pkg> add Example
    Resolving package versions...
-   Installed Example ─ v0.5.3
+   Installed Example ─ v0.5.5
     Updating `~/MyProject/Project.toml`
-  [7876af07] + Example v0.5.3
+  [7876af07] + Example v0.5.5
     Updating `~/MyProject/Manifest.toml`
-  [7876af07] + Example v0.5.3
-Precompiling environment...
-  1 dependency successfully precompiled in 2 seconds
+  [7876af07] + Example v0.5.5
+Precompiling packages...
+  1 dependency successfully precompiled in 0 seconds
 
 julia> readdir("MyProject")
 2-element Vector{String}:
@@ -45,14 +45,23 @@ Example = "7876af07-990d-54b4-ab0e-23690620f79a"
 julia> print(read(joinpath("MyProject", "Manifest.toml"), String))
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.0"
-manifest_format = "2.0"
-project_hash = "2ca1c6c58cb30e79e021fb54e5626c96d05d5fdc"
+environment_id = "aac3e84c-a841-4e7f-af36-69d8c0e4eb68"  # generated
+julia_version = "{{VERSION}}.0"
+manifest_format = "2.2"
+project_hash = "2ba095eea143434854ea510082d0697aa2bcd3f3"
 
 [[deps.Example]]
-git-tree-sha1 = "46e44e869b4d90b96bd8ed1fdcf32244fddfb6cc"
+git-tree-sha1 = "e1f0e1a832ccd8e97d6d0348dec33ee139a5aeaf"
+registries = "General"
 uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
-version = "0.5.3"
+version = "0.5.5"
+
+    [deps.Example.syntax]
+    julia_version = "1.0.0"
+
+[registries.General]
+url = "https://github.com/JuliaRegistries/General.git"
+uuid = "23338594-aafe-5451-b93e-139f81909106"
 ```
 
 This new environment is completely separate from the one we used earlier. See [`Project.toml` and `Manifest.toml`](@ref Project-and-Manifest) for a more detailed explanation.
@@ -66,12 +75,12 @@ shell> git clone https://github.com/JuliaLang/Example.jl.git
 Cloning into 'Example.jl'...
 ...
 
-(@v1.10) pkg> activate Example.jl
-Activating project at `~/Example.jl`
+(@v{{VERSION}}) pkg> activate Example.jl
+  Activating project at `~/Example.jl`
 
 (Example) pkg> instantiate
-  No packages added to or removed from `~/Example.jl/Project.toml`
-  No packages added to or removed from `~/Example.jl/Manifest.toml`
+     Project No packages added to or removed from `~/Example.jl/Project.toml`
+    Manifest No packages added to or removed from `~/Example.jl/Manifest.toml`
 ```
 
 If the project contains a manifest, this will install the packages in the same state that is given by that manifest.
@@ -98,9 +107,9 @@ To return to the default environment after working in a project environment, sim
 
 ```julia-repl
 (MyProject) pkg> activate
-  Activating project at `~/.julia/environments/v1.10`
+  Activating project at `~/.julia/environments/v{{VERSION}}`
 
-(@v1.10) pkg>
+(@v{{VERSION}}) pkg>
 ```
 
 This deactivates the current project and returns you to the default shared environment (typically `@v#.#`).
@@ -126,33 +135,32 @@ also want a scratch space to try out a new package, or a sandbox to resolve vers
 between several incompatible packages.
 
 ```julia-repl
-(@v1.10) pkg> activate --temp # requires Julia 1.5 or later
-  Activating new environment at `/var/folders/34/km3mmt5930gc4pzq1d08jvjw0000gn/T/jl_a31egx/Project.toml`
+(@v{{VERSION}}) pkg> activate --temp
+  Activating new project at `/var/folders/34/km3mmt5930gc4pzq1d08jvjw0000gn/T/jl_a31egx`
 
 (jl_a31egx) pkg> add Example
-    Updating registry at `~/.julia/registries/General`
    Resolving package versions...
     Updating `/private/var/folders/34/km3mmt5930gc4pzq1d08jvjw0000gn/T/jl_a31egx/Project.toml`
-  [7876af07] + Example v0.5.3
+  [7876af07] + Example v0.5.5
     Updating `/private/var/folders/34/km3mmt5930gc4pzq1d08jvjw0000gn/T/jl_a31egx/Manifest.toml`
-  [7876af07] + Example v0.5.3
+  [7876af07] + Example v0.5.5
 ```
 
 ## Shared environments
 
-A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v1.10` environment is
+A "shared" environment is simply an environment that exists in `~/.julia/environments`. The default `v{{VERSION}}` environment is
 therefore a shared environment:
 
 ```julia-repl
-(@v1.10) pkg> st
-Status `~/.julia/environments/v1.10/Project.toml`
+(@v{{VERSION}}) pkg> st
+Status `~/.julia/environments/v{{VERSION}}/Project.toml`
 ```
 
 Shared environments can be activated with the `--shared` flag to `activate`:
 
 ```julia-repl
-(@v1.10) pkg> activate --shared mysharedenv
-  Activating project at `~/.julia/environments/mysharedenv`
+(@v{{VERSION}}) pkg> activate --shared mysharedenv
+  Activating new project at `~/.julia/environments/mysharedenv`
 
 (@mysharedenv) pkg>
 ```
@@ -174,7 +182,7 @@ Each argument is a shared environment given as `@name`, a path to a `Project.tom
 This is a convenient way to populate the default environment of a new Julia version from the previous one:
 
 ```julia-repl
-(@v1.14) pkg> add --from @v1.13
+(@v{{VERSION}}) pkg> add --from @v{{PREVIOUS_VERSION}}
 ```
 
 The dependencies are resolved afresh for the active environment, so the versions may differ from the source
@@ -189,15 +197,16 @@ This precompilation can be triggered via code loading if the un-imported package
 
 ```julia-repl
 julia> using Example
-[ Info: Precompiling Example [7876af07-990d-54b4-ab0e-23690620f79a]
+Precompiling Example...
+  1 dependency successfully precompiled in 0 seconds
 ```
 
 or using Pkg's precompile option, which can precompile the entire environment, or a given dependency, and do so in parallel,
 which can be significantly faster than the code-load route above.
 
 ```julia-repl
-(@v1.10) pkg> precompile
-Precompiling environment...
+(@v{{VERSION}}) pkg> precompile
+Precompiling project...
   23 dependencies successfully precompiled in 36 seconds
 ```
 
@@ -210,14 +219,14 @@ By default, any package that is added to a project or updated in a Pkg action wi
 with its dependencies.
 
 ```julia-repl
-(@v1.10) pkg> add Images
+(@v{{VERSION}}) pkg> add Images
    Resolving package versions...
-    Updating `~/.julia/environments/v1.10/Project.toml`
-  [916415d5] + Images v0.25.2
-    Updating `~/.julia/environments/v1.10/Manifest.toml`
+    Updating `~/.julia/environments/v{{VERSION}}/Project.toml`
+  [916415d5] + Images v0.26.2
+    Updating `~/.julia/environments/v{{VERSION}}/Manifest.toml`
     ...
-Precompiling environment...
-  Progress [===================>                     ]  45/97
+Precompiling packages...
+Precompiling packages ━━━━━━━━━━━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━ 45/97 Press `?` for help, `c` to cancel, `d` to detach.
   ✓ NaNMath
   ✓ IntervalSets
   ◐ CoordinateTransformations

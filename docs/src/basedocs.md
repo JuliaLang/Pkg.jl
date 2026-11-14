@@ -19,6 +19,7 @@ import Markdown
 file = joinpath(Sys.STDLIB, "Pkg", "docs", "src", "getting-started.md")
 str = read(file, String)
 str = replace(str, r"^#.*$"m => "")
+str = replace(str, "{{VERSION}}" => "$(VERSION.major).$(VERSION.minor)", "{{PREVIOUS_VERSION}}" => "$(VERSION.major).$(VERSION.minor - 1)")
 str = replace(str, "[API Reference](@ref)" => "[API Reference](https://pkgdocs.julialang.org/v1/api/)")
 str = replace(str, "(@ref Working-with-Environments)" => "(https://pkgdocs.julialang.org/v1/environments/)")
 str = replace(str, "(@ref Managing-Packages)" => "(https://pkgdocs.julialang.org/v1/managing-packages/)")

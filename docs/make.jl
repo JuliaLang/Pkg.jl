@@ -19,6 +19,26 @@ end
 # setup for doctesting
 DocMeta.setdocmeta!(Pkg.BinaryPlatforms, :DocTestSetup, :(using Base.BinaryPlatforms); recursive = true)
 
+# Code in the manual writes the Julia version as `{{VERSION}}` (and the one before it as
+# `{{PREVIOUS_VERSION}}`), so prompts like `(@v{{VERSION}}) pkg>` match the release these
+# docs are for. The version comes from this Pkg checkout, because CI builds the docs with nightly.
+abstract type ExpandVersions <: Documenter.Builder.DocumentPipeline end
+Documenter.Selectors.order(::Type{ExpandVersions}) = 1.5
+function Documenter.Selectors.runner(::Type{ExpandVersions}, doc::Documenter.Document)
+    v = VersionNumber(Pkg.TOML.parsefile(joinpath(@__DIR__, "..", "Project.toml"))["version"])
+    subs = ("{{VERSION}}" => "$(v.major).$(v.minor)", "{{PREVIOUS_VERSION}}" => "$(v.major).$(v.minor - 1)")
+    function expand!(node)
+        el = node.element
+        if el isa Documenter.MarkdownAST.CodeBlock || el isa Documenter.MarkdownAST.Code
+            el.code = replace(el.code, subs...)
+        end
+        foreach(expand!, node.children)
+        return
+    end
+    foreach(page -> expand!(page.mdast), values(doc.blueprint.pages))
+    return
+end
+
 # Run doctests first and disable them in makedocs
 Documenter.doctest(joinpath(@__DIR__, "src"), [Pkg])
 
