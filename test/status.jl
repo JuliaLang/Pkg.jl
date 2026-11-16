@@ -123,6 +123,7 @@ end
         # Basic Add
         Pkg.add(Pkg.PackageSpec(; name = "Example", version = "0.3.0"); io = io)
         output = String(take!(io))
+        @test !occursin("○", output) # the diff does not say that the new package is not precompiled
         @test occursin(r"Updating `.+Project\.toml`", output)
         @test occursin(r"\[7876af07\] \+ Example v0\.3\.0", output)
         @test occursin(r"Updating `.+Manifest\.toml`", output)
@@ -207,26 +208,34 @@ end
         Pkg.Registry.add(Pkg.RegistrySpec[], io = devnull) # load reg before io capturing
         Pkg.activate(joinpath(@__DIR__, "test_packages", "Status"))
         io = PipeBuffer()
+        # The stdlibs are marked with `○` when their caches were not built with the flags the tests run with.
+        not_precompiled_info = "Info Packages marked with ○ are not precompiled."
+        readline_skip_precompiled_info(io) = (line = readline(io); strip(line) == not_precompiled_info ? readline(io) : line)
         Pkg.status(; io = io)
         @test occursin(r"Status `.+Project.toml`", readline(io))
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
-        @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
+        @test occursin(r"^[○ ]  \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test startswith(strip(readline(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
+        @test startswith(strip(readline_skip_precompiled_info(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
         Pkg.status(; io = io, mode = Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
         @test occursin(r"^→⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
-        @test occursin(r"^   \[2a0f44e3\] Base64", readline(io))
-        @test occursin(r"^   \[d6f4376e\] Markdown", readline(io))
+        @test occursin(r"^[○ ]  \[2a0f44e3\] Base64", readline(io))
+        @test occursin(r"^[○ ]  \[d6f4376e\] Markdown", readline(io))
         @test "Info Packages marked with → are not downloaded, use `instantiate` to download" == strip(readline(io))
-        @test startswith(strip(readline(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
+        @test startswith(strip(readline_skip_precompiled_info(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
         Pkg.instantiate(; io = devnull) # download Example
         Pkg.status(; io = io, mode = Pkg.PKGMODE_MANIFEST)
         @test occursin(r"Status `.+Manifest.toml`", readline(io))
-        @test occursin(r"^⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
-        @test occursin(r"^  \[2a0f44e3\] Base64", readline(io))
-        @test occursin(r"^  \[d6f4376e\] Markdown", readline(io))
+        @test occursin(r"^○⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
+        @test occursin(r"^[○ ]  \[2a0f44e3\] Base64", readline(io))
+        @test occursin(r"^[○ ]  \[d6f4376e\] Markdown", readline(io))
+        @test not_precompiled_info == strip(readline(io))
         @test startswith(strip(readline(io)), "Info Packages marked with ⌃ have new versions available. Use `status --outdated")
+        Pkg.precompile("Example"; io = devnull)
+        Pkg.status(; io = io)
+        @test occursin(r"Status `.+Project.toml`", readline(io))
+        @test occursin(r"^⌃ \[7876af07\] Example\s*v\d\.\d\.\d", readline(io))
     end
     # Manifest Status API
     isolate(loaded_depot = true) do

@@ -4582,7 +4582,6 @@ struct PackageStatusData
     downloaded::Bool
     upgradable::Bool
     heldback::Bool
-    precompiled::Bool
     compat_data::Union{Nothing, Tuple{Vector{String}, VersionNumber, VersionNumber}}
     changed::Bool
     extinfo::Union{Nothing, Vector{ExtInfo}}
@@ -4592,13 +4591,14 @@ end
 function print_status(
         env::EnvCache, old_env::Union{Nothing, EnvCache}, registries::Vector{Registry.RegistryInstance}, header::Symbol,
         uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, deprecated::Bool, extensions::Bool, io::IO,
-        mode::PackageMode, show_usagetips::Bool = true, updated_env::Union{Nothing, EnvCache} = nothing
+        mode::PackageMode, show_usagetips::Bool = true, updated_env::Union{Nothing, EnvCache} = nothing,
+        precompile_status::Bool = false
     )
     xs = diff_array(old_env, env; manifest, workspace)
     return print_status_entries(
         env, xs, registries, header, uuids, names;
         manifest, diff, ignore_indent, workspace, outdated, deprecated, extensions, io,
-        mode, show_usagetips, updated_env
+        mode, show_usagetips, updated_env, precompile_status
     )
 end
 
@@ -4606,7 +4606,8 @@ end
 @noinline function print_status_entries(
         env::EnvCache, xs, registries::Vector{Registry.RegistryInstance}, header::Symbol,
         uuids::Vector, names::Vector; manifest = true, diff = false, ignore_indent::Bool, workspace::Bool, outdated::Bool, deprecated::Bool, extensions::Bool, io::IO,
-        mode::PackageMode, show_usagetips::Bool = true, updated_env::Union{Nothing, EnvCache} = nothing
+        mode::PackageMode, show_usagetips::Bool = true, updated_env::Union{Nothing, EnvCache} = nothing,
+        precompile_status::Bool = false
     )
     not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.error_color()), "→", context = io)
     upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color = :green), "⌃", context = io)
@@ -4672,7 +4673,6 @@ end
 
     all_packages_downloaded = true
     no_packages_upgradable = true
-    all_packages_precompiled = true
     lpadding = 2
 
     package_statuses = PackageStatusData[]
@@ -4748,31 +4748,37 @@ end
             pkg_heldback = new_ver_avail && cinfo !== nothing && !pkg_upgradable && cinfo[1] != ["removed"]
         end
 
-        # Check precompilation status
-        pkg_precompiled = false
-        if pkg_downloaded && !isnothing(new)
-            pkgid = Base.PkgId(uuid, new.name)
-            pkg_precompiled = Base.isprecompiled(pkgid)
-        end
-
-        if (!pkg_downloaded || (pkg_downloaded && !pkg_precompiled)) && (pkg_upgradable || pkg_heldback)
+        if !pkg_downloaded && (pkg_upgradable || pkg_heldback)
             # allow space in the gutter for two icons on a single line
             lpadding = 3
         end
         all_packages_downloaded &= (!changed || pkg_downloaded)
         no_packages_upgradable &= (!changed || !pkg_upgradable)
-        all_packages_precompiled &= (!changed || pkg_precompiled)
 
-        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, pkg_precompiled, cinfo, changed, ext_info, deprecation_info))
+        push!(package_statuses, PackageStatusData(uuid, old, new, pkg_downloaded, pkg_upgradable, pkg_heldback, cinfo, changed, ext_info, deprecation_info))
     end
 
-    for pkg in package_statuses
+    # Not for diffs: those are printed right before the new packages get precompiled.
+    # Needs the batch method (Julia 1.15), one call per package is too slow.
+    precompiled = trues(length(package_statuses))
+    if precompile_status && !diff && hasmethod(Base.isprecompiled, Tuple{Vector{Base.PkgId}})
+        installed = findall(pkg -> pkg.downloaded, package_statuses)
+        pkgids = [Base.PkgId(pkg.uuid, pkg.new.name) for pkg in package_statuses[installed]]
+        precompiled[installed] = Base.isprecompiled(pkgids)
+        for i in installed
+            if !precompiled[i] && (package_statuses[i].upgradable || package_statuses[i].heldback)
+                lpadding = 3
+            end
+        end
+    end
+
+    for (pkg, pkg_precompiled) in zip(package_statuses, precompiled)
         pad = Ref(0)
         print_padding(x) = (print(io, x); pad[] += 1)
 
         if !pkg.downloaded
             print_padding(not_installed_indicator)
-        elseif pkg.downloaded && !pkg.precompiled
+        elseif !pkg_precompiled
             print_padding(not_precompiled_indicator)
         elseif lpadding > 2
             print_padding(" ")
@@ -4881,7 +4887,7 @@ end
     if !no_changes && !all_packages_downloaded
         printpkgstyle(io, :Info, "Packages marked with $not_installed_indicator are not downloaded, use `instantiate` to download", color = Base.info_color(), ignore_indent)
     end
-    if !no_changes && !all_packages_precompiled
+    if !all(precompiled)
         printpkgstyle(io, :Info, "Packages marked with $not_precompiled_indicator are not precompiled.", color = Base.info_color(), ignore_indent)
     end
     if outdated && updated_env !== nothing
@@ -4956,7 +4962,9 @@ function status(
         header = nothing, mode::PackageMode = PKGMODE_PROJECT, git_diff::Bool = false, env_diff = nothing, ignore_indent = true,
         io::IO, workspace::Bool = false, outdated::Bool = false, deprecated::Bool = false, extensions::Bool = false, show_usagetips::Bool = true,
         # for `outdated`: the environment as an update leaves it, when one resolves
-        updated_env::Union{Nothing, EnvCache} = nothing
+        updated_env::Union{Nothing, EnvCache} = nothing,
+        # mark packages that are not precompiled, `env` must be the active project
+        precompile_status::Bool = false
     )
     io == Base.devnull && return
     # if a package, print header
@@ -4987,10 +4995,10 @@ function status(
     diff = old_env !== nothing
     header = something(header, diff ? :Diff : :Status)
     if mode == PKGMODE_PROJECT || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest = false, diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, show_usagetips, updated_env)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; manifest = false, diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, show_usagetips, updated_env, precompile_status)
     end
     if mode == PKGMODE_MANIFEST || mode == PKGMODE_COMBINED
-        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, show_usagetips, updated_env)
+        print_status(env, old_env, registries, header, filter_uuids, filter_names; diff, ignore_indent, io, workspace, outdated, deprecated, extensions, mode, show_usagetips, updated_env, precompile_status)
     end
     if outdated && updated_env === nothing && !isempty(env.manifest.deps)
         printpkgstyle(
