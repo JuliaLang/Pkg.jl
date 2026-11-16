@@ -387,10 +387,10 @@ end
         end
     end
     @testset "syntax julia_version" begin
-        @testset "dropbuild applied: dev build number dropped" begin
-            # syntax.julia_version should drop the DEV build number to avoid manifest churn
+        @testset "defaults to the oldest edition" begin
+            # as Base does for a package with neither syntax.julia_version nor a julia compat
             p = Pkg.Types.Project()
-            @test Pkg.Operations.get_project_syntax_version(p) == Pkg.Operations.dropbuild(VERSION)
+            @test Pkg.Operations.get_project_syntax_version(p) == VersionNumber(Base.OLDEST_EDITION...)
         end
     end
 

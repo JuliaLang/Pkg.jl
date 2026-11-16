@@ -470,8 +470,10 @@ function update_manifest!(env::EnvCache, pkgs::Vector{PackageSpec}, deps_map, @n
     return record_project_hash(env, julia_version)
 end
 
+const OLDEST_SYNTAX_VERSION = VersionNumber(Base.OLDEST_EDITION...)
+
 """
-    get_project_syntax_version(p::Project, julia_version = VERSION) -> VersionNumber
+    get_project_syntax_version(p::Project) -> VersionNumber
 
 Extract the syntax version from a Project.
 
@@ -480,13 +482,13 @@ this precedence order:
 
 1. If `syntax.julia_version` is present in the Project.toml, use that value
 2. If `compat.julia` is specified, use the minimum version from the compat range
-3. Otherwise, default to `julia_version`, the Julia version the manifest is written for
+3. Otherwise, default to the oldest.
 
 This information is used to populate the `syntax.julia_version` field in the
 Manifest.toml, allowing Base's loading system to parse each package with the
 correct syntax version.
 """
-function get_project_syntax_version(p::Project, julia_version::Union{VersionNumber, Nothing} = VERSION)::VersionNumber
+function get_project_syntax_version(p::Project)::VersionNumber
     # First check syntax.julia_version entry in Project.other
     if p.julia_syntax_version !== nothing
         return p.julia_syntax_version
@@ -503,8 +505,8 @@ function get_project_syntax_version(p::Project, julia_version::Union{VersionNumb
         end
     end
 
-    # Finally, if neither of those are set, default to the Julia version
-    return dropbuild(something(julia_version, VERSION))
+    # Finally, if neither of those are set, default to the oldest edition
+    return OLDEST_SYNTAX_VERSION
 end
 
 # This has to be done after the packages have been downloaded
@@ -551,7 +553,7 @@ function fixups_from_projectfile!(ctx::Context; tmpdir::Union{Nothing, String} =
                 pkg.weakdeps = p.weakdeps
                 pkg.exts = p.exts
                 pkg.entryfile = p.entryfile
-                pkg.julia_syntax_version = get_project_syntax_version(p, ctx.julia_version)
+                pkg.julia_syntax_version = get_project_syntax_version(p)
 
                 for (name, _) in p.weakdeps
                     if !haskey(p.deps, name)
@@ -593,7 +595,7 @@ function reuse_project_info!(ctx::Context)
         old_entry === nothing && continue
         syntax_version = old_entry.julia_syntax_version
         (old_entry.tree_hash == entry.tree_hash && syntax_version !== nothing) || continue
-        syntax_version == dropbuild(something(ctx.julia_version, VERSION)) ||
+        syntax_version == OLDEST_SYNTAX_VERSION ||
             syntax_version == registry_julia_compat_lower(ctx.registries, uuid, entry.version) || continue
         entry.weakdeps = copy(old_entry.weakdeps)
         entry.exts = copy(old_entry.exts)
