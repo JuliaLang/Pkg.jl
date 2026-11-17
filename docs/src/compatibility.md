@@ -30,6 +30,9 @@ and `julia` one for the running version of Julia, use `compat --current`:
 
 `compat Example --current` sets the entry of `Example` alone, replacing any it already has.
 
+!!! compat "Julia 1.13"
+    `compat --current` requires at least Julia 1.13.
+
 !!! info
     The rules below apply to the `Project.toml` file; for registries, see [Registry Compat.toml](@ref).
 

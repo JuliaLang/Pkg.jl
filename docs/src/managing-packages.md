@@ -213,6 +213,9 @@ before it is released:
 
 These are the same as giving the repository URL with `#mybranch`, `#025cf7e` and `#pull/123/head`.
 
+!!! compat "Julia 1.13"
+    Links to pull requests require at least Julia 1.13.
+
 If you want to add a package using the SSH-based `git` protocol, you have to use quotes because the URL contains a `@`. For example,
 ```julia-repl
 (@v{{VERSION}}) pkg> add "git@github.com:fredrikekre/ImportMacros.jl.git"
