@@ -172,6 +172,19 @@ To go back to tracking the registry version of `Example`, the command `free` is 
   [7876af07] ~ Example v0.5.5 `https://github.com/JuliaLang/Example.jl.git#master` ⇒ v0.5.5
 ```
 
+Adding a package may change the versions of packages that are already in the environment, when that
+is needed to find a set of versions that work together. To keep every package as it is and add only
+versions that are already installed, so that nothing new is downloaded, use `--preserve=installed`:
+
+```julia-repl
+(@v{{VERSION}}) pkg> add --preserve=installed Example
+```
+
+This fails if no such versions work together. `--preserve=tiered_installed` tries it first and
+otherwise falls back to the default; setting the environment variable
+`JULIA_PKG_PRESERVE_TIERED_INSTALLED=true` makes that the default. `pkg> ?add` describes the other
+`--preserve` options.
+
 ### Adding unregistered packages
 
 If a package is not in a registry, it can be added by specifying a URL to the Git repository:
@@ -188,6 +201,20 @@ If a package is not in a registry, it can be added by specifying a URL to the Gi
 ```
 
 For unregistered packages, we could have given a branch name (or commit SHA1) to track using `#`, just like for registered packages.
+
+A link to a branch, a commit or a pull request on GitHub works too, which is handy for trying out a fix
+before it is released:
+
+```julia-repl
+(@v{{VERSION}}) pkg> add https://github.com/JuliaLang/Example.jl/tree/mybranch
+(@v{{VERSION}}) pkg> add https://github.com/JuliaLang/Example.jl/commit/025cf7e
+(@v{{VERSION}}) pkg> add https://github.com/JuliaLang/Example.jl/pull/123
+```
+
+These are the same as giving the repository URL with `#mybranch`, `#025cf7e` and `#pull/123/head`.
+
+!!! compat "Julia 1.13"
+    Links to pull requests require at least Julia 1.13.
 
 If you want to add a package using the SSH-based `git` protocol, you have to use quotes because the URL contains a `@`. For example,
 ```julia-repl
