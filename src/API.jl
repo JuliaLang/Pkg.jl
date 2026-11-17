@@ -1682,7 +1682,10 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mod
     else
         # `outdated` says what an update would do, which takes resolving one
         updated_env = outdated ? update_preview(ctx; workspace) : nothing
-        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, deprecated, extensions, workspace, updated_env)
+        # `Base.isprecompiled` answers for the active project
+        active_project = Base.active_project()
+        precompile_status = active_project !== nothing && safe_realpath(active_project) == ctx.env.project_file
+        Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, deprecated, extensions, workspace, updated_env, precompile_status)
     end
     return nothing
 end
