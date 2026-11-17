@@ -24,6 +24,10 @@ let
                     repl = REPL.LineEditREPL(term, true)
                     REPL.run_repl(repl)
                     repl_init(repl)
+                    # The REPL calls the `]` handler and `on_done` through `invokelatest`, so run them here
+                    s = REPL.LineEdit.init_state(term, repl.interface)
+                    REPL.LineEdit.match_input(repl.interface.modes[1].keymap_dict, s, IOBuffer("]"))(s, repl)
+                    REPL.LineEdit.mode(s).on_done(s, IOBuffer(), false)
                 end
             end
             copy!(DEPOT_PATH, original_depot_path)
@@ -32,6 +36,7 @@ let
             Base.precompile(Tuple{typeof(REPL.LineEdit.complete_line), REPLExt.PkgCompletionProvider, REPL.LineEdit.PromptState})
             Base.precompile(Tuple{typeof(REPL.REPLCompletions.completion_text), REPL.REPLCompletions.PackageCompletion})
             Base.precompile(Tuple{typeof(REPLExt.on_done), REPL.LineEdit.MIState, Base.GenericIOBuffer{Memory{UInt8}}, Bool, REPL.LineEditREPL})
+            Base.precompile(Tuple{typeof(REPLExt.repl_init_hook), REPL.LineEditREPL})
             return Base.precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:hint,), Tuple{Bool}}, typeof(REPL.LineEdit.complete_line), REPLExt.PkgCompletionProvider, REPL.LineEdit.PromptState})
         end
     end
