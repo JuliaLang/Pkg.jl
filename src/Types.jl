@@ -37,9 +37,15 @@ include("HistoricalStdlibs.jl")
 
 deepcopy_toml(x) = x
 function deepcopy_toml(@nospecialize(x::Vector))
+    T = eltype(x)
+    # elements that are neither tables nor arrays are shared, as before
+    isconcretetype(T) && !(T <: Union{Vector, Dict}) && return copy(x)
+    return deepcopy_toml_elements(x)
+end
+function deepcopy_toml_elements(x::Vector)
     d = similar(x)
-    for (i, v) in enumerate(x)
-        d[i] = deepcopy_toml(v)
+    for i in eachindex(x)
+        d[i] = deepcopy_toml_value(x[i])
     end
     return d
 end
@@ -47,9 +53,14 @@ function deepcopy_toml(x::Dict{String, Any})
     d = Dict{String, Any}()
     sizehint!(d, length(x))
     for (k, v) in x
-        d[k] = deepcopy_toml(v)
+        d[k] = deepcopy_toml_value(v)
     end
     return d
+end
+function deepcopy_toml_value(@nospecialize(v))
+    v isa Dict{String, Any} && return deepcopy_toml(v)
+    v isa Vector && return deepcopy_toml(v)
+    return v
 end
 
 # See loading.jl
@@ -863,7 +874,7 @@ function _write_env_usage(source_files, usage_file::String, timestamp::DateTime)
                     Dates.now()
                 end
             end
-            usage[k] = [Dict("time" => maximum(times))]
+            usage[k] = [Dict("time" => maximum(times)::Dates.DateTime)]
         end
 
         try
