@@ -260,6 +260,25 @@ function archive_format_to_extension(filepath::AbstractString)::String
     end
 end
 
+# Decompress a downloaded registry and verify its git tree hash. Returns the files of
+# the registry, or `nothing` if verification failed.
+function read_verified_registry(compressed_tar::AbstractString, expected_hash::Base.SHA1)
+    files, tree_hash = try
+        uncompress_registry_tree_hash(compressed_tar)
+    catch err
+        @warn "unable to decompress and read archive" exception = err
+        return nothing
+    end
+    if tree_hash === nothing
+        # Let Tar hash the entries that `uncompress_registry_tree_hash` does not support.
+        verify_archive_tree_hash(compressed_tar, expected_hash) || return nothing
+    elseif tree_hash != expected_hash
+        @warn "Tarball content does not match expected hash (git-tree-sha1)" tarball = compressed_tar expected = expected_hash computed = tree_hash
+        return nothing
+    end
+    return files
+end
+
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{String, Vector{String}} = depots())
     # Use the first depot as the target
     target_depot = depots1(depots)
@@ -294,19 +313,22 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
                 end
                 _hash = pkg_server_url_hash(url)
-                if !verify_archive_tree_hash(tmp, _hash)
+                files = read_verified_registry(tmp, _hash)
+                if files === nothing
                     Pkg.Types.pkgerror("unable to verify download from $url")
                 end
                 if reg.name === nothing
                     # Need to look up the registry name here
-                    reg_unc = uncompress_registry(tmp)
-                    reg.name = TOML.parse(reg_unc["Registry.toml"])["name"]::String
+                    reg.name = TOML.parse(files["Registry.toml"])["name"]::String
                 end
                 # Detect what we actually got from the server (defensive against servers that don't support zstd yet)
                 ext = archive_format_to_extension(tmp)
-                mv(tmp, joinpath(regdir, reg.name * ext); force = true)
+                compressed_tar = joinpath(regdir, reg.name * ext)
+                mv(tmp, compressed_tar; force = true)
                 reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(_hash), "path" => reg.name * ext)
                 atomic_toml_write(joinpath(regdir, reg.name * ".toml"), reg_info)
+                # Build the cache now, rather than decompressing the tarball again on first use
+                load_or_build_registry_cache(compressed_tar, _hash; files)
                 registry_update_log[string(reg.uuid)] = now()
                 printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
             else
@@ -587,7 +609,8 @@ end
                                 @goto done_tarball_read
                             end
                             hash = pkg_server_url_hash(url)
-                            if !verify_archive_tree_hash(tmp, hash)
+                            files = read_verified_registry(tmp, hash)
+                            if files === nothing
                                 push!(errors, (reg.path, "failed to verify download from $(url)"))
                                 @goto done_tarball_read
                             end
@@ -599,9 +622,12 @@ end
                             # Detect what we actually got from the server (defensive against servers that don't support zstd yet)
                             format = detect_archive_format(tmp)
                             ext = format == "zstd" ? ".tar.zst" : ".tar.gz"
-                            mv(tmp, joinpath(registry_path, reg.name * ext); force = true)
+                            compressed_tar = joinpath(registry_path, reg.name * ext)
+                            mv(tmp, compressed_tar; force = true)
                             reg_info = Dict("uuid" => string(reg.uuid), "git-tree-sha1" => string(hash), "path" => reg.name * ext)
                             atomic_toml_write(joinpath(registry_path, reg.name * ".toml"), reg_info)
+                            # Build the cache now, rather than decompressing the tarball again on first use
+                            load_or_build_registry_cache(compressed_tar, hash; files)
                             registry_update_log[string(reg.uuid)] = now()
                             @label done_tarball_read
                         else
