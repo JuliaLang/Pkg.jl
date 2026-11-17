@@ -853,4 +853,57 @@ end
     end
 end
 
+@testset "Manifest apps" begin
+    function read_apps_manifest(apps_toml::String)
+        toml = """
+        manifest_format = "2.0"
+
+        [[deps.Foo]]
+        uuid = "7876af07-990d-54b4-ab0e-23690620f79a"
+        version = "0.1.0"
+
+        $apps_toml
+        """
+        return Pkg.Types.read_manifest(IOBuffer(toml))
+    end
+    foo = UUID("7876af07-990d-54b4-ab0e-23690620f79a")
+
+    m = read_apps_manifest(
+        """
+        [deps.Foo.apps.foo]
+        julia_command = "julia"
+        julia_flags = ["--threads=2", "--color=yes"]
+
+        [deps.Foo.apps.bar]
+        julia_command = "julia"
+        submodule = "Bar"
+        julia_flags = []
+
+        [deps.Foo.apps.baz]
+        julia_command = "julia"
+        """
+    )
+    apps = m[foo].apps
+    @test apps["foo"].julia_flags == ["--threads=2", "--color=yes"]
+    @test apps["foo"].submodule === nothing
+    @test apps["foo"].julia_flags !== apps["foo"].other["julia_flags"]
+    @test apps["bar"].julia_flags == String[]
+    @test apps["bar"].julia_flags !== apps["bar"].other["julia_flags"]
+    @test apps["bar"].submodule == "Bar"
+    @test apps["baz"].julia_flags == String[]
+    @test_throws Pkg.Types.PkgError read_apps_manifest(
+        """
+        [deps.Foo.apps]
+        foo = "julia"
+        """
+    )
+    @test_throws Pkg.Types.PkgError read_apps_manifest(
+        """
+        [deps.Foo.apps.foo]
+        julia_command = "julia"
+        julia_flags = "--threads=2"
+        """
+    )
+end
+
 end # module
