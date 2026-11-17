@@ -1009,14 +1009,14 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         end
 
         artifact_path_list = String[]
-        for name in keys(artifact_dict)
-            getpaths(meta) = artifact_paths(SHA1(hex2bytes(meta["git-tree-sha1"])))
-            if isa(artifact_dict[name], Vector)
-                for platform_meta in artifact_dict[name]
-                    append!(artifact_path_list, getpaths(platform_meta))
+        getpaths(meta::Dict{String, Any}) = artifact_paths(SHA1(hex2bytes(meta["git-tree-sha1"]::String)))
+        for entry in values(artifact_dict)
+            if entry isa Vector
+                for platform_meta in entry
+                    append!(artifact_path_list, getpaths(platform_meta::Dict{String, Any}))
                 end
             else
-                append!(artifact_path_list, getpaths(artifact_dict[name]))
+                append!(artifact_path_list, getpaths(entry::Dict{String, Any}))
             end
         end
         return artifact_path_list
