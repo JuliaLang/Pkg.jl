@@ -186,181 +186,187 @@ end
 end
 
 @testset "artifact selector environment relocation" begin
-    mktempdir() do root
-        uuid = "b8df255f-45df-4e3b-8d04-6a7f7496dbd4"
-        manifest = joinpath(root, "custom-manifest.toml")
-        write(
-            manifest, """
-            manifest_format = "2.0"
-            [[deps.ArtifactSelectorDependency]]
-            uuid = "$uuid"
-            version = "0.1.0"
-            path = "dependency"
-            """
-        )
-        write(
-            joinpath(root, "Project.toml"), """
-            manifest = $(repr(manifest))
-            [deps]
-            ArtifactSelectorDependency = "$uuid"
-            [preferences.ArtifactSelectorDependency]
-            inherited = "root"
-            overridden = "root"
-            """
-        )
-        pkgroot = joinpath(root, "Consumer")
-        mkpath(joinpath(pkgroot, ".pkg"))
-        write(joinpath(pkgroot, "Project.toml"), "[deps]\nArtifactSelectorDependency = \"$uuid\"\n")
-        script = joinpath(pkgroot, ".pkg", "select_artifacts.jl")
-        artifacts = joinpath(pkgroot, "Artifacts.toml")
-        write(artifacts, "")
-        write(
-            script, """
-            using TOML
-            manifest = TOML.parsefile(Base.project_file_manifest_path(Base.active_project()))
-            TOML.print(Dict(
-                "version" => only(manifest["deps"]["ArtifactSelectorDependency"])["version"],
-                "preferences" => Base.get_preferences(Base.UUID("$uuid")),
-            ))
-            """
-        )
-        function select(env)
-            Pkg.Operations.with_resolved_artifact_env(env) do project
-                Pkg.Operations.run_artifact_selector(script, artifacts, HostPlatform(); selector_project = project, env_key = nothing)
+    isolate() do
+        mktempdir() do root
+            uuid = "b8df255f-45df-4e3b-8d04-6a7f7496dbd4"
+            manifest = joinpath(root, "custom-manifest.toml")
+            write(
+                manifest, """
+                manifest_format = "2.0"
+                [[deps.ArtifactSelectorDependency]]
+                uuid = "$uuid"
+                version = "0.1.0"
+                path = "dependency"
+                """
+            )
+            write(
+                joinpath(root, "Project.toml"), """
+                manifest = $(repr(manifest))
+                [deps]
+                ArtifactSelectorDependency = "$uuid"
+                [preferences.ArtifactSelectorDependency]
+                inherited = "root"
+                overridden = "root"
+                """
+            )
+            pkgroot = joinpath(root, "Consumer")
+            mkpath(joinpath(pkgroot, ".pkg"))
+            write(joinpath(pkgroot, "Project.toml"), "[deps]\nArtifactSelectorDependency = \"$uuid\"\n")
+            script = joinpath(pkgroot, ".pkg", "select_artifacts.jl")
+            artifacts = joinpath(pkgroot, "Artifacts.toml")
+            write(artifacts, "")
+            write(
+                script, """
+                using TOML
+                manifest = TOML.parsefile(Base.project_file_manifest_path(Base.active_project()))
+                TOML.print(Dict(
+                    "version" => only(manifest["deps"]["ArtifactSelectorDependency"])["version"],
+                    "preferences" => Base.get_preferences(Base.UUID("$uuid")),
+                ))
+                """
+            )
+            function select(env)
+                Pkg.Operations.with_resolved_artifact_env(env) do project
+                    Pkg.Operations.run_artifact_selector(script, artifacts, HostPlatform(); selector_project = project, env_key = nothing)
+                end
             end
-        end
 
-        env = Pkg.Types.EnvCache(joinpath(root, "Project.toml"))
-        env.manifest[Base.UUID(uuid)].version = v"0.2.0"
-        @test select(env)["version"] == "0.2.0"
-        @test only(TOML.parsefile(manifest)["deps"]["ArtifactSelectorDependency"])["version"] == "0.1.0"
+            env = Pkg.Types.EnvCache(joinpath(root, "Project.toml"))
+            env.manifest[Base.UUID(uuid)].version = v"0.2.0"
+            @test select(env)["version"] == "0.2.0"
+            @test only(TOML.parsefile(manifest)["deps"]["ArtifactSelectorDependency"])["version"] == "0.1.0"
 
-        # A workspace member shares its parent's manifest and inherits its preferences.
-        child = joinpath(root, "member")
-        mkpath(child)
-        open(joinpath(root, "Project.toml"), "a") do io
-            println(io, "\n[workspace]\nprojects = [\"member\"]")
+            # A workspace member shares its parent's manifest and inherits its preferences.
+            child = joinpath(root, "member")
+            mkpath(child)
+            open(joinpath(root, "Project.toml"), "a") do io
+                println(io, "\n[workspace]\nprojects = [\"member\"]")
+            end
+            cp(manifest, joinpath(root, "Manifest.toml"))
+            write(
+                joinpath(child, "Project.toml"), """
+                [deps]
+                ArtifactSelectorDependency = "$uuid"
+                """
+            )
+            write(
+                joinpath(child, "LocalPreferences.toml"), """
+                [ArtifactSelectorDependency]
+                overridden = "child"
+                """
+            )
+            env = Pkg.Types.EnvCache(joinpath(child, "Project.toml"))
+            env.manifest[Base.UUID(uuid)].version = v"0.2.0"
+            selected = select(env)
+            @test selected["version"] == "0.2.0"
+            @test selected["preferences"] == Dict("inherited" => "root", "overridden" => "child")
+            key = Pkg.Operations.selector_env_key(env)
+            write(
+                joinpath(root, "LocalPreferences.toml"), """
+                [ArtifactSelectorDependency]
+                inherited = "changed"
+                """
+            )
+            @test Pkg.Operations.selector_env_key(env) != key
+            @test select(env)["preferences"]["inherited"] == "changed"
         end
-        cp(manifest, joinpath(root, "Manifest.toml"))
-        write(
-            joinpath(child, "Project.toml"), """
-            [deps]
-            ArtifactSelectorDependency = "$uuid"
-            """
-        )
-        write(
-            joinpath(child, "LocalPreferences.toml"), """
-            [ArtifactSelectorDependency]
-            overridden = "child"
-            """
-        )
-        env = Pkg.Types.EnvCache(joinpath(child, "Project.toml"))
-        env.manifest[Base.UUID(uuid)].version = v"0.2.0"
-        selected = select(env)
-        @test selected["version"] == "0.2.0"
-        @test selected["preferences"] == Dict("inherited" => "root", "overridden" => "child")
-        key = Pkg.Operations.selector_env_key(env)
-        write(
-            joinpath(root, "LocalPreferences.toml"), """
-            [ArtifactSelectorDependency]
-            inherited = "changed"
-            """
-        )
-        @test Pkg.Operations.selector_env_key(env) != key
-        @test select(env)["preferences"]["inherited"] == "changed"
     end
 end
 
 @testset "artifact selector dependency identity" begin
-    mktempdir() do root
-        # Two packages share a name. The active project depends on one and the hook's
-        # package on the other; the hook must get the one from its own [deps].
-        function write_dependency(dir, uuid, origin)
-            mkpath(joinpath(dir, "src"))
-            write(joinpath(dir, "Project.toml"), "name = \"Dep\"\nuuid = \"$uuid\"\n")
-            return write(joinpath(dir, "src", "Dep.jl"), "module Dep\nconst origin = $(repr(origin))\nend\n")
-        end
-        user_uuid = "1e8a6f17-4a4f-4b6c-9a4b-2f4a0b2a5d01"
-        hook_uuid = "5c3d2b21-8f2e-4d1a-b6e5-7a9c0d1e2f02"
-        write_dependency(joinpath(root, "user"), user_uuid, "user")
-        write_dependency(joinpath(root, "hook"), hook_uuid, "hook")
-        write(joinpath(root, "Project.toml"), "[deps]\nDep = \"$user_uuid\"\n")
-        write(
-            joinpath(root, "Manifest.toml"), """
-            manifest_format = "2.0"
-            [[deps.Dep]]
-            uuid = "$user_uuid"
-            path = "user"
-            [[deps.Dep]]
-            uuid = "$hook_uuid"
-            path = "hook"
-            """
-        )
-        consumer = joinpath(root, "Consumer")
-        mkpath(joinpath(consumer, ".pkg"))
-        write(
-            joinpath(consumer, "Project.toml"), """
-            name = "Consumer"
-            uuid = "9b7e6d5c-4a3b-4c2d-8e1f-0a9b8c7d6e03"
-            [deps]
-            Dep = "$hook_uuid"
-            """
-        )
-        artifacts_toml = joinpath(consumer, "Artifacts.toml")
-        write(artifacts_toml, "")
-        selector = joinpath(consumer, ".pkg", "select_artifacts.jl")
-        write(selector, "using Dep, TOML\nTOML.print(Dict(\"origin\" => Dep.origin))\n")
-        env = Pkg.Types.EnvCache(joinpath(root, "Project.toml"))
-        selected = Pkg.Operations.with_resolved_artifact_env(env) do project
-            Pkg.Operations.run_artifact_selector(
-                selector, artifacts_toml, HostPlatform(); selector_project = project, env_key = nothing
+    isolate() do
+        mktempdir() do root
+            # Two packages share a name. The active project depends on one and the hook's
+            # package on the other; the hook must get the one from its own [deps].
+            function write_dependency(dir, uuid, origin)
+                mkpath(joinpath(dir, "src"))
+                write(joinpath(dir, "Project.toml"), "name = \"Dep\"\nuuid = \"$uuid\"\n")
+                return write(joinpath(dir, "src", "Dep.jl"), "module Dep\nconst origin = $(repr(origin))\nend\n")
+            end
+            user_uuid = "1e8a6f17-4a4f-4b6c-9a4b-2f4a0b2a5d01"
+            hook_uuid = "5c3d2b21-8f2e-4d1a-b6e5-7a9c0d1e2f02"
+            write_dependency(joinpath(root, "user"), user_uuid, "user")
+            write_dependency(joinpath(root, "hook"), hook_uuid, "hook")
+            write(joinpath(root, "Project.toml"), "[deps]\nDep = \"$user_uuid\"\n")
+            write(
+                joinpath(root, "Manifest.toml"), """
+                manifest_format = "2.0"
+                [[deps.Dep]]
+                uuid = "$user_uuid"
+                path = "user"
+                [[deps.Dep]]
+                uuid = "$hook_uuid"
+                path = "hook"
+                """
             )
-        end
-        @test selected["origin"] == "hook"
-    end
-end
-
-@testset "artifact selectors cannot load their own package" begin
-    mktempdir() do root
-        # The active project makes the hook's package loadable, but its artifacts are
-        # selected by that very hook, so loading it must fail rather than pick up
-        # whatever artifacts happen to be installed.
-        pkg = joinpath(root, "SelfLoader")
-        pkg_uuid = "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c05"
-        mkpath(joinpath(pkg, "src"))
-        mkpath(joinpath(pkg, ".pkg"))
-        write(
-            joinpath(pkg, "Project.toml"), """
-            name = "SelfLoader"
-            uuid = "$pkg_uuid"
-            [deps]
-            TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
-            """
-        )
-        write(joinpath(pkg, "src", "SelfLoader.jl"), "module SelfLoader end\n")
-        artifacts_toml = joinpath(pkg, "Artifacts.toml")
-        write(artifacts_toml, "")
-        selector = joinpath(pkg, ".pkg", "select_artifacts.jl")
-        write(joinpath(root, "Project.toml"), "[deps]\nSelfLoader = \"$pkg_uuid\"\n")
-        write(
-            joinpath(root, "Manifest.toml"), """
-            manifest_format = "2.0"
-            [[deps.SelfLoader]]
-            uuid = "$pkg_uuid"
-            path = "SelfLoader"
-            """
-        )
-        env = Pkg.Types.EnvCache(joinpath(root, "Project.toml"))
-        function select(hook)
-            write(selector, hook)
-            return Pkg.Operations.with_resolved_artifact_env(env) do project
+            consumer = joinpath(root, "Consumer")
+            mkpath(joinpath(consumer, ".pkg"))
+            write(
+                joinpath(consumer, "Project.toml"), """
+                name = "Consumer"
+                uuid = "9b7e6d5c-4a3b-4c2d-8e1f-0a9b8c7d6e03"
+                [deps]
+                Dep = "$hook_uuid"
+                """
+            )
+            artifacts_toml = joinpath(consumer, "Artifacts.toml")
+            write(artifacts_toml, "")
+            selector = joinpath(consumer, ".pkg", "select_artifacts.jl")
+            write(selector, "using Dep, TOML\nTOML.print(Dict(\"origin\" => Dep.origin))\n")
+            env = Pkg.Types.EnvCache(joinpath(root, "Project.toml"))
+            selected = Pkg.Operations.with_resolved_artifact_env(env) do project
                 Pkg.Operations.run_artifact_selector(
                     selector, artifacts_toml, HostPlatform(); selector_project = project, env_key = nothing
                 )
             end
+            @test selected["origin"] == "hook"
         end
-        @test select("using TOML\nTOML.print(Dict(\"ok\" => true))\n") == Dict("ok" => true)
-        @test_throws ProcessFailedException select("using SelfLoader, TOML\nTOML.print(Dict(\"ok\" => true))\n")
+    end
+end
+
+@testset "artifact selectors cannot load their own package" begin
+    isolate() do
+        mktempdir() do root
+            # The active project makes the hook's package loadable, but its artifacts are
+            # selected by that very hook, so loading it must fail rather than pick up
+            # whatever artifacts happen to be installed.
+            pkg = joinpath(root, "SelfLoader")
+            pkg_uuid = "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c05"
+            mkpath(joinpath(pkg, "src"))
+            mkpath(joinpath(pkg, ".pkg"))
+            write(
+                joinpath(pkg, "Project.toml"), """
+                name = "SelfLoader"
+                uuid = "$pkg_uuid"
+                [deps]
+                TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+                """
+            )
+            write(joinpath(pkg, "src", "SelfLoader.jl"), "module SelfLoader end\n")
+            artifacts_toml = joinpath(pkg, "Artifacts.toml")
+            write(artifacts_toml, "")
+            selector = joinpath(pkg, ".pkg", "select_artifacts.jl")
+            write(joinpath(root, "Project.toml"), "[deps]\nSelfLoader = \"$pkg_uuid\"\n")
+            write(
+                joinpath(root, "Manifest.toml"), """
+                manifest_format = "2.0"
+                [[deps.SelfLoader]]
+                uuid = "$pkg_uuid"
+                path = "SelfLoader"
+                """
+            )
+            env = Pkg.Types.EnvCache(joinpath(root, "Project.toml"))
+            function select(hook)
+                write(selector, hook)
+                return Pkg.Operations.with_resolved_artifact_env(env) do project
+                    Pkg.Operations.run_artifact_selector(
+                        selector, artifacts_toml, HostPlatform(); selector_project = project, env_key = nothing
+                    )
+                end
+            end
+            @test select("using TOML\nTOML.print(Dict(\"ok\" => true))\n") == Dict("ok" => true)
+            @test_throws ProcessFailedException select("using SelfLoader, TOML\nTOML.print(Dict(\"ok\" => true))\n")
+        end
     end
 end
 
@@ -462,15 +468,10 @@ end
         Pkg.instantiate()
         @test selector_runs() == 3
 
-        depot_env = "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
-
         # Loading the dependency from the selector precompiled it. That cache must be
         # usable at the default optimization level, or it is recompiled on first use.
         dependency_id = "Base.PkgId(Base.UUID(\"b8df255f-45df-4e3b-8d04-6a7f7496dbd4\"), \"ArtifactSelectorDependency\")"
-        cmd = addenv(
-            `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e "print(Base.isprecompiled($dependency_id))"`,
-            depot_env,
-        )
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e "print(Base.isprecompiled($dependency_id))"`
         @test read(cmd, String) == "true"
 
         # Instantiation checks a dependency's static artifacts before running the
@@ -486,10 +487,7 @@ end
         @test artifact_exists(selected["new"].hash)
         @test selector_runs() == runs_before + 1
 
-        cmd = addenv(
-            `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e 'using ArtifactSelectorWithDependency; print(ArtifactSelectorWithDependency.selected_artifact())'`,
-            depot_env,
-        )
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$(project_path) -e 'using ArtifactSelectorWithDependency; print(ArtifactSelectorWithDependency.selected_artifact())'`
         @test chomp(read(cmd, String)) == "new"
 
         # Exercise loading through the consumer's [deps], without a direct dependency
@@ -971,7 +969,6 @@ end
             # because it feeds the right `Platform` object through to `@artifact_str()`
             cmd = addenv(
                 `$(Base.julia_cmd()) --color=yes --code-coverage=none --project=$(ap_path) -e 'using AugmentedPlatform; print(get_artifact_dir("gooblebox"))'`,
-                "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":"),
                 "FLOOBLECRANK" => flooblecrank_status
             )
             using_output = chomp(String(read(cmd)))
