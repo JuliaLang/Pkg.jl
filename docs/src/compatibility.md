@@ -21,6 +21,15 @@ The format of the version specifier is described in detail below.
 !!! info
     Use the command `compat` to edit the compat entries in the Pkg REPL, or manually edit the project file.
 
+To give every dependency that has no compat entry yet one that allows the version in the manifest,
+and `julia` one for the running version of Julia, use `compat --current`:
+
+```julia-repl
+(@v{{VERSION}}) pkg> compat --current
+```
+
+`compat Example --current` sets the entry of `Example` alone, replacing any it already has.
+
 !!! info
     The rules below apply to the `Project.toml` file; for registries, see [Registry Compat.toml](@ref).
 
