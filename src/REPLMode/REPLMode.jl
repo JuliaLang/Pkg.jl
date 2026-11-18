@@ -6,7 +6,7 @@ module REPLMode
 
 using Markdown, UUIDs, Dates
 
-import ..OFFLINE_MODE, ..linewrap, ..pathrepr, ..IN_REPL_MODE
+import ..OFFLINE_MODE, ..linewrap, ..pathrepr, ..IN_REPL_MODE, ..trimmed
 using ..Types, ..Operations, ..API, ..Registry, ..Resolve, ..Apps
 import ..stdout_f, ..stderr_f
 
@@ -73,7 +73,7 @@ end
 # Arguments #
 #-----------#
 struct ArgSpec
-    count::Pair
+    count::Pair{Int, Float64}
     parser::Function
 end
 
@@ -116,7 +116,7 @@ function CommandSpec(dec::CommandDeclaration)
     api === nothing         && error("Supply API dispatch function for `$(name)`")
     # TODO assert isapplicable completions dict, string
     return CommandSpec(
-        name, short_name, api, should_splat, ArgSpec(arg_count, arg_parser),
+        name, short_name, api, should_splat, ArgSpec(Pair{Int, Float64}(arg_count.first, arg_count.second), arg_parser),
         OptionSpecs(option_spec), completions, description, help
     )
 end
@@ -331,9 +331,8 @@ function api_options(
     enforce_option(options, specs)
     for option in options
         spec = specs[option.val]
-        api_opts[spec.api.first] = spec.takes_arg ?
-            spec.api.second(option.argument) :
-            spec.api.second
+        api_opts[spec.api.first] = trimmed() ? trimmed_option_value(spec, option) :
+            spec.takes_arg ? spec.api.second(option.argument) : spec.api.second
     end
     return api_opts
 end
@@ -396,8 +395,9 @@ function Command(statement::Statement)::Command
     options = api_options(statement.options, statement.spec.option_specs)
     # arguments
     arg_spec = statement.spec.argument_spec
-    arguments = arg_spec.parser(statement.arguments, options)
-    if !((arg_spec.count.first <= length(arguments) <= arg_spec.count.second)::Bool)
+    arguments = trimmed() ? trimmed_parse_arguments(statement.spec, statement.arguments, options) :
+        arg_spec.parser(statement.arguments, options)
+    if !(arg_spec.count.first <= length(arguments) <= arg_spec.count.second)
         pkgerror("Wrong number of arguments")
     end
     return Command(statement.spec, options, arguments)
@@ -430,6 +430,7 @@ end
 function do_cmd(command::Command, io)
     # Set the scoped value to indicate we're in REPL mode
     return Base.ScopedValues.@with IN_REPL_MODE => true begin
+        trimmed() && return trimmed_do_cmd(command, io)
         # REPL specific commands
         command.spec === SPECS["package"]["help"] && return Base.invokelatest(do_help!, command, io)
         # API commands
@@ -492,6 +493,7 @@ end
 ########
 include("argument_parsers.jl")
 include("command_declarations.jl")
+include("trimmed.jl")
 const SPECS = CompoundSpecs(compound_declarations)
 
 ########

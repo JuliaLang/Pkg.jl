@@ -2673,7 +2673,7 @@ function gen_build_code(
     code = """
     $(Base.load_path_setup_code(false))
     if $(load_path !== nothing)
-        append!(empty!(Base.LOAD_PATH), $(repr(load_path)))
+        append!(empty!(Base.LOAD_PATH), $(load_path === nothing ? "nothing" : string("[", join(map(repr, load_path), ", "), "]")))
     end
     cd($(repr(dirname(build_file))))
     include($(repr(build_file)))
@@ -2683,12 +2683,12 @@ function gen_build_code(
     # *unless* the parent julia session is started with --startup=yes explicitly.
     startup_flag = Base.JLOptions().startupfile == 1 ? "yes" : "no"
     project = inherit_project ? Base.active_project() : project
-    return ```
-    $(Base.julia_cmd()) $(optimize ? `` : `-O0`) --color=no --history-file=no
-    --startup-file=$startup_flag
-    $(project === nothing ? `` : `--project=$project`)
-    --eval $code
-    ```
+    exec = copy(Pkg.julia_cmd().exec)
+    optimize || push!(exec, "-O0")
+    push!(exec, "--color=no", "--history-file=no", "--startup-file=$startup_flag")
+    project === nothing || push!(exec, "--project=$project")
+    push!(exec, "--eval", code)
+    return Cmd(exec)
 end
 
 with_load_path(f::Function, new_load_path::String) = with_load_path(f, [new_load_path])
@@ -4809,7 +4809,7 @@ end
             print_padding(" ")
         end
 
-        printstyled(io, "[", string(pkg.uuid)[1:8], "] "; color = :light_black)
+        printstyled(io, "[$(string(pkg.uuid)[1:8])] "; color = :light_black)
 
         diff ? print_diff(io, pkg.old, pkg.new) : print_single(io, pkg.new)
 

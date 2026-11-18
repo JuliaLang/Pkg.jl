@@ -25,7 +25,10 @@ function cli_help(io::IO)
         label = spec.short_name === nothing ? name : string(name, ", ", super, spec.short_name)
         label => spec.description
     end
-    width = maximum(textwidth ∘ first, commands)
+    width = 0
+    for (label, _) in commands
+        width = max(width, textwidth(label))
+    end
     for (label, description) in commands
         print(io, "  ")
         printstyled(io, rpad(label, width); color = :cyan)
@@ -80,7 +83,7 @@ function cli(args)
             cli_help(io)
             return 0
         elseif arg in ("-v", "--version")
-            println(io, "pkg ", pkgversion(Pkg), " (julia ", VERSION, ")")
+            println(io, "pkg ", PKG_VERSION, " (julia ", VERSION, ")")
             return 0
         elseif startswith(arg, "-")
             Types.pkgerror("unknown option `$arg`, see `pkg --help`")

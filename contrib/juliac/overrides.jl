@@ -1,5 +1,10 @@
 # Method redefinitions applied when compiling Pkg with `--trim`.
 
+# Base: process spawning, `Cmd` display, `VersionNumber` hashing (julia branch `kc/trim-process-version`)
+include("base_process.jl")
+# Base and standard libraries: everything else
+include("stdlib.jl")
+
 # Compile-time switch that removes code paths a trimmed binary can not have.
 @eval Pkg trimmed() = true
 

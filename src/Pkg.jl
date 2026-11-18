@@ -79,6 +79,11 @@ end
 # Redefined to `true` by the entry point of a `--trim`med binary (contrib/juliac/pkg.jl)
 # to drop code paths that need dynamic dispatch.
 trimmed() = false
+
+const PKG_VERSION = let project = joinpath(dirname(@__DIR__), "Project.toml")
+    Base.include_dependency(project)
+    VersionNumber(TOML.parsefile(project)["version"]::String)
+end
 function trimmed_io(io::Union{Core.CoreSTDOUT, Core.CoreSTDERR})
     fd = io isa Core.CoreSTDOUT ? 1 : 2
     color = ccall(:isatty, Cint, (Cint,), fd) == 1 && get(ENV, "TERM", "") != "dumb" && !haskey(ENV, "NO_COLOR")
@@ -101,6 +106,17 @@ function errorstring(@nospecialize(err))::String
         err isa Base.IOError ? sprint(showerror, err) :
         err isa ProcessFailedException ? "failed process" :
         string(nameof(typeof(err)))
+end
+
+# `Base.julia_cmd()` describes the running julia; a trimmed binary uses the `julia` next
+# to it, else the one on the `PATH`
+function julia_cmd()
+    trimmed() || return Base.julia_cmd()
+    julia = joinpath(Sys.BINDIR, Base.julia_exename())
+    isfile(julia) && return Cmd([julia])
+    julia = Sys.which(Base.julia_exename())
+    julia === nothing && Types.pkgerror("could not find a `julia` executable")
+    return Cmd([julia])
 end
 
 stderr_f() = trimmed() ? trimmed_io(Core.stderr) : something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stderr))
