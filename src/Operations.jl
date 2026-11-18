@@ -4826,7 +4826,7 @@ end
     # Not for diffs: those are printed right before the new packages get precompiled.
     # Needs the batch method (Julia 1.15), one call per package is too slow.
     precompiled = trues(length(package_statuses))
-    if precompile_status && !diff && hasmethod(Base.isprecompiled, Tuple{Vector{Base.PkgId}})
+    if !Pkg.trimmed() && precompile_status && !diff && hasmethod(Base.isprecompiled, Tuple{Vector{Base.PkgId}})
         installed = findall(pkg -> pkg.downloaded, package_statuses)
         pkgids = [Base.PkgId(pkg.uuid, pkg.new.name) for pkg in package_statuses[installed]]
         precompiled[installed] = Base.isprecompiled(pkgids)

@@ -1699,10 +1699,12 @@ function status(ctx::Context, pkgs::Vector{PackageSpec}; diff::Bool = false, mod
         Operations.print_compat(ctx, pkgs; io)
     else
         # `outdated` says what an update would do, which takes resolving one
+        # the resolver is not trimmable yet
+        outdated && Pkg.trimmed() && pkgerror("`status --outdated` is not available in this build of `pkg`")
         updated_env = outdated ? update_preview(ctx; workspace) : nothing
-        # `Base.isprecompiled` answers for the active project
+        # `Base.isprecompiled` answers for the active project; a trimmed binary loads no packages
         active_project = Base.active_project()
-        precompile_status = active_project !== nothing && safe_realpath(active_project) == ctx.env.project_file
+        precompile_status = !Pkg.trimmed() && active_project !== nothing && safe_realpath(active_project) == ctx.env.project_file
         Operations.status(ctx.env, ctx.registries, pkgs; mode, git_diff = diff, io, outdated, deprecated, extensions, workspace, updated_env, precompile_status)
     end
     return nothing
