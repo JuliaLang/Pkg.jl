@@ -310,7 +310,7 @@ end
 function parse_statement(words::Vector{QString}; hint = "Type ? for help with available commands")
     statement, input_word = core_parse(words)
     statement.spec === nothing && pkgerror("`$input_word` is not a recognized command. $hint")
-    statement.options = map(parse_option, statement.options)
+    statement.options = Option[parse_option(o) for o in statement.options::Vector{String}]
     return statement
 end
 

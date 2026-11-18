@@ -76,7 +76,8 @@ parse_toml(toml_file::AbstractString) =
 struct PkgError <: Exception
     msg::String
 end
-pkgerror(msg::String...) = throw(PkgError(join(msg)))
+pkgerror(msg::String) = throw(PkgError(msg))
+pkgerror(msgs::String...) = throw(PkgError(join(collect(msgs))))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 
 ###############

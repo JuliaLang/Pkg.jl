@@ -103,6 +103,20 @@ function cli(args)
     return 0
 end
 
+# `display_error` dispatches on the exception type, which a trimmed binary can not do
+function cli_trimmed_error(io::IO, @nospecialize(err))
+    printstyled(io, "ERROR: "; bold = true, color = Base.error_color())
+    msg = err isa Types.PkgError ? err.msg :
+        err isa Resolve.ResolverError ? sprint(showerror, err; context = io) :
+        err isa ErrorException ? err.msg :
+        err isa ArgumentError ? err.msg :
+        err isa SystemError ? string(err.prefix, ": ", Libc.strerror(err.errnum)) :
+        err isa Base.IOError ? err.msg :
+        string(nameof(typeof(err)))
+    println(io, msg)
+    return
+end
+
 function (@main)(args)
     try
         return cli(args)
@@ -110,7 +124,9 @@ function (@main)(args)
         err isa InterruptException && return 130
         # the reader of our output went away, e.g. `pkg status | head`
         err isa Base.IOError && err.code == Base.UV_EPIPE && return 141
-        if err isa Types.PkgError || err isa Resolve.ResolverError
+        if trimmed()
+            cli_trimmed_error(stderr_f(), err)
+        elseif err isa Types.PkgError || err isa Resolve.ResolverError
             Base.display_error(stderr_f(), ErrorException(sprint(showerror, err)), Ptr{Nothing}[])
         else
             Base.display_error(stderr_f(), err, catch_backtrace())

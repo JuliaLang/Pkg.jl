@@ -75,8 +75,16 @@ function unstableio(@nospecialize(io::IO))
         get(_io, :color, false) ? Base.ImmutableDict{Symbol, Any}(:color, true) : Base.ImmutableDict{Symbol, Any}()
     )
 end
-stderr_f() = something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stderr))
-stdout_f() = something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stdout))
+# Redefined to `true` by the entry point of a `--trim`med binary (contrib/juliac/pkg.jl)
+# to drop code paths that need dynamic dispatch.
+trimmed() = false
+function trimmed_io(io::Union{Core.CoreSTDOUT, Core.CoreSTDERR})
+    fd = io isa Core.CoreSTDOUT ? 1 : 2
+    color = ccall(:isatty, Cint, (Cint,), fd) == 1 && get(ENV, "TERM", "") != "dumb" && !haskey(ENV, "NO_COLOR")
+    return IOContext{IO}(io, color ? Base.ImmutableDict{Symbol, Any}(:color, true) : Base.ImmutableDict{Symbol, Any}())
+end
+stderr_f() = trimmed() ? trimmed_io(Core.stderr) : something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stderr))
+stdout_f() = trimmed() ? trimmed_io(Core.stdout) : something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
 
 usable_io(io) = (io isa Base.TTY) || (io isa IOContext{IO} && io.io isa Base.TTY)
