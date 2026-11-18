@@ -9,7 +9,14 @@ struct StdlibInfo
 
     deps::Vector{UUID}
     weakdeps::Vector{UUID}
+
+    compat::Dict{UUID, VersionSpec}
 end
+
+# Backwards-compatible constructor for callers that don't supply compat data
+# (e.g. older HistoricalStdlibVersions.jl payloads).
+StdlibInfo(name, uuid, version, deps, weakdeps) =
+    StdlibInfo(name, uuid, version, deps, weakdeps, Dict{UUID, VersionSpec}())
 
 const DictStdLibs = Dict{UUID, StdlibInfo}
 
