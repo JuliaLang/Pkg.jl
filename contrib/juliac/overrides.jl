@@ -4,6 +4,9 @@
 include("base_process.jl")
 # Base and standard libraries: everything else
 include("stdlib.jl")
+# Base: TOML printing (julia branch `kc/trim-toml-printer`, the patched printer is loaded until it is in a nightly)
+isdefined(Base.TOML.Printer, :_invoke_generic) || Base.include(Base.TOML.Printer, joinpath(@__DIR__, "toml_printer.jl"))
+include("toml.jl")
 
 # Compile-time switch that removes code paths a trimmed binary can not have.
 @eval Pkg trimmed() = true

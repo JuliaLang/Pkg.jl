@@ -129,13 +129,15 @@ end
 # `==` and `hash` on raw TOML data, which a trimmed binary can not dispatch on
 function toml_equal(@nospecialize(a), @nospecialize(b))::Bool
     if a isa Dict{String, Any}
-        b isa Dict{String, Any} && length(a) == length(b) || return false
+        b isa Dict{String, Any} || return false
+        length(a) == length(b) || return false
         for (k, v) in a
             haskey(b, k) && toml_equal(v, b[k]) || return false
         end
         return true
     elseif a isa Vector{Any}
-        b isa Vector{Any} && length(a) == length(b) || return false
+        b isa Vector{Any} || return false
+        length(a) == length(b) || return false
         return all(i -> toml_equal(a[i], b[i]), eachindex(a))
     elseif a isa String
         return b isa String && a == b
@@ -178,7 +180,9 @@ end
     ex = :(true)
     for (i, f) in enumerate(fieldnames(T))
         f in skip && continue
-        cmp = fieldtype(T, i) <: Union{Nothing, Dict{String, Any}} ? :toml_equal : :(==)
+        FT = fieldtype(T, i)
+        cmp = FT <: Union{Nothing, Dict{String, Any}} ? :toml_equal :
+            FT isa Union && length(Base.uniontypes(FT)) > 2 ? :version_eq : :(==)
         ex = :($ex && ($cmp(getfield(a, $i), getfield(b, $i)))::Bool)
     end
     return ex
@@ -236,6 +240,16 @@ function version_eq(@nospecialize(a), @nospecialize(b))
     return a === b
 end
 
+function showvalue(@nospecialize(x))::String
+    x isa String && return x
+    x isa UUID && return string(x)
+    x isa SHA1 && return string(x)
+    x isa VersionNumber && return string(x)
+    x isa VersionSpec && return string(x)
+    x isa Bool && return string(x)
+    return Pkg.trimmed() ? "?" : string(x)
+end
+
 function Base.hash(a::PackageSpec, h::UInt)
     return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init = h)
 end
@@ -276,7 +290,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
-        print(io, "  ", field, " = ", string(value)::String, "\n")
+        print(io, "  ", field, " = ", showvalue(value), "\n")
     end
     return print(io, ")")
 end
@@ -423,7 +437,7 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid &&
     t1.apps == t2.apps &&
-    t1.julia_syntax_version == t2.julia_syntax_version &&
+    version_eq(t1.julia_syntax_version, t2.julia_syntax_version) &&
     t1.registries == t2.registries
 # omits `other`
 Base.hash(x::PackageEntry, h::UInt) = fields_hash(x, h, Val((:apps, :other)))  # omits `other`
@@ -957,7 +971,7 @@ function _write_env_usage(source_files, usage_file::String, timestamp::DateTime)
 
         # record new usage
         for source_file in source_files
-            usage[source_file] = [Dict("time" => timestamp)]
+            usage[source_file] = Any[Dict{String, Any}("time" => timestamp)]
         end
 
         # keep only latest usage info
@@ -975,7 +989,7 @@ function _write_env_usage(source_files, usage_file::String, timestamp::DateTime)
                     push!(times, Dates.now())
                 end
             end
-            usage[k] = [Dict("time" => maximum(times)::Dates.DateTime)]
+            usage[k] = Any[Dict{String, Any}("time" => maximum(times))]
         end
 
         try
@@ -1342,7 +1356,7 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             end
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
-            tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
+            tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject::LibGit2.GitObject)::LibGit2.GitTree
             # When the lookup was by `pkg.tree_hash` the object is already the tree of the
             # package itself: for a subdir package the manifest records the hash of the
             # subdirectory, not of the repository root. Only descend into the subdir when

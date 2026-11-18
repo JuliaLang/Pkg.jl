@@ -365,8 +365,12 @@ function write_project(env::EnvCache, skip_readonly_check::Bool = false)
     end
     return write_project(env.project, env.project_file)
 end
-write_project(project::Project, project_file::AbstractString) =
-    write_project(destructure(project), project_file; comments = project.comments)
+function write_project(project::Project, project_file::AbstractString)
+    # a keyword argument of a `Union` type is a call with a non-concrete `NamedTuple`
+    comments = project.comments
+    comments === nothing && return write_project(destructure(project), project_file)
+    return write_project(destructure(project), project_file; comments)
+end
 function write_project(io::IO, project::Dict; comments::Union{TOML.Comments, Nothing} = nothing)
     inline_tables = Base.IdSet{Dict}()
     if haskey(project, "sources")
@@ -380,11 +384,13 @@ function write_project(io::IO, project::Dict; comments::Union{TOML.Comments, Not
             end
         end
     end
-    TOML.print(io, project; inline_tables, sorted = true, by = key -> (project_key_order(key), key), comments) do x
-        x isa UUID || x isa VersionNumber || pkgerror("unhandled type `$(typeof(x))`")
-        return string(x)
-    end
+    TOML.print(project_toml_value, io, project; inline_tables, sorted = true, by = key -> (project_key_order(key), key), comments)
     return nothing
+end
+function project_toml_value(@nospecialize(x))
+    x isa UUID && return string(x)
+    x isa VersionNumber && return string(x)
+    pkgerror("unhandled type `$(typeof(x))`")
 end
 function write_project(project::Dict, project_file::AbstractString; comments::Union{TOML.Comments, Nothing} = nothing)
     str = sprint(io -> write_project(io, project; comments))

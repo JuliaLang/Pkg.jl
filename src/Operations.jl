@@ -2414,16 +2414,23 @@ function download_source(
     # use eager throw version
     Base.Experimental.@sync begin
         jobs = Channel{eltype(pkgs_to_install)}(ctx.num_concurrent_downloads)
-        results = Channel(ctx.num_concurrent_downloads)
+        results = Channel{Tuple{DownloadPkg, Any, Any}}(ctx.num_concurrent_downloads)
 
-        @async begin
+        # A task that fails outside the per-package `try` closes `results` with its error,
+        # so that `take!(results)` below throws instead of waiting forever
+        fail!(err) = close(results, err isa Exception ? err : ErrorException("download task failed"))
+
+        @async try
             for pkg in pkgs_to_install
                 put!(jobs, pkg)
             end
+        catch err
+            fail!(err)
+            rethrow()
         end
 
         for i in 1:ctx.num_concurrent_downloads # (default 8)
-            @async begin
+            @async try
                 for (pkg, urls, path) in jobs
                     mkpath(dirname(path)) # the `packages/Package` dir needs to exist for the pidfile to be created
                     FileWatching.mkpidlock(path * ".pid", stale_age = pidfile_stale_age) do
@@ -2461,6 +2468,9 @@ function download_source(
                         end
                     end
                 end
+            catch err
+                fail!(err)
+                rethrow()
             end
         end
 
@@ -2477,7 +2487,7 @@ function download_source(
                 pkg::DownloadPkg, exc_or_success_or_nothing, bt_or_pathurls = take!(results)
                 if exc_or_success_or_nothing isa Exception
                     exc = exc_or_success_or_nothing
-                    pkgerror("Error when installing package $(pkg.name):\n", sprint(Base.showerror, exc, bt_or_pathurls))
+                    pkgerror("Error when installing package $(pkg.name):\n", Pkg.trimmed() ? Pkg.errorstring(exc) : sprint(Base.showerror, exc, bt_or_pathurls))
                 end
                 if exc_or_success_or_nothing === nothing
                     continue # represents when another process did the install

@@ -167,7 +167,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
                 add_snapshot_to_undo()
                 saved_initial_snapshot[] = true
             end
-            kwargs = merge((; kwargs...), (:io => io,))
+            kwargs = merge((; kwargs...), (; io))
             pkgs = Types.tdeepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
@@ -789,6 +789,9 @@ admin privileges depending on the setup).
 
 Use verbose mode (`verbose=true`) for detailed output.
 """
+# a usage time is a TOML datetime, or a string in files written by old versions
+usage_time(@nospecialize(x)) = x isa DateTime ? x : DateTime(x::String)
+
 function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = nothing, verbose = false, force = false, kwargs...)
     Context!(ctx; kwargs...)
     if collect_delay !== nothing
@@ -839,7 +842,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         let usage = usage
             reduce_usage!(joinpath(logdir(depot), "manifest_usage.toml")) do filename, info
                 # For Manifest usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
+                usage[filename] = max(get(usage, filename, DateTime(0)), usage_time(info["time"]))
             end
         end
         manifest_usage_by_depot[depot] = usage
@@ -848,7 +851,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         let usage = usage
             reduce_usage!(joinpath(logdir(depot), "artifact_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
+                usage[filename] = max(get(usage, filename, DateTime(0)), usage_time(info["time"]))
             end
         end
         artifact_usage_by_depot[depot] = usage
@@ -859,11 +862,11 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         let usage = usage
             reduce_usage!(joinpath(logdir(depot), "scratch_usage.toml")) do filename, info
                 # For Artifact usage, store only the last DateTime for each filename found
-                usage[filename] = max(get(usage, filename, DateTime(0)), DateTime(info["time"])::DateTime)
+                usage[filename] = max(get(usage, filename, DateTime(0)), usage_time(info["time"]))
                 if !haskey(parents, filename)
                     parents[filename] = Set{String}()
                 end
-                for parent in info["parent_projects"]
+                for parent in something(toml_strings(info["parent_projects"]), String[])
                     push!(parents[filename], parent)
                 end
             end
@@ -913,7 +916,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
                 filter!(((k, v),) -> k in all_manifest_tomls, usage)
 
                 # Expand it back into a dict-of-dicts
-                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+                return Dict{String, Any}(k => Any[Dict{String, Any}("time" => v)] for (k, v) in usage)
             end
         end
     end
@@ -923,7 +926,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         write_condensed_toml(artifact_usage_by_depot, "artifact_usage.toml") do depot, usage
             let usage = usage
                 filter!(((k, v),) -> k in all_artifact_tomls, usage)
-                return Dict(k => [Dict("time" => v)] for (k, v) in usage)
+                return Dict{String, Any}(k => Any[Dict{String, Any}("time" => v)] for (k, v) in usage)
             end
         end
     end
@@ -935,7 +938,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
             filter!(((k, v),) -> k in all_scratch_dirs, usage)
 
             # Expand it back into a dict-of-dicts
-            expanded_usage = Dict{String, Vector{Dict}}()
+            expanded_usage = Dict{String, Any}()
             for (k, v) in usage
                 # Drop scratch spaces whose parents are all non-existent
                 parents = scratch_parents_by_depot[depot][k]
@@ -944,8 +947,8 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
                     continue
                 end
 
-                expanded_usage[k] = [
-                    Dict(
+                expanded_usage[k] = Any[
+                    Dict{String, Any}(
                         "time" => v,
                         "parent_projects" => collect(parents),
                     ),
@@ -1011,7 +1014,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
         artifact_path_list = String[]
         getpaths(meta::Dict{String, Any}) = artifact_paths(SHA1(hex2bytes(meta["git-tree-sha1"]::String)))
         for entry in values(artifact_dict)
-            if entry isa Vector
+            if entry isa Vector{Any}
                 for platform_meta in entry
                     append!(artifact_path_list, getpaths(platform_meta::Dict{String, Any}))
                 end
@@ -1413,6 +1416,8 @@ function precompile(
         skip_dependents::Bool = true, force::Bool = false, kwargs...
     )
     # Handle background precompilation control options via Base
+    (monitor || stop || cancel) && Pkg.trimmed() &&
+        pkgerror("background precompilation can not be controlled from this build of `pkg`")
     if monitor
         Base.Precompilation.monitor_background_precompile(ctx.io)
         return
@@ -1456,6 +1461,8 @@ function precompile(
     end
     pkgids = Base.PkgId[Base.PkgId(pkg.uuid, pkg.name) for pkg in pkgs]
 
+    Pkg.trimmed() && return trimmed_precompile(ctx, pkgids; workspace, force)
+
     return activate(dirname(ctx.env.project_file)) do
         # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
         # `IOContext{IO}` and takes `ctx.io` as is. Before that it specialized on the
@@ -1479,6 +1486,16 @@ function precompile(
     end
 end
 
+# A trimmed binary can not load code, so a `julia` precompiles the packages
+function trimmed_precompile(ctx::Context, pkgids::Vector{Base.PkgId}; workspace::Bool, force::Bool)
+    names = join((repr(pkg.name::String) for pkg in pkgids), ", ")
+    code = "import Pkg; Pkg.precompile(String[$names]; workspace = $workspace, force = $force)"
+    exec = copy(Pkg.julia_cmd().exec)
+    push!(exec, "--project=$(ctx.env.project_file)", "--startup-file=no", "--color=$(get(ctx.io, :color, false) ? "yes" : "no")", "-e", code)
+    run(Cmd(exec))
+    return nothing
+end
+
 function precompile(f, args...; kwargs...)
     return Base.ScopedValues.@with _autoprecompilation_enabled_scoped => false begin
         f()
@@ -1486,7 +1503,7 @@ function precompile(f, args...; kwargs...)
     end
 end
 
-function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)
+function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)::Union{Nothing, LibGit2.GitObject}
     try
         return LibGit2.GitObject(repo, tree_hash)
     catch err
@@ -1722,6 +1739,8 @@ Designed to be lightweight: the manifest is parsed at most once per call, and
 each `(project, package)` pair is warned about at most once per session.
 """
 function _warn_loaded_module_path_mismatch(io::IO)
+    # nothing is loaded in a trimmed binary
+    Pkg.trimmed() && return
     p = Base.active_project()
     p === nothing && return
     isfile(p) || return
