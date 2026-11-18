@@ -5,7 +5,7 @@ using ..MiniProgressBars, ..PlatformEngines
 using Tar: can_symlink
 using FileWatching: FileWatching
 
-import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
+import ..set_readonly, ..errorstring, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
     ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries, ..atomic_toml_write, ..create_cachedir_tag
 
 import Base: get, SHA1
@@ -547,7 +547,7 @@ function try_artifact_download_sources(
     """
     for (url, err) in errors
         errmsg *= "- $(url)\n"
-        errmsg *= "    Error: $(sprint(showerror, err))\n"
+        errmsg *= "    Error: $(errorstring(err))\n"
     end
     error(errmsg)
 end

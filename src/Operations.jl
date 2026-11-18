@@ -1823,7 +1823,7 @@ function run_artifact_selector(
     end
     artifacts = TOML.tryparse(meta_toml)
     if artifacts isa TOML.ParserError
-        errstr = sprint(showerror, artifacts; context = stderr)
+        errstr = Pkg.errorstring(artifacts)
         pkgerror("failed to parse TOML output from running $(repr(selector_path)), got: \n$errstr")
     end
     # Only successful runs are cached; a failing selector is retried on the next call.
@@ -2073,14 +2073,14 @@ end
 # Copy the resolved environment and its workspace ancestors. The ancestors supply
 # preferences, but all projects must use the resolved manifest in the temporary tree.
 function selector_environment(env::EnvCache)
-    manifest = deepcopy(env.manifest)
+    manifest = Types.tdeepcopy(env.manifest)
     abspath!(env, manifest)
     # Selectors don't depend on the environment's identity, and the id may be first written
     # after installation, so leave it out to keep the cached selection valid.
     manifest.environment_id = nothing
     manifest.environment_name = nothing
     projects = map(enumerate(Base.get_projects_workspace_to_root(env.project_file))) do (i, file)
-        project = deepcopy(i == 1 ? env.project : env.workspace[file])
+        project = Types.tdeepcopy(i == 1 ? env.project : env.workspace[file])
         project.manifest = nothing
         empty!(project.workspace)
         i == 1 || (project.workspace["projects"] = ["child"])
@@ -2307,7 +2307,7 @@ function check_artifacts_downloaded(
     end
     for (artifacts_toml, artifacts) in collected_artifacts
         for name in keys(artifacts)
-            if !artifact_exists(Base.SHA1(artifacts[name]["git-tree-sha1"]))
+            if !artifact_exists(Base.SHA1((artifacts[name]::Dict{String, Any})["git-tree-sha1"]::String))
                 return false
             end
         end
@@ -3798,7 +3798,7 @@ end
 
 # pick out a set of subgraphs and preserve their versions
 function sandbox_preserve(env::EnvCache, target::PackageSpec, test_project::String)
-    env = deepcopy(env)
+    env = Types.tdeepcopy(env)
     # include root in manifest (in case any dependencies point back to it)
     if env.pkg !== nothing
         env.manifest[env.pkg.uuid] = PackageEntry(;
@@ -4344,8 +4344,8 @@ function print_diff(io::IO, old::Union{Nothing, PackageSpec}, new::Union{Nothing
     elseif !is_instantiated(new)
         printstyled(io, "- $(stat_rep(old))"; color = :light_red)
     elseif is_tracking_registry(old) && is_tracking_registry(new) &&
-            new.version isa VersionNumber && old.version isa VersionNumber && new.version != old.version
-        if new.version > old.version
+            (new_version = new.version) isa VersionNumber && (old_version = old.version) isa VersionNumber && new_version != old_version
+        if new_version > old_version
             printstyled(io, "↑ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_yellow)
         else
             printstyled(io, "↓ $(stat_rep(old)) ⇒ $(stat_rep(new; name = false))"; color = :light_magenta)
@@ -4462,7 +4462,9 @@ function status_compat_info(pkg::PackageSpec, env::EnvCache, regs::Vector{Regist
             VERSION in spec || push!(packages_holding_back, "julia")
         else
             dep_pkg = get(manifest, dep_uuid, nothing)
-            dep_pkg === nothing || dep_pkg.version === nothing || dep_pkg.version in spec || push!(packages_holding_back, dep_pkg.name)
+            dep_pkg === nothing && continue
+            dep_version = dep_pkg.version
+            dep_version === nothing || dep_version in spec || push!(packages_holding_back, dep_pkg.name)
         end
     end
 
@@ -4611,10 +4613,10 @@ end
         mode::PackageMode, show_usagetips::Bool = true, updated_env::Union{Nothing, EnvCache} = nothing,
         precompile_status::Bool = false
     )
-    not_installed_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.error_color()), "→", context = io)
-    upgradable_indicator = sprint((io, args) -> printstyled(io, args...; color = :green), "⌃", context = io)
-    heldback_indicator = sprint((io, args) -> printstyled(io, args...; color = Base.warn_color()), "⌅", context = io)
-    not_precompiled_indicator = sprint((io, args) -> printstyled(io, args...; color = :light_black), "○", context = io)
+    not_installed_indicator = sprint((io, str) -> printstyled(io, str; color = Base.error_color()), "→", context = io)
+    upgradable_indicator = sprint((io, str) -> printstyled(io, str; color = :green), "⌃", context = io)
+    heldback_indicator = sprint((io, str) -> printstyled(io, str; color = Base.warn_color()), "⌅", context = io)
+    not_precompiled_indicator = sprint((io, str) -> printstyled(io, str; color = :light_black), "○", context = io)
     filter = !isempty(uuids) || !isempty(names)
     # filter and return early if possible
     if isempty(xs) && !diff
@@ -4651,7 +4653,13 @@ end
                 end
                 union!(matching_ids, deps_to_add)
             end
-            xs = eltype(xs)[(id, old, new) for (id, old, new) in xs if id in matching_ids]
+            # a loop rather than a filtering comprehension: `eltype(xs)` is not concrete,
+            # so a closure called on an element would be dynamically dispatched
+            filtered = eltype(xs)[]
+            for x in xs
+                x[1] in matching_ids && push!(filtered, x)
+            end
+            xs = filtered
         end
         if isempty(xs)
             printpkgstyle(
@@ -4670,7 +4678,12 @@ end
             end
         end
         # Sort stdlibs and _jlls towards the end in status output
-        xs = sort!(xs, by = (x -> (is_stdlib(x[1]), endswith(something(x[3], x[2]).name, "_jll"), something(x[3], x[2]).name, x[1])))
+        sort_keys = Tuple{Bool, Bool, String, UUID}[]
+        for x in xs
+            name = something(x[3], x[2]).name::String
+            push!(sort_keys, (is_stdlib(x[1]::UUID), endswith(name, "_jll"), name, x[1]::UUID))
+        end
+        xs = xs[sortperm(sort_keys)]
     end
 
     all_packages_downloaded = true
@@ -4813,23 +4826,23 @@ end
 
         # show deprecation details when using --deprecated flag
         if deprecated && !diff && pkg.deprecation_info !== nothing
-            reason = get(pkg.deprecation_info, "reason", nothing)
-            alternative = get(pkg.deprecation_info, "alternative", nothing)
+            reason = get(pkg.deprecation_info, "reason", nothing)::Union{Nothing, String}
+            alternative = get(pkg.deprecation_info, "alternative", nothing)::Union{Nothing, String}
             if reason !== nothing
-                printstyled(io, " (reason: ", reason, ")"; color = :yellow)
+                printstyled(io, " (reason: $reason)"; color = :yellow)
             end
             if alternative !== nothing
-                printstyled(io, " (alternative: ", alternative, ")"; color = :yellow)
+                printstyled(io, " (alternative: $alternative)"; color = :yellow)
             end
         end
 
         if outdated && !diff && pkg.compat_data !== nothing
             packages_holding_back, max_version, max_version_compat = pkg.compat_data
             if pkg.new.version !== max_version_compat && max_version_compat != max_version
-                printstyled(io, " [<v", max_version_compat, "]", color = :light_magenta)
+                printstyled(io, " [<v$(max_version_compat)]", color = :light_magenta)
                 printstyled(io, ",")
             end
-            printstyled(io, " (<v", max_version, ")"; color = Base.warn_color())
+            printstyled(io, " (<v$(max_version))"; color = Base.warn_color())
             if packages_holding_back == ["compat"]
                 printstyled(io, " [compat]"; color = :light_magenta)
             elseif packages_holding_back == ["sysimage"]
@@ -4846,7 +4859,8 @@ end
         # show if loaded version and version in the manifest doesn't match
         pkg_spec = something(pkg.new, pkg.old)
         pkgid = Base.PkgId(pkg.uuid, pkg_spec.name)
-        m = get(Base.loaded_modules, pkgid, nothing)
+        # nothing is loaded in a trimmed binary, and `locate_package` is not trimmable
+        m = Pkg.trimmed() ? nothing : get(Base.loaded_modules, pkgid, nothing)
         if m isa Module && pkg_spec.version !== nothing
             loaded_path = pathof(m)
             env_path = Base.locate_package(pkgid) # nothing if not installed
@@ -4911,7 +4925,7 @@ end
 
     # Add warning for yanked packages
     if any_yanked_packages
-        yanked_str = sprint((io, args) -> printstyled(io, args...; color = :yellow), "[yanked]", context = io)
+        yanked_str = sprint((io, str) -> printstyled(io, str; color = :yellow), "[yanked]", context = io)
         printpkgstyle(io, :Warning, """Package versions marked with $yanked_str have been pulled from their registry. \
         It is recommended to update them to resolve a valid version.""", color = Base.warn_color(), ignore_indent)
     end
@@ -4921,7 +4935,7 @@ end
 
     # Add info for deprecated packages (only if not already in deprecated mode)
     if !deprecated && any_deprecated_packages
-        deprecated_str = sprint((io, args) -> printstyled(io, args...; color = :yellow), "[deprecated]", context = io)
+        deprecated_str = sprint((io, str) -> printstyled(io, str; color = :yellow), "[deprecated]", context = io)
         tipend = manifest ? " -m" : ""
         tip = show_usagetips ? " Use `status --deprecated$tipend` to see more information." : ""
         printpkgstyle(io, :Info, """Packages marked with $deprecated_str are no longer maintained.$tip""", color = Base.info_color(), ignore_indent)
@@ -5036,7 +5050,7 @@ function is_manifest_current(env::EnvCache)
     if haskey(env.manifest.other, "project_hash")
         recorded_hash = env.manifest.other["project_hash"]
         current_hash = Types.workspace_resolve_hash(env)
-        return recorded_hash == current_hash
+        return recorded_hash isa String && recorded_hash == current_hash
     else
         # Manifest doesn't have a hash of the source Project recorded
         return nothing

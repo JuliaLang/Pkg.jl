@@ -30,3 +30,17 @@ end
 # `Context.io` is typed `IO`; in a trimmed binary it always holds `stderr_f()`/`stdout_f()`
 @eval Pkg.Types Base.getproperty(ctx::Context, s::Symbol) =
     s === :io ? getfield(ctx, :io)::IOContext{IO} : getfield(ctx, s)
+
+# `with_output_color` `@nospecialize`s the printing function, so `printstyled` is dynamic
+@eval Base function with_output_color(f::F, color::Union{Int, Symbol}, io::IO, args...;
+        bold::Bool = false, italic::Bool = false, underline::Bool = false, blink::Bool = false,
+        reverse::Bool = false, hidden::Bool = false) where {F <: Function}
+    buf = IOBuffer()
+    iscolor = get(io, :color, false)::Bool
+    try f(IOContext(buf, io), args...)
+    finally
+        str = takestring!(buf)
+        iscolor && (str = output_color_string(buf, str, color, bold, italic, underline, blink, reverse, hidden))
+        print(io, str)
+    end
+end

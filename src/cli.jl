@@ -103,17 +103,10 @@ function cli(args)
     return 0
 end
 
-# `display_error` dispatches on the exception type, which a trimmed binary can not do
+# `display_error` shows a backtrace, which needs dynamic dispatch
 function cli_trimmed_error(io::IO, @nospecialize(err))
     printstyled(io, "ERROR: "; bold = true, color = Base.error_color())
-    msg = err isa Types.PkgError ? err.msg :
-        err isa Resolve.ResolverError ? sprint(showerror, err; context = io) :
-        err isa ErrorException ? err.msg :
-        err isa ArgumentError ? err.msg :
-        err isa SystemError ? string(err.prefix, ": ", Libc.strerror(err.errnum)) :
-        err isa Base.IOError ? err.msg :
-        string(nameof(typeof(err)))
-    println(io, msg)
+    println(io, errorstring(err))
     return
 end
 

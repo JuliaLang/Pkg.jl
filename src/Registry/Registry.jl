@@ -291,7 +291,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                 try
                     download_verify(url, nothing, tmp)
                 catch err
-                    Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
+                    Pkg.Types.pkgerror("could not download $url \nException: $(Pkg.errorstring(err))")
                 end
                 _hash = pkg_server_url_hash(url)
                 if !verify_archive_tree_hash(tmp, _hash)
@@ -335,7 +335,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                         try
                             download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                         catch err
-                            Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
+                            Pkg.Types.pkgerror("could not download $url \nException: $(Pkg.errorstring(err))")
                         end
                         tree_info_file = joinpath(tmp, ".tree_info.toml")
                         hash = pkg_server_url_hash(url)
@@ -583,7 +583,7 @@ end
                             try
                                 download_verify(url, nothing, tmp)
                             catch err
-                                push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
+                                push!(errors, (reg.path, "failed to download from $(url). Exception: $(Pkg.errorstring(err))"))
                                 @goto done_tarball_read
                             end
                             hash = pkg_server_url_hash(url)
@@ -622,7 +622,7 @@ end
                                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                                     registry_update_log[string(reg.uuid)] = now()
                                 catch err
-                                    push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
+                                    push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(Pkg.errorstring(err))"))
                                     @goto done_tarball_unpack
                                 end
                                 tree_info_file = joinpath(tmp, ".tree_info.toml")

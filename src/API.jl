@@ -168,7 +168,7 @@ for f in (:develop, :add, :rm, :up, :pin, :free, :test, :build, :status, :why, :
                 saved_initial_snapshot[] = true
             end
             kwargs = merge((; kwargs...), (:io => io,))
-            pkgs = deepcopy(pkgs) # don't mutate input
+            pkgs = Types.tdeepcopy(pkgs) # don't mutate input
             foreach(handle_package_input!, pkgs)
             ret = $f(ctx, pkgs; kwargs...)
             lazy = get(kwargs, :lazy, false)
@@ -1658,7 +1658,7 @@ end
 # The environment as `up` (`up --workspace`) would leave it: the update is resolved on a copy
 # of the environment, without fetching or installing anything. `nothing` if it does not resolve.
 function update_preview(ctx::Context; workspace::Bool = false)
-    preview = Context(; env = deepcopy(ctx.env), io = devnull, registries = ctx.registries, julia_version = ctx.julia_version)
+    preview = Context(; env = Types.tdeepcopy(ctx.env), io = devnull, registries = ctx.registries, julia_version = ctx.julia_version)
     pkgs = PackageSpec[]
     append_all_pkgs!(pkgs, preview, PKGMODE_PROJECT; workspace)
     try

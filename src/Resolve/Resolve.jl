@@ -5,7 +5,7 @@ module Resolve
 using ..Versions
 using ..Registry
 using ..Types
-import ..stdout_f, ..stderr_f
+import ..stdout_f, ..stderr_f, ..trimmed, ..errorstring
 
 using Random
 using UUIDs
@@ -56,11 +56,11 @@ function Base.showerror(io::IO, pkgerr::ResolverError)
         if isa(pkgex, CompositeException)
             for cex in pkgex
                 print(io, "\n=> ")
-                showerror(io, cex)
+                trimmed() ? print(io, errorstring(cex)) : showerror(io, cex)
             end
         else
             print(io, "\n")
-            showerror(io, pkgex)
+            trimmed() ? print(io, errorstring(pkgex)) : showerror(io, pkgex)
         end
     end
 end

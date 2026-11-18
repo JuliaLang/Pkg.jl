@@ -106,18 +106,16 @@ function read_deps(raw::Dict{String, Any})::Dict{String, UUID}
     return deps
 end
 
-read_apps(::Nothing) = Dict{String, AppInfo}()
-read_apps(::Any) = pkgerror("Expected `apps` field to be a Dict")
-function read_apps(apps::Dict)
+function read_apps(@nospecialize(apps))
     appinfos = Dict{String, AppInfo}()
+    apps === nothing && return appinfos
+    apps isa Dict{String, Any} || pkgerror("Expected `apps` field to be a Dict")
     for (appname, app) in apps
-        submodule = get(app, "submodule", nothing)
+        app isa Dict{String, Any} || pkgerror("Expected app `$appname` to be a Dict")
+        submodule = get(app, "submodule", nothing)::Union{Nothing, String}
         julia_flags_raw = get(app, "julia_flags", nothing)
-        julia_flags = if julia_flags_raw === nothing
-            String[]
-        else
-            String[flag::String for flag in julia_flags_raw]
-        end
+        julia_flags = julia_flags_raw === nothing ? String[] : toml_strings(julia_flags_raw)
+        julia_flags === nothing && pkgerror("Expected `julia_flags` for app `$appname` to be an array of strings")
         appinfo = AppInfo(
             appname::String,
             app["julia_command"]::String,
@@ -315,7 +313,7 @@ function read_manifest(f_or_io::Union{String, IO})
         end
     catch e
         if e isa TOML.ParserError
-            pkgerror("Could not parse manifest: ", sprint(showerror, e))
+            pkgerror("Could not parse manifest: ", Pkg.errorstring(e))
         end
         rethrow()
     end

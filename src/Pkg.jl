@@ -13,6 +13,7 @@ end
 
 import Random
 import TOML
+import Downloads, LibGit2
 using Dates
 
 export @pkg_str
@@ -83,6 +84,25 @@ function trimmed_io(io::Union{Core.CoreSTDOUT, Core.CoreSTDERR})
     color = ccall(:isatty, Cint, (Cint,), fd) == 1 && get(ENV, "TERM", "") != "dumb" && !haskey(ENV, "NO_COLOR")
     return IOContext{IO}(io, color ? Base.ImmutableDict{Symbol, Any}(:color, true) : Base.ImmutableDict{Symbol, Any}())
 end
+# `sprint(showerror, err)`; `showerror` dispatches on the exception type, so a trimmed
+# binary can only show the exception types listed here
+function errorstring(@nospecialize(err))::String
+    trimmed() || return sprint(showerror, err)
+    return err isa Types.PkgError ? err.msg :
+        err isa Resolve.ResolverError ? sprint(showerror, err) :
+        err isa TOML.ParserError ? string("TOML parse error ", err.type, err.filepath === nothing ? "" : " in $(err.filepath)",
+            err.line === nothing ? "" : " at line $(err.line)") :
+        err isa Downloads.RequestError ? sprint(showerror, err) :
+        err isa LibGit2.GitError ? sprint(showerror, err) :
+        err isa ErrorException ? (err.msg isa String ? err.msg : "ErrorException") :
+        err isa ArgumentError ? (err.msg isa String ? err.msg : "ArgumentError") :
+        err isa AssertionError ? (err.msg isa String ? err.msg : "AssertionError") :
+        err isa SystemError ? string(err.prefix, ": ", Libc.strerror(err.errnum)) :
+        err isa Base.IOError ? sprint(showerror, err) :
+        err isa ProcessFailedException ? "failed process" :
+        string(nameof(typeof(err)))
+end
+
 stderr_f() = trimmed() ? trimmed_io(Core.stderr) : something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stderr))
 stdout_f() = trimmed() ? trimmed_io(Core.stdout) : something(Base.ScopedValues.get(DEFAULT_IO), unstableio(stdout))
 const PREV_ENV_PATH = Ref{String}("")
