@@ -866,7 +866,7 @@ function gc(ctx::Context = Context(); collect_delay::Union{Period, Nothing} = no
                 if !haskey(parents, filename)
                     parents[filename] = Set{String}()
                 end
-                for parent in something(toml_strings(info["parent_projects"]), String[])
+                for parent in something(Pkg.toml_strings(info["parent_projects"]), String[])
                     push!(parents[filename], parent)
                 end
             end
