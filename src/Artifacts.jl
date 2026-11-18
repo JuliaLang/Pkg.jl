@@ -5,7 +5,7 @@ using ..MiniProgressBars, ..PlatformEngines
 using Tar: can_symlink
 using FileWatching: FileWatching
 
-import ..set_readonly, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
+import ..set_readonly, ..errorstring, ..GitTools, ..TOML, ..pkg_server, ..can_fancyprint,
     ..stderr_f, ..printpkgstyle, ..mv_temp_dir_retries, ..atomic_toml_write, ..create_cachedir_tag
 
 import Base: get, SHA1
@@ -475,7 +475,7 @@ function ensure_artifact_installed(
         progress::Union{Function, Nothing} = nothing,
         io::IO = stderr_f()
     )
-    hash = SHA1(meta["git-tree-sha1"])
+    hash = SHA1(meta["git-tree-sha1"]::String)
     if !artifact_exists(hash)
         if isnothing(progress) || verbose == true
             return try_artifact_download_sources(name, hash, meta, artifacts_toml; pkg_server_eligible, platform, verbose, quiet_download, io)
@@ -495,10 +495,10 @@ function try_artifact_download_sources(
         verbose::Bool = false,
         quiet_download::Bool = false,
         io::IO = stderr_f(),
-        progress::Union{Function, Nothing} = nothing
-    )
+        progress::P = nothing
+    ) where {P <: Union{Function, Nothing}}
 
-    errors = Any[]
+    errors = Tuple{String, Any}[]
     # first try downloading from Pkg server if the Pkg server knows about this package
     if pkg_server_eligible && (server = pkg_server()) !== nothing
         url = "$server/artifact/$hash"
@@ -524,9 +524,9 @@ function try_artifact_download_sources(
     end
 
     # Attempt to download from all sources
-    for entry in meta["download"]
-        url = entry["url"]
-        tarball_hash = entry["sha256"]
+    for entry in meta["download"]::Vector{Any}
+        url = (entry::Dict{String, Any})["url"]::String
+        tarball_hash = entry["sha256"]::String
         download_success = let url = url
             @debug "Downloading artifact" name artifacts_toml platform url
             with_show_download_info(io, name, quiet_download) do
@@ -547,7 +547,7 @@ function try_artifact_download_sources(
     """
     for (url, err) in errors
         errmsg *= "- $(url)\n"
-        errmsg *= "    Error: $(sprint(showerror, err))\n"
+        errmsg *= "    Error: $(errorstring(err))\n"
     end
     error(errmsg)
 end

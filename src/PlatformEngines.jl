@@ -92,8 +92,13 @@ end
 
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex}, Any}[]
 
+# a TOML number is an `Int64` or a `Float64`
+toml_float(@nospecialize(x)) = x isa Float64 ? x : x isa Int64 ? Float64(x) : error("expected a number, got `$(typeof(x))`")
+
 function handle_auth_error(url, err; verbose::Bool = false)
     handled, should_retry = false, false
+    # the handlers are functions of unknown type, which a trimmed binary can not call
+    Pkg.trimmed() && return nothing
     for (scheme, handler) in AUTH_ERROR_HANDLERS
         occursin(scheme, url) || continue
         handled, should_retry = handler(url, pkg_server(), err)
@@ -164,10 +169,10 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     # handle token expiration and refresh
     expires_at = Inf
     if haskey(auth_info, "expires_at")
-        expires_at = min(expires_at, Float64(auth_info["expires_at"])::Float64)
+        expires_at = min(expires_at, toml_float(auth_info["expires_at"]))
     end
     if haskey(auth_info, "expires_in")
-        expires_at = min(expires_at, mtime(auth_file) + Float64(auth_info["expires_in"])::Float64)
+        expires_at = min(expires_at, mtime(auth_file) + toml_float(auth_info["expires_in"]))
     end
     # if token is good until ten minutes from now, use it
     time_now = time()
@@ -215,7 +220,7 @@ function get_auth_header(url::AbstractString; verbose::Bool = false)
     if haskey(auth_info, "expires_in")
         expires_in = auth_info["expires_in"]
         if expires_in isa Number
-            expires_at = floor(time_now + Float64(expires_in)::Float64)
+            expires_at = floor(time_now + toml_float(expires_in))
             # overwrite expires_at (avoids clock skew issues)
             auth_info["expires_at"] = expires_at
         end

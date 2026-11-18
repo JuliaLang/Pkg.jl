@@ -491,9 +491,10 @@ function load_registry_cache(path::AbstractString, tree_hash::SHA1)
     isfile(path) || return nothing
     data = try
         open(path) do io
-            if Sys.iswindows()
+            if Sys.iswindows() || Pkg.trimmed()
                 # A mapped file can neither be removed nor replaced on Windows, which would
                 # break `registry rm`, registry updates and removing the registries directory.
+                # `Mmap.mmap` builds its error messages with dynamic dispatch.
                 read(io)
             else
                 Mmap.mmap(io, Vector{UInt8}, filesize(io); grow = false, shared = false)
@@ -531,7 +532,10 @@ function write_registry_cache(io::IO, files::Dict{String, String}, tree_hash::SH
         return (UInt32(off), UInt32(sizeof(str)))
     end
     header = IOBuffer()
-    write(header, CACHE_MAGIC, CACHE_VERSION, UInt32(npkgs), Ref(tree_hash.bytes))
+    write(header, CACHE_MAGIC)
+    write(header, CACHE_VERSION)
+    write(header, UInt32(npkgs))
+    write(header, Ref(tree_hash.bytes))
     for key in ("name", "uuid", "repo", "description")
         off, len = put!(get(d, key, nothing)::Union{String, Nothing})
         write(header, off, len)
@@ -802,7 +806,7 @@ registry_info(registry::RegistryInstance, pkg::PkgEntry) = init_package_info!(re
                     reg_toml = getfield(r, :path)
                     Pkg.Types.pkgerror(
                         "failed to read the registry tarball `$(compressed_tar)`, it may be corrupt: ",
-                        sprint(showerror, err), ". Remove `$(compressed_tar)` and `$(reg_toml)` ",
+                        Pkg.errorstring(err), ". Remove `$(compressed_tar)` and `$(reg_toml)` ",
                         "and add the registry again with `Pkg.Registry.add`."
                     )
                 end

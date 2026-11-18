@@ -5,7 +5,7 @@ module Resolve
 using ..Versions
 using ..Registry
 using ..Types
-import ..stdout_f, ..stderr_f
+import ..stdout_f, ..stderr_f, ..trimmed, ..errorstring
 
 using Random
 using UUIDs
@@ -35,16 +35,16 @@ Base.show(io::IO, f::Fixed) = isempty(f.requires) ?
 
 
 struct ResolverError <: Exception
-    msg::AbstractString
+    msg::String
     ex::Union{Exception, Nothing}
 end
-ResolverError(msg::AbstractString) = ResolverError(msg, nothing)
+ResolverError(msg::AbstractString) = ResolverError(String(msg), nothing)
 
 struct ResolverTimeoutError <: Exception
-    msg::AbstractString
+    msg::String
     ex::Union{Exception, Nothing}
 end
-ResolverTimeoutError(msg::AbstractString) = ResolverTimeoutError(msg, nothing)
+ResolverTimeoutError(msg::AbstractString) = ResolverTimeoutError(String(msg), nothing)
 
 function Base.showerror(io::IO, pkgerr::ResolverError)
     # the maxsum log is colored when built if `stderr` has color; don't leak the
@@ -56,11 +56,11 @@ function Base.showerror(io::IO, pkgerr::ResolverError)
         if isa(pkgex, CompositeException)
             for cex in pkgex
                 print(io, "\n=> ")
-                showerror(io, cex)
+                trimmed() ? print(io, errorstring(cex)) : showerror(io, cex)
             end
         else
             print(io, "\n")
-            showerror(io, pkgex)
+            trimmed() ? print(io, errorstring(pkgex)) : showerror(io, pkgex)
         end
     end
 end

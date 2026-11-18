@@ -260,6 +260,19 @@ function archive_format_to_extension(filepath::AbstractString)::String
     end
 end
 
+# `retry(GitTools.clone; ...)`, which calls through a closure taking keyword arguments
+function clone_with_retry(io::IO, url::String, path::String; header::String, depth::Int)
+    for attempt in 1:6
+        try
+            return GitTools.clone(io, url, path; header, depth)
+        catch err
+            (err isa LibGit2.GitError && attempt < 6) || rethrow()
+            sleep(1.0)
+        end
+    end
+    error("unreachable")
+end
+
 function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{String, Vector{String}} = depots())
     # Use the first depot as the target
     target_depot = depots1(depots)
@@ -291,7 +304,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                 try
                     download_verify(url, nothing, tmp)
                 catch err
-                    Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
+                    Pkg.Types.pkgerror("could not download $url \nException: $(Pkg.errorstring(err))")
                 end
                 _hash = pkg_server_url_hash(url)
                 if !verify_archive_tree_hash(tmp, _hash)
@@ -335,7 +348,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                         try
                             download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                         catch err
-                            Pkg.Types.pkgerror("could not download $url \nException: $(sprint(showerror, err))")
+                            Pkg.Types.pkgerror("could not download $url \nException: $(Pkg.errorstring(err))")
                         end
                         tree_info_file = joinpath(tmp, ".tree_info.toml")
                         hash = pkg_server_url_hash(url)
@@ -353,7 +366,7 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                     elseif reg.url !== nothing # clone from url
                         # retry to help spurious connection issues, particularly on CI
                         # Use shallow clone (depth=1) for registries since we only need the latest state
-                        repo = retry(GitTools.clone, delays = fill(1.0, 5), check = (s, e) -> isa(e, LibGit2.GitError))(io, reg.url, tmp; header = "registry from $(repr(reg.url))", depth = 1)
+                        repo = clone_with_retry(io, reg.url, tmp; header = "registry from $(repr(reg.url))", depth = 1)
                         LibGit2.close(repo)
                     else
                         Pkg.Types.pkgerror("no path or url specified for registry")
@@ -421,7 +434,7 @@ function rm(regs::Vector{RegistrySpec}; io::IO = stderr_f())
         if isfile(registry.path)
             d = TOML.parsefile(registry.path)
             if haskey(d, "path")
-                compressed_tar = joinpath(dirname(registry.path), d["path"])
+                compressed_tar = joinpath(dirname(registry.path), d["path"]::String)
                 Base.rm(compressed_tar; force = true)
                 remove_registry_cache(compressed_tar)
             end
@@ -583,7 +596,7 @@ end
                             try
                                 download_verify(url, nothing, tmp)
                             catch err
-                                push!(errors, (reg.path, "failed to download from $(url). Exception: $(sprint(showerror, err))"))
+                                push!(errors, (reg.path, "failed to download from $(url). Exception: $(Pkg.errorstring(err))"))
                                 @goto done_tarball_read
                             end
                             hash = pkg_server_url_hash(url)
@@ -622,7 +635,7 @@ end
                                     download_verify_unpack(url, nothing, tmp, ignore_existence = true, io = io)
                                     registry_update_log[string(reg.uuid)] = now()
                                 catch err
-                                    push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(sprint(showerror, err))"))
+                                    push!(errors, (reg.path, "failed to download and unpack from $(url). Exception: $(Pkg.errorstring(err))"))
                                     @goto done_tarball_unpack
                                 end
                                 tree_info_file = joinpath(tmp, ".tree_info.toml")
@@ -655,7 +668,12 @@ end
                         push!(errors, (regpath, "registry detached"))
                         @goto done_git
                     end
-                    if !("origin" in LibGit2.remotes(repo))
+                    # the remotes come as a `Vector{Any}`
+                    has_origin = false
+                    for remote in LibGit2.remotes(repo)
+                        remote isa String && remote == "origin" && (has_origin = true)
+                    end
+                    if !has_origin
                         push!(errors, (regpath, "origin not in the list of remotes"))
                         @goto done_git
                     end
@@ -755,7 +773,7 @@ function status(io::IO = stderr_f())
             registry_type = get_registry_type(reg)
             print(io, "    ", registry_description(reg))
             update_time = get(registry_update_log, string(reg.uuid), nothing)
-            if !isnothing(update_time)
+            if update_time isa DateTime
                 time_string = Dates.format(update_time, dateformat"yyyy-mm-dd HH:MM:SS")
                 print(io, ", last updated $(time_string)")
             end

@@ -75,6 +75,7 @@ module PkgTestsInner
         "sources.jl",
         "workspaces.jl",
         "apps.jl",
+        "cli.jl",
         "stdlib_compat.jl",
     ]
 

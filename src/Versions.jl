@@ -162,19 +162,27 @@ function Base.print(io::IO, r::VersionRange)
         print(io, '*')
     elseif m == 0
         print(io, "0 -")
-        join(io, r.upper.t, '.')
+        print_bound(io, r.upper, 3)
     elseif n == 0
-        join(io, r.lower.t, '.')
+        print_bound(io, r.lower, 3)
         print(io, " - *")
     else
-        join(io, r.lower.t[1:m], '.')
+        print_bound(io, r.lower, m)
         if r.lower != r.upper
             print(io, " - ")
-            join(io, r.upper.t[1:n], '.')
+            print_bound(io, r.upper, n)
         end
     end
 end
 Base.show(io::IO, r::VersionRange) = print(io, "VersionRange(\"", r, "\")")
+
+function print_bound(io::IO, b::VersionBound, n::Int)
+    for i in 1:n
+        i > 1 && print(io, '.')
+        print(io, b.t[i])
+    end
+    return
+end
 
 Base.in(v::VersionNumber, r::VersionRange) = r.lower ≲ v ≲ r.upper
 
@@ -335,16 +343,8 @@ end
 function semver_spec(s::String; throw = true)
     ranges = VersionRange[]
     for ver in strip.(split(strip(s), ','))
-        range = nothing
-        found_match = false
-        for (ver_reg, f) in ver_regs
-            if occursin(ver_reg, ver)
-                range = f(match(ver_reg, ver))
-                found_match = true
-                break
-            end
-        end
-        if !found_match
+        range = match_ver_regs(ver)
+        if range === nothing
             if throw
                 error("invalid version specifier: \"$s\"")
             else
@@ -466,5 +466,16 @@ const ver_regs =
     Regex("^((?:≥\\s*)|(?:>=\\s*)|(?:=\\s*)|(?:<\\s*)|(?:=\\s*))v?$version\$") => inequality_interval, # < 0.2 >= 0.5,2
     Regex("^[\\s]*$version[\\s]*?\\s-\\s[\\s]*?$version[\\s]*\$") => hyphen_interval, # 0.7 - 1.3
 ]
+
+# Called one by one rather than through `ver_regs` so that the calls are statically known
+function match_ver_regs(ver::AbstractString)
+    m = match(ver_regs[1].first, ver)
+    m === nothing || return semver_interval(m)
+    m = match(ver_regs[2].first, ver)
+    m === nothing || return inequality_interval(m)
+    m = match(ver_regs[3].first, ver)
+    m === nothing || return hyphen_interval(m)
+    return nothing
+end
 
 end

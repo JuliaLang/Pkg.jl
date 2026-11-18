@@ -10,7 +10,8 @@ import Base: SHA1
 import LibGit2
 using Printf
 
-use_cli_git() = Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
+# A trimmed binary always uses the `git` client: the credential callbacks of LibGit2 are not trimmable
+use_cli_git() = Pkg.trimmed() || Base.get_bool_env("JULIA_PKG_USE_CLI_GIT", false)
 const RESOLVING_DELTAS_HEADER = "Resolving Deltas:"
 
 # Check if LibGit2 supports shallow clones (requires LibGit2 >= 1.7.0)
@@ -125,7 +126,7 @@ function ensure_clone(io::IO, target_path, url; kwargs...)
     end
 end
 
-function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, path::String)
+function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitTree, path::String)
     # Compare against the empty tree rather than the repo's HEAD/index, which can make
     # libgit2 fail with "null OID cannot exist" (#4842); `path` is a fresh directory anyway.
     # libgit2 knows the empty tree without it being in the object database.
@@ -141,7 +142,7 @@ function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitObject, p
             catch err
                 err isa LibGit2.GitError && err.class == LibGit2.Error.Submodule || rethrow()
                 Pkg.Types.pkgerror(
-                    "cannot check out a git tree that contains git submodules ($(err.msg)). ",
+                    "cannot check out a git tree that contains git submodules ($((err::LibGit2.GitError).msg)). ",
                     "Packages with submodules cannot be added, only developed with `Pkg.develop`. ",
                     "To make the package addable, replace the submodules with their content (e.g. with `git subtree`) or use artifacts."
                 )
@@ -184,15 +185,16 @@ function clone(io::IO, url, source_path; @nospecialize(header::Union{Nothing, Ab
             depth > 0 && push!(args, "--depth=$depth")
             isbare && push!(args, "--bare")
             push!(args, url, source_path)
-            cmd = `git clone $args`
+            cmd = Cmd(vcat(["git", "clone"], args))
             try
                 run(pipeline(cmd; stdout = devnull))
             catch err
-                Pkg.Types.pkgerror("The command $(cmd) failed, error: $err")
+                Pkg.Types.pkgerror("The command $(cmd) failed, error: $(Pkg.errorstring(err))")
             end
             return LibGit2.GitRepo(source_path)
         else
-            callbacks = if fancyprint
+            # the progress callback takes `Any`, which a trimmed binary can not `@cfunction`
+    callbacks = if fancyprint && !Pkg.trimmed()
                 LibGit2.Callbacks(
                     :transfer_progress => (
                         @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
@@ -241,7 +243,8 @@ function geturl(repo)
 end
 
 function fetch(io::IO, repo::LibGit2.GitRepo, @nospecialize(remoteurl::Union{Nothing, AbstractString} = nothing); @nospecialize(header::Union{Nothing, AbstractString} = nothing), credentials = nothing, refspecs::Vector{String} = [""], depth::Integer = 0, kwargs...)
-    remoteurl = remoteurl === nothing ? geturl(repo) : String(remoteurl)::String
+    remoteurl = remoteurl === nothing ? geturl(repo) : remoteurl isa String ? remoteurl :
+        Pkg.trimmed() ? error("expected a `String`") : String(remoteurl)::String
 
     # Disable shallow fetches for local repos (not supported) or if LibGit2 doesn't support it
     if depth > 0 && (is_local_repo(remoteurl) || !supports_shallow_clone())
@@ -252,7 +255,8 @@ function fetch(io::IO, repo::LibGit2.GitRepo, @nospecialize(remoteurl::Union{Not
     remoteurl = normalize_url(remoteurl)
     printpkgstyle(io, :Updating, header === nothing ? "git-repo `$remoteurl`" : header)
     bar = MiniProgressBar(header = "Fetching:", color = Base.info_color())
-    callbacks = if fancyprint
+    # the progress callback takes `Any`, which a trimmed binary can not `@cfunction`
+    callbacks = if fancyprint && !Pkg.trimmed()
         LibGit2.Callbacks(
             :transfer_progress => (
                 @cfunction(transfer_progress, Cint, (Ptr{LibGit2.TransferProgress}, Any)),
@@ -272,13 +276,13 @@ function fetch(io::IO, repo::LibGit2.GitRepo, @nospecialize(remoteurl::Union{Not
                 args = ["-C", LibGit2.path(repo), "fetch", "-q"]
                 depth > 0 && push!(args, "--depth=$depth")
                 push!(args, remoteurl, only(refspecs))
-                cmd = `git $args`
+                cmd = Cmd(vcat(["git"], args))
                 errbuf = IOBuffer()
                 try
                     run(pipeline(cmd; stdout = devnull, stderr = errbuf))
                 catch err
                     git_err = strip(String(take!(errbuf)))
-                    msg = "The command $(cmd) failed, error: $err"
+                    msg = "The command $(cmd) failed, error: $(Pkg.errorstring(err))"
                     isempty(git_err) || (msg *= "\n$(git_err)")
                     Pkg.Types.pkgerror(msg)
                 end
@@ -467,7 +471,7 @@ function check_valid_HEAD(repo)
         catch
             "(unknown url)"
         end
-        Pkg.Types.pkgerror("invalid git HEAD in $url ($(err.msg))")
+        Pkg.Types.pkgerror("invalid git HEAD in $url ($(err isa LibGit2.GitError ? err.msg : Pkg.errorstring(err)))")
     end
 end
 
