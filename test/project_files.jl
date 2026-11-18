@@ -125,6 +125,18 @@ end
             @test !isfile(joinpath(dir, "Manifest.toml"))
             @test isfile(joinpath(dir, "JuliaManifest.toml"))
         end
+        isdefined(Base, :is_shared_major_env) && cd_tempdir() do dir
+            envdir = joinpath(dir, "environments", "v$(VERSION.major)")
+            mkpath(envdir)
+            touch(joinpath(envdir, "Project.toml"))
+            touch(joinpath(envdir, "Manifest.toml"))
+            Pkg.activate(envdir)
+            Pkg.add("Example")
+            versioned = joinpath(envdir, "Manifest-v$(VERSION.major).$(VERSION.minor).toml")
+            @test isfile(versioned)
+            @test realpath(Pkg.Types.EnvCache().manifest_file) == realpath(versioned)
+            @test isempty(read(joinpath(envdir, "Manifest.toml")))
+        end
     end
 end
 
