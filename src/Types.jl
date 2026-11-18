@@ -138,7 +138,10 @@ function toml_equal(@nospecialize(a), @nospecialize(b))::Bool
     elseif a isa Vector{Any}
         b isa Vector{Any} || return false
         length(a) == length(b) || return false
-        return all(i -> toml_equal(a[i], b[i]), eachindex(a))
+        for i in eachindex(a)
+            toml_equal(a[i], b[i]) || return false
+        end
+        return true
     elseif a isa String
         return b isa String && a == b
     elseif a isa Vector{String}
@@ -1053,7 +1056,7 @@ function error_if_in_sysimage(pkg::PackageSpec)
     end
     pkgid = Base.PkgId(pkg.uuid, pkg.name)
     return if Base.in_sysimage(pkgid)
-        pkgerror("Tried to develop or add by URL package $(pkgid) which is already in the sysimage, use `Pkg.respect_sysimage_versions(false)` to disable this check.")
+        pkgerror("Tried to develop or add by URL package $(pkg.name) [$(pkg.uuid)] which is already in the sysimage, use `Pkg.respect_sysimage_versions(false)` to disable this check.")
     end
 end
 
@@ -1356,16 +1359,17 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             end
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
-            tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject::LibGit2.GitObject)::LibGit2.GitTree
+            tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject::LibGit2.GitUnknownObject)
             # When the lookup was by `pkg.tree_hash` the object is already the tree of the
             # package itself: for a subdir package the manifest records the hash of the
             # subdirectory, not of the repository root. Only descend into the subdir when
             # the lookup was by rev, where the object is the commit's root tree.
             if pkg.repo.subdir !== nothing && pkg.tree_hash === nothing
                 try
-                    tree_hash_object = tree_hash_object[pkg.repo.subdir]
+                    # by rev-parse rather than `getindex`, which returns a `GitObject` of run-time type
+                    tree_hash_object = LibGit2.GitTree(repo, string(LibGit2.GitHash(tree_hash_object), ":", pkg.repo.subdir))
                 catch e
-                    e isa KeyError || rethrow()
+                    e isa LibGit2.GitError || rethrow()
                     pkgerror("Did not find subdirectory `$(pkg.repo.subdir)` in repository `$(repo_source_typed)` at rev `$(pkg.repo.rev)`")
                 end
             end
@@ -1433,11 +1437,12 @@ get_object_or_branch(repo, rev::SHA1) =
     get_object_or_branch(repo, string(rev))
 
 # Returns nothing if rev could not be found in repo
+# `GitUnknownObject` rather than `GitObject`, whose concrete type is only known at run time
 function get_object_or_branch(repo, rev)
     # Handle pull request references
     if startswith(rev, "pull/") && endswith(rev, "/head")
         try
-            gitobject = LibGit2.GitObject(repo, "cache/" * rev)
+            gitobject = LibGit2.GitUnknownObject(repo, "cache/" * rev)
             return gitobject, true
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
@@ -1445,25 +1450,25 @@ function get_object_or_branch(repo, rev)
     end
 
     try
-        gitobject = LibGit2.GitObject(repo, "cache/heads/" * rev)
+        gitobject = LibGit2.GitUnknownObject(repo, "cache/heads/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
-        gitobject = LibGit2.GitObject(repo, "remotes/origin/" * rev)
+        gitobject = LibGit2.GitUnknownObject(repo, "remotes/origin/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
-        gitobject = LibGit2.GitObject(repo, "heads/" * rev)
+        gitobject = LibGit2.GitUnknownObject(repo, "heads/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
-        gitobject = LibGit2.GitObject(repo, rev)
+        gitobject = LibGit2.GitUnknownObject(repo, rev)
         return gitobject, false
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()

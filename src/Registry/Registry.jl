@@ -668,7 +668,12 @@ end
                         push!(errors, (regpath, "registry detached"))
                         @goto done_git
                     end
-                    if !("origin" in LibGit2.remotes(repo))
+                    # the remotes come as a `Vector{Any}`
+                    has_origin = false
+                    for remote in LibGit2.remotes(repo)
+                        remote isa String && remote == "origin" && (has_origin = true)
+                    end
+                    if !has_origin
                         push!(errors, (regpath, "origin not in the list of remotes"))
                         @goto done_git
                     end

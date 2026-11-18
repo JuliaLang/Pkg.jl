@@ -1503,9 +1503,10 @@ function precompile(f, args...; kwargs...)
     end
 end
 
-function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)::Union{Nothing, LibGit2.GitObject}
+function tree_hash(repo::LibGit2.GitRepo, tree_hash::String)::Union{Nothing, LibGit2.GitTree}
     try
-        return LibGit2.GitObject(repo, tree_hash)
+        # a `GitTree` rather than a `GitObject`, whose type is only known at run time
+        return LibGit2.GitTree(repo, tree_hash)
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
@@ -2042,16 +2043,16 @@ set_current_compat(; kwargs...) = set_current_compat(Context(); kwargs...)
 
 # Print `uuid` and, recursively, its neighbors in `adjacency` as a tree. A subtree
 # is only printed the first time its node is seen; later occurrences are marked
-# with `(*)`. Only children satisfying `keep` are shown. The connector to each
+# with `(*)`. Only children in `keep` are shown. The connector to each
 # child ends in `arrow`, which points in the direction of the dependency: `→`
 # when the parent depends on the child and `←` when the child depends on the parent.
 function why_print_tree!(
         io::IO, seen::Set{UUID}, uuid::UUID, prefix::String, child_prefix::String;
-        manifest, adjacency, keep, project_deps, arrow::String
+        manifest, adjacency, keep::Set{UUID}, project_deps, arrow::String
     )
     pkg = manifest[uuid]
     children = sort!(
-        filter(keep, get(adjacency, uuid, UUID[])),
+        filter(in(keep), get(adjacency, uuid, UUID[])),
         by = u -> (is_stdlib(u), endswith(manifest[u].name, "_jll"), manifest[u].name)
     )
     print(io, prefix)
@@ -2126,11 +2127,11 @@ function why(ctx::Context, pkgs::Vector{PackageSpec}; io::IO, workspace::Bool = 
             ancestors = why_closure([pkg.uuid], incoming, reachable)
             roots = sort!(filter(in(ancestors), collect(project_deps)); by = u -> manifest[u].name)
             for root in roots
-                why_print_tree!(io, seen, root, "  ", "  "; manifest, adjacency = outgoing, keep = in(ancestors), project_deps, arrow = "→")
+                why_print_tree!(io, seen, root, "  ", "  "; manifest, adjacency = outgoing, keep = ancestors, project_deps, arrow = "→")
             end
         else
             # Bottom-up: start at the package and show what depends on it
-            why_print_tree!(io, seen, pkg.uuid, "  ", "  "; manifest, adjacency = incoming, keep = in(reachable), project_deps, arrow = "←")
+            why_print_tree!(io, seen, pkg.uuid, "  ", "  "; manifest, adjacency = incoming, keep = reachable, project_deps, arrow = "←")
         end
     end
     return

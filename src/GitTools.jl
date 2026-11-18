@@ -126,7 +126,7 @@ function ensure_clone(io::IO, target_path, url; kwargs...)
     end
 end
 
-function checkout_tree_to_path(repo::LibGit2.GitRepo, @nospecialize(tree::LibGit2.GitObject), path::String)
+function checkout_tree_to_path(repo::LibGit2.GitRepo, tree::LibGit2.GitTree, path::String)
     # Compare against the empty tree rather than the repo's HEAD/index, which can make
     # libgit2 fail with "null OID cannot exist" (#4842); `path` is a fresh directory anyway.
     # libgit2 knows the empty tree without it being in the object database.
@@ -185,7 +185,7 @@ function clone(io::IO, url, source_path; @nospecialize(header::Union{Nothing, Ab
             depth > 0 && push!(args, "--depth=$depth")
             isbare && push!(args, "--bare")
             push!(args, url, source_path)
-            cmd = `git clone $args`
+            cmd = Cmd(vcat(["git", "clone"], args))
             try
                 run(pipeline(cmd; stdout = devnull))
             catch err
@@ -276,7 +276,7 @@ function fetch(io::IO, repo::LibGit2.GitRepo, @nospecialize(remoteurl::Union{Not
                 args = ["-C", LibGit2.path(repo), "fetch", "-q"]
                 depth > 0 && push!(args, "--depth=$depth")
                 push!(args, remoteurl, only(refspecs))
-                cmd = `git $args`
+                cmd = Cmd(vcat(["git"], args))
                 errbuf = IOBuffer()
                 try
                     run(pipeline(cmd; stdout = devnull, stderr = errbuf))

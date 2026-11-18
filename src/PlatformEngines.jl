@@ -93,12 +93,13 @@ end
 const AUTH_ERROR_HANDLERS = Pair{Union{String, Regex}, Any}[]
 
 # a TOML number is an `Int64` or a `Float64`
-toml_float(@nospecialize(x)) = x isa Float64 ? x : x isa Int64 ? Float64(x) : Float64(x::Number)::Float64
+toml_float(@nospecialize(x)) = x isa Float64 ? x : x isa Int64 ? Float64(x) : error("expected a number, got `$(typeof(x))`")
 
 function handle_auth_error(url, err; verbose::Bool = false)
     handled, should_retry = false, false
     # the handlers are functions of unknown type, which a trimmed binary can not call
-    for (scheme, handler) in (Pkg.trimmed() ? empty(AUTH_ERROR_HANDLERS) : AUTH_ERROR_HANDLERS)
+    Pkg.trimmed() && return nothing
+    for (scheme, handler) in AUTH_ERROR_HANDLERS
         occursin(scheme, url) || continue
         handled, should_retry = handler(url, pkg_server(), err)
         handled && break
