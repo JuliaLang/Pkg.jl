@@ -586,6 +586,49 @@ end
     end
 end
 
+@testset "workspace sources distinguish packages with the same name (#4907)" begin
+    isolate() do
+        mktempdir() do dir
+            repo = joinpath(dir, "Mono")
+            ws = joinpath(dir, "workspace")
+            vendored_uuid = UUID("22222222-2222-2222-2222-222222222222")
+            member_uuid = UUID("33333333-3333-3333-3333-333333333333")
+
+            for (path, name, uuid) in (
+                    (repo, "Mono", UUID("11111111-1111-1111-1111-111111111111")),
+                    (joinpath(repo, "lib", "Sub"), "Sub", vendored_uuid),
+                    (joinpath(ws, "Sub"), "Sub", member_uuid),
+                )
+                mkpath(joinpath(path, "src"))
+                write(joinpath(path, "Project.toml"), "name = \"$name\"\nuuid = \"$uuid\"\nversion = \"0.1.0\"\n")
+                write(joinpath(path, "src", "$name.jl"), "module $name end\n")
+            end
+            git_init_and_commit(repo)
+            write(
+                joinpath(ws, "Project.toml"), """
+                [deps]
+                Sub = "$vendored_uuid"
+
+                [sources]
+                Sub = {url = $(repr(repo)), subdir = "lib/Sub"}
+
+                [workspace]
+                projects = ["Sub"]
+                """
+            )
+
+            with_pkg_env(ws) do
+                Pkg.instantiate()
+                Pkg.add("Dates")
+                manifest = Pkg.Types.EnvCache().manifest
+                @test manifest[vendored_uuid].repo.subdir == "lib/Sub"
+                @test manifest[member_uuid].path == "Sub"
+                @test manifest[member_uuid].repo.source === nothing
+            end
+        end
+    end
+end
+
 @testset "workspace projects with conflicting [sources] warn (#4590)" begin
     isolate() do
         mktempdir() do dir
