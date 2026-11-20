@@ -1902,7 +1902,7 @@ function activate(f::Function, new_project::AbstractString)
     end
 end
 
-function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing, String}; current::Bool = false, io = nothing, kwargs...)
+function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing, String}; current::Bool = false, lazy::Bool = false, io = nothing, kwargs...)
     if current
         if compat_str !== nothing
             pkgerror("`current` is true, but `compat_str` is not nothing. This is not allowed.")
@@ -1933,7 +1933,7 @@ function _compat(ctx::Context, pkg::String, compat_str::Union{Nothing, String}; 
         end
         printpkgstyle(io, :Resolve, "checking for compliance with the new compat rules...")
         try
-            resolve(ctx)
+            resolve(ctx; lazy)
         catch e
             if e isa ResolverError || e isa ResolverTimeoutError
                 printpkgstyle(io, :Error, string(e.msg), color = Base.warn_color())

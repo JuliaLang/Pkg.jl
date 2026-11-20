@@ -1180,6 +1180,25 @@ end
     end
 end
 
+@testset "compat: lazy" begin
+    isolate(loaded_depot = false) do
+        mktempdir() do dir
+            Pkg.activate(dir)
+            Pkg.add("Example"; lazy = true)
+            @test !Pkg.Operations.is_instantiated(Pkg.Types.EnvCache())
+
+            Pkg.compat("Example", "0.5"; lazy = true)
+            env = Pkg.Types.EnvCache()
+            @test Pkg.Operations.get_compat_str(env.project, "Example") == "0.5"
+            @test Pkg.Operations.is_manifest_current(env) === true
+            @test !Pkg.Operations.is_instantiated(env)
+
+            Pkg.compat("Example", "0.5")
+            @test Pkg.Operations.is_instantiated(Pkg.Types.EnvCache())
+        end
+    end
+end
+
 @testset "add/update/resolve: lazy" begin
     isolate(loaded_depot = false) do
         mktempdir() do dir
