@@ -2081,6 +2081,9 @@ function selector_environment(env::EnvCache)
     manifest.environment_name = nothing
     projects = map(enumerate(Base.get_projects_workspace_to_root(env.project_file))) do (i, file)
         project = deepcopy(i == 1 ? env.project : env.workspace[file])
+        # Test resolution can temporarily narrow compat values. Selectors use the
+        # resolved manifest and the project's original compat strings.
+        reset_all_compat!(project)
         project.manifest = nothing
         empty!(project.workspace)
         i == 1 || (project.workspace["projects"] = ["child"])
