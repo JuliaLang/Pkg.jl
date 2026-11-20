@@ -317,9 +317,12 @@ function load_all_deps(
         preserve::PreserveLevel = PRESERVE_ALL
     )
     pkgs = load_manifest_deps(env.manifest, pkgs; preserve = preserve)
-    # Sources takes presedence over the manifest...
+    # Project sources override the manifest only for the declared dependency.
+    project = env.project
     for pkg in pkgs
-        path, repo = get_path_repo(env.project, env.project_file, env.manifest_file, pkg.name)
+        source_uuid = get(project.deps, pkg.name, get(project.extras, pkg.name, nothing))
+        source_uuid !== nothing && source_uuid == pkg.uuid || continue
+        path, repo = get_path_repo(project, env.project_file, env.manifest_file, pkg.name)
         if path !== nothing
             # Path from [sources] takes precedence - clear tree_hash and repo from manifest
             pkg.tree_hash = nothing
