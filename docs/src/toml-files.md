@@ -342,8 +342,15 @@ release under `v` and its version number, as in the example. Without `{version}`
 should show the latest release, such as Documenter.jl's `stable`.
 
 `source` is only needed when the manual is not in `docs/src`, where Documenter.jl keeps it by
-default. Leave it out when the manual is not part of the package, for example when the package
-is in a subdirectory of a repository whose documentation is elsewhere in it.
+default. It can point outside the package, to elsewhere in its repository, as for a package in a
+subdirectory whose manual is shared with other packages of the repository:
+```toml
+[docs]
+source = "../docs/src"
+```
+Such a manual is not installed with the package, since only the package's own directory is.
+A tool can download it from the repository, at the release whose package directory has the
+tree hash recorded for the installed version.
 
 ### The `[extras]` section (legacy)
 
