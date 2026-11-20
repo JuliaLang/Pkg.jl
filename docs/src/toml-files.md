@@ -323,6 +323,35 @@ In this case, the workspaces are "merged" with a single manifest being stored al
 !!! compat
     Workspaces require Julia 1.12+.
 
+### The `[docs]` section
+
+The optional `[docs]` section of a package says where its documentation is: `url` is the
+address of the hosted documentation, and `source` is the directory, relative to the project
+file, that holds the Markdown source of its manual. For example:
+```toml
+[docs]
+url = "https://example.github.io/Example.jl/v{version}/"
+source = "docs/src"
+```
+Pkg does not use this section. It lets other tools, such as documentation browsers, editors
+and AI agents, find a package's documentation without guessing it from the README.
+
+In `url`, `{version}` stands for the package's `version`, so that a tool can link the
+documentation of the version that is installed. Documenter.jl deploys the documentation of each
+release under `v` and its version number, as in the example. Without `{version}`, the address
+should show the latest release, such as Documenter.jl's `stable`.
+
+`source` is only needed when the manual is not in `docs/src`, where Documenter.jl keeps it by
+default. It can point outside the package, to elsewhere in its repository, as for a package in a
+subdirectory whose manual is shared with other packages of the repository:
+```toml
+[docs]
+source = "../docs/src"
+```
+Such a manual is not installed with the package, since only the package's own directory is.
+A tool can download it from the repository, at the release whose package directory has the
+tree hash recorded for the installed version.
+
 ### The `[extras]` section (legacy)
 
 !!! warning
