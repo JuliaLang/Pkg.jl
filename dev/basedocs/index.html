@@ -12,57 +12,60 @@ If you require more details, refer to subsequent sections of the Pkg manual.</p>
 For non-interactive use, we recommend the Pkg API.
 The Pkg API is fully documented in the <a href="https://pkgdocs.julialang.org/v1/api/">API Reference</a> section of the Pkg documentation.</p></div></div><p>Pkg comes with a REPL.
 Enter the Pkg REPL by pressing <code>]</code> from the Julia REPL.
-To get back to the Julia REPL, press <code>Ctrl+C</code> or backspace (when the REPL cursor is at the beginning of the input).</p><p>Upon entering the Pkg REPL, you should see the following prompt:</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt;</code></pre><p>To add a package, use <code>add</code>:</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; add Example
+To get back to the Julia REPL, press <code>Ctrl+C</code> or backspace (when the REPL cursor is at the beginning of the input).</p><p>Upon entering the Pkg REPL, you should see the following prompt:</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt;</code></pre><p>To add a package, use <code>add</code>:</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; add Example
    Resolving package versions...
-   Installed Example ─ v0.5.3
-    Updating `~/.julia/environments/v1.10/Project.toml`
-  [7876af07] + Example v0.5.3
-    Updating `~/.julia/environments/v1.10/Manifest.toml`
-  [7876af07] + Example v0.5.3</code></pre><p>After the package is installed, it can be loaded into the Julia session:</p><pre><code class="language-julia-repl hljs">julia&gt; import Example
+   Installed Example ─ v0.5.5
+    Updating `~/.julia/environments/v{{VERSION}}/Project.toml`
+  [7876af07] + Example v0.5.5
+    Updating `~/.julia/environments/v{{VERSION}}/Manifest.toml`
+  [7876af07] + Example v0.5.5
+Precompiling packages...
+  1 dependency successfully precompiled in 0 seconds</code></pre><p>After the package is installed, it can be loaded into the Julia session:</p><pre><code class="language-julia-repl hljs">julia&gt; import Example
 
 julia&gt; Example.hello(&quot;friend&quot;)
-&quot;Hello, friend&quot;</code></pre><p>We can also specify multiple packages at once to install:</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; add JSON StaticArrays</code></pre><p>The <code>status</code> command (or the shorter <code>st</code> command) can be used to see installed packages.</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; st
-Status `~/.julia/environments/v1.10/Project.toml`
-  [7876af07] Example v0.5.3
-  [682c06a0] JSON v0.21.3
-  [90137ffa] StaticArrays v1.5.9</code></pre><div class="admonition is-info" id="Note-75a3ef9daf05f47f"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-75a3ef9daf05f47f" title="Permalink"></a></header><div class="admonition-body"><p>Some Pkg REPL commands have a short and a long version of the command, for example <code>status</code> and <code>st</code>.</p></div></div><p>To remove packages, use <code>rm</code> (or <code>remove</code>):</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; rm JSON StaticArrays</code></pre><p>Use <code>up</code> (or <code>update</code>) to update the installed packages</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; up</code></pre><p>If you have been following this guide it is likely that the packages installed are at the latest version
+&quot;Hello, friend&quot;</code></pre><p>We can also specify multiple packages at once to install:</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; add JSON StaticArrays</code></pre><p>The <code>status</code> command (or the shorter <code>st</code> command) can be used to see installed packages.</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; st
+Status `~/.julia/environments/v{{VERSION}}/Project.toml`
+  [7876af07] Example v0.5.5
+  [682c06a0] JSON v1.14.4
+  [90137ffa] StaticArrays v1.9.25</code></pre><div class="admonition is-info" id="Note-75a3ef9daf05f47f"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-75a3ef9daf05f47f" title="Permalink"></a></header><div class="admonition-body"><p>Some Pkg REPL commands have a short and a long version of the command, for example <code>status</code> and <code>st</code>.</p></div></div><p>To remove packages, use <code>rm</code> (or <code>remove</code>):</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; rm JSON StaticArrays</code></pre><p>Use <code>up</code> (or <code>update</code>) to update the installed packages</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; up</code></pre><p>If you have been following this guide it is likely that the packages installed are at the latest version
 so <code>up</code> will not do anything. Below we show the status output in the case where we deliberately have installed
-an old version of the Example package and then upgrade it:</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; st
-Status `~/.julia/environments/v1.10/Project.toml`
+an old version of the Example package and then upgrade it:</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; st
+Status `~/.julia/environments/v{{VERSION}}/Project.toml`
 ⌃ [7876af07] Example v0.5.1
 Info Packages marked with ⌃ have new versions available. Use `status --outdated` to see which of them an update upgrades and what holds the others back.
 
-(@v1.10) pkg&gt; up
-    Updating `~/.julia/environments/v1.10/Project.toml`
-  [7876af07] ↑ Example v0.5.1 ⇒ v0.5.3</code></pre><p>We can see that the status output tells us that there is a newer version available and that <code>up</code> upgrades the package.</p><p>For more information about managing packages, see the <a href="https://pkgdocs.julialang.org/v1/managing-packages/">Managing Packages</a> section of the documentation.</p><p>Up to this point, we have covered basic package management: adding, updating, and removing packages.</p><p>You may have noticed the <code>(@v1.10)</code> in the REPL prompt.
-This lets us know that <code>v1.10</code> is the <strong>active environment</strong>.
+(@v{{VERSION}}) pkg&gt; up
+    Updating `~/.julia/environments/v{{VERSION}}/Project.toml`
+  [7876af07] ↑ Example v0.5.1 ⇒ v0.5.5
+    Updating `~/.julia/environments/v{{VERSION}}/Manifest.toml`
+  [7876af07] ↑ Example v0.5.1 ⇒ v0.5.5</code></pre><p>We can see that the status output tells us that there is a newer version available and that <code>up</code> upgrades the package.</p><p>For more information about managing packages, see the <a href="https://pkgdocs.julialang.org/v1/managing-packages/">Managing Packages</a> section of the documentation.</p><p>Up to this point, we have covered basic package management: adding, updating, and removing packages.</p><p>You may have noticed the <code>(@v{{VERSION}})</code> in the REPL prompt.
+This lets us know that <code>v{{VERSION}}</code> is the <strong>active environment</strong>.
 Different environments can have totally different packages and versions installed from another environment.
 The active environment is the environment that will be modified by Pkg commands such as <code>add</code>, <code>rm</code> and <code>update</code>.</p><p>Let&#39;s set up a new environment so we may experiment.
-To set the active environment, use <code>activate</code>:</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; activate tutorial
-[ Info: activating new environment at `~/tutorial/Project.toml`.</code></pre><p>Pkg lets us know we are creating a new environment and that this environment
+To set the active environment, use <code>activate</code>:</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; activate tutorial
+  Activating new project at `~/tutorial`</code></pre><p>Pkg lets us know we are creating a new environment and that this environment
 will be stored in the <code>~/tutorial</code> directory. The path to the environment
 is created relative to the current working directory of the REPL.</p><p>Pkg has also updated the REPL prompt in order to reflect the new
 active environment:</p><pre><code class="language-julia-repl hljs">(tutorial) pkg&gt;</code></pre><p>We can ask for information about the active environment by using <code>status</code>:</p><pre><code class="language-julia-repl hljs">(tutorial) pkg&gt; status
-    Status `~/tutorial/Project.toml`
-   (empty environment)</code></pre><p><code>~/tutorial/Project.toml</code> is the location of the active environment&#39;s <strong>project file</strong>.
+Status `~/tutorial/Project.toml` (empty project)</code></pre><p><code>~/tutorial/Project.toml</code> is the location of the active environment&#39;s <strong>project file</strong>.
 A project file is a <a href="https://toml.io/en/">TOML</a> file where Pkg stores the packages that have been explicitly installed.
 Notice this new environment is empty.
 Let us add some packages and observe:</p><pre><code class="language-julia-repl hljs">(tutorial) pkg&gt; add Example JSON
 ...
 
 (tutorial) pkg&gt; status
-    Status `~/tutorial/Project.toml`
-  [7876af07] Example v0.5.3
-  [682c06a0] JSON v0.21.3</code></pre><p>We can see that the <code>tutorial</code> environment now contains <code>Example</code> and <code>JSON</code>.</p><div class="admonition is-info" id="Note-24ed79b4ea0dee3d"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-24ed79b4ea0dee3d" title="Permalink"></a></header><div class="admonition-body"><p>If you have the same
+Status `~/tutorial/Project.toml`
+  [7876af07] Example v0.5.5
+  [682c06a0] JSON v1.14.4</code></pre><p>We can see that the <code>tutorial</code> environment now contains <code>Example</code> and <code>JSON</code>.</p><div class="admonition is-info" id="Note-24ed79b4ea0dee3d"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-24ed79b4ea0dee3d" title="Permalink"></a></header><div class="admonition-body"><p>If you have the same
 package (at the same version) installed in multiple environments, the package
 will only be downloaded and stored on the hard drive once. This makes environments
 very lightweight and effectively free to create. Using only the default
 environment with a huge number of packages in it is a common beginners mistake in
 Julia. Learning how to use environments effectively will improve your experience with
 Julia packages.</p></div></div><p>When you&#39;re done working in a specific environment and want to return to the default environment, use <code>activate</code> with no arguments:</p><pre><code class="language-julia-repl hljs">(tutorial) pkg&gt; activate
-  Activating project at `~/.julia/environments/v1.10`
+  Activating project at `~/.julia/environments/v{{VERSION}}`
 
-(@v1.10) pkg&gt;</code></pre><p>This returns you to the default <code>@v1.10</code> environment. There is no separate &quot;deactivate&quot; command—<code>activate</code> with no arguments serves this purpose.</p><p>For more information about environments, see the <a href="https://pkgdocs.julialang.org/v1/environments/">Working with Environments</a> section of the documentation.</p><p>If you are ever stuck, you can ask <code>Pkg</code> for help:</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; ?</code></pre><p>You should see a list of available commands along with short descriptions.
-You can ask for more detailed help by specifying a command:</p><pre><code class="language-julia-repl hljs">(@v1.10) pkg&gt; ?develop</code></pre><p>This guide should help you get started with <code>Pkg</code>.
+(@v{{VERSION}}) pkg&gt;</code></pre><p>This returns you to the default <code>@v{{VERSION}}</code> environment. There is no separate &quot;deactivate&quot; command—<code>activate</code> with no arguments serves this purpose.</p><p>For more information about environments, see the <a href="https://pkgdocs.julialang.org/v1/environments/">Working with Environments</a> section of the documentation.</p><p>If you are ever stuck, you can ask <code>Pkg</code> for help:</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; ?</code></pre><p>You should see a list of available commands along with short descriptions.
+You can ask for more detailed help by specifying a command:</p><pre><code class="language-julia-repl hljs">(@v{{VERSION}}) pkg&gt; ?develop</code></pre><p>This guide should help you get started with <code>Pkg</code>.
 <code>Pkg</code> has much more to offer in terms of powerful package management.
-For more advanced topics, see <a href="https://pkgdocs.julialang.org/v1/managing-packages/">Managing Packages</a>, <a href="https://pkgdocs.julialang.org/v1/environments/">Working with Environments</a>, and <a href="@ref creating-packages-tutorial">Creating Packages</a>.</p></article><nav class="docs-footer"><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Tuesday 17 November 2026 14:26">Tuesday 17 November 2026</span>. Using Julia version 1.15.0-DEV.812.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+For more advanced topics, see <a href="https://pkgdocs.julialang.org/v1/managing-packages/">Managing Packages</a>, <a href="https://pkgdocs.julialang.org/v1/environments/">Working with Environments</a>, and <a href="@ref creating-packages-tutorial">Creating Packages</a>.</p></article><nav class="docs-footer"><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.20.0 on <span class="colophon-date" title="Monday 23 November 2026 21:38">Monday 23 November 2026</span>. Using Julia version 1.15.0-DEV.940.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
