@@ -182,7 +182,7 @@ function resolve_prepared(
     univ :: Universe{P,V},
     prob :: Problem{P};
     by   :: Function = identity, # package ordering
-    order = nothing, # version ordering
+    order :: Union{Nothing,Function} = nothing, # version ordering
     diagnose :: Bool = false,
 ) where {P,V}
     sat = SAT(univ)
@@ -267,7 +267,7 @@ function relax(
     Q    :: Problem{P},
     drop_reqs        :: SetOrVec{P} = P[],
     drop_constraints :: AbstractDict{Symbol} = EmptyDict{Symbol,Nothing}();
-    order = nothing, # version ordering
+    order :: Union{Nothing,Function} = nothing, # version ordering
 ) where {P,V}
     R = relax(Q, drop_reqs, drop_constraints)
     # what `R` makes of the classes `Q` laid out, in one pass: the member each
@@ -336,7 +336,7 @@ function resolve(
     deps :: DepsProvider{P},
     prob :: Problem{P};
     by   :: Function = identity, # package ordering
-    order = nothing, # version ordering
+    order :: Union{Nothing,Function} = nothing, # version ordering
     diagnose :: Bool = true,
     upstream :: Bool = true, # look for releases that would fix each conflict
 ) where {P}
@@ -350,7 +350,7 @@ function resolve(
     data :: AbstractDict{P,<:PkgData{P}},
     prob :: Problem{P};
     by   :: Function = identity, # package ordering
-    order = nothing, # version ordering
+    order :: Union{Nothing,Function} = nothing, # version ordering
     diagnose :: Bool = true,
     upstream :: Bool = true, # look for releases that would fix each conflict
 ) where {P}
@@ -363,12 +363,24 @@ end
 # `resolve(deps, prob; diagnose = false, upstream = false)`, which is what an
 # upstream probe asks. Not `resolve` itself: inference would meet that again
 # inside its own probes, and the cycle widens the argument types it compiles
-# the whole pipeline for, so the pipeline would be compiled twice
-function resolve_undiagnosed(deps::DepsProvider{P}, prob::Problem{P};
-                             by::Function = identity, order = nothing) where {P}
+# the whole pipeline for, so the pipeline would be compiled twice. Nor
+# `resolve_prepared`, whose answer is a solution or a diagnosis by the value of
+# a flag: solving here makes a solution or `nothing` all it can return, which
+# its types then say without anyone having to assert it
+function resolve_undiagnosed(
+    deps  :: DepsProvider{P},
+    prob  :: Problem{P};
+    by    :: Function = identity, # package ordering
+    order :: Union{Nothing,Function} = nothing, # version ordering
+) where {P}
     info = pkg_info(deps, prob)
-    return resolve_prepared(prepare_pkg_info(info, prob, info; order), prob;
-        by, order, diagnose = false)
+    # single-use, as in `resolve_prepared`: there is no state to restore
+    sat = SAT(prepare_pkg_info(info, prob, info; order))
+    try
+        return resolve(sat, prob.reqs; by, restore = false)
+    finally
+        finalize(sat)
+    end
 end
 
 # What the package data adds to a diagnosis, and only it can: for each
@@ -376,7 +388,14 @@ end
 # `Diagnostics.upstream_fixes`). A release is a different registry rather than a
 # different query, so this is the resolve's to ask and not the diagnosis's, and
 # `upstream = false` is how a caller that does not want the probes says so.
-with_upstream(data, prob::Problem, ans, upstream::Bool; by, order) =
+with_upstream(
+    data     :: Union{DepsProvider{P}, AbstractDict{P,<:PkgData{P}}},
+    prob     :: Problem{P},
+    ans      :: Any, # a solution, `nothing`, or a `Diagnosis` (defined later)
+    upstream :: Bool;
+    by       :: Function,
+    order    :: Union{Nothing,Function},
+) where {P} =
     upstream && ans isa Diagnostics.Diagnosis ?
         Diagnostics.upstream_fixes(data, prob, ans; by, order) : ans
 
@@ -386,7 +405,7 @@ function resolve(
     info :: AbstractDict{P,PkgInfo{P,V}},
     prob :: Problem{P};
     by   :: Function = identity, # package ordering
-    order = nothing, # version ordering
+    order :: Union{Nothing,Function} = nothing, # version ordering
     diagnose :: Bool = true,
 ) where {P,V}
     resolve_prepared(prepare_pkg_info(info, prob; order), prob;
@@ -400,7 +419,7 @@ resolve(
     deps :: DepsProvider{P},
     reqs :: SetOrVec{P} = deps.packages;
     by     :: Function = identity, # package ordering
-    order  = nothing, # version ordering
+    order  :: Union{Nothing,Function} = nothing, # version ordering
     diagnose :: Bool = true,
     upstream :: Bool = true,
 ) where {P} = resolve(deps, Problem(reqs); by, order, diagnose, upstream)
@@ -409,7 +428,7 @@ resolve(
     data :: AbstractDict{P,<:PkgData{P}},
     reqs :: SetOrVec{P} = keys(data);
     by     :: Function = identity, # package ordering
-    order  = nothing, # version ordering
+    order  :: Union{Nothing,Function} = nothing, # version ordering
     diagnose :: Bool = true,
     upstream :: Bool = true,
 ) where {P} = resolve(data, Problem(reqs); by, order, diagnose, upstream)
@@ -418,7 +437,7 @@ resolve(
     info :: AbstractDict{P,PkgInfo{P,V}},
     reqs :: SetOrVec{P} = keys(info);
     by     :: Function = identity, # package ordering
-    order  = nothing, # version ordering
+    order  :: Union{Nothing,Function} = nothing, # version ordering
     diagnose :: Bool = true,
 ) where {P,V} = resolve(info, Problem(reqs); by, order, diagnose)
 

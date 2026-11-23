@@ -1,7 +1,7 @@
 name = "Resolver"
 uuid = "ecd60e94-5748-11e9-04dc-1fe0f95e4121"
 authors = ["Stefan Karpinski <stefan@karpinski.org>"]
-version = "0.2.0"
+version = "1.0.0"
 
 [deps]
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"

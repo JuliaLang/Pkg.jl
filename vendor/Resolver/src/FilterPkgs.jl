@@ -118,7 +118,7 @@ version_permutations(
 
 function version_permutations(
     info  :: AbstractDict{P, PkgInfo{P,V}},
-    order,
+    order :: Function,
 ) where {P,V}
     perms = Dict{P, Vector{Int}}()
     for (p, info_p) in info
@@ -209,8 +209,8 @@ function class_ranking_keys(
     excl = exclusion_masks(info, prob)
     reps = Dict{P, Vector{Int}}()
     perms′ = Dict{P, SparsePerm}()
-    keys_q = want_keys ? Dict{P, Vector{Int}}() : nothing
-    keys_0 = want_keys ? Dict{P, Vector{Int}}() : nothing
+    # `(key_Q, key_∅)` per package, when wanted
+    ranks = want_keys ? (Dict{P, Vector{Int}}(), Dict{P, Vector{Int}}()) : nothing
     ord = Int[] # scratch: the class order, read out into a `SparsePerm`
     key = Int[] # scratch: per class, the rank of the member it competes at
     key0 = Int[] # scratch: per class, the rank of its best member, period
@@ -257,7 +257,7 @@ function class_ranking_keys(
             cperm = SparsePerm(m, moved)
             perms′[p] = cperm
         end
-        if want_keys
+        if ranks !== nothing
             # key_∅: the rank of each class's best member, exclusions ignored
             resize!(key0, m)
             fill!(key0, 0)
@@ -266,12 +266,11 @@ function class_ranking_keys(
                 key0[j] == 0 || continue
                 key0[j] = r
             end
-            keys_q[p] = cperm === nothing ? copy(key) : key[cperm]
-            keys_0[p] = cperm === nothing ? copy(key0) : key0[cperm]
+            ranks[1][p] = cperm === nothing ? copy(key) : key[cperm]
+            ranks[2][p] = cperm === nothing ? copy(key0) : key0[cperm]
         end
     end
-    return reps, isempty(perms′) ? nothing : perms′,
-        want_keys ? (keys_q, keys_0) : nothing
+    return reps, isempty(perms′) ? nothing : perms′, ranks
 end
 
 """
@@ -307,7 +306,8 @@ prepare_pkg_info(
     info  :: AbstractDict{P, PkgInfo{P,V}},
     prob  :: Problem{P},
     info′ :: Dict{P, PkgInfo{P,V}} = Dict{P, PkgInfo{P,V}}();
-    order = nothing, # nothing = canonical, else package -> `lt` comparator
+    # nothing = canonical, else package -> `lt` comparator
+    order :: Union{Nothing,Function} = nothing,
 ) where {P,V} =
     filter_pkg_info!(rank_pkg_info(info, prob, info′; order), prob)
 
@@ -319,7 +319,7 @@ function rank_pkg_info(
     info  :: AbstractDict{P, PkgInfo{P,V}},
     prob  :: Problem{P} = Problem(P[]),
     info′ :: Dict{P, PkgInfo{P,V}} = Dict{P, PkgInfo{P,V}}();
-    order = nothing,
+    order :: Union{Nothing,Function} = nothing,
 ) where {P,V}
     perms = version_permutations(info, order)
     reps, cperms, keys = class_ranking_keys(
@@ -559,10 +559,9 @@ function find_reachable(
     deact :: AbstractDict{P, BitVector},
     kq    :: Dict{P, Vector{Int}},
     k0    :: Dict{P, Vector{Int}},
-    tb    = reach_tables(info),
+    tb    :: NamedTuple = reach_tables(info),
 ) where {P,V}
-    pkgs, N, ix, infos, ncls, deps, partners =
-        tb.pkgs, tb.N, tb.ix, tb.infos, tb.ncls, tb.deps, tb.partners
+    pkgs, N, infos, ncls = tb.pkgs, tb.N, tb.infos, tb.ncls
 
     # ---------------------------------------------------------------- layout
     # Everything per-class is flat: `coff[p]` offsets the key arrays, `soff[p]`
@@ -603,7 +602,17 @@ end
 
 # Deactivation dictionaries only affect the prepared rank arrays. Share the
 # reachability loop across their concrete representations.
-@noinline function find_reachable_kernel!(reqs, tb, coff, soff, cw, chunks, KQ, K0, ord0)
+@noinline function find_reachable_kernel!(
+    reqs   :: SetOrVec,
+    tb     :: NamedTuple,
+    coff   :: Vector{Int},
+    soff   :: Vector{Int},
+    cw     :: Vector{Int},
+    chunks :: Vector{Vector{UInt64}},
+    KQ     :: Vector{Int},
+    K0     :: Vector{Int},
+    ord0   :: Vector{Union{Nothing,Vector{Int}}},
+)
     N, ix, infos, ncls, deps, partners =
         tb.N, tb.ix, tb.infos, tb.ncls, tb.deps, tb.partners
 
@@ -877,17 +886,15 @@ function mark_necessary!(
     partners = Vector{Vector{NTuple{3,Int}}}(undef, N)
     # interned deactivation masks (nothing: nothing empty here, the norm)
     deacts = Vector{Union{Nothing,BitVector}}(nothing, N)
-    # interned rank keys
-    kqv = Vector{Union{Nothing,Vector{Int}}}(nothing, N)
-    k0v = Vector{Union{Nothing,Vector{Int}}}(nothing, N)
+    # interned rank keys (key_Q, key_∅), or nothing when not ranking
+    rankv = Vector{Union{Nothing,NTuple{2,Vector{Int}}}}(nothing, N)
     for p = 1:N
         info_p = info[pkgs[p]]
         infos[p] = info_p
         ncls[p] = nclasses(info_p)
         deacts[p] = get(deact, pkgs[p], nothing)
         if ranks !== nothing
-            kqv[p] = ranks[1][pkgs[p]]
-            k0v[p] = ranks[2][pkgs[p]]
+            rankv[p] = (ranks[1][pkgs[p]], ranks[2][pkgs[p]])
         end
         # (partner id, partner's class block offset in p's matrix,
         #  p's class block offset in the partner's matrix)
@@ -897,7 +904,7 @@ function mark_necessary!(
         ]
         partners[p] = sort!(prt)
     end
-    return mark_necessary_kernel!(infos, ncls, partners, deacts, kqv, k0v)
+    return mark_necessary_kernel!(infos, ncls, partners, deacts, rankv)
 end
 
 # Share the pruning loop across dictionary and rank representations. Setup
@@ -907,8 +914,7 @@ end
     ncls :: Vector{Int},
     partners :: Vector{Vector{NTuple{3,Int}}},
     deacts :: Vector{Union{Nothing,BitVector}},
-    kqv :: Vector{Union{Nothing,Vector{Int}}},
-    k0v :: Vector{Union{Nothing,Vector{Int}}},
+    rankv :: Vector{Union{Nothing,NTuple{2,Vector{Int}}}},
 ) where {P,V}
     N = length(infos)
     # some work buffers
@@ -969,7 +975,7 @@ end
         # matter — it is still in the universe, so the conflict still
         # counts, and the flag it is read from does not know about
         # deactivation precisely so that it does
-        for (q, b, c) in partners[p]
+        for (q, b, _) in partners[p]
             Y = infos[q].conflicts
             for k = 1:ncls[q]
                 X[m+1, b+k] &= Y[k, end]
@@ -1022,9 +1028,9 @@ end
         # Build the suffix masks of the classes sorted by key_∅ once per
         # package; `S[(k-1)*W+1 : k*W]` is the mask of the classes at position
         # k and later, and the block at k = m+1 is empty.
-        kq_p = kqv[p]
-        k0_p = k0v[p]
-        if kq_p !== nothing
+        rank_p = rankv[p]
+        if rank_p !== nothing
+            k0_p = rank_p[2]
             ord = sortperm(k0_p)
             resize!(k0s, m)
             for k = 1:m
@@ -1049,7 +1055,7 @@ end
                 c &= c - 1
                 # candidates of i: candidate classes worse than i
                 o = (i - 1) * W
-                if kq_p === nothing
+                if rank_p === nothing
                     for w′ = 1:W
                         D[o + w′] = A[w′]
                     end
@@ -1065,7 +1071,7 @@ end
                     # key_∅(j) > key_Q(i) implies j > i (key_∅(j) ≤ key_Q(j)
                     # and key_Q is ascending), so this is a subset of the
                     # candidate set "every class worse than i"
-                    kk = searchsortedlast(k0s, kq_p[i]) + 1
+                    kk = searchsortedlast(k0s, rank_p[1][i]) + 1
                     sb = (kk - 1) * W
                     for w′ = 1:W
                         D[o + w′] = A[w′] & S[sb + w′]
@@ -1203,7 +1209,7 @@ end
         end
         # deactivate redundant classes
         X[R, end] .= false
-        for (q, b, c) in partners[p]
+        for (q, _, c) in partners[p]
             infos[q].conflicts[ncls[q] + 1, c .+ R] .= false
             if !inwork[q] # can create new redundancies
                 inwork[q] = true
@@ -1277,7 +1283,8 @@ function drop_unmarked!(
 end
 
 # These passes do not depend on the optional representative/rank bookkeeping.
-@noinline function drop_unmarked_masks(info::Dict{P, <:PkgInfo{P}}, A) where {P}
+@noinline function drop_unmarked_masks(info::Dict{P, <:PkgInfo{P}},
+                                       A::Vector{UInt64}) where {P}
     masks = Dict{P, Tuple{BitVector, BitVector}}()
     for (p, info_p) in info
         X = info_p.conflicts
@@ -1306,10 +1313,15 @@ end
     return masks
 end
 
-@noinline function drop_unmarked_pkg(info_p::PkgInfo{P}, I, K, N, A) where {P}
+@noinline function drop_unmarked_pkg(
+    info_p :: PkgInfo{P},
+    I      :: BitVector,
+    K      :: BitVector,
+    N      :: Dict{P,Int},
+    A      :: Vector{UInt64},
+) where {P}
     # abbreviate components
     V = info_p.versions
-    C = info_p.classes
     M = info_p.members
     S = info_p.shadows
     D = info_p.depends

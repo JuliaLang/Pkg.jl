@@ -68,7 +68,7 @@ function load_pkg_info_file(
                 shadows, depends, interacts, conflicts)
         end
         # compute interacts dict values: one column block per partner *class*
-        for (p, d) in info
+        for d in values(info)
             b = length(d.depends)
             for q in sort!(collect(keys(d.interacts)))
                 d.interacts[q] = b
