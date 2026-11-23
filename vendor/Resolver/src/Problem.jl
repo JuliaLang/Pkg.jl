@@ -6,10 +6,10 @@
 struct EmptyDict{K,V} <: AbstractDict{K,V} end
 
 Base.length(::EmptyDict) = 0
-Base.iterate(::EmptyDict, state...) = nothing
-Base.haskey(::EmptyDict, key) = false
-Base.get(::EmptyDict, key, default) = default
-Base.getindex(::EmptyDict, key) = throw(KeyError(key))
+Base.iterate(::EmptyDict, state::Any...) = nothing
+Base.haskey(::EmptyDict, key::Any) = false
+Base.get(::EmptyDict, key::Any, default::Any) = default
+Base.getindex(::EmptyDict, key::Any) = throw(KeyError(key))
 
 # What a constraint is made of matters only where it is built. Everywhere else
 # it answers two questions: does it forbid this version of this package, and
@@ -19,7 +19,8 @@ struct Constraint{P}
     forbids :: Any                     # (p, v) -> Bool
     named   :: Union{Nothing, Set{P}}  # the packages it names, or every package
     # no default outer constructor: `P` is unbound when `named` is `nothing`
-    Constraint{P}(forbids, named) where {P} = new{P}(forbids, named)
+    Constraint{P}(forbids::Any, named::Union{Nothing, Set{P}}) where {P} =
+        new{P}(forbids, named)
 end
 
 """
@@ -140,7 +141,7 @@ constraint(::Type{P}, ::Val{:pin}, d::AbstractDict) where {P} =
         (p, v) -> (w = get(e, p, nothing); w !== nothing && v != w), Set{P}(keys(e))))
 # a sourced kind is built as its base is: the source changes what the report
 # says, not what the constraint does
-function constraint(::Type{P}, ::Val{K}, value) where {P,K}
+function constraint(::Type{P}, ::Val{K}, value::Any) where {P,K}
     base = kind_base(K)
     return base === K ? Constraint{P}(value, nothing) : constraint(P, Val(base), value)
 end
@@ -149,7 +150,7 @@ end
 # is left — so relaxing a kind for the packages it names relaxes it entirely,
 # whatever its shape, and `nothing` never has to mean two things
 relax(::Constraint, ::Nothing) = nothing
-function relax(c::Constraint{P}, pkgs) where {P}
+function relax(c::Constraint{P}, pkgs::SetOrVec{P}) where {P}
     isempty(pkgs) && return c
     names = c.named === nothing ? nothing : setdiff(c.named, pkgs)
     names !== nothing && isempty(names) && return nothing
@@ -241,7 +242,7 @@ is_constrained(prob::Problem) = !isempty(prob.constraints)
 # between.
 
 # does the problem forbid version v of package p?
-is_excluded(prob::Problem{P}, p::P, v) where {P} =
+is_excluded(prob::Problem{P}, p::P, v::Any) where {P} =
     any(c -> c.forbids(p, v)::Bool, values(prob.constraints))
 
 # Which of the problem's constraints forbid version `v` of package `p`: one
@@ -251,7 +252,7 @@ is_excluded(prob::Problem{P}, p::P, v) where {P} =
 # problem admits the version. Every source is named, where `is_excluded` stops
 # at the first: lifting one source leaves the others in force, so what a
 # question about lifting one needs is all of them.
-exclusion_kinds(prob::Problem{P}, p::P, v) where {P} =
+exclusion_kinds(prob::Problem{P}, p::P, v::Any) where {P} =
     sort!(Symbol[k for (k, c) in prob.constraints if c.forbids(p, v)::Bool])
 
 # Why class `c` of package `p` holds nothing this problem admits: the class's
@@ -265,7 +266,7 @@ exclusion_kinds(prob::Problem{P}, p::P, v) where {P} =
 function class_exclusions(
     prob   :: Problem{P},
     p      :: P,
-    info_p,        # `p`'s PkgInfo (declared after this file)
+    info_p :: Any, # `p`'s PkgInfo (declared after this file)
     c      :: Integer,
 ) where {P}
     vers = info_p.versions

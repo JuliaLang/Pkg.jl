@@ -281,7 +281,7 @@ function SAT(
             n_p = nclasses(info_p)
             v_p = vars[p]
             l_p = get(lads, p, 0)
-            for (q, b) in info_p.interacts
+            for q in keys(info_p.interacts)
                 p < q || continue # conflicts are symmetrical
                 info_q = info[q]
                 n_q = nclasses(info_q)
@@ -585,14 +585,15 @@ end
 # A relaxation moves few packages, and few of the classes of the ones it moves.
 # Both sparsities are one fact, and `SparsePerm` is both: the map holds an entry
 # only for a package that moved, and that entry holds only the classes that did.
-ranking(::Nothing, p, m::Int) = Base.OneTo(m)
+ranking(::Nothing, p::Any, m::Int) = Base.OneTo(m)
 ranking(ord::Dict{P,SparsePerm}, p::P, m::Int) where {P} =
     get(ord, p, Base.OneTo(m))
 
 # the class a package's decision phase points at when its classes are
 # represented by `reps_p` and ranked by `ord_p`: the best class the query admits,
 # or 0 when it admits none
-function hinted_class(reps_p::Vector{Int}, ord_p)
+function hinted_class(reps_p::Vector{Int},
+                      ord_p::Union{Base.OneTo{Int}, SparsePerm})
     for r in eachindex(ord_p)
         c = @inbounds ord_p[r]
         iszero(reps_p[c]) || return c

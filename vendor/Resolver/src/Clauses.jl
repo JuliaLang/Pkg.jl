@@ -70,7 +70,7 @@ version list), or everything but them when `complement`, together with ⊥ when
 `absent`. The complement is taken over versions alone: ⊥ is put in or left out
 by `absent`, whichever way the version part was named.
 """
-function literal(n::Integer, versions, complement::Bool = false;
+function literal(n::Integer, versions::AbstractVector{<:Integer}, complement::Bool = false;
                  absent::Bool = false)
     bits = falses(n + 1)
     for i in versions
@@ -95,11 +95,26 @@ an installation that gives some package a value its literal admits. Equal
 statements are `==`, which the ordering and the dropping of empty literals is
 what buys.
 
+A clause is a dictionary from packages to literals: `c[p]` is its literal on
+`p`, a `KeyError` where it says nothing about `p`, and iterating gives the
+entries in package order.
+
 Build one with [`clause`](@ref Resolver.Clauses.clause), which normalizes; the
 constructor takes the normal form as given.
 """
-struct Clause{P}
+struct Clause{P} <: AbstractDict{P,Lit}
     lits :: Vector{Pair{P,Lit}}
+end
+
+Base.length(c::Clause) = length(c.lits)
+Base.iterate(c::Clause, i::Int = 1) =
+    i > length(c.lits) ? nothing : (c.lits[i], i + 1)
+
+function Base.get(c::Clause, p::Any, default::Any)
+    for (q, m) in c.lits
+        q == p && return m
+    end
+    return default
 end
 
 Base.:(==)(a::Clause, b::Clause) = a.lits == b.lits
@@ -107,14 +122,6 @@ Base.hash(c::Clause, h::UInt) = hash(c.lits, hash(:Clause, h))
 
 # the packages the clause speaks about, in order
 packages(c::Clause{P}) where {P} = P[first(x) for x in c.lits]
-
-# the clause's literal on `p`, or `nothing` where it says nothing about `p`
-function Base.getindex(c::Clause{P}, p) where {P}
-    for (q, m) in c.lits
-        q == p && return m
-    end
-    return nothing
-end
 
 """
     isbottom(c) :: Bool
@@ -158,7 +165,7 @@ did not.
 """
 function subsumes(c::Clause{P}, d::Clause{P}) where {P}
     for (p, m) in c.lits
-        n = d[p]
+        n = get(d, p, nothing)
         n === nothing && return false
         any(m.bits .& .~n.bits) && return false
     end
@@ -176,13 +183,13 @@ than re-establishing it. `nothing` when the result is a tautology.
 A clause not mentioning `q` contributes the empty literal there, as it should:
 saying nothing about `q` is saying `q` can be nothing.
 """
-function resolve_raw(clauses, q)
-    P = typeof(q)
+function resolve_raw(clauses::Union{Tuple{Vararg{Clause{P}}}, AbstractVector{Clause{P}}},
+                     q::P) where {P}
     acc = Dict{P,BitVector}()
     order = P[]
     qbits = nothing
     for c in clauses
-        m = c[q]
+        m = get(c, q, nothing)
         b = m === nothing ? nothing : copy(m.bits)
         if qbits === nothing
             qbits = b
@@ -219,7 +226,7 @@ weakened, and a weakening is not a derivation — or when what comes out is a
 tautology.
 """
 function resolve_on(c::Clause{P}, d::Clause{P}, q::P) where {P}
-    a, b = c[q], d[q]
+    a, b = get(c, q, nothing), get(d, q, nothing)
     (a === nothing || b === nothing) && return nothing
     inter = Lit(a.bits .& b.bits)
     (inter == a || inter == b) && return nothing
@@ -235,13 +242,16 @@ Resolver.Clauses.resolve_on) declines. Stated for families because literals are
 sets: three of them can have empty intersection while every two overlap, so
 pairs do not suffice to empty a package.
 """
-function resolve_all(clauses, q)
+function resolve_all(clauses::Union{Tuple{Vararg{Clause{P}}}, AbstractVector{Clause{P}}},
+                     q::P) where {P}
     isempty(clauses) && return nothing
     r = resolve_raw(clauses, q)
     r === nothing && return nothing
-    m = r[q]
+    # an emptied literal is dropped, and then no parent can equal it
+    m = get(r, q, nothing)
+    m === nothing && return r
     for c in clauses
-        a = c[q]
+        a = get(c, q, nothing)
         a !== nothing && m == a && return nothing
     end
     return r
@@ -256,7 +266,7 @@ A package's name. Integers name themselves in spreadsheet columns — `1` is
 `A`, `27` is `AA` — so that a test can write packages and versions as
 different kinds of thing and have a wrong assertion look wrong.
 """
-letters(p) = string(p)
+letters(p::Any) = string(p)
 
 function letters(i::Integer)
     s = ""
@@ -304,7 +314,7 @@ end
 # one run, said as the narrowing it is: a run touching an end of the order is
 # the inequality that end names, an interior one names both its ends, and a
 # single version names itself
-function run_phrase(vs, r::UnitRange{Int}, dir::Int)
+function run_phrase(vs::AbstractVector, r::UnitRange{Int}, dir::Int)
     n = length(vs)
     length(r) == 1 && return string(vs[first(r)])
     dir == 0 && return join((string(vs[i]) for i in r), ", ")
@@ -331,7 +341,8 @@ of and claims nothing about having selected it -- and the line is otherwise left
 naming no version at all, which is the harder thing to read: "julia constrains
 Statistics" leaves the reader to work out which julia.
 """
-function range_phrase(vs, sel::AbstractVector{Bool}, dir::Int = version_order(vs))
+function range_phrase(vs::AbstractVector, sel::AbstractVector{Bool},
+                      dir::Int = version_order(vs))
     rs = selected_runs(sel)
     isempty(rs) && return ""
     length(rs) == 1 && first(rs) == 1:length(vs) && length(vs) > 1 && return ""
@@ -346,7 +357,7 @@ unselected(m::Lit) = Bool[!m[i] for i = 1:nversions(m)]
 # "the package, held where the literal does not reach" — the condition under
 # which a clause's other literals have to carry it. A literal that admits ⊥ is
 # denied by a version; one that does not is denied by absence too, and says so.
-function antecedent_phrase(q, m::Lit, vers, names)
+function antecedent_phrase(q::Any, m::Lit, vers::Function, names::Function)
     vs = vers(q)
     sel = unselected(m)
     r = range_phrase(vs, sel)
@@ -362,7 +373,8 @@ end
 # it, printed with no verb: the verb is read off ⊥ by the caller, which also
 # says how it joins. A bare name takes no joiner: there is no range for it to
 # reach, and *constrains B to* with nothing after it is not a sentence.
-function consequent_phrase(s, m::Lit, vers, names, joiner = " ")
+function consequent_phrase(s::Any, m::Lit, vers::Function, names::Function,
+                           joiner::AbstractString = " ")
     vs = vers(s)
     r = range_phrase(vs, selected(m))
     return isempty(r) ? names(s) : "$(names(s))$joiner$r"
@@ -375,7 +387,7 @@ end
 # prints shortest and says least, and choosing it throws away the very bound the
 # reader was about to hold against another. What is left is broken toward the
 # later package, so that the same clause always reads the same way.
-function default_subject(c::Clause{P}, vers) where {P}
+function default_subject(c::Clause{P}) where {P}
     best = nothing
     bestkey = (true, true)
     for (p, m) in c.lits
@@ -403,8 +415,8 @@ admits it and so binds only if it is there, and *allows no version of* one that
 admits ⊥ alone. So a statement said the other way round re-derives its own
 verb, which is what makes contraposition safe to print.
 """
-function clause_phrase(c::Clause{P}, vers, names = letters;
-                       subject = nothing) where {P}
+function clause_phrase(c::Clause{P}, vers::Function, names::Function = letters;
+                       subject::Union{Nothing,P} = nothing) where {P}
     isbottom(c) && return "nothing can be installed"
     ps = packages(c)
     if length(ps) == 1
@@ -421,8 +433,8 @@ function clause_phrase(c::Clause{P}, vers, names = letters;
             return "$(names(p)) must be installed at $r"
         end
     end
-    s = subject === nothing || c[subject] === nothing ?
-        default_subject(c, vers) : subject
+    s = subject === nothing || !haskey(c, subject) ?
+        default_subject(c) : subject
     ants = String[antecedent_phrase(q, c[q], vers, names) for q in ps if q != s]
     m = c[s]
     plural = length(ants) > 1

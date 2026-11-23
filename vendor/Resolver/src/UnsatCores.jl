@@ -67,7 +67,7 @@ using ..Resolver: SAT, PicoSAT, sat_assume_var, sat_solve
 # clause set, not for instances augmented with blocking clauses).
 
 # solve with exactly `lits` assumed (assumptions are consumed by the solve)
-function sat_solve_assuming(sat::SAT, lits)
+function sat_solve_assuming(sat::SAT, lits::Vector{Int})
     for l in lits
         sat_assume_var(sat, l)
     end
