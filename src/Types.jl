@@ -10,7 +10,7 @@ import Base.string
 
 using TOML
 import ..Pkg, ..Registry
-import ..Pkg: GitTools, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, create_cachedir_tag, normalize_path_for_toml
+import ..Pkg: GitTools, toml_strings, depots, depots1, logdir, set_readonly, safe_realpath, pkg_server, stdlib_path, isurl, stderr_f, RESPECT_SYSIMAGE_VERSIONS, atomic_toml_write, create_cachedir_tag, normalize_path_for_toml
 import Base.BinaryPlatforms: Platform
 using ..Pkg.Versions
 import FileWatching
@@ -35,32 +35,30 @@ export UUID, SHA1, VersionRange, VersionSpec,
 # Load in data about historical stdlibs
 include("HistoricalStdlibs.jl")
 
-deepcopy_toml(x) = x
-function deepcopy_toml(@nospecialize(x::Vector))
-    T = eltype(x)
-    # elements that are neither tables nor arrays are shared, as before
-    isconcretetype(T) && !(T <: Union{Vector, Dict}) && return copy(x)
-    return deepcopy_toml_elements(x)
-end
-function deepcopy_toml_elements(x::Vector)
-    d = similar(x)
-    for i in eachindex(x)
-        d[i] = deepcopy_toml_value(x[i])
+function deepcopy_toml(@nospecialize(x))
+    if x isa Dict{String, Any}
+        d = Dict{String, Any}()
+        sizehint!(d, length(x))
+        for (k, v) in x
+            d[k] = deepcopy_toml(v)
+        end
+        return d
+    elseif x isa Vector{Any}
+        return Any[deepcopy_toml(v) for v in x]
+    elseif x isa Vector{Dict{String, Any}}
+        return Dict{String, Any}[deepcopy_toml(v)::Dict{String, Any} for v in x]
+    elseif x isa Vector{String}
+        return copy(x)
+    elseif x isa Vector{Int64}
+        return copy(x)
+    elseif x isa Vector{Float64}
+        return copy(x)
+    elseif x isa Vector{Bool}
+        return copy(x)
+    elseif x isa Vector && !Pkg.trimmed()
+        return copy(x)
     end
-    return d
-end
-function deepcopy_toml(x::Dict{String, Any})
-    d = Dict{String, Any}()
-    sizehint!(d, length(x))
-    for (k, v) in x
-        d[k] = deepcopy_toml_value(v)
-    end
-    return d
-end
-function deepcopy_toml_value(@nospecialize(v))
-    v isa Dict{String, Any} && return deepcopy_toml(v)
-    v isa Vector && return deepcopy_toml(v)
-    return v
+    return x
 end
 
 # See loading.jl
@@ -76,7 +74,8 @@ parse_toml(toml_file::AbstractString) =
 struct PkgError <: Exception
     msg::String
 end
-pkgerror(msg::String...) = throw(PkgError(join(msg)))
+pkgerror(msg::String) = throw(PkgError(msg))
+pkgerror(msgs::String...) = throw(PkgError(join(collect(msgs))))
 Base.showerror(io::IO, err::PkgError) = print(io, err.msg)
 
 ###############
@@ -127,6 +126,104 @@ function PackageSpec(;
     uuid = uuid === nothing ? nothing : UUID(uuid)
     return PackageSpec(name, uuid, version, tree_hash, repo, path, pinned, url, rev, subdir)
 end
+# `==` and `hash` on raw TOML data, which a trimmed binary can not dispatch on
+function toml_equal(@nospecialize(a), @nospecialize(b))::Bool
+    if a isa Dict{String, Any}
+        b isa Dict{String, Any} || return false
+        length(a) == length(b) || return false
+        for (k, v) in a
+            haskey(b, k) && toml_equal(v, b[k]) || return false
+        end
+        return true
+    elseif a isa Vector{Any}
+        b isa Vector{Any} || return false
+        length(a) == length(b) || return false
+        for i in eachindex(a)
+            toml_equal(a[i], b[i]) || return false
+        end
+        return true
+    elseif a isa String
+        return b isa String && a == b
+    elseif a isa Vector{String}
+        return b isa Vector{String} && a == b
+    elseif a isa Int64
+        return b isa Int64 && a == b
+    elseif a isa Bool
+        return b isa Bool && a == b
+    elseif a isa Float64
+        return b isa Float64 && a == b
+    end
+    return Pkg.trimmed() ? a === b : isequal(a, b)
+end
+function toml_hash(@nospecialize(x), h::UInt)::UInt
+    if x isa Dict{String, Any}
+        # order independent, like `hash(::AbstractDict)`
+        hv = hash(Dict, h)
+        for (k, v) in x
+            hv ⊻= toml_hash(v, hash(k))
+        end
+        return hv
+    elseif x isa Vector{Any}
+        for v in x
+            h = toml_hash(v, h)
+        end
+        return h
+    end
+    x isa String && return hash(x, h)
+    x isa Vector{String} && return hash(x, h)
+    x isa Int64 && return hash(x, h)
+    x isa Bool && return hash(x, h)
+    x isa Float64 && return hash(x, h)
+    return Pkg.trimmed() ? hash(objectid(x), h) : hash(x, h)
+end
+
+# Field-wise `==`, `hash` and `deepcopy` by the declared field types. The generic
+# versions walk the fields as `Any`, which needs dynamic dispatch.
+@generated function fields_equal(a::T, b::T, ::Val{skip} = Val(())) where {T, skip}
+    ex = :(true)
+    for (i, f) in enumerate(fieldnames(T))
+        f in skip && continue
+        FT = fieldtype(T, i)
+        cmp = FT <: Union{Nothing, Dict{String, Any}} ? :toml_equal :
+            FT isa Union && length(Base.uniontypes(FT)) > 2 ? :version_eq : :(==)
+        ex = :($ex && ($cmp(getfield(a, $i), getfield(b, $i)))::Bool)
+    end
+    return ex
+end
+@generated function fields_hash(x::T, h::UInt, ::Val{skip} = Val(())) where {T, skip}
+    ex = :h
+    for (i, f) in enumerate(fieldnames(T))
+        f in skip && continue
+        hf = fieldtype(T, i) <: Union{Nothing, Dict{String, Any}} ? :toml_hash : :hash
+        ex = :($hf(getfield(x, $i), $ex))
+    end
+    return ex
+end
+
+tdeepcopy(x::Union{Nothing, Bool, Number, Char, String, Symbol, UUID, SHA1, VersionNumber, Enum, Dates.TimeType}) = x
+tdeepcopy(x::Dict{String, Any}) = deepcopy_toml(x)::Dict{String, Any}
+tdeepcopy(x::Vector{T}) where {T} = T[tdeepcopy(y) for y in x]
+function tdeepcopy(x::Dict{K, V}) where {K, V}
+    d = Dict{K, V}()
+    sizehint!(d, length(x))
+    for (k, v) in x
+        d[tdeepcopy(k)] = tdeepcopy(v)
+    end
+    return d
+end
+@generated function tdeepcopy(x::T) where {T}
+    args = map(1:fieldcount(T)) do i
+        FT = fieldtype(T, i)
+        ts = FT isa Union ? Base.uniontypes(FT) : Any[FT]
+        ex = :(tdeepcopy(v::$(ts[end])))
+        for t in reverse(ts[1:(end - 1)])
+            ex = :(v isa $t ? tdeepcopy(v) : $ex)
+        end
+        :(let v = getfield(x, $i); $ex; end)
+    end
+    return Expr(:new, T, args...)
+end
+
 PackageSpec(name::AbstractString) = PackageSpec(; name = name)::PackageSpec
 PackageSpec(name::AbstractString, uuid::UUID) = PackageSpec(; name = name, uuid = uuid)::PackageSpec
 PackageSpec(name::AbstractString, version::VersionTypes) = PackageSpec(; name = name, version = version)::PackageSpec
@@ -134,10 +231,28 @@ PackageSpec(n::AbstractString, u::UUID, v::VersionTypes) = PackageSpec(; name = 
 
 # XXX: These definitions are a bit fishy. It seems to be used in an `==` call in status printing
 function Base.:(==)(a::PackageSpec, b::PackageSpec)
-    return a.name == b.name && a.uuid == b.uuid && a.version == b.version &&
+    return a.name == b.name && a.uuid == b.uuid && version_eq(a.version, b.version) &&
         a.tree_hash == b.tree_hash && a.repo == b.repo && a.path == b.path &&
         a.pinned == b.pinned
 end
+# `VersionTypes` has more members than the compiler splits a `Union` into
+function version_eq(@nospecialize(a), @nospecialize(b))
+    a isa VersionSpec && return b isa VersionSpec && a == b
+    a isa VersionNumber && return b isa VersionNumber && a == b
+    a isa String && return b isa String && a == b
+    return a === b
+end
+
+function showvalue(@nospecialize(x))::String
+    x isa String && return x
+    x isa UUID && return string(x)
+    x isa SHA1 && return string(x)
+    x isa VersionNumber && return string(x)
+    x isa VersionSpec && return string(x)
+    x isa Bool && return string(x)
+    return Pkg.trimmed() ? "?" : string(x)
+end
+
 function Base.hash(a::PackageSpec, h::UInt)
     return foldr(hash, [a.name, a.uuid, a.version, a.tree_hash, a.repo, a.path, a.pinned], init = h)
 end
@@ -178,7 +293,7 @@ function Base.show(io::IO, pkg::PackageSpec)
     end
     print(io, "PackageSpec(\n")
     for (field, value) in f
-        print(io, "  ", field, " = ", string(value)::String, "\n")
+        print(io, "  ", field, " = ", showvalue(value), "\n")
     end
     return print(io, ")")
 end
@@ -292,9 +407,8 @@ Base.@kwdef mutable struct Project
     workspace::Dict{String, Any} = Dict{String, Any}()
     readonly::Bool = false
 end
-const _project_comparison_fields = filter(!=(:comments), collect(fieldnames(Project)))
-Base.:(==)(t1::Project, t2::Project) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, _project_comparison_fields)
-Base.hash(t::Project, h::UInt) = foldr(hash, [getfield(t, x) for x in _project_comparison_fields], init = h)
+Base.:(==)(t1::Project, t2::Project) = fields_equal(t1, t2, Val((:comments,)))
+Base.hash(t::Project, h::UInt) = fields_hash(t, h, Val((:comments,)))
 
 
 Base.@kwdef mutable struct PackageEntry
@@ -312,7 +426,7 @@ Base.@kwdef mutable struct PackageEntry
     apps::Dict{String, AppInfo} = Dict{String, AppInfo}() # used by AppManifest.toml
     registries::Vector{String} = String[]
     julia_syntax_version::Union{VersionTypes, Nothing} = nothing
-    other::Union{Dict, Nothing} = nothing
+    other::Union{Dict{String, Any}, Nothing} = nothing
 end
 Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.version == t2.version &&
@@ -326,10 +440,10 @@ Base.:(==)(t1::PackageEntry, t2::PackageEntry) = t1.name == t2.name &&
     t1.exts == t2.exts &&
     t1.uuid == t2.uuid &&
     t1.apps == t2.apps &&
-    t1.julia_syntax_version == t2.julia_syntax_version &&
+    version_eq(t1.julia_syntax_version, t2.julia_syntax_version) &&
     t1.registries == t2.registries
 # omits `other`
-Base.hash(x::PackageEntry, h::UInt) = foldr(hash, [x.name, x.version, x.path, x.entryfile, x.pinned, x.repo, x.tree_hash, x.deps, x.weakdeps, x.exts, x.uuid, x.registries, x.julia_syntax_version], init = h)  # omits `other`
+Base.hash(x::PackageEntry, h::UInt) = fields_hash(x, h, Val((:apps, :other)))  # omits `other`
 
 """
     ManifestRegistryEntry
@@ -362,8 +476,8 @@ Base.@kwdef mutable struct Manifest
     registries::Dict{String, ManifestRegistryEntry} = Dict{String, ManifestRegistryEntry}()
     other::Dict{String, Any} = Dict{String, Any}()
 end
-Base.:(==)(t1::Manifest, t2::Manifest) = all(x -> (getfield(t1, x) == getfield(t2, x))::Bool, fieldnames(Manifest))
-Base.hash(m::Manifest, h::UInt) = foldr(hash, [getfield(m, x) for x in fieldnames(Manifest)], init = h)
+Base.:(==)(t1::Manifest, t2::Manifest) = fields_equal(t1, t2)
+Base.hash(m::Manifest, h::UInt) = fields_hash(m, h)
 Base.getindex(m::Manifest, i_or_key) = getindex(m.deps, i_or_key)
 Base.get(m::Manifest, key, default) = get(m.deps, key, default)
 Base.setindex!(m::Manifest, i_or_key, value) = setindex!(m.deps, i_or_key, value)
@@ -483,8 +597,8 @@ function EnvCache(env::Union{Nothing, String} = nothing)
         project,
         workspace,
         manifest,
-        deepcopy(project),
-        deepcopy(manifest),
+        tdeepcopy(project),
+        tdeepcopy(manifest),
     )
 
     return env′
@@ -562,8 +676,8 @@ function load_stdlib()
             push!(UPGRADABLE_STDLIBS_UUIDS, UUID(uuid))
             continue
         end
-        deps = UUID.(values(get(project, "deps", Dict{String, Any}())))
-        weakdeps = UUID.(values(get(project, "weakdeps", Dict{String, Any}())))
+        deps = UUID[UUID(u::String) for u in values(get(project, "deps", Dict{String, Any}())::Dict{String, Any})]
+        weakdeps = UUID[UUID(u::String) for u in values(get(project, "weakdeps", Dict{String, Any}())::Dict{String, Any})]
         stdlib[UUID(uuid)] = StdlibInfo(name, Base.UUID(uuid), version, deps, weakdeps)
     end
     return stdlib
@@ -697,8 +811,8 @@ function load_workspace_sources(env::EnvCache)
     for (project_file, project) in Iterators.flatten(((env.project_file => env.project,), env.workspace))
         for name in keys(project.sources)
             path, repo = get_path_repo(project, project_file, env.manifest_file, name)
-            fields = (; path, url = repo.source, rev = repo.rev, subdir = repo.subdir)
-            str = join((string(k, "=", v) for (k, v) in pairs(fields) if v !== nothing), ",")
+            fields = Pair{String, Union{Nothing, String}}["path" => path, "url" => repo.source, "rev" => repo.rev, "subdir" => repo.subdir]
+            str = join((string(k, "=", v) for (k, v) in fields if v !== nothing), ",")
             push!(get!(Set{String}, sources, name), str)
         end
     end
@@ -860,21 +974,25 @@ function _write_env_usage(source_files, usage_file::String, timestamp::DateTime)
 
         # record new usage
         for source_file in source_files
-            usage[source_file] = [Dict("time" => timestamp)]
+            usage[source_file] = Any[Dict{String, Any}("time" => timestamp)]
         end
 
         # keep only latest usage info
         for k in keys(usage)
-            times = map(usage[k]) do d
-                if haskey(d, "time")
-                    Dates.DateTime(d["time"])
+            entries = usage[k]
+            entries isa Vector{Any} || continue
+            times = DateTime[]
+            for d in entries
+                if d isa Dict{String, Any} && haskey(d, "time")
+                    t = d["time"]
+                    push!(times, t isa DateTime ? t : Dates.DateTime(t::String))
                 else
                     # if there's no time entry because of a write failure be conservative and mark it as being used now
                     @debug "Usage file `$usage_file` has a missing `time` entry for `$k`. Marking as used `now()`"
-                    Dates.now()
+                    push!(times, Dates.now())
                 end
             end
-            usage[k] = [Dict("time" => maximum(times)::Dates.DateTime)]
+            usage[k] = Any[Dict{String, Any}("time" => maximum(times))]
         end
 
         try
@@ -938,7 +1056,7 @@ function error_if_in_sysimage(pkg::PackageSpec)
     end
     pkgid = Base.PkgId(pkg.uuid, pkg.name)
     return if Base.in_sysimage(pkgid)
-        pkgerror("Tried to develop or add by URL package $(pkgid) which is already in the sysimage, use `Pkg.respect_sysimage_versions(false)` to disable this check.")
+        pkgerror("Tried to develop or add by URL package $(pkg.name) [$(pkg.uuid)] which is already in the sysimage, use `Pkg.respect_sysimage_versions(false)` to disable this check.")
     end
 end
 
@@ -1241,16 +1359,17 @@ function handle_repo_add!(ctx::Context, pkg::PackageSpec)
             end
 
             # Now we have the gitobject for our ref, time to find the tree hash for it
-            tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject)
+            tree_hash_object = LibGit2.peel(LibGit2.GitTree, gitobject::LibGit2.GitUnknownObject)
             # When the lookup was by `pkg.tree_hash` the object is already the tree of the
             # package itself: for a subdir package the manifest records the hash of the
             # subdirectory, not of the repository root. Only descend into the subdir when
             # the lookup was by rev, where the object is the commit's root tree.
             if pkg.repo.subdir !== nothing && pkg.tree_hash === nothing
                 try
-                    tree_hash_object = tree_hash_object[pkg.repo.subdir]
+                    # by rev-parse rather than `getindex`, which returns a `GitObject` of run-time type
+                    tree_hash_object = LibGit2.GitTree(repo, string(LibGit2.GitHash(tree_hash_object), ":", pkg.repo.subdir))
                 catch e
-                    e isa KeyError || rethrow()
+                    e isa LibGit2.GitError || rethrow()
                     pkgerror("Did not find subdirectory `$(pkg.repo.subdir)` in repository `$(repo_source_typed)` at rev `$(pkg.repo.rev)`")
                 end
             end
@@ -1318,11 +1437,12 @@ get_object_or_branch(repo, rev::SHA1) =
     get_object_or_branch(repo, string(rev))
 
 # Returns nothing if rev could not be found in repo
+# `GitUnknownObject` rather than `GitObject`, whose concrete type is only known at run time
 function get_object_or_branch(repo, rev)
     # Handle pull request references
     if startswith(rev, "pull/") && endswith(rev, "/head")
         try
-            gitobject = LibGit2.GitObject(repo, "cache/" * rev)
+            gitobject = LibGit2.GitUnknownObject(repo, "cache/" * rev)
             return gitobject, true
         catch err
             err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
@@ -1330,25 +1450,25 @@ function get_object_or_branch(repo, rev)
     end
 
     try
-        gitobject = LibGit2.GitObject(repo, "cache/heads/" * rev)
+        gitobject = LibGit2.GitUnknownObject(repo, "cache/heads/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
-        gitobject = LibGit2.GitObject(repo, "remotes/origin/" * rev)
+        gitobject = LibGit2.GitUnknownObject(repo, "remotes/origin/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
-        gitobject = LibGit2.GitObject(repo, "heads/" * rev)
+        gitobject = LibGit2.GitUnknownObject(repo, "heads/" * rev)
         return gitobject, true
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()
     end
     try
-        gitobject = LibGit2.GitObject(repo, rev)
+        gitobject = LibGit2.GitUnknownObject(repo, rev)
         return gitobject, false
     catch err
         err isa LibGit2.GitError && err.code == LibGit2.Error.ENOTFOUND || rethrow()

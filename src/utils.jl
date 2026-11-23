@@ -242,3 +242,10 @@ end
 # Resolve a manifest-relative path to an absolute path
 # Note: Despite the name "manifest_rel_path", this resolves relative to the manifest file
 manifest_rel_path(env, path::String) = normpath(joinpath(dirname(env.manifest_file), path))
+
+# A TOML array of strings parses to a `Vector{String}`, or to a `Vector{Any}` when empty
+function toml_strings(@nospecialize(x))::Union{Nothing, Vector{String}}
+    x isa Vector{String} && return x
+    x isa Vector{Any} && all(s -> s isa String, x) && return String[s::String for s in x]
+    return nothing
+end

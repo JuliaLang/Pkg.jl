@@ -106,18 +106,16 @@ function read_deps(raw::Dict{String, Any})::Dict{String, UUID}
     return deps
 end
 
-read_apps(::Nothing) = Dict{String, AppInfo}()
-read_apps(::Any) = pkgerror("Expected `apps` field to be a Dict")
-function read_apps(apps::Dict)
+function read_apps(@nospecialize(apps))
     appinfos = Dict{String, AppInfo}()
+    apps === nothing && return appinfos
+    apps isa Dict{String, Any} || pkgerror("Expected `apps` field to be a Dict")
     for (appname, app) in apps
-        submodule = get(app, "submodule", nothing)
+        app isa Dict{String, Any} || pkgerror("Expected app `$appname` to be a Dict")
+        submodule = get(app, "submodule", nothing)::Union{Nothing, String}
         julia_flags_raw = get(app, "julia_flags", nothing)
-        julia_flags = if julia_flags_raw === nothing
-            String[]
-        else
-            String[flag::String for flag in julia_flags_raw]
-        end
+        julia_flags = julia_flags_raw === nothing ? String[] : toml_strings(julia_flags_raw)
+        julia_flags === nothing && pkgerror("Expected `julia_flags` for app `$appname` to be an array of strings")
         appinfo = AppInfo(
             appname::String,
             app["julia_command"]::String,
@@ -315,7 +313,7 @@ function read_manifest(f_or_io::Union{String, IO})
         end
     catch e
         if e isa TOML.ParserError
-            pkgerror("Could not parse manifest: ", sprint(showerror, e))
+            pkgerror("Could not parse manifest: ", Pkg.errorstring(e))
         end
         rethrow()
     end
@@ -451,10 +449,11 @@ function destructure(manifest::Manifest)::Dict
                 if all(dep -> haskey(unique_name, first(dep)), deptype) && all(dep -> unique_name[first(dep)], deptype)
                     new_entry[depname] = sort(collect(keys(deptype)))
                 else
-                    new_entry[depname] = Dict{String, String}()
+                    dep_dict = Dict{String, String}()
                     for (name, uuid) in deptype
-                        new_entry[depname][name] = string(uuid)
+                        dep_dict[name] = string(uuid)
                     end
+                    new_entry[depname] = dep_dict
                 end
             end
         end
@@ -465,7 +464,8 @@ function destructure(manifest::Manifest)::Dict
         end
 
         if !isempty(entry.apps)
-            new_entry["apps"] = Dict{String, Any}()
+            apps_dict = Dict{String, Any}()
+            new_entry["apps"] = apps_dict
             for (appname, appinfo) in entry.apps
                 julia_command = @something appinfo.julia_command joinpath(Sys.BINDIR, "julia" * (Sys.iswindows() ? ".exe" : ""))
                 app_dict = Dict{String, Any}("julia_command" => julia_command)
@@ -475,13 +475,13 @@ function destructure(manifest::Manifest)::Dict
                 if !isempty(appinfo.julia_flags)
                     app_dict["julia_flags"] = appinfo.julia_flags
                 end
-                new_entry["apps"][appname] = app_dict
+                apps_dict[appname] = app_dict
             end
         end
         if manifest.manifest_format.major == 1
-            push!(get!(raw, entry.name, Dict{String, Any}[]), new_entry)
+            push!(get!(raw::Dict{String, Vector{Dict{String, Any}}}, entry.name::String, Dict{String, Any}[]), new_entry)
         elseif manifest.manifest_format.major == 2
-            push!(get!(raw["deps"], entry.name, Dict{String, Any}[]), new_entry)
+            push!(get!(raw["deps"]::Dict{String, Vector{Dict{String, Any}}}, entry.name::String, Dict{String, Any}[]), new_entry)
         end
     end
     return raw
@@ -506,13 +506,18 @@ end
 function write_manifest(io::IO, manifest::Manifest)
     return write_manifest(io, destructure(manifest))
 end
+function manifest_toml_value(@nospecialize(x))
+    x isa String && return x
+    x isa Nothing && return string(x)
+    x isa UUID && return string(x)
+    x isa SHA1 && return string(x)
+    x isa VersionNumber && return string(x)
+    error("unhandled type `$(typeof(x))`")
+end
 function write_manifest(io::IO, raw_manifest::Dict; generated_id::Bool = false)
     print(io, "# This file is machine-generated - editing it directly is not advised\n\n")
     str = sprint() do toml_io
-        TOML.print(toml_io, raw_manifest, sorted = true) do x
-            (typeof(x) in [String, Nothing, UUID, SHA1, VersionNumber]) && return string(x)
-            error("unhandled type `$(typeof(x))`")
-        end
+        TOML.print(manifest_toml_value, toml_io, raw_manifest, sorted = true)
     end
     # tell readers the id is not the project uuid, since nothing else in the file says where it came from
     if generated_id

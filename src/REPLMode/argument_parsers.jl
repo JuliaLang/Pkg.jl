@@ -24,6 +24,13 @@ const PackageToken = Union{
     Subdir,
 }
 
+# The tokens as typed, for error messages
+token_string(t::PackageIdentifier) = t.val
+token_string(t::VersionToken) = "@" * t.version
+token_string(t::Rev) = "#" * t.rev
+token_string(t::Subdir) = ":" * t.dir
+tokens_string(tokens::Vector{PackageToken}) = join((token_string(t) for t in tokens), " ")
+
 # Check if a string is a valid UUID
 function is_valid_uuid(str::String)
     try
@@ -371,25 +378,25 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev = false)::Vec
                 return
             elseif modifier isa Subdir
                 if parsed_subdir
-                    pkgerror("Multiple subdir specifiers `$args` found.")
+                    pkgerror("Multiple subdir specifiers `$(tokens_string(args))` found.")
                 end
                 pkg.subdir = modifier.dir
                 parsed_subdir = true
                 (isempty(args) || args[1] isa PackageIdentifier) && return
             elseif modifier isa VersionToken
                 if parsed_version
-                    pkgerror("Multiple version specifiers `$args` found.")
+                    pkgerror("Multiple version specifiers `$(tokens_string(args))` found.")
                 end
                 pkg.version = modifier.version
                 parsed_version = true
             elseif modifier isa Rev
                 if parsed_rev
-                    pkgerror("Multiple revision specifiers `$args` found.")
+                    pkgerror("Multiple revision specifiers `$(tokens_string(args))` found.")
                 end
                 pkg.rev = modifier.rev
                 parsed_rev = true
             else
-                pkgerror("Package name/uuid must precede subdir specifier `$args`.")
+                pkgerror("Package name/uuid must precede subdir specifier `$(tokens_string(args))`.")
             end
         end
         return
@@ -405,10 +412,10 @@ function parse_package_args(args::Vector{PackageToken}; add_or_dev = false)::Vec
             # Modifiers without a corresponding package identifier -- this is a user error
         else
             arg isa VersionToken ?
-                pkgerror("Package name/uuid must precede version specifier `@$arg`.") :
+                pkgerror("Package name/uuid must precede version specifier `$(token_string(arg))`.") :
                 arg isa Rev ?
                 pkgerror("Package name/uuid must precede revision specifier `#$(arg.rev)`.") :
-                pkgerror("Package name/uuid must precede subdir specifier `[$arg]`.")
+                pkgerror("Package name/uuid must precede subdir specifier `$(token_string(arg))`.")
         end
     end
     return pkgs
