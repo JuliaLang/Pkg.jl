@@ -70,6 +70,9 @@ Pkg v1.14 Release Notes
 - `Pkg.test` and `Pkg.build` of an installed (not developed) package no longer fail with "expected package ... to exist
   at path" when it points at sibling packages of its repository by path, as monorepo subpackages do, through
   `[sources]` or a committed test manifest. Those paths are ignored and the dependencies resolve from the registry. ([#4861])
+- The project file of a package can now say where its documentation is, in a `[docs]` section: `url` for the address
+  of the hosted documentation, with `{version}` standing for the package version, and `source` for the Markdown source
+  of its manual when that is not in `docs/src`. Pkg does not use it; it is for tools that show documentation. ([#4943])
 
 Pkg v1.13 Release Notes
 =======================
@@ -297,6 +300,7 @@ Pkg v1.7 Release Notes
 [#4824]: https://github.com/JuliaLang/Pkg.jl/pull/4824
 [#4841]: https://github.com/JuliaLang/Pkg.jl/pull/4841
 [#4861]: https://github.com/JuliaLang/Pkg.jl/pull/4861
+[#4943]: https://github.com/JuliaLang/Pkg.jl/pull/4943
 [#4157]: https://github.com/JuliaLang/Pkg.jl/issues/4157
 [#4237]: https://github.com/JuliaLang/Pkg.jl/issues/4237
 [#4830]: https://github.com/JuliaLang/Pkg.jl/issues/4830
