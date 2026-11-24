@@ -814,9 +814,11 @@ const status = API.status
 
 Interactively edit the [compat] entries within the current Project.
 
-    Pkg.compat(pkg::String, compat::String)
+    Pkg.compat(pkg::String, compat::String; lazy::Bool = false)
 
-Set the [compat] string for the given package within the current Project.
+Set the [compat] string for the given package within the current Project, then run
+[`resolve`](@ref) to check it. Pass `lazy=true` to use lazy resolution (see [`add`](@ref)
+for installation behavior).
 
 See [Compatibility](@ref) for more information on the project [compat] section.
 """
