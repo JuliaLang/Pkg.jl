@@ -1,6 +1,9 @@
 Pkg v1.14 Release Notes
 =======================
 
+- Manifests written in the `v1` shared environment (`@v#`, on the default load path from Julia 1.15) are
+  named after the running Julia minor version, e.g. `Manifest-v1.15.toml`, so every minor version keeps its own.
+
 - `Pkg.status` now displays a `○` indicator for packages that are not yet precompiled, helping users identify which
   packages will require precompilation on first load. ([#4415])
 - `Pkg.status(outdated = true)` (`pkg> status --outdated`) now resolves what an update would do: `⌃` marks the

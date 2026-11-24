@@ -175,6 +175,23 @@ Shared environments have a `@` before their name in the Pkg REPL prompt.
     If a project needs a package, `add` it to the project. See
     [Environment stacks](https://docs.julialang.org/en/v1/manual/code-loading/#Environment-stacks) in the Julia manual.
 
+### The environment shared by all minor versions
+
+From Julia 1.15 the default `LOAD_PATH` also includes `@v#`, the `v1` shared environment, after `@v#.#`.
+Packages added there, such as development tools, can be loaded from every `1.x` version that has it on its load path:
+
+```julia-repl
+(@v{{VERSION}}) pkg> activate --shared v1
+  Activating new project at `~/.julia/environments/v1`
+
+(@v1) pkg> add Revise
+```
+
+Each minor version of Julia resolves this environment separately and writes its own manifest, named like
+`Manifest-v{{VERSION}}.toml`, so different versions do not overwrite each other's package versions.
+A plain `Manifest.toml` in this environment is ignored. Run `instantiate` in a new Julia version to resolve and
+install the environment's packages for it.
+
 ### Copying the dependencies of another environment
 
 The `--from` flag to `add` adds the direct dependencies of other environments instead of individual packages.

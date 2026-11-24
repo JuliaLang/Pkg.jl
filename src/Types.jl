@@ -196,7 +196,10 @@ function projectfile_path(env_path::String; strict = false)
 end
 
 function manifestfile_path(env_path::String; strict = false)
-    for name in (Base.manifest_names..., "AppManifest.toml")
+    # the `v<major>` shared environment keeps one manifest per minor version of julia
+    versioned = isdefined(Base, :is_shared_major_env) && Base.is_shared_major_env(env_path)
+    names = versioned ? Base.manifest_names_for(env_path) : (Base.manifest_names..., "AppManifest.toml")
+    for name in names
         maybe_file = joinpath(env_path, name)
         isfile(maybe_file) && return maybe_file
     end
@@ -206,10 +209,11 @@ function manifestfile_path(env_path::String; strict = false)
         # given no matching manifest exists, if JuliaProject.toml is used,
         # prefer to create JuliaManifest.toml, otherwise Manifest.toml
         project, _ = splitext(basename(projectfile_path(env_path)::String))
+        suffix = versioned ? "-v$(VERSION.major).$(VERSION.minor).toml" : ".toml"
         if project == "JuliaProject"
-            return joinpath(env_path, "JuliaManifest.toml")
+            return joinpath(env_path, "JuliaManifest" * suffix)
         else
-            return joinpath(env_path, "Manifest.toml")
+            return joinpath(env_path, "Manifest" * suffix)
         end
     end
 end
