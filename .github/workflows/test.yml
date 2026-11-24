@@ -43,6 +43,8 @@ jobs:
             julia-arch: aarch64
           - os: windows-latest
             julia-arch: aarch64
+          - os: windows-latest
+            julia-arch: x86
           - os: macOS-latest
             julia-arch: x86
           - os: macOS-latest
