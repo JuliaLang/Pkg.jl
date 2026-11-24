@@ -178,6 +178,41 @@ end
             end
         end
 
+        @testset "temporarily narrowed compat with an artifact selector (#4902)" begin
+            Utils.isolate(loaded_depot = true) do
+                mktempdir() do dir
+                    write(
+                        joinpath(dir, "Project.toml"), """
+                        name = "SelectorTest"
+                        uuid = "49020000-7aae-4f33-ae67-a450f8984902"
+                        version = "0.1.0"
+
+                        [deps]
+                        Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+
+                        [compat]
+                        Example = "0.4, 0.5"
+                        """
+                    )
+                    mkpath(joinpath(dir, "src"))
+                    write(joinpath(dir, "src", "SelectorTest.jl"), "module SelectorTest end\n")
+                    mkpath(joinpath(dir, "test"))
+                    write(
+                        joinpath(dir, "test", "runtests.jl"), """
+                        using Example
+                        @assert pkgversion(Example) >= v"0.5"
+                        """
+                    )
+                    mkpath(joinpath(dir, ".pkg"))
+                    write(joinpath(dir, ".pkg", "select_artifacts.jl"), "nothing\n")
+                    write(joinpath(dir, "Artifacts.toml"), "")
+                    Pkg.activate(dir)
+                    Pkg.add(; name = "Example", version = "0.4")
+                    @test Pkg.test(; force_latest_compatible_version = true) === nothing
+                end
+            end
+        end
+
         @testset "NewOnly: `SomePkg = \"0.2\"`" begin
             mktempdir() do tmp_dir
                 test_package = joinpath(tmp_dir, "NewOnly")
