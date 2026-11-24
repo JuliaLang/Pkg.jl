@@ -416,6 +416,29 @@ end
     end
 end
 
+@testset "develop a subdir package with the same name as its repository (#4798)" begin
+    temp_pkg_dir() do project
+        Pkg.activate(project)
+        mktempdir() do dir
+            packages_dir = mkpath(joinpath(dir, "Package.jl"))
+            registry_dir = mkpath(joinpath(dir, "registry"))
+            tree_hashes = setup_packages_repository(packages_dir)
+            setup_registry(registry_dir, make_file_url(packages_dir), tree_hashes...)
+            Pkg.Registry.add(path = registry_dir)
+
+            Pkg.develop("Dep"; shared = false)
+            dev_path = joinpath(project, "dev", "Package")
+            @test Pkg.dependencies()[DEP.uuid].source == joinpath(dev_path, "dependencies", "Dep")
+
+            Pkg.develop("Package"; shared = false)
+            package_uuid = Pkg.project().dependencies["Package"]
+            @test Pkg.dependencies()[package_uuid].source == joinpath(dev_path, "julia")
+            @test Pkg.dependencies()[DEP.uuid].source == joinpath(dev_path, "dependencies", "Dep")
+            @test_throws "could not find project file" Pkg.develop(path = dev_path)
+        end
+    end
+end
+
 @testset "resolve with a subdir package missing from the depot (#4851)" begin
     temp_pkg_dir() do project
         cd(@__DIR__) do

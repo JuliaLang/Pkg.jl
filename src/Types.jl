@@ -967,7 +967,9 @@ function handle_repo_develop!(ctx::Context, pkg::PackageSpec, shared::Bool)
                 pkgerror("Dev path `$(dev_path)` does not exist.")
             end
         end
-        if isdir(dev_path)
+        # A name-derived dev directory may be a monorepo checkout rather than a package.
+        # If it has no project file, look up the repository and subdir before reusing it.
+        if isdir(dev_path) && (is_local_path || projectfile_path(dev_path; strict = true) !== nothing)
             resolve_projectfile!(pkg, dev_path)
             error_if_in_sysimage(pkg)
             if is_local_path
