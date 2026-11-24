@@ -7,6 +7,27 @@ using UUIDs
 using ..Utils
 using ..Pkg.Resolve: ResolverError
 
+@testset "Portable source path hashes" begin
+    mktempdir() do dir
+        project_file = joinpath(dir, "Project.toml")
+        write(
+            project_file, """
+            [deps]
+            Dep = "11111111-2222-3333-4444-555555555555"
+            [sources]
+            Dep = {path = "../Dep"}
+            """
+        )
+        env = Pkg.Types.EnvCache(project_file)
+        @test Pkg.Types.load_workspace_sources(env)["Dep"] == Set(["path=../Dep"])
+        hash = Pkg.Types.workspace_resolve_hash(env)
+        env.project.sources["Dep"]["path"] = joinpath("..", "Dep")
+        @test Pkg.Types.workspace_resolve_hash(env) == hash
+        env.project.sources["Dep"]["path"] = joinpath("..", "OtherDep")
+        @test Pkg.Types.workspace_resolve_hash(env) != hash
+    end
+end
+
 temp_pkg_dir() do project_path
     cd(project_path) do;
         with_temp_env() do
