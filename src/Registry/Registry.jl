@@ -310,7 +310,9 @@ function download_registries(io::IO, regs::Vector{RegistrySpec}, depots::Union{S
                 registry_update_log[string(reg.uuid)] = now()
                 printpkgstyle(io, :Added, "`$(reg.name)` registry to $(Base.contractuser(regdir))")
             else
+                url_some = Some{Union{Nothing, String}}(url) # a concrete capture for the closure
                 mktempdir() do tmp
+                    local url = something(url_some)
                     if reg.path !== nothing && reg.linked == true # symlink to local source
                         registry = Registry.RegistryInstance(reg.path)
                         regpath = joinpath(regdir, registry.name)
