@@ -104,8 +104,7 @@ nprocs = max(Sys.EFFECTIVE_CPU_THREADS, 2)
             iob = IOBuffer()
             t = @async run(
                 pipeline(
-                    addenv(
-                        `$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
+                    `$(Base.julia_cmd()) --project="$(pkgdir(Pkg))"
                 -e "import Pkg;
                 Pkg.UPDATED_REGISTRY_THIS_SESSION[] = true;
                 Pkg.activate(temp = true);
@@ -131,8 +130,7 @@ nprocs = max(Sys.EFFECTIVE_CPU_THREADS, 2)
                         rethrow()
                     end
                     yield()
-                end"`, "JULIA_DEPOT_PATH" => join(Base.DEPOT_PATH, Sys.iswindows() ? ";" : ":")
-                    ),
+                end"`,
                     stderr = iob, stdout = devnull
                 )
             )
