@@ -14,6 +14,8 @@ Pkg v1.14 Release Notes
   channel of the same minor version, or else to the `julia` in `PATH` with a warning.
   The new `Pkg.Apps.relink` (`pkg> app relink`) makes apps use the running Julia while keeping their package
   versions, and `pkg> app status` marks apps whose Julia is missing. ([#4913])
+- `Pkg.generate` (`pkg> generate`) now adds a `[compat]` entry for `julia` to the new `Project.toml`, with the
+  minor version of the running Julia as the lower bound. ([#4179])
 - Pkg now resolves package versions with the exact SAT-based resolver from
   [Resolver.jl](https://github.com/JuliaLang/Resolver.jl). It finds the same solutions as the previous
   resolver where one exists, is typically faster, and when the requirements cannot be satisfied it reports each
@@ -307,3 +309,4 @@ Pkg v1.7 Release Notes
 [#4922]: https://github.com/JuliaLang/Pkg.jl/pull/4922
 [#4926]: https://github.com/JuliaLang/Pkg.jl/pull/4926
 [#4415]: https://github.com/JuliaLang/Pkg.jl/pull/4415
+[#4179]: https://github.com/JuliaLang/Pkg.jl/issues/4179

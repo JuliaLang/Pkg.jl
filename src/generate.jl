@@ -67,6 +67,7 @@ function project(io::IO, pkg::AbstractString, dir::AbstractString)
             "name" => pkg,
             "uuid" => string(uuid),
             "version" => "0.1.0",
+            "compat" => Dict{String, Any}("julia" => "$(VERSION.major).$(VERSION.minor)"),
         )
         TOML.print(file_io, toml, sorted = true, by = key -> (Types.project_key_order(key), key))
     end

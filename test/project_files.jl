@@ -17,6 +17,13 @@ using ..Utils
                 @test Pkg.Types.read_project("Project.toml").name == "MyNewPkg"
             end
 
+            # a `julia` compat entry is added, using the running minor version as lower bound
+            Pkg.generate("WithCompat"; io = devnull)
+            proj = Pkg.Types.read_project(joinpath("WithCompat", "Project.toml"))
+            @test proj.compat["julia"].str == "$(VERSION.major).$(VERSION.minor)"
+            @test VersionNumber(VERSION.major, VERSION.minor, VERSION.patch) in proj.compat["julia"].val
+            @test occursin("[compat]\njulia = ", read(joinpath("WithCompat", "Project.toml"), String))
+
             mkdir("NonEmpty")
             write("NonEmpty/existing.txt", "content")
             cd("NonEmpty") do
