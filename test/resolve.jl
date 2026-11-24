@@ -951,4 +951,37 @@ end
     @test sprint(showerror, err; context = :color => true) == err.msg
 end
 
+@testset "resolver log colors follow stderr's :color" begin
+    colored = sprint(io -> printstyled(io, "A"; color = Resolve.pkgID_color("A")); context = :color => true)
+    pipe = Pipe()
+    path = tempname()
+    try
+        open(path, "w") do file
+            redirect_stderr(pipe) do # links the pipe, for `pipe_writer`
+                nothing
+            end
+            dict = Base.ImmutableDict{Symbol, Any}(:color, true)
+            streams = Any[
+                pipe, file, devnull,
+                IOContext(pipe, :color => true), IOContext(pipe, :color => false),
+                IOContext(Base.pipe_writer(pipe), :color => true),
+                IOContext(file, :color => true), IOContext(devnull, :color => true),
+                IOContext{IO}(pipe, dict),
+            ]
+            for io in streams
+                redirect_stderr(io) do
+                    color = get(stderr, :color, false)::Bool
+                    @test Resolve.stderr_color() === color
+                    @test Resolve.logstr("A") == (color ? colored : "A")
+                end
+            end
+        end
+    finally
+        close(pipe)
+        rm(path; force = true)
+    end
+    # The stderr of this process (a TTY when the tests run in a terminal)
+    @test Resolve.stderr_color() === get(stderr, :color, false)
+end
+
 end # module
