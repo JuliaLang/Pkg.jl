@@ -1699,22 +1699,12 @@ function install_archive(
         # Assert that the tarball unpacked to the tree sha we wanted
         computed_hash = GitTools.tree_hash(unpacked)
         if SHA1(computed_hash) != hash
-            # On Windows, users who cannot create symlinks get symlinks
-            # unpacked as regular file copies (#4950), so the tree hash of
-            # the unpacked directory differs from the expected hash even
-            # though the tarball itself is authentic. This is the package
-            # counterpart of #3643, handled for artifacts in #3764 by
-            # ignoring the mismatch when the user cannot create symlinks.
-            # Unlike artifacts, package tarballs carry no sha256 to
-            # authenticate the download, so only ignore the mismatch when
-            # the tarball's own tree hash matches the expected hash: a
-            # tarball whose own hash mismatches is still rejected.
+            # Without symlink privileges on Windows, symlinks unpack as file copies, so the
+            # unpacked tree hash can't match (#4950). Accept if the tarball's own tree hash does.
             ignore_hash = Sys.iswindows() &&
                 !mktempdir(can_symlink, depot_temp) &&
                 PlatformEngines.verify_archive_tree_hash(path, hash)
-            if ignore_hash
-                @warn "Downloaded package content does not match expected hash (git-tree-sha1), but the downloaded tarball itself matches the expected hash; the mismatch is likely because symlinks were unpacked as regular files on a system that cannot create symlinks. Installing the package anyway." package = name url = url expected = hash computed = computed_hash
-            else
+            if !ignore_hash
                 @warn "Downloaded package content does not match expected hash (git-tree-sha1); skipping this source" package = name url = url expected = hash computed = computed_hash
                 url_success = false
             end

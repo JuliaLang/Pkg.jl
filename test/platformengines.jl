@@ -142,8 +142,9 @@ end
             copyderef_path = joinpath(dir, "depot", "packages", "TestPkg", "1.0.1")
             if Sys.iswindows() && !mktempdir(PlatformEngines.Tar.can_symlink, dir)
                 # Windows without symlink privileges: the mismatch is excused
-                # because the tarball itself matches the expected hash (#4950)
-                @test_logs (:warn, r"symlinks were unpacked as regular files") match_mode = :any begin
+                # because the tarball itself matches the expected hash (#4950),
+                # silently — there is nothing for the user to act on
+                @test_logs begin
                     @test install_pkg("file://" * tarball_path, expected, copyderef_path)
                 end
                 @test isdir(copyderef_path)
