@@ -6,6 +6,7 @@ using Base: CacheFlags
 using FileWatching: FileWatching
 using UUIDs
 using Random: randstring
+using Tar: can_symlink
 import LibGit2, Dates, TOML
 
 using ..Types, ..Resolve, ..PlatformEngines, ..GitTools, ..MiniProgressBars
@@ -1698,8 +1699,15 @@ function install_archive(
         # Assert that the tarball unpacked to the tree sha we wanted
         computed_hash = GitTools.tree_hash(unpacked)
         if SHA1(computed_hash) != hash
-            @warn "Downloaded package content does not match expected hash (git-tree-sha1); skipping this source" package = name url = url expected = hash computed = computed_hash
-            url_success = false
+            # Without symlink privileges on Windows, symlinks unpack as file copies, so the
+            # unpacked tree hash can't match (#4950). Accept if the tarball's own tree hash does.
+            ignore_hash = Sys.iswindows() &&
+                !mktempdir(can_symlink, depot_temp) &&
+                PlatformEngines.verify_archive_tree_hash(path, hash)
+            if !ignore_hash
+                @warn "Downloaded package content does not match expected hash (git-tree-sha1); skipping this source" package = name url = url expected = hash computed = computed_hash
+                url_success = false
+            end
         end
         url_success || continue
 

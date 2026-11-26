@@ -98,6 +98,68 @@ end
     end
 end
 
+@testset "install_archive with symlinks unpacked as regular files (#4950)" begin
+    mktempdir() do dir
+        # Source tree mimicking JuliaFormatter: CLAUDE.md is a symlink to AGENTS.md
+        src = mkpath(joinpath(dir, "src"))
+        write(joinpath(src, "AGENTS.md"), "# Agent instructions\n")
+        symlink("AGENTS.md", joinpath(src, "CLAUDE.md"))
+
+        expected = Base.SHA1(Pkg.GitTools.tree_hash(src))
+        tarball_path = joinpath(dir, "testpkg.tar.gz")
+        package(src, tarball_path)
+        @test PlatformEngines.verify_archive_tree_hash(tarball_path, expected)
+
+        install_pkg(tarball_url, hash, version_path) =
+            Pkg.Operations.install_archive([tarball_url => true], hash, version_path; name = "TestPkg")
+
+        # A genuinely tampered tarball (different content, same layout) is rejected,
+        # also on Windows without symlink privileges: its own tree hash mismatches
+        tampered_src = mkpath(joinpath(dir, "tampered_src"))
+        write(joinpath(tampered_src, "AGENTS.md"), "# Tampered instructions\n")
+        symlink("AGENTS.md", joinpath(tampered_src, "CLAUDE.md"))
+        tampered_tarball = joinpath(dir, "tampered.tar.gz")
+        package(tampered_src, tampered_tarball)
+        tampered_path = joinpath(dir, "depot", "packages", "TestPkg", "1.0.0")
+        @test_logs (:warn, r"does not match expected hash") match_mode = :any begin
+            @test !install_pkg("file://" * tampered_tarball, expected, tampered_path)
+        end
+        @test !isdir(tampered_path)
+
+        # An authentic tarball installs fine
+        version_path = joinpath(dir, "depot", "packages", "TestPkg", "1.0.0")
+        @test install_pkg("file://" * tarball_path, expected, version_path)
+        @test read(joinpath(version_path, "CLAUDE.md"), String) == "# Agent instructions\n"
+        if mktempdir(PlatformEngines.Tar.can_symlink, dir)
+            @test islink(joinpath(version_path, "CLAUDE.md"))
+        end
+
+        # Symlinks unpacked as regular files, as on Windows without symlink
+        # privileges (simulated with BINARYPROVIDER_COPYDEREF=true, cf. the
+        # artifact test "installing artifacts when symlinks are copied"):
+        # the unpacked tree hash mismatches although the tarball is authentic.
+        withenv("BINARYPROVIDER_COPYDEREF" => "true") do
+            copyderef_path = joinpath(dir, "depot", "packages", "TestPkg", "1.0.1")
+            if Sys.iswindows() && !mktempdir(PlatformEngines.Tar.can_symlink, dir)
+                # Windows without symlink privileges: the mismatch is excused
+                # because the tarball itself matches the expected hash (#4950),
+                # silently — there is nothing for the user to act on
+                @test_logs begin
+                    @test install_pkg("file://" * tarball_path, expected, copyderef_path)
+                end
+                @test isdir(copyderef_path)
+                @test !islink(joinpath(copyderef_path, "CLAUDE.md"))
+            else
+                # Otherwise (non-Windows, or Windows with symlink privileges)
+                # the mismatch is still rejected
+                @test_logs (:warn, r"does not match expected hash") match_mode = :any begin
+                    @test !install_pkg("file://" * tarball_path, expected, copyderef_path)
+                end
+                @test !isdir(copyderef_path)
+            end
+        end
+    end
+end
 
 @testset "Verification" begin
     mktempdir() do prefix
