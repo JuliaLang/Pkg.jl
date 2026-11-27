@@ -445,12 +445,17 @@ end
             write(joinpath("HasExt", "src", "HasExt.jl"), "module HasExt\nend\n")
             write(joinpath("HasExt", "ext", "HasExtExampleExt.jl"), "module HasExtExampleExt\nimport HasExt, Example\nend\n")
             Pkg.develop(path = "HasExt")
+            hasext = Base.PkgId(UUID("3a1f6c2e-9b4d-4e8a-a7c5-2d6f0b8e1c94"), "HasExt")
+            ext = Base.PkgId(Base.uuid5(hasext.uuid, "HasExtExampleExt"), "HasExtExampleExt")
+            add_example() = withenv(() -> Pkg.add("Example"; io = devnull), "JULIA_PKG_PRECOMPILE_AUTO" => 1)
+            # a package that is not precompiled yet is left for its first load, extension and all
+            add_example()
+            @test !Base.isprecompiled(hasext) && !Base.isprecompiled(ext)
+            # one that is gets the extension that the add switches on
+            Pkg.rm("Example"; io = devnull)
             Pkg.precompile()
-            withenv("JULIA_PKG_PRECOMPILE_AUTO" => 1) do
-                Pkg.add("Example"; io = devnull)
-            end
-            hasext = UUID("3a1f6c2e-9b4d-4e8a-a7c5-2d6f0b8e1c94")
-            @test Base.isprecompiled(Base.PkgId(Base.uuid5(hasext, "HasExtExampleExt"), "HasExtExampleExt"))
+            add_example()
+            @test Base.isprecompiled(ext)
         end
     end
 end

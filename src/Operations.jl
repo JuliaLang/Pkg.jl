@@ -3231,9 +3231,8 @@ function add_compat_entries!(ctx::Context, pkgs::Vector{PackageSpec})
     return
 end
 
-# Packages that were already in the manifest and now have another version or source, or
-# a weak dependency that is new or changed, plus everything that depends on them. Their
-# caches, or those of their extensions, are missing or no longer match, so an `add` that
+# Packages that were already in the manifest and now have another version or source,
+# plus everything that depends on them. Their caches no longer match, so an `add` that
 # changes them precompiles them too instead of leaving that to the next load.
 # Only direct dependencies are returned, since precompilation looks packages up by name
 # from the project; the others are reached as their dependencies.
@@ -3245,10 +3244,6 @@ function changed_packages_and_dependents(env::EnvCache)
         if new.version != old.version || new.tree_hash != old.tree_hash || new.path != old.path
             push!(affected, uuid)
         end
-    end
-    triggers = union(affected, setdiff(keys(env.manifest), keys(env.original_manifest)))
-    for (uuid, entry) in env.manifest
-        haskey(env.original_manifest, uuid) && any(in(triggers), values(entry.weakdeps)) && push!(affected, uuid)
     end
     isempty(affected) && return PackageSpec[]
     grew = true
@@ -3264,6 +3259,35 @@ function changed_packages_and_dependents(env::EnvCache)
     end
     direct = Set{UUID}(values(env.project.deps))
     return PackageSpec[PackageSpec(; name = env.manifest[uuid].name, uuid) for uuid in affected if uuid in direct]
+end
+
+# The extensions that a new or changed package triggers in packages that were already in
+# the manifest and did not change, where everything else the extension needs is precompiled.
+# Then the package is in use and its next load would stop to build the extension, which is
+# quick to build now. Where something is not precompiled, it is left for that first load.
+function triggered_extensions(env::EnvCache)
+    changed = Set{UUID}()
+    for (uuid, new) in env.manifest
+        old = get(env.original_manifest, uuid, nothing)
+        if old === nothing || new.version != old.version || new.tree_hash != old.tree_hash || new.path != old.path
+            push!(changed, uuid)
+        end
+    end
+    candidates = Pair{Base.PkgId, Vector{Base.PkgId}}[]
+    for (uuid, entry) in env.manifest
+        uuid in changed && continue
+        for (name, triggers) in entry.exts
+            ids = map(t -> get(entry.weakdeps, t, get(entry.deps, t, nothing)), triggers isa String ? [triggers] : triggers)
+            all(id -> id !== nothing && haskey(env.manifest, id), ids) && any(in(changed), ids) || continue
+            needs = Base.PkgId[Base.PkgId(id, env.manifest[id].name) for id in ids if !(id in changed)]
+            push!(candidates, Base.PkgId(Base.uuid5(uuid, name), name) => push!(needs, Base.PkgId(uuid, entry.name)))
+        end
+    end
+    isempty(candidates) && return Base.PkgId[]
+    # whether a package is precompiled depends on the environment it is looked up in
+    return Pkg.API.activate(dirname(env.project_file)) do
+        Base.PkgId[ext for (ext, needs) in candidates if all(Base.isprecompiled, needs)]
+    end
 end
 
 function add(
@@ -3376,7 +3400,8 @@ function add(
         if allow_autoprecomp
             added = Set(pkg.uuid for pkg in pkgs)
             affected = filter(pkg -> !(pkg.uuid in added), changed_packages_and_dependents(ctx.env))
-            Pkg._auto_precompile(ctx, vcat(pkgs, affected))
+            extensions = Pkg.should_autoprecompile() ? triggered_extensions(ctx.env) : Base.PkgId[]
+            Pkg._auto_precompile(ctx, vcat(pkgs, affected); extensions)
         end
     else
         record_project_hash(ctx.env, ctx.julia_version)

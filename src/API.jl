@@ -1410,7 +1410,7 @@ function precompile(
         strict::Bool = false, warn_loaded = true, already_instantiated = false, timing::Bool = false,
         _from_loading::Bool = false, configs::Union{Base.Precompilation.Config, Vector{Base.Precompilation.Config}} = (`` => Base.CacheFlags()),
         workspace::Bool = false, monitor::Bool = false, stop::Bool = false, cancel::Bool = false,
-        skip_dependents::Bool = true, force::Bool = false, kwargs...
+        skip_dependents::Bool = true, force::Bool = false, extensions::Vector{Base.PkgId} = Base.PkgId[], kwargs...
     )
     # Handle background precompilation control options via Base
     if monitor
@@ -1454,7 +1454,9 @@ function precompile(
         manifest_resolve!(ctx.env.manifest, pkgs)
         ensure_resolved(ctx, ctx.env.manifest, pkgs)
     end
-    pkgids = Base.PkgId[Base.PkgId(pkg.uuid, pkg.name) for pkg in pkgs]
+    # `extensions` are extensions to build along with `pkgs`, by their ids, as they have no names
+    # in the project
+    pkgids = Base.PkgId[Base.PkgId[Base.PkgId(pkg.uuid, pkg.name) for pkg in pkgs]; extensions]
 
     return activate(dirname(ctx.env.project_file)) do
         # Since JuliaLang/julia#62970 the driver in Base is compiled for a single
