@@ -1134,10 +1134,10 @@ end
 # Precompilation #
 ##################
 
-function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false, workspace = false)
+function _auto_precompile(ctx::Types.Context, pkgs::Vector{PackageSpec} = PackageSpec[]; warn_loaded = true, already_instantiated = false, workspace = false, extensions::Vector{Base.PkgId} = Base.PkgId[])
     return if should_autoprecompile()
         # Auto precompile runs in foreground with detachable support
-        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated, workspace = workspace)
+        Pkg.precompile(ctx, pkgs; internal_call = true, warn_loaded = warn_loaded, already_instantiated = already_instantiated, workspace = workspace, extensions)
     end
 end
 
