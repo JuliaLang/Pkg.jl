@@ -3231,8 +3231,9 @@ function add_compat_entries!(ctx::Context, pkgs::Vector{PackageSpec})
     return
 end
 
-# Packages that were already in the manifest and now have another version or source,
-# plus everything that depends on them. Their caches no longer match, so an `add` that
+# Packages that were already in the manifest and now have another version or source, or
+# a weak dependency that is new or changed, plus everything that depends on them. Their
+# caches, or those of their extensions, are missing or no longer match, so an `add` that
 # changes them precompiles them too instead of leaving that to the next load.
 # Only direct dependencies are returned, since precompilation looks packages up by name
 # from the project; the others are reached as their dependencies.
@@ -3244,6 +3245,10 @@ function changed_packages_and_dependents(env::EnvCache)
         if new.version != old.version || new.tree_hash != old.tree_hash || new.path != old.path
             push!(affected, uuid)
         end
+    end
+    triggers = union(affected, setdiff(keys(env.manifest), keys(env.original_manifest)))
+    for (uuid, entry) in env.manifest
+        haskey(env.original_manifest, uuid) && any(in(triggers), values(entry.weakdeps)) && push!(affected, uuid)
     end
     isempty(affected) && return PackageSpec[]
     grew = true

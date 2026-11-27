@@ -423,6 +423,38 @@ end
     end
 end
 
+@testset "add precompiles the extensions that the added package triggers" begin
+    isolate() do
+        cd_tempdir() do tmp
+            Pkg.activate(".")
+            mkpath(joinpath("HasExt", "src"))
+            mkpath(joinpath("HasExt", "ext"))
+            write(
+                joinpath("HasExt", "Project.toml"), """
+                name = "HasExt"
+                uuid = "3a1f6c2e-9b4d-4e8a-a7c5-2d6f0b8e1c94"
+                version = "0.1.0"
+
+                [weakdeps]
+                Example = "7876af07-990d-54b4-ab0e-23690620f79a"
+
+                [extensions]
+                HasExtExampleExt = "Example"
+                """
+            )
+            write(joinpath("HasExt", "src", "HasExt.jl"), "module HasExt\nend\n")
+            write(joinpath("HasExt", "ext", "HasExtExampleExt.jl"), "module HasExtExampleExt\nimport HasExt, Example\nend\n")
+            Pkg.develop(path = "HasExt")
+            Pkg.precompile()
+            withenv("JULIA_PKG_PRECOMPILE_AUTO" => 1) do
+                Pkg.add("Example"; io = devnull)
+            end
+            hasext = UUID("3a1f6c2e-9b4d-4e8a-a7c5-2d6f0b8e1c94")
+            @test Base.isprecompiled(Base.PkgId(Base.uuid5(hasext, "HasExtExampleExt"), "HasExtExampleExt"))
+        end
+    end
+end
+
 @testset "Pkg.API.check_package_name: Error message if package name ends in .jl" begin
     @test_throws Pkg.Types.PkgError("`Example.jl` is not a valid package name. Perhaps you meant `Example`") Pkg.API.check_package_name("Example.jl")
 end
